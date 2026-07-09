@@ -7,7 +7,6 @@ import {
   ShoppingCart,
   MessageSquare,
   LayoutGrid,
-  LayoutGrid,
   X,
 } from "lucide-react";
 import { Logo } from "@/components/common/Logo";
