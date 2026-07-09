@@ -1,0 +1,97 @@
+import type { Product } from "@/types";
+
+const img = (seed: string) =>
+  `https://picsum.photos/seed/${encodeURIComponent(seed)}/600/600`;
+
+export const products: Product[] = [
+  {
+    id: "p1", slug: "conta-valorant-imortal",
+    title: "Conta Valorant Imortal — Full Skins",
+    categorySlug: "contas", categoryName: "Contas",
+    price: 349.9, originalPrice: 499.9, discountPercent: 30,
+    rating: 4.9, reviewsCount: 128, soldCount: 340,
+    imageUrl: img("valorant-imortal"), badge: "hot",
+  },
+  {
+    id: "p2", slug: "gift-card-steam-100",
+    title: "Gift Card Steam R$ 100",
+    categorySlug: "gift-cards", categoryName: "Gift Cards",
+    price: 98.9, rating: 4.8, reviewsCount: 2450, soldCount: 12800,
+    imageUrl: img("steam-100"), badge: "top",
+  },
+  {
+    id: "p3", slug: "moedas-fifa-500k",
+    title: "500K Moedas FIFA — Entrega Rápida",
+    categorySlug: "moedas", categoryName: "Moedas",
+    price: 79.9, originalPrice: 99.9, discountPercent: 20,
+    rating: 4.7, reviewsCount: 890, soldCount: 5400,
+    imageUrl: img("fifa-500k"), badge: "promo",
+  },
+  {
+    id: "p4", slug: "skin-ak47-redline",
+    title: "Skin AK-47 Redline Field-Tested",
+    categorySlug: "skins", categoryName: "Skins",
+    price: 189.0, rating: 4.9, reviewsCount: 340, soldCount: 210,
+    imageUrl: img("ak-redline"), badge: "new",
+  },
+  {
+    id: "p5", slug: "conta-lol-diamante",
+    title: "Conta LoL Diamante IV — 120 Campeões",
+    categorySlug: "contas", categoryName: "Contas",
+    price: 259.0, originalPrice: 329.0, discountPercent: 21,
+    rating: 4.6, reviewsCount: 78, soldCount: 156,
+    imageUrl: img("lol-diamante"),
+  },
+  {
+    id: "p6", slug: "gift-card-google-play-50",
+    title: "Gift Card Google Play R$ 50",
+    categorySlug: "gift-cards", categoryName: "Gift Cards",
+    price: 49.5, rating: 4.9, reviewsCount: 4200, soldCount: 23100,
+    imageUrl: img("gplay-50"),
+  },
+  {
+    id: "p7", slug: "servico-boost-rank",
+    title: "Serviço de Boost — Ranked",
+    categorySlug: "servicos", categoryName: "Serviços",
+    price: 149.9, rating: 4.8, reviewsCount: 210, soldCount: 640,
+    imageUrl: img("boost-rank"), badge: "hot",
+  },
+  {
+    id: "p8", slug: "conta-fortnite-og",
+    title: "Conta Fortnite OG — Skins Raras",
+    categorySlug: "contas", categoryName: "Contas",
+    price: 899.0, originalPrice: 1200.0, discountPercent: 25,
+    rating: 5.0, reviewsCount: 54, soldCount: 42,
+    imageUrl: img("fortnite-og"), badge: "top",
+  },
+  {
+    id: "p9", slug: "jogo-cyberpunk-2077",
+    title: "Cyberpunk 2077 — Chave Original",
+    categorySlug: "jogos", categoryName: "Jogos",
+    price: 79.9, originalPrice: 199.9, discountPercent: 60,
+    rating: 4.5, reviewsCount: 1240, soldCount: 3200,
+    imageUrl: img("cyberpunk"), badge: "promo",
+  },
+  {
+    id: "p10", slug: "assinatura-xbox-gp",
+    title: "Xbox Game Pass Ultimate — 3 meses",
+    categorySlug: "assinaturas", categoryName: "Assinaturas",
+    price: 129.9, rating: 4.9, reviewsCount: 3400, soldCount: 8900,
+    imageUrl: img("xbox-gp"),
+  },
+  {
+    id: "p11", slug: "item-mm2-godly",
+    title: "Item MM2 Godly — Chroma Set",
+    categorySlug: "itens", categoryName: "Itens",
+    price: 39.9, rating: 4.7, reviewsCount: 120, soldCount: 780,
+    imageUrl: img("mm2-godly"), badge: "new",
+  },
+  {
+    id: "p12", slug: "moedas-gta-online",
+    title: "GTA Online — 10M + Level Up",
+    categorySlug: "moedas", categoryName: "Moedas",
+    price: 59.9, originalPrice: 89.9, discountPercent: 33,
+    rating: 4.8, reviewsCount: 560, soldCount: 2100,
+    imageUrl: img("gta-online"),
+  },
+];
