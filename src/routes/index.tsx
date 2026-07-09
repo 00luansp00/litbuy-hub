@@ -1,24 +1,48 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { Hero } from "@/components/home/Hero";
+import { CategoriesGrid } from "@/components/home/CategoriesGrid";
+import { ProductsSection } from "@/components/home/ProductsSection";
+import { Benefits } from "@/components/home/Benefits";
+import { Newsletter } from "@/components/home/Newsletter";
+import { categories } from "@/data/categories";
+import { products } from "@/data/products";
 
-// No head() here: the home route inherits title/description/og/twitter from
-// __root.tsx, and ships no og:image so serve-time hosting can inject the
-// project's social preview (explicit og:image or latest screenshot).
 export const Route = createFileRoute("/")({
-  component: Index,
+  component: HomePage,
 });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
-function Index() {
+function HomePage() {
+  const featured = products.filter((p) => p.badge === "hot" || p.badge === "top");
+  const popular = [...products].sort((a, b) => b.soldCount - a.soldCount).slice(0, 8);
+  const recent = [...products].slice(-8).reverse();
+
   return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
+    <>
+      <Hero />
+      <CategoriesGrid categories={categories} />
+      <ProductsSection
+        eyebrow="Em destaque"
+        title="Produtos em destaque"
+        description="Selecionados a dedo pela nossa curadoria."
+        href="/"
+        products={featured}
       />
-    </div>
+      <ProductsSection
+        eyebrow="Mais vendidos"
+        title="Populares agora"
+        description="O que a comunidade LIT Buy está comprando essa semana."
+        href="/"
+        products={popular}
+      />
+      <ProductsSection
+        eyebrow="Novidades"
+        title="Chegou agora"
+        description="Os últimos anúncios publicados no marketplace."
+        href="/"
+        products={recent}
+      />
+      <Benefits />
+      <Newsletter />
+    </>
   );
 }
