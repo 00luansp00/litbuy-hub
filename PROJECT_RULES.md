@@ -14,7 +14,12 @@ Regras obrigatórias para qualquer desenvolvedor(a) ou agente que contribuir com
 - Nunca duplique componentes. Se existir um `ProductCard`, `SectionHeader`, `AuthCard`, etc., estenda-os por props.
 - Componentes de UI baixo-nível vivem em `src/components/ui/` (shadcn) — **não editar diretamente** salvo bugfix.
 - Componentes reutilizáveis de domínio vivem em `src/components/common/`.
-- Componentes de feature vivem em `src/components/<feature>/` (ex.: `home/`, `auth/`, `layout/`).
+- Componentes de feature vivem em `src/components/<feature>/` (ex.: `home/`, `auth/`, `layout/`, `product/`, `seller/`).
+
+### Convenções de rota — vendedor
+
+- **`/vendedor`** é reservada para o **painel do vendedor** (área logada, futura sprint). Não usar para perfil público.
+- **`/loja/$slug`** é o **perfil público** da loja/vendedor. Consome `sellerService`.
 
 ## 3. Identidade visual
 
