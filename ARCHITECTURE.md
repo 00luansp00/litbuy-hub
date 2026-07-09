@@ -92,9 +92,18 @@ Todos os tokens estão em `src/styles.css` via `@theme inline`. Utilitários cus
 5. **Provider** (se necessário) — adicione contexto em `src/providers/` e monte no `RootComponent`.
 6. **Documente** — atualize este arquivo e, se aplicável, `PROJECT_RULES.md`.
 
+## Camada de dados (atual vs futura)
+
+- **Hoje:** toda leitura passa por `src/services/*` que consomem mocks estáticos de `src/data/`. Componentes e rotas **nunca** importam de `src/data/` diretamente — sempre via service.
+- **Amanhã:** os services serão substituídos por chamadas HTTP ao Supabase (Data API / server functions), mantendo **a mesma assinatura pública**. Nenhum componente de UI precisará mudar.
+- **Sem conexão real ainda:** não há Supabase configurado, nem client HTTP, nem variáveis de ambiente de backend. A ativação será feita em sprint dedicada.
+- **Contrato de dados futuro:** ver `DATABASE_SCHEMA.md`, `ENTITY_RELATIONSHIP.md` e `SUPABASE_RLS_PLAN.md` na raiz do projeto. Toda nova entidade deve ser compatível com esse contrato para evitar dívida técnica.
+
 ## Convenções finais
 
 - Nunca introduzir React Router DOM ou pastas `src/pages/`.
 - Nunca editar `src/routeTree.gen.ts`.
 - Sempre preferir composição a props booleanas explosivas.
 - Sempre passar por `useAuth()` para qualquer decisão baseada em sessão.
+- Sempre passar por `src/services/*` para leitura/escrita de dados — nunca importar mocks direto na UI.
+
