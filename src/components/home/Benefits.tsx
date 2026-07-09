@@ -25,7 +25,7 @@ const items = [
 
 export function Benefits() {
   return (
-    <section className="container-lit py-14">
+    <section className="container-lit py-12 md:py-16">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {items.map(({ icon: Icon, title, description }) => (
           <div
