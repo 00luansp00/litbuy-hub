@@ -40,23 +40,36 @@ Regras obrigatórias para qualquer desenvolvedor(a) ou agente que contribuir com
 - Autenticação atual é **mock em memória** (`src/services/authMock.ts` + `AuthProvider`). Zero LocalStorage, cookies, JWT ou backend.
 - Novas features que dependem de sessão devem consumir `useAuth()` e nunca criar seu próprio estado paralelo.
 
-## 7. Restrições até nova ordem
+## 7. Dados e acesso
+
+- **Nunca** acessar mocks de `src/data/` diretamente em páginas ou componentes. Sempre consumir via `src/services/*`.
+- Toda leitura/escrita de dados passa por um service assíncrono — mesmo que hoje resolva localmente.
+- Novos services devem usar assinaturas compatíveis com uma futura API HTTP/Supabase (async, retornando `Promise`, aceitando parâmetros serializáveis).
+- Toda nova entidade deve ser compatível com o contrato definido em `DATABASE_SCHEMA.md` e `ENTITY_RELATIONSHIP.md`.
+
+## 8. Restrições até nova ordem
 
 Não implementar nesta fase:
 
 - Backend, banco de dados, APIs reais
+- Supabase (client, migrations, políticas) — apenas em sprint dedicada, seguindo `SUPABASE_RLS_PLAN.md`
 - Autenticação real, OAuth, providers sociais
-- Pagamentos, lógica financeira, checkout real
+- Pagamentos, lógica financeira, checkout real, cálculo de saldo no frontend
 - Mensageria, uploads reais, notificações push
+- Regras de segurança implementadas apenas no cliente — segurança é responsabilidade do backend (RLS / server functions)
 
-## 8. Qualidade
+Toda funcionalidade sensível (pagamentos, disputas, movimentação de carteira, admin) deve ser **planejada em documentação** antes de qualquer linha de código.
+
+## 9. Qualidade
 
 - Preserve acessibilidade: `aria-label`, foco visível, contraste.
 - Animações discretas via `motion` (framer-motion) — nunca exageradas.
 - Toda tela deve funcionar em mobile, tablet e desktop.
 - Zero `console.log` em produção; use os utilitários de log/erro existentes.
 
-## 9. Documentação
+## 10. Documentação
 
 - Toda sprint que introduzir um módulo novo deve atualizar `ARCHITECTURE.md`.
+- Toda nova entidade de dados deve ser refletida em `DATABASE_SCHEMA.md`, `ENTITY_RELATIONSHIP.md` e, se aplicável, `SUPABASE_RLS_PLAN.md`.
 - Decisões arquiteturais relevantes devem ser registradas neste arquivo ou em ADRs futuros.
+
