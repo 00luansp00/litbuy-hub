@@ -32,4 +32,8 @@ export interface Product {
   badge?: "hot" | "new" | "promo" | "top";
   seller?: Seller;
   stock?: number;
+  instantDelivery?: boolean;
+  verifiedSeller?: boolean;
+  /** 0-100 — indicador de confiança agregado do anúncio. */
+  trustScore?: number;
 }

@@ -1,5 +1,5 @@
 import { CategoryCard } from "@/components/common/CategoryCard";
-import { SectionTitle } from "@/components/common/SectionTitle";
+import { SectionHeader } from "@/components/common/SectionHeader";
 import type { Category } from "@/types";
 
 interface CategoriesGridProps {
@@ -8,8 +8,8 @@ interface CategoriesGridProps {
 
 export function CategoriesGrid({ categories }: CategoriesGridProps) {
   return (
-    <section className="container-lit py-14">
-      <SectionTitle
+    <section className="container-lit py-12 md:py-16">
+      <SectionHeader
         eyebrow="Navegue"
         title="Categorias em destaque"
         description="Encontre exatamente o que você procura em nossas categorias mais populares."
@@ -22,3 +22,4 @@ export function CategoriesGrid({ categories }: CategoriesGridProps) {
     </section>
   );
 }
+

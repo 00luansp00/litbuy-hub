@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
-import { Heart, ShoppingCart, Star } from "lucide-react";
+import { Heart, ShoppingCart, Star, Zap, BadgeCheck, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatBRL, formatCompact } from "@/lib/format";
@@ -18,11 +18,18 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ product }: ProductCardProps) {
+  const trustTone =
+    (product.trustScore ?? 0) >= 90
+      ? "text-success"
+      : (product.trustScore ?? 0) >= 75
+        ? "text-warning"
+        : "text-muted-foreground";
+
   return (
     <motion.article
-      whileHover={{ y: -4 }}
+      whileHover={{ y: -6 }}
       transition={{ type: "spring", stiffness: 300, damping: 22 }}
-      className="group relative flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-card hover:border-primary/40 transition-colors"
+      className="group relative flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-card transition-all duration-300 hover:border-primary/50 hover:shadow-elegant"
     >
       <Link
         to="/produto/$id"
@@ -33,13 +40,20 @@ export function ProductCard({ product }: ProductCardProps) {
           src={product.imageUrl}
           alt={product.title}
           loading="lazy"
-          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
         />
-        {product.badge && (
-          <Badge className="absolute left-3 top-3 border-0 bg-primary/90 text-primary-foreground backdrop-blur">
-            {badgeLabel[product.badge]}
-          </Badge>
-        )}
+        <div className="absolute left-3 top-3 flex flex-col gap-1.5">
+          {product.badge && (
+            <Badge className="border-0 bg-primary/90 text-primary-foreground backdrop-blur">
+              {badgeLabel[product.badge]}
+            </Badge>
+          )}
+          {product.instantDelivery && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-background/70 px-1.5 py-0.5 text-[10px] font-semibold text-warning backdrop-blur">
+              <Zap className="h-3 w-3 fill-warning" /> Instantâneo
+            </span>
+          )}
+        </div>
         {product.discountPercent && (
           <span className="absolute right-3 top-3 rounded-md bg-success px-2 py-0.5 text-xs font-semibold text-success-foreground">
             -{product.discountPercent}%
@@ -48,7 +62,7 @@ export function ProductCard({ product }: ProductCardProps) {
         <button
           type="button"
           aria-label="Favoritar"
-          className="absolute right-3 bottom-3 grid h-9 w-9 place-items-center rounded-full bg-background/70 text-foreground opacity-0 backdrop-blur transition group-hover:opacity-100 hover:bg-primary hover:text-primary-foreground"
+          className="absolute right-3 bottom-3 grid h-9 w-9 place-items-center rounded-full bg-background/70 text-foreground opacity-0 backdrop-blur transition-all duration-200 group-hover:opacity-100 hover:bg-primary hover:text-primary-foreground hover:scale-110"
         >
           <Heart className="h-4 w-4" />
         </button>
@@ -56,7 +70,7 @@ export function ProductCard({ product }: ProductCardProps) {
 
       <div className="flex flex-1 flex-col gap-3 p-4">
         <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>{product.categoryName}</span>
+          <span className="truncate">{product.categoryName}</span>
           <span className="inline-flex items-center gap-1">
             <Star className="h-3 w-3 fill-warning text-warning" />
             {product.rating.toFixed(1)}
@@ -69,10 +83,25 @@ export function ProductCard({ product }: ProductCardProps) {
         <Link
           to="/produto/$id"
           params={{ id: product.slug }}
-          className="line-clamp-2 text-sm font-medium leading-snug text-foreground hover:text-primary transition-colors"
+          className="line-clamp-2 text-sm font-medium leading-snug text-foreground transition-colors hover:text-primary"
         >
           {product.title}
         </Link>
+
+        {(product.verifiedSeller || product.trustScore != null) && (
+          <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+            {product.verifiedSeller && (
+              <span className="inline-flex items-center gap-1 text-accent">
+                <BadgeCheck className="h-3.5 w-3.5" /> Verificado
+              </span>
+            )}
+            {product.trustScore != null && (
+              <span className={`inline-flex items-center gap-1 ${trustTone}`}>
+                <ShieldCheck className="h-3.5 w-3.5" /> {product.trustScore}% confiança
+              </span>
+            )}
+          </div>
+        )}
 
         <div className="mt-auto flex items-end justify-between gap-2">
           <div>
@@ -88,7 +117,12 @@ export function ProductCard({ product }: ProductCardProps) {
               {formatCompact(product.soldCount)} vendidos
             </div>
           </div>
-          <Button size="icon" variant="default" aria-label="Comprar">
+          <Button
+            size="icon"
+            variant="default"
+            aria-label="Comprar"
+            className="transition-transform hover:scale-110"
+          >
             <ShoppingCart className="h-4 w-4" />
           </Button>
         </div>
