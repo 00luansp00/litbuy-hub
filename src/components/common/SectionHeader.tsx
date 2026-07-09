@@ -3,4 +3,3 @@
  * Reutiliza a implementação já existente de SectionTitle para não duplicar código.
  */
 export { SectionTitle as SectionHeader } from "./SectionTitle";
-export type { default as SectionHeaderProps } from "./SectionTitle";
