@@ -1,4 +1,4 @@
-import { CategoriesGrid } from "@/components/common/CategoriesGrid";
+import { CategoriesGrid as CategoriesGridLayout } from "@/components/common/CategoriesGrid";
 import { SectionHeader } from "@/components/common/SectionHeader";
 import type { Category } from "@/types";
 
@@ -20,7 +20,7 @@ export function CategoriesGrid({ categories }: CategoriesSectionProps) {
         href="/"
         actionLabel="Ver todas"
       />
-      <CategoriesGrid categories={categories} />
+      <CategoriesGridLayout categories={categories} />
     </section>
   );
 }
