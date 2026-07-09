@@ -102,7 +102,13 @@ function ProductPage() {
             <h3 className="mb-3 text-sm font-semibold text-foreground">
               Sobre o vendedor
             </h3>
-            <SellerInfo seller={enrichedSeller} size="lg" detailed />
+            <SellerInfo
+              seller={enrichedSeller}
+              size="lg"
+              detailed
+              href={enrichedSeller.slug ? "/loja/$slug" : undefined}
+              hrefParams={enrichedSeller.slug ? { slug: enrichedSeller.slug } : undefined}
+            />
           </div>
         </motion.div>
 

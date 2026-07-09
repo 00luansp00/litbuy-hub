@@ -1,21 +1,9 @@
-import type { Product, Seller } from "@/types";
+import type { Product } from "@/types";
+import { sellers } from "./sellers";
 
 const img = (seed: string) =>
   `https://picsum.photos/seed/${encodeURIComponent(seed)}/600/600`;
 
-const avatar = (seed: string) =>
-  `https://i.pravatar.cc/80?u=${encodeURIComponent(seed)}`;
-
-const sellers: Record<string, Seller> = {
-  nova: { id: "s1", name: "NovaKeys", avatarUrl: avatar("nova"), rating: 4.9, verified: true },
-  pixel: { id: "s2", name: "PixelStore", avatarUrl: avatar("pixel"), rating: 4.8, verified: true },
-  arena: { id: "s3", name: "Arena Gamer", avatarUrl: avatar("arena"), rating: 4.7, verified: true },
-  drop: { id: "s4", name: "DropZone", avatarUrl: avatar("drop"), rating: 4.6, verified: false },
-  loot: { id: "s5", name: "LootMaster", avatarUrl: avatar("loot"), rating: 4.9, verified: true },
-  neon: { id: "s6", name: "NeonMarket", avatarUrl: avatar("neon"), rating: 4.5, verified: false },
-  omega: { id: "s7", name: "Omega Games", avatarUrl: avatar("omega"), rating: 5.0, verified: true },
-  turbo: { id: "s8", name: "TurboBoost", avatarUrl: avatar("turbo"), rating: 4.8, verified: true },
-};
 
 export const products: Product[] = [
   {

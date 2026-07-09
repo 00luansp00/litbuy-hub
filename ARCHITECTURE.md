@@ -45,7 +45,7 @@ src/
 | `components/auth` | Blocos de autenticação: `AuthLayout`, `AuthCard`, `AuthHeader`, `AuthDivider`, `PasswordInput`, `FormFooter`. |
 | `data`         | Fixtures TypeScript tipadas por `src/types/`. Nunca importar de componentes de UI. |
 | `providers`    | Contexts globais. Hoje: `AuthProvider` (mock em memória). |
-| `services`     | Fachadas assíncronas — `productService`, `authMock`. Mesma assinatura que a API real terá. |
+| `services`     | Fachadas assíncronas — `productService`, `sellerService`, `reviewService`, `authMock`. Mesma assinatura que a API real terá. |
 | `routes`       | Cada arquivo é uma rota. Placeholders usam `PlaceholderPage`. |
 
 ## Rotas
@@ -65,7 +65,8 @@ Rotas atuais (todas registradas em `src/routes/`):
 | `/mensagens`           | `mensagens.tsx`               | Placeholder      |
 | `/carrinho`            | `carrinho.tsx`                | Placeholder      |
 | `/checkout`            | `checkout.tsx`                | Placeholder      |
-| `/vendedor`            | `vendedor.tsx`                | Placeholder      |
+| `/vendedor`            | `vendedor.tsx`                | Reservada — futuro **painel do vendedor** |
+| `/loja/$slug`          | `loja.$slug.tsx`              | Perfil público da loja |
 | `/admin`               | `admin.tsx`                   | Placeholder      |
 | `/categoria/$slug`     | `categoria.$slug.tsx`         | Placeholder      |
 | `/produto/$id`         | `produto.$id.tsx`             | Placeholder      |
