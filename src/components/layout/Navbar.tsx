@@ -167,14 +167,20 @@ export function Navbar() {
                 </Button>
               ))}
             </div>
-            <div className="flex gap-2">
-              <Button asChild variant="outline" className="flex-1">
-                <Link to="/login">Entrar</Link>
-              </Button>
-              <Button asChild className="flex-1">
-                <Link to="/cadastro">Criar conta</Link>
-              </Button>
-            </div>
+            {isAuthenticated ? (
+              <div className="flex justify-center">
+                <UserMenu />
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <Button asChild variant="outline" className="flex-1">
+                  <Link to="/login">Entrar</Link>
+                </Button>
+                <Button asChild className="flex-1">
+                  <Link to="/cadastro">Criar conta</Link>
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       )}
