@@ -1,4 +1,5 @@
 import { BadgeCheck, Clock, Star, TrendingUp, CalendarDays } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatCompact } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -11,6 +12,10 @@ interface SellerInfoProps {
   size?: "sm" | "md" | "lg";
   /** Exibe bloco expandido com nível, tempo de resposta e "membro desde". */
   detailed?: boolean;
+  /** Se fornecido, torna o nome do vendedor um link para a rota informada. */
+  href?: string;
+  /** Params de rota (usado com `href` quando a rota é dinâmica). */
+  hrefParams?: Record<string, string>;
   className?: string;
 }
 
@@ -20,12 +25,15 @@ const NAME_SIZE = { sm: "text-xs", md: "text-sm", lg: "text-base" };
 /**
  * SellerInfo — bloco de identidade do vendedor.
  * Reutilizado em ProductCard, página do produto, checkout, pedidos e perfil.
+ * Passando `href`, o nome vira link para o perfil público (`/loja/$slug`).
  */
 export function SellerInfo({
   seller,
   salesCount,
   size = "sm",
   detailed = false,
+  href,
+  hrefParams,
   className,
 }: SellerInfoProps) {
   const initials = seller.name
@@ -35,6 +43,10 @@ export function SellerInfo({
     .slice(0, 2)
     .toUpperCase();
   const sales = salesCount ?? seller.salesCount;
+
+  const nameNode = (
+    <span className="truncate font-medium text-foreground">{seller.name}</span>
+  );
 
   return (
     <div className={cn("min-w-0", className)}>
@@ -47,7 +59,18 @@ export function SellerInfo({
         </Avatar>
         <div className="min-w-0 flex-1">
           <div className={cn("flex items-center gap-1 truncate", NAME_SIZE[size])}>
-            <span className="truncate font-medium text-foreground">{seller.name}</span>
+            {href ? (
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              <Link
+                to={href as any}
+                params={hrefParams as any}
+                className="truncate transition-colors hover:text-primary"
+              >
+                {nameNode}
+              </Link>
+            ) : (
+              nameNode
+            )}
             {seller.verified && (
               <BadgeCheck
                 className="h-3.5 w-3.5 shrink-0 text-accent"
