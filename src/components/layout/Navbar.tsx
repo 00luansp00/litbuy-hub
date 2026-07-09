@@ -6,7 +6,7 @@ import {
   Heart,
   ShoppingCart,
   MessageSquare,
-  User,
+  LayoutGrid,
   LayoutGrid,
   X,
 } from "lucide-react";
