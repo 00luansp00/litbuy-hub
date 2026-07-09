@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 export function Hero() {
   return (
     <section className="relative overflow-hidden bg-hero">
-      <div className="container-lit relative py-16 md:py-24 grid gap-10 lg:grid-cols-2 lg:items-center">
+      <div className="container-lit relative py-12 md:py-20 grid gap-10 lg:grid-cols-2 lg:items-center">
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}

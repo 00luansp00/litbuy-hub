@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Hero } from "@/components/home/Hero";
 import { CategoriesGrid } from "@/components/home/CategoriesGrid";
-import { ProductsSection } from "@/components/home/ProductsSection";
+import { ProductSection } from "@/components/home/ProductSection";
+import { MarketplaceStats } from "@/components/home/MarketplaceStats";
 import { Benefits } from "@/components/home/Benefits";
 import { Newsletter } from "@/components/home/Newsletter";
 import { categories } from "@/data/categories";
@@ -13,33 +14,37 @@ export const Route = createFileRoute("/")({
 
 function HomePage() {
   const featured = products.filter((p) => p.badge === "hot" || p.badge === "top");
-  const popular = [...products].sort((a, b) => b.soldCount - a.soldCount).slice(0, 8);
-  const recent = [...products].slice(-8).reverse();
+  const popular = [...products].sort((a, b) => b.soldCount - a.soldCount);
+  const recent = [...products].reverse();
 
   return (
     <>
       <Hero />
       <CategoriesGrid categories={categories} />
-      <ProductsSection
+      <ProductSection
         eyebrow="Em destaque"
         title="Produtos em destaque"
         description="Selecionados a dedo pela nossa curadoria."
         href="/"
         products={featured}
+        count={8}
       />
-      <ProductsSection
+      <MarketplaceStats />
+      <ProductSection
         eyebrow="Mais vendidos"
         title="Populares agora"
         description="O que a comunidade LIT Buy está comprando essa semana."
         href="/"
         products={popular}
+        count={8}
       />
-      <ProductsSection
+      <ProductSection
         eyebrow="Novidades"
         title="Chegou agora"
         description="Os últimos anúncios publicados no marketplace."
         href="/"
         products={recent}
+        count={8}
       />
       <Benefits />
       <Newsletter />

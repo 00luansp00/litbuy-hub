@@ -11,6 +11,7 @@ export const products: Product[] = [
     price: 349.9, originalPrice: 499.9, discountPercent: 30,
     rating: 4.9, reviewsCount: 128, soldCount: 340,
     imageUrl: img("valorant-imortal"), badge: "hot",
+    instantDelivery: true, verifiedSeller: true, trustScore: 97,
   },
   {
     id: "p2", slug: "gift-card-steam-100",
@@ -18,6 +19,7 @@ export const products: Product[] = [
     categorySlug: "gift-cards", categoryName: "Gift Cards",
     price: 98.9, rating: 4.8, reviewsCount: 2450, soldCount: 12800,
     imageUrl: img("steam-100"), badge: "top",
+    instantDelivery: true, verifiedSeller: true, trustScore: 99,
   },
   {
     id: "p3", slug: "moedas-fifa-500k",
@@ -26,6 +28,7 @@ export const products: Product[] = [
     price: 79.9, originalPrice: 99.9, discountPercent: 20,
     rating: 4.7, reviewsCount: 890, soldCount: 5400,
     imageUrl: img("fifa-500k"), badge: "promo",
+    instantDelivery: true, verifiedSeller: true, trustScore: 92,
   },
   {
     id: "p4", slug: "skin-ak47-redline",
@@ -33,6 +36,7 @@ export const products: Product[] = [
     categorySlug: "skins", categoryName: "Skins",
     price: 189.0, rating: 4.9, reviewsCount: 340, soldCount: 210,
     imageUrl: img("ak-redline"), badge: "new",
+    verifiedSeller: true, trustScore: 88,
   },
   {
     id: "p5", slug: "conta-lol-diamante",
@@ -41,6 +45,7 @@ export const products: Product[] = [
     price: 259.0, originalPrice: 329.0, discountPercent: 21,
     rating: 4.6, reviewsCount: 78, soldCount: 156,
     imageUrl: img("lol-diamante"),
+    verifiedSeller: true, trustScore: 84,
   },
   {
     id: "p6", slug: "gift-card-google-play-50",
@@ -48,6 +53,7 @@ export const products: Product[] = [
     categorySlug: "gift-cards", categoryName: "Gift Cards",
     price: 49.5, rating: 4.9, reviewsCount: 4200, soldCount: 23100,
     imageUrl: img("gplay-50"),
+    instantDelivery: true, verifiedSeller: true, trustScore: 98,
   },
   {
     id: "p7", slug: "servico-boost-rank",
@@ -55,6 +61,7 @@ export const products: Product[] = [
     categorySlug: "servicos", categoryName: "Serviços",
     price: 149.9, rating: 4.8, reviewsCount: 210, soldCount: 640,
     imageUrl: img("boost-rank"), badge: "hot",
+    verifiedSeller: true, trustScore: 91,
   },
   {
     id: "p8", slug: "conta-fortnite-og",
@@ -63,6 +70,7 @@ export const products: Product[] = [
     price: 899.0, originalPrice: 1200.0, discountPercent: 25,
     rating: 5.0, reviewsCount: 54, soldCount: 42,
     imageUrl: img("fortnite-og"), badge: "top",
+    verifiedSeller: true, trustScore: 95,
   },
   {
     id: "p9", slug: "jogo-cyberpunk-2077",
@@ -71,6 +79,7 @@ export const products: Product[] = [
     price: 79.9, originalPrice: 199.9, discountPercent: 60,
     rating: 4.5, reviewsCount: 1240, soldCount: 3200,
     imageUrl: img("cyberpunk"), badge: "promo",
+    instantDelivery: true, trustScore: 82,
   },
   {
     id: "p10", slug: "assinatura-xbox-gp",
@@ -78,6 +87,7 @@ export const products: Product[] = [
     categorySlug: "assinaturas", categoryName: "Assinaturas",
     price: 129.9, rating: 4.9, reviewsCount: 3400, soldCount: 8900,
     imageUrl: img("xbox-gp"),
+    instantDelivery: true, verifiedSeller: true, trustScore: 96,
   },
   {
     id: "p11", slug: "item-mm2-godly",
@@ -85,6 +95,7 @@ export const products: Product[] = [
     categorySlug: "itens", categoryName: "Itens",
     price: 39.9, rating: 4.7, reviewsCount: 120, soldCount: 780,
     imageUrl: img("mm2-godly"), badge: "new",
+    verifiedSeller: true, trustScore: 86,
   },
   {
     id: "p12", slug: "moedas-gta-online",
@@ -93,5 +104,6 @@ export const products: Product[] = [
     price: 59.9, originalPrice: 89.9, discountPercent: 33,
     rating: 4.8, reviewsCount: 560, soldCount: 2100,
     imageUrl: img("gta-online"),
+    instantDelivery: true, trustScore: 79,
   },
 ];
