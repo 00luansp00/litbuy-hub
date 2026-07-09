@@ -1,17 +1,11 @@
 import { Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
-import { Heart, ShoppingCart, Star, Zap, BadgeCheck, ShieldCheck } from "lucide-react";
+import { Heart, ShieldCheck, ShoppingCart, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { ProductBadges } from "./ProductBadges";
+import { SellerInfo } from "./SellerInfo";
 import { formatBRL, formatCompact } from "@/lib/format";
 import type { Product } from "@/types";
-
-const badgeLabel: Record<NonNullable<Product["badge"]>, string> = {
-  hot: "Em alta",
-  new: "Novo",
-  promo: "Promo",
-  top: "Top",
-};
 
 interface ProductCardProps {
   product: Product;
@@ -29,7 +23,7 @@ export function ProductCard({ product }: ProductCardProps) {
     <motion.article
       whileHover={{ y: -6 }}
       transition={{ type: "spring", stiffness: 300, damping: 22 }}
-      className="group relative flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-card transition-all duration-300 hover:border-primary/50 hover:shadow-elegant"
+      className="group relative flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card shadow-card transition-all duration-300 hover:border-primary/50 hover:shadow-elegant"
     >
       <Link
         to="/produto/$id"
@@ -42,20 +36,13 @@ export function ProductCard({ product }: ProductCardProps) {
           loading="lazy"
           className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
         />
-        <div className="absolute left-3 top-3 flex flex-col gap-1.5">
-          {product.badge && (
-            <Badge className="border-0 bg-primary/90 text-primary-foreground backdrop-blur">
-              {badgeLabel[product.badge]}
-            </Badge>
-          )}
-          {product.instantDelivery && (
-            <span className="inline-flex items-center gap-1 rounded-md bg-background/70 px-1.5 py-0.5 text-[10px] font-semibold text-warning backdrop-blur">
-              <Zap className="h-3 w-3 fill-warning" /> Instantâneo
-            </span>
-          )}
-        </div>
+        <ProductBadges
+          product={product}
+          variant="overlay"
+          className="absolute left-3 top-3 max-w-[calc(100%-4rem)]"
+        />
         {product.discountPercent && (
-          <span className="absolute right-3 top-3 rounded-md bg-success px-2 py-0.5 text-xs font-semibold text-success-foreground">
+          <span className="absolute right-3 top-3 rounded-md bg-success px-2 py-0.5 text-xs font-semibold text-success-foreground shadow-card">
             -{product.discountPercent}%
           </span>
         )}
@@ -88,18 +75,14 @@ export function ProductCard({ product }: ProductCardProps) {
           {product.title}
         </Link>
 
-        {(product.verifiedSeller || product.trustScore != null) && (
-          <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-            {product.verifiedSeller && (
-              <span className="inline-flex items-center gap-1 text-accent">
-                <BadgeCheck className="h-3.5 w-3.5" /> Verificado
-              </span>
-            )}
-            {product.trustScore != null && (
-              <span className={`inline-flex items-center gap-1 ${trustTone}`}>
-                <ShieldCheck className="h-3.5 w-3.5" /> {product.trustScore}% confiança
-              </span>
-            )}
+        {product.seller && (
+          <SellerInfo seller={product.seller} />
+        )}
+
+        {product.trustScore != null && (
+          <div className={`flex items-center gap-1 text-[11px] ${trustTone}`}>
+            <ShieldCheck className="h-3.5 w-3.5" />
+            {product.trustScore}% confiança
           </div>
         )}
 
