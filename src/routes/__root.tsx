@@ -14,6 +14,7 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { Toaster } from "@/components/ui/sonner";
+import { AuthProvider } from "@/providers/AuthProvider";
 
 function NotFoundComponent() {
   return (
@@ -132,15 +133,17 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <div className="flex min-h-screen flex-col bg-background text-foreground">
-        <Navbar />
-        <main className="flex-1">
-          {/* Required: nested routes render here. */}
-          <Outlet />
-        </main>
-        <Footer />
-      </div>
-      <Toaster />
+      <AuthProvider>
+        <div className="flex min-h-screen flex-col bg-background text-foreground">
+          <Navbar />
+          <main className="flex-1">
+            {/* Required: nested routes render here. */}
+            <Outlet />
+          </main>
+          <Footer />
+        </div>
+        <Toaster />
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

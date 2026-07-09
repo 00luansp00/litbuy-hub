@@ -6,7 +6,6 @@ import {
   Heart,
   ShoppingCart,
   MessageSquare,
-  User,
   LayoutGrid,
   X,
 } from "lucide-react";
@@ -22,6 +21,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { categories } from "@/data/categories";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/providers/AuthProvider";
+import { UserMenu } from "./UserMenu";
 
 const navLinks = [
   { to: "/", label: "Início" },
@@ -33,6 +34,7 @@ const navLinks = [
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { isAuthenticated } = useAuth();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -115,17 +117,20 @@ export function Navbar() {
               </Badge>
             </Link>
           </Button>
-          <div className="hidden md:flex items-center gap-1 ml-2">
-            <Button asChild variant="ghost" size="sm">
-              <Link to="/login">Entrar</Link>
-            </Button>
-            <Button asChild size="sm">
-              <Link to="/cadastro">Criar conta</Link>
-            </Button>
-          </div>
-          <Button asChild variant="ghost" size="icon" aria-label="Perfil" className="hidden md:inline-flex">
-            <Link to="/perfil"><User className="h-5 w-5" /></Link>
-          </Button>
+          {isAuthenticated ? (
+            <div className="hidden md:flex items-center ml-2">
+              <UserMenu />
+            </div>
+          ) : (
+            <div className="hidden md:flex items-center gap-1 ml-2">
+              <Button asChild variant="ghost" size="sm">
+                <Link to="/login">Entrar</Link>
+              </Button>
+              <Button asChild size="sm">
+                <Link to="/cadastro">Criar conta</Link>
+              </Button>
+            </div>
+          )}
           <Button
             variant="ghost"
             size="icon"
@@ -161,14 +166,20 @@ export function Navbar() {
                 </Button>
               ))}
             </div>
-            <div className="flex gap-2">
-              <Button asChild variant="outline" className="flex-1">
-                <Link to="/login">Entrar</Link>
-              </Button>
-              <Button asChild className="flex-1">
-                <Link to="/cadastro">Criar conta</Link>
-              </Button>
-            </div>
+            {isAuthenticated ? (
+              <div className="flex justify-center">
+                <UserMenu />
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <Button asChild variant="outline" className="flex-1">
+                  <Link to="/login">Entrar</Link>
+                </Button>
+                <Button asChild className="flex-1">
+                  <Link to="/cadastro">Criar conta</Link>
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       )}
