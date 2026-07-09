@@ -63,7 +63,8 @@ function ProductPage() {
   };
 
   const avg =
-    reviews.reduce((acc, r) => acc + r.rating, 0) / Math.max(1, reviews.length);
+    reviews.reduce((acc: number, r: { rating: number }) => acc + r.rating, 0) /
+    Math.max(1, reviews.length);
 
   return (
     <div className="container-lit space-y-8 py-6 md:py-10">
