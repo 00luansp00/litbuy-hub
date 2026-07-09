@@ -2,7 +2,7 @@ import { motion } from "motion/react";
 import {
   BadgeCheck,
   Crown,
-  HeadphonesIcon,
+  Headphones,
   Medal,
   MessageSquare,
   ShieldCheck,
@@ -27,7 +27,7 @@ const BADGE_META: Record<
   fast_reply: { icon: MessageSquare, tone: "text-primary bg-primary/12" },
   premium_member: { icon: Sparkles, tone: "text-primary bg-primary/12" },
   high_rep: { icon: Medal, tone: "text-success bg-success/12" },
-  active_support: { icon: HeadphonesIcon, tone: "text-accent bg-accent/12" },
+  active_support: { icon: Headphones, tone: "text-accent bg-accent/12" },
 };
 
 /**
