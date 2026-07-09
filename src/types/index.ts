@@ -4,6 +4,11 @@ export interface Category {
   name: string;
   icon: string; // lucide icon name
   description?: string;
+  /** Quantidade de anúncios ativos na categoria (mock). */
+  listingCount?: number;
+  /** Cor de destaque (token semântico ou variável CSS). */
+  color?: string;
+  /** @deprecated Use `listingCount`. Mantido apenas para compatibilidade. */
   productCount?: number;
 }
 
