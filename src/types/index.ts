@@ -36,4 +36,6 @@ export interface Product {
   verifiedSeller?: boolean;
   /** 0-100 — indicador de confiança agregado do anúncio. */
   trustScore?: number;
+  /** Marca explicitamente o anúncio como "Mais vendido". */
+  bestSeller?: boolean;
 }
