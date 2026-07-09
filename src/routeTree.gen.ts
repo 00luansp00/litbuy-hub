@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as VendedorRouteImport } from './routes/vendedor'
+import { Route as RecuperarSenhaRouteImport } from './routes/recuperar-senha'
 import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as PedidosRouteImport } from './routes/pedidos'
 import { Route as MensagensRouteImport } from './routes/mensagens'
@@ -27,6 +28,11 @@ import { Route as CategoriaSlugRouteImport } from './routes/categoria.$slug'
 const VendedorRoute = VendedorRouteImport.update({
   id: '/vendedor',
   path: '/vendedor',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RecuperarSenhaRoute = RecuperarSenhaRouteImport.update({
+  id: '/recuperar-senha',
+  path: '/recuperar-senha',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PerfilRoute = PerfilRouteImport.update({
@@ -107,6 +113,7 @@ export interface FileRoutesByFullPath {
   '/mensagens': typeof MensagensRoute
   '/pedidos': typeof PedidosRoute
   '/perfil': typeof PerfilRoute
+  '/recuperar-senha': typeof RecuperarSenhaRoute
   '/vendedor': typeof VendedorRoute
   '/categoria/$slug': typeof CategoriaSlugRoute
   '/produto/$id': typeof ProdutoIdRoute
@@ -123,6 +130,7 @@ export interface FileRoutesByTo {
   '/mensagens': typeof MensagensRoute
   '/pedidos': typeof PedidosRoute
   '/perfil': typeof PerfilRoute
+  '/recuperar-senha': typeof RecuperarSenhaRoute
   '/vendedor': typeof VendedorRoute
   '/categoria/$slug': typeof CategoriaSlugRoute
   '/produto/$id': typeof ProdutoIdRoute
@@ -140,6 +148,7 @@ export interface FileRoutesById {
   '/mensagens': typeof MensagensRoute
   '/pedidos': typeof PedidosRoute
   '/perfil': typeof PerfilRoute
+  '/recuperar-senha': typeof RecuperarSenhaRoute
   '/vendedor': typeof VendedorRoute
   '/categoria/$slug': typeof CategoriaSlugRoute
   '/produto/$id': typeof ProdutoIdRoute
@@ -158,6 +167,7 @@ export interface FileRouteTypes {
     | '/mensagens'
     | '/pedidos'
     | '/perfil'
+    | '/recuperar-senha'
     | '/vendedor'
     | '/categoria/$slug'
     | '/produto/$id'
@@ -174,6 +184,7 @@ export interface FileRouteTypes {
     | '/mensagens'
     | '/pedidos'
     | '/perfil'
+    | '/recuperar-senha'
     | '/vendedor'
     | '/categoria/$slug'
     | '/produto/$id'
@@ -190,6 +201,7 @@ export interface FileRouteTypes {
     | '/mensagens'
     | '/pedidos'
     | '/perfil'
+    | '/recuperar-senha'
     | '/vendedor'
     | '/categoria/$slug'
     | '/produto/$id'
@@ -207,6 +219,7 @@ export interface RootRouteChildren {
   MensagensRoute: typeof MensagensRoute
   PedidosRoute: typeof PedidosRoute
   PerfilRoute: typeof PerfilRoute
+  RecuperarSenhaRoute: typeof RecuperarSenhaRoute
   VendedorRoute: typeof VendedorRoute
   CategoriaSlugRoute: typeof CategoriaSlugRoute
   ProdutoIdRoute: typeof ProdutoIdRoute
@@ -219,6 +232,13 @@ declare module '@tanstack/react-router' {
       path: '/vendedor'
       fullPath: '/vendedor'
       preLoaderRoute: typeof VendedorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/recuperar-senha': {
+      id: '/recuperar-senha'
+      path: '/recuperar-senha'
+      fullPath: '/recuperar-senha'
+      preLoaderRoute: typeof RecuperarSenhaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/perfil': {
@@ -327,6 +347,7 @@ const rootRouteChildren: RootRouteChildren = {
   MensagensRoute: MensagensRoute,
   PedidosRoute: PedidosRoute,
   PerfilRoute: PerfilRoute,
+  RecuperarSenhaRoute: RecuperarSenhaRoute,
   VendedorRoute: VendedorRoute,
   CategoriaSlugRoute: CategoriaSlugRoute,
   ProdutoIdRoute: ProdutoIdRoute,
