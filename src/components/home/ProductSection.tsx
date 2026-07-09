@@ -1,4 +1,4 @@
-import { ProductCard } from "@/components/common/ProductCard";
+import { ProductGrid } from "@/components/common/ProductGrid";
 import { SectionHeader } from "@/components/common/SectionHeader";
 import type { Product } from "@/types";
 
@@ -11,11 +11,14 @@ interface ProductSectionProps {
   products: Product[];
   /** Limita a quantidade de itens exibidos. */
   count?: number;
+  /** Colunas máximas do grid. */
+  columns?: 2 | 3 | 4 | 5 | 6;
+  loading?: boolean;
 }
 
 /**
- * ProductSection — seção reutilizável para listar produtos na Home
- * (e futuramente em outras páginas).
+ * ProductSection — combina SectionHeader + ProductGrid.
+ * Continua sendo a forma padrão de listar produtos na Home.
  */
 export function ProductSection({
   eyebrow,
@@ -25,6 +28,8 @@ export function ProductSection({
   actionLabel,
   products,
   count,
+  columns = 4,
+  loading = false,
 }: ProductSectionProps) {
   const items = typeof count === "number" ? products.slice(0, count) : products;
 
@@ -37,11 +42,12 @@ export function ProductSection({
         href={href}
         actionLabel={actionLabel}
       />
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-5">
-        {items.map((p) => (
-          <ProductCard key={p.id} product={p} />
-        ))}
-      </div>
+      <ProductGrid
+        products={items}
+        columns={columns}
+        loading={loading}
+        skeletonCount={count ?? 8}
+      />
     </section>
   );
 }
