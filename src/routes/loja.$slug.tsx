@@ -51,7 +51,8 @@ function SellerPage() {
   const { seller, products, reviews } = Route.useLoaderData();
 
   const average = reviews.length
-    ? reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length
+    ? reviews.reduce((acc: number, r: { rating: number }) => acc + r.rating, 0) /
+      reviews.length
     : seller.rating;
   const totalReviews = seller.stats?.totalReviews ?? reviews.length;
 
