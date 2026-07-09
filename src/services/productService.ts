@@ -22,6 +22,14 @@ export const productService = {
     delay(products.filter((p) => p.categorySlug === slug)),
   byId: (id: string): Promise<Product | undefined> =>
     delay(products.find((p) => p.id === id || p.slug === id)),
+  related: (id: string, limit = 8): Promise<Product[]> => {
+    const base = products.find((p) => p.id === id || p.slug === id);
+    if (!base) return delay([]);
+    const same = products.filter(
+      (p) => p.categorySlug === base.categorySlug && p.id !== base.id,
+    );
+    return delay(same.slice(0, limit));
+  },
 };
 
 export const categoryService = {

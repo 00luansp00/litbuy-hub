@@ -18,7 +18,27 @@ export interface Seller {
   avatarUrl?: string;
   rating: number;
   verified?: boolean;
+  /** Nível (mock) exibido no perfil expandido. */
+  level?: string;
+  /** Tempo médio de resposta (mock, ex.: "< 5 min"). */
+  responseTime?: string;
+  /** Total de vendas do vendedor. */
+  salesCount?: number;
+  /** ISO date — quando o vendedor entrou. */
+  memberSince?: string;
 }
+
+export interface Review {
+  id: string;
+  productId: string;
+  author: string;
+  avatarUrl?: string;
+  rating: number;
+  comment: string;
+  /** ISO date. */
+  date: string;
+}
+
 
 export interface Product {
   id: string;
