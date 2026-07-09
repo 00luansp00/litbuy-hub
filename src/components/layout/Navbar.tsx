@@ -118,17 +118,20 @@ export function Navbar() {
               </Badge>
             </Link>
           </Button>
-          <div className="hidden md:flex items-center gap-1 ml-2">
-            <Button asChild variant="ghost" size="sm">
-              <Link to="/login">Entrar</Link>
-            </Button>
-            <Button asChild size="sm">
-              <Link to="/cadastro">Criar conta</Link>
-            </Button>
-          </div>
-          <Button asChild variant="ghost" size="icon" aria-label="Perfil" className="hidden md:inline-flex">
-            <Link to="/perfil"><User className="h-5 w-5" /></Link>
-          </Button>
+          {isAuthenticated ? (
+            <div className="hidden md:flex items-center ml-2">
+              <UserMenu />
+            </div>
+          ) : (
+            <div className="hidden md:flex items-center gap-1 ml-2">
+              <Button asChild variant="ghost" size="sm">
+                <Link to="/login">Entrar</Link>
+              </Button>
+              <Button asChild size="sm">
+                <Link to="/cadastro">Criar conta</Link>
+              </Button>
+            </div>
+          )}
           <Button
             variant="ghost"
             size="icon"
