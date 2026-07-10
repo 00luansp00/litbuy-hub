@@ -116,11 +116,14 @@ export function Navbar() {
           <Button asChild variant="ghost" size="icon" aria-label="Carrinho" className="relative">
             <Link to="/carrinho">
               <ShoppingCart className="h-5 w-5" />
-              <Badge className="absolute -top-1 -right-1 h-4 min-w-4 px-1 text-[10px] bg-primary border-0">
-                0
-              </Badge>
+              {itemCount > 0 && (
+                <Badge className="absolute -top-1 -right-1 h-4 min-w-4 px-1 text-[10px] bg-primary border-0">
+                  {itemCount > 99 ? "99+" : itemCount}
+                </Badge>
+              )}
             </Link>
           </Button>
+
           {isAuthenticated ? (
             <div className="hidden md:flex items-center ml-2">
               <UserMenu />
