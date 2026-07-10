@@ -22,7 +22,9 @@ import {
 import { categories } from "@/data/categories";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/AuthProvider";
+import { useCart } from "@/providers/CartProvider";
 import { UserMenu } from "./UserMenu";
+
 
 const navLinks = [
   { to: "/", label: "Início" },
