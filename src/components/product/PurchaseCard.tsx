@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { motion } from "motion/react";
+import { useNavigate } from "@tanstack/react-router";
+import { toast } from "sonner";
 import {
   Heart,
   Minus,
@@ -15,12 +17,15 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { formatBRL } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useCart } from "@/providers/CartProvider";
+import { useAuth } from "@/providers/AuthProvider";
 import type { Product } from "@/types";
 
 interface PurchaseCardProps {
   product: Product;
   className?: string;
 }
+
 
 /**
  * PurchaseCard — bloco lateral sticky de conversão.
@@ -29,6 +34,27 @@ interface PurchaseCardProps {
 export function PurchaseCard({ product, className }: PurchaseCardProps) {
   const [qty, setQty] = useState(1);
   const maxQty = product.stock ?? 99;
+  const { addItem } = useCart();
+  const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+
+  const handleAddToCart = () => {
+    addItem(product, qty);
+    toast.success("Adicionado ao carrinho", {
+      description: `${qty}x ${product.title}`,
+    });
+  };
+
+  const handleBuyNow = () => {
+    addItem(product, qty);
+    if (!isAuthenticated) {
+      toast.info("Faça login para finalizar a compra");
+      navigate({ to: "/login" });
+      return;
+    }
+    navigate({ to: "/checkout" });
+  };
+
 
   return (
     <motion.aside
@@ -79,12 +105,13 @@ export function PurchaseCard({ product, className }: PurchaseCardProps) {
       </div>
 
       <div className="flex flex-col gap-2">
-        <Button size="lg" className="w-full">
+        <Button size="lg" className="w-full" onClick={handleBuyNow}>
           <Zap className="mr-2 h-4 w-4" /> Comprar agora
         </Button>
-        <Button size="lg" variant="secondary" className="w-full">
+        <Button size="lg" variant="secondary" className="w-full" onClick={handleAddToCart}>
           <ShoppingCart className="mr-2 h-4 w-4" /> Adicionar ao carrinho
         </Button>
+
         <div className="grid grid-cols-2 gap-2">
           <Button variant="outline" size="sm">
             <Heart className="mr-2 h-4 w-4" /> Favoritar

@@ -239,3 +239,44 @@ export interface AccountNotification {
   read?: boolean;
 }
 
+// ==================================================
+// Carrinho (Cart) — tipos consumidos pelo CartProvider,
+// cartService e componentes em src/components/cart.
+// Estado 100% em memória; nenhum backend/persistência.
+// ==================================================
+
+export interface CartItem {
+  productId: string;
+  slug: string;
+  title: string;
+  image: string;
+  category: string;
+  categorySlug: string;
+  sellerName: string;
+  sellerSlug?: string;
+  price: number;
+  oldPrice?: number;
+  quantity: number;
+  instantDelivery?: boolean;
+  verifiedSeller?: boolean;
+}
+
+export type CartCouponKind = "percent" | "fixed";
+
+export interface CartCoupon {
+  code: string;
+  kind: CartCouponKind;
+  /** Percentual (0-100) para "percent" ou valor em BRL para "fixed". */
+  value: number;
+  label: string;
+}
+
+export interface CartSummary {
+  itemCount: number;
+  subtotal: number;
+  discount: number;
+  platformFee: number;
+  total: number;
+}
+
+

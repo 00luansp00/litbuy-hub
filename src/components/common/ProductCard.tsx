@@ -1,17 +1,30 @@
 import { Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import { Heart, ShieldCheck, ShoppingCart, Star } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ProductBadges } from "./ProductBadges";
 import { SellerInfo } from "./SellerInfo";
 import { formatBRL, formatCompact } from "@/lib/format";
+import { useCart } from "@/providers/CartProvider";
 import type { Product } from "@/types";
+
+
+
 
 interface ProductCardProps {
   product: Product;
 }
 
 export function ProductCard({ product }: ProductCardProps) {
+  const { addItem } = useCart();
+  const handleAdd = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    addItem(product);
+    toast.success("Adicionado ao carrinho", { description: product.title });
+  };
+
   const trustTone =
     (product.trustScore ?? 0) >= 90
       ? "text-success"
@@ -103,11 +116,13 @@ export function ProductCard({ product }: ProductCardProps) {
           <Button
             size="icon"
             variant="default"
-            aria-label="Comprar"
+            aria-label="Adicionar ao carrinho"
+            onClick={handleAdd}
             className="transition-transform hover:scale-110"
           >
             <ShoppingCart className="h-4 w-4" />
           </Button>
+
         </div>
       </div>
     </motion.article>

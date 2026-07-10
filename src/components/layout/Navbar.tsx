@@ -22,7 +22,9 @@ import {
 import { categories } from "@/data/categories";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/AuthProvider";
+import { useCart } from "@/providers/CartProvider";
 import { UserMenu } from "./UserMenu";
+
 
 const navLinks = [
   { to: "/", label: "Início" },
@@ -35,6 +37,8 @@ export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const { isAuthenticated } = useAuth();
+  const { itemCount } = useCart();
+
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -112,11 +116,14 @@ export function Navbar() {
           <Button asChild variant="ghost" size="icon" aria-label="Carrinho" className="relative">
             <Link to="/carrinho">
               <ShoppingCart className="h-5 w-5" />
-              <Badge className="absolute -top-1 -right-1 h-4 min-w-4 px-1 text-[10px] bg-primary border-0">
-                0
-              </Badge>
+              {itemCount > 0 && (
+                <Badge className="absolute -top-1 -right-1 h-4 min-w-4 px-1 text-[10px] bg-primary border-0">
+                  {itemCount > 99 ? "99+" : itemCount}
+                </Badge>
+              )}
             </Link>
           </Button>
+
           {isAuthenticated ? (
             <div className="hidden md:flex items-center ml-2">
               <UserMenu />
