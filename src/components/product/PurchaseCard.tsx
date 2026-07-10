@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { motion } from "motion/react";
+import { useNavigate } from "@tanstack/react-router";
+import { toast } from "sonner";
 import {
   Heart,
   Minus,
@@ -15,12 +17,15 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { formatBRL } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useCart } from "@/providers/CartProvider";
+import { useAuth } from "@/providers/AuthProvider";
 import type { Product } from "@/types";
 
 interface PurchaseCardProps {
   product: Product;
   className?: string;
 }
+
 
 /**
  * PurchaseCard — bloco lateral sticky de conversão.
