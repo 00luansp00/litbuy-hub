@@ -9,8 +9,8 @@ import { formatBRL, formatCompact } from "@/lib/format";
 import { useCart } from "@/providers/CartProvider";
 import type { Product } from "@/types";
 
-import { formatBRL, formatCompact } from "@/lib/format";
-import type { Product } from "@/types";
+
+
 
 interface ProductCardProps {
   product: Product;
