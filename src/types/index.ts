@@ -131,3 +131,111 @@ export interface Product {
   /** Marca explicitamente o anúncio como "Mais vendido". */
   bestSeller?: boolean;
 }
+
+// ==================================================
+// Área do Usuário (Account) — tipos consumidos pelo
+// accountService e pelos componentes em src/components/account.
+// Tudo mockado nesta sprint; o contrato foi desenhado para
+// receber dados reais no futuro sem refatoração de UI.
+// ==================================================
+
+export type AccountMetricTone =
+  | "primary"
+  | "accent"
+  | "success"
+  | "warning"
+  | "muted";
+
+export interface AccountMetric {
+  id: string;
+  label: string;
+  value: string;
+  /** Nome do ícone Lucide (ex.: "ShoppingBag"). */
+  icon: string;
+  /** Variação em relação ao período anterior (mock). */
+  delta?: string;
+  deltaDirection?: "up" | "down" | "neutral";
+  tone?: AccountMetricTone;
+  hint?: string;
+}
+
+export interface AccountSummary {
+  memberSince: string; // ISO date
+  verified: boolean;
+  level: string;
+  metrics: AccountMetric[];
+}
+
+export type UserOrderStatus =
+  | "pending"
+  | "processing"
+  | "delivered"
+  | "completed"
+  | "cancelled"
+  | "refunded";
+
+export interface UserOrderPreview {
+  id: string;
+  code: string;
+  productTitle: string;
+  productImage: string;
+  sellerName: string;
+  status: UserOrderStatus;
+  total: number;
+  /** ISO date. */
+  createdAt: string;
+}
+
+export interface UserFavoritePreview {
+  id: string;
+  productId: string;
+  addedAt: string; // ISO date
+}
+
+export interface UserMessagePreview {
+  id: string;
+  sellerId: string;
+  sellerName: string;
+  avatarUrl?: string;
+  lastMessage: string;
+  /** ISO date. */
+  lastMessageAt: string;
+  unreadCount: number;
+}
+
+export type WalletTransactionKind =
+  | "credit"
+  | "debit"
+  | "refund"
+  | "withdraw"
+  | "topup";
+
+export interface WalletTransaction {
+  id: string;
+  kind: WalletTransactionKind;
+  description: string;
+  amount: number; // positivo p/ crédito, negativo p/ débito
+  createdAt: string; // ISO date
+}
+
+export interface WalletSummary {
+  balance: number;
+  pending: number;
+  currency: "BRL";
+  transactions: WalletTransaction[];
+}
+
+export type AccountNotificationTone = "info" | "success" | "warning" | "danger";
+
+export interface AccountNotification {
+  id: string;
+  title: string;
+  description: string;
+  tone: AccountNotificationTone;
+  /** Nome do ícone Lucide. */
+  icon: string;
+  /** ISO date. */
+  createdAt: string;
+  read?: boolean;
+}
+
