@@ -9,22 +9,21 @@ import { ProductGrid } from "@/components/common/ProductGrid";
 import { SortBar } from "@/components/common/SortBar";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { categories } from "@/data/categories";
-import { products } from "@/data/products";
+import { categoryService, productService } from "@/services/productService";
 
 export const Route = createFileRoute("/categoria/$slug")({
-  loader: ({ params }) => {
-    const category = categories.find((c) => c.slug === params.slug);
+  loader: async ({ params }) => {
+    const category = await categoryService.bySlug(params.slug);
     if (!category) throw notFound();
-    return { category };
+    const items = await productService.byCategory(params.slug);
+    return { category, items };
   },
   component: CategoryPage,
   notFoundComponent: CategoryNotFound,
 });
 
 function CategoryPage() {
-  const { category } = Route.useLoaderData();
-  const items = products.filter((p) => p.categorySlug === category.slug);
+  const { category, items } = Route.useLoaderData();
 
   // Mock de loading apenas para demonstração visual.
   const [loading, setLoading] = useState(true);

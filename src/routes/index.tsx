@@ -5,17 +5,23 @@ import { ProductSection } from "@/components/home/ProductSection";
 import { MarketplaceStats } from "@/components/home/MarketplaceStats";
 import { Benefits } from "@/components/home/Benefits";
 import { Newsletter } from "@/components/home/Newsletter";
-import { categories } from "@/data/categories";
-import { products } from "@/data/products";
+import { categoryService, productService } from "@/services/productService";
 
 export const Route = createFileRoute("/")({
+  loader: async () => {
+    const [categories, featured, popular, recent] = await Promise.all([
+      categoryService.list(),
+      productService.featured(),
+      productService.popular(),
+      productService.recent(),
+    ]);
+    return { categories, featured, popular, recent };
+  },
   component: HomePage,
 });
 
 function HomePage() {
-  const featured = products.filter((p) => p.badge === "hot" || p.badge === "top");
-  const popular = [...products].sort((a, b) => b.soldCount - a.soldCount);
-  const recent = [...products].reverse();
+  const { categories, featured, popular, recent } = Route.useLoaderData();
 
   return (
     <>
