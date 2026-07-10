@@ -34,6 +34,27 @@ interface PurchaseCardProps {
 export function PurchaseCard({ product, className }: PurchaseCardProps) {
   const [qty, setQty] = useState(1);
   const maxQty = product.stock ?? 99;
+  const { addItem } = useCart();
+  const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+
+  const handleAddToCart = () => {
+    addItem(product, qty);
+    toast.success("Adicionado ao carrinho", {
+      description: `${qty}x ${product.title}`,
+    });
+  };
+
+  const handleBuyNow = () => {
+    addItem(product, qty);
+    if (!isAuthenticated) {
+      toast.info("Faça login para finalizar a compra");
+      navigate({ to: "/login" });
+      return;
+    }
+    navigate({ to: "/checkout" });
+  };
+
 
   return (
     <motion.aside
