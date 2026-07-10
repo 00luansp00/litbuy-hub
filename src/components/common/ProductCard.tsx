@@ -116,11 +116,13 @@ export function ProductCard({ product }: ProductCardProps) {
           <Button
             size="icon"
             variant="default"
-            aria-label="Comprar"
+            aria-label="Adicionar ao carrinho"
+            onClick={handleAdd}
             className="transition-transform hover:scale-110"
           >
             <ShoppingCart className="h-4 w-4" />
           </Button>
+
         </div>
       </div>
     </motion.article>
