@@ -136,16 +136,19 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <div className="flex min-h-screen flex-col bg-background text-foreground">
-          <Navbar />
-          <main className="flex-1">
-            {/* Required: nested routes render here. */}
-            <Outlet />
-          </main>
-          <Footer />
-        </div>
-        <Toaster />
+        <CartProvider>
+          <div className="flex min-h-screen flex-col bg-background text-foreground">
+            <Navbar />
+            <main className="flex-1">
+              {/* Required: nested routes render here. */}
+              <Outlet />
+            </main>
+            <Footer />
+          </div>
+          <Toaster />
+        </CartProvider>
       </AuthProvider>
+
     </QueryClientProvider>
   );
 }
