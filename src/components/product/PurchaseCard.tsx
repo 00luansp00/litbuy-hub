@@ -105,12 +105,13 @@ export function PurchaseCard({ product, className }: PurchaseCardProps) {
       </div>
 
       <div className="flex flex-col gap-2">
-        <Button size="lg" className="w-full">
+        <Button size="lg" className="w-full" onClick={handleBuyNow}>
           <Zap className="mr-2 h-4 w-4" /> Comprar agora
         </Button>
-        <Button size="lg" variant="secondary" className="w-full">
+        <Button size="lg" variant="secondary" className="w-full" onClick={handleAddToCart}>
           <ShoppingCart className="mr-2 h-4 w-4" /> Adicionar ao carrinho
         </Button>
+
         <div className="grid grid-cols-2 gap-2">
           <Button variant="outline" size="sm">
             <Heart className="mr-2 h-4 w-4" /> Favoritar
