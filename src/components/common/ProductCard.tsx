@@ -1,9 +1,14 @@
 import { Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import { Heart, ShieldCheck, ShoppingCart, Star } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ProductBadges } from "./ProductBadges";
 import { SellerInfo } from "./SellerInfo";
+import { formatBRL, formatCompact } from "@/lib/format";
+import { useCart } from "@/providers/CartProvider";
+import type { Product } from "@/types";
+
 import { formatBRL, formatCompact } from "@/lib/format";
 import type { Product } from "@/types";
 
