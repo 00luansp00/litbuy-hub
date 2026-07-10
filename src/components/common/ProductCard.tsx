@@ -17,6 +17,14 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ product }: ProductCardProps) {
+  const { addItem } = useCart();
+  const handleAdd = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    addItem(product);
+    toast.success("Adicionado ao carrinho", { description: product.title });
+  };
+
   const trustTone =
     (product.trustScore ?? 0) >= 90
       ? "text-success"
