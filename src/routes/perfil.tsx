@@ -57,9 +57,10 @@ function PerfilPage() {
           aria-label="Métricas da conta"
           className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6"
         >
-          {summary.metrics.map((m, i) => (
+          {summary.metrics.map((m: import("@/types").AccountMetric, i: number) => (
             <AccountMetricCard key={m.id} metric={m} index={i} />
           ))}
+
         </section>
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
