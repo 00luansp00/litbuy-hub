@@ -63,3 +63,8 @@ Regras futuras de saldo, carteira e intermediação. **Documentação de planeja
 - Services: `litPointsService`, `sellerLevelService`, `platformEconomicsService` — todos mockados, sem persistência.
 - Integrações leves em `/carteira`, `/vendedor`, `/vendedor/financeiro`, `/loja/$slug` e `/produto/$id`.
 - Footer aponta para `/lit-points` e `/taxas`.
+
+## Admin financeiro (Sprint 18.12 — mock)
+- `/admin/financeiro` exibe saldo pendente, disponível e bloqueado por disputa apenas como cards mockados.
+- Ajustes de taxa, ativar/inativar método de pagamento, editar LIT Points e níveis de vendedor são visuais.
+- Saques podem ser "pausados" pelo admin em modo demonstração; em produção isso deve travar o motor de payout e gerar audit log.

@@ -102,3 +102,9 @@ Regras oficiais de produto da LIT Buy como marketplace intermediador de produtos
 - Vendedores podem exibir o selo "Vendedor Verificado" quando aprovados pelo KYC (mock).
 - Em produção, KYC poderá ser exigido para publicar categorias sensíveis, sacar valores altos ou acessar recursos avançados.
 - Vendedores podem ter equipe com múltiplos cargos (Dono, Gerente, Atendente, Operador de entrega, Financeiro). Permissões e convites são visuais nesta fase.
+
+## Gestão administrativa (Sprint 18.12)
+- Categorias/subcategorias são gerenciáveis pelo admin (mock). Em produção, alterar categoria deve tratar migração de anúncios afetados.
+- Moderação é organizada por perfis (Admin, Moderador de anúncios, Moderador de disputas, Suporte, Financeiro, Conteúdo, Leitura).
+- Financeiro, LIT Points, níveis de vendedor e planos comerciais (LIT-MAX, Prata, Ouro, Diamante) são configuráveis pelo admin em modo visual.
+- Feature flags controlam recursos globais (checkout, pagamentos, chat, KYC obrigatório, modo manutenção).
