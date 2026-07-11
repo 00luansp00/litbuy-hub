@@ -260,3 +260,12 @@ são **proteção visual**. Segurança real vai para o backend (ver
 - Notificações apontam para rotas reais quando existem (`/pedidos/$id`, `/vendedor/vendas/$id`, `/mensagens/$id`, `/admin/*`, `/lit-points`, etc.).
 - **Nada é persistido**: sem LocalStorage, sem Cookies, sem backend. Push, e-mail, SMS, WebSocket e Service Worker **não** são implementados — exigem backend real, opt-in do usuário e infra de mensageria.
 - Dados sensíveis nunca devem aparecer em notificações — títulos e descrições são genéricos e mascarados.
+
+## Sprint 18.15 — Denúncias / Reports
+
+- `src/services/reportService.ts`: mock service com motivos por tipo de alvo, severidade, guidelines, `simulateSubmitReport`, `getReportsForAdmin`, `getUserReports`, `getReportById`.
+- `src/components/report/ReportDialog.tsx`, `ReportButton.tsx`, `ReportSeverityBadge.tsx`, `ReportStatusBadge.tsx`, `ReportSecurityNotice.tsx`.
+- Integrações: `produto.$id`, `loja.$slug`, `mensagens.$id`, `OrderChatCard`, `OrderActionsCard` (`/pedidos/$id`), `SellerSaleDetailView` (`/vendedor/vendas/$id`).
+- Admin `/admin/denuncias` consome `reportService.getReportsForAdmin()` e mostra drawer de detalhe com contexto, evidências, notas internas e ações mockadas.
+- Tipos centralizados: `Report`, `ReportTargetType`, `ReportReason`, `ReportPayload`, `ReportStatus`, `ReportSeverity`, `ReportEvidence`, `ReportContext`, `ReportSource`, `ReportResolution` em `src/types/index.ts`.
+- Futuro: substituir mocks por backend/moderação/audit log; evidências em storage seguro; ações admin protegidas por RBAC.

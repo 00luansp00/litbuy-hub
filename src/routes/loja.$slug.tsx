@@ -12,6 +12,7 @@ import { SellerReviews } from "@/components/seller/SellerReviews";
 import { SellerStats } from "@/components/seller/SellerStats";
 import { SellerLevelBadge } from "@/components/seller/SellerLevelBadge";
 import { SellerVerificationBadge } from "@/components/verification/SellerVerificationBadge";
+import { ReportButton } from "@/components/report/ReportButton";
 import { sellerService } from "@/services/sellerService";
 
 
@@ -97,8 +98,23 @@ function SellerPage() {
         </div>
 
         <aside className="lg:col-span-4">
-          <div className="lg:sticky lg:top-24">
+          <div className="lg:sticky lg:top-24 space-y-3">
             <ContactSellerCard seller={seller} />
+            <div className="flex justify-end">
+              <ReportButton
+                targetType="seller"
+                targetId={seller.id}
+                targetLabel={seller.name}
+                label="Reportar vendedor"
+                variant="outline"
+                size="sm"
+                source="seller_page"
+                context={{
+                  sellerId: seller.id,
+                  sellerSlug: seller.slug,
+                }}
+              />
+            </div>
           </div>
         </aside>
       </div>

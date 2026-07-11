@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { ReportButton } from "@/components/report/ReportButton";
 import { messageService } from "@/services/messageService";
 import { analyticsService } from "@/services/analyticsService";
 import type { Conversation, ConversationMessage, Order } from "@/types";
@@ -133,6 +134,22 @@ export function OrderChatCard({ order, onReportProblem }: OrderChatCardProps) {
           >
             Reportar problema
           </Button>
+          {conversation && (
+            <ReportButton
+              targetType="conversation"
+              targetId={conversation.id}
+              targetLabel={`Chat do pedido ${order.code}`}
+              label="Denunciar conversa"
+              variant="ghost"
+              size="sm"
+              source="chat_order"
+              context={{
+                conversationId: conversation.id,
+                orderId: order.id,
+                orderCode: order.code,
+              }}
+            />
+          )}
           {conversation && (
             <Button asChild variant="ghost" size="sm">
               <Link to="/mensagens/$id" params={{ id: conversation.id }}>

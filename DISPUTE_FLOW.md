@@ -57,3 +57,10 @@ Fluxo futuro de disputa. **Documentação de planejamento.** Não implementado.
 - Rota `/vendedor/vendas/$id` mostra a visão do vendedor: comprador, produto, pagamento, entrega, chat, financeiro, timeline e mediação.
 - Services: `sellerSaleService`, extensões em `orderService` e `messageService`; nenhum dado é persistido.
 - Confirmação de recebimento, liberação de saldo, uploads reais e decisões de mediação **só podem ocorrer no backend real**.
+
+## Denúncia vs Mediação (Sprint 18.15)
+
+- **Mediação**: aberta quando o comprador tem problema com a entrega (não recebido, item diferente, dados inválidos, conta recuperada). Fluxo: `OrderProblemDialog` → `orderService.simulateOpenMediation`.
+- **Denúncia**: aberta quando há comportamento irregular (contato externo, golpe, abuso, anúncio enganoso). Fluxo: `ReportDialog` → `reportService.simulateSubmitReport`.
+- Uma denúncia pode ser encaminhada para mediação a partir de `/admin/denuncias` (ação mockada).
+- Evidências reais (prints, vídeos, mensagens sanitizadas) exigirão storage seguro em produção.

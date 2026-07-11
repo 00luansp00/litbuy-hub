@@ -386,3 +386,14 @@ Docs de suporte atualizados: `DATABASE_SCHEMA.md`, `ENTITY_RELATIONSHIP.md`, `SU
 - Notificações apontam para rotas reais quando existem (`/pedidos/$id`, `/vendedor/vendas/$id`, `/mensagens/$id`, `/admin/*`, `/lit-points`, etc.).
 - **Nada é persistido**: sem LocalStorage, sem Cookies, sem backend. Push, e-mail, SMS, WebSocket e Service Worker **não** são implementados — exigem backend real, opt-in do usuário e infra de mensageria.
 - Dados sensíveis nunca devem aparecer em notificações — títulos e descrições são genéricos e mascarados.
+
+## Sprint 18.15 — Denúncias / Reportar Problema (mock)
+
+- Camada visual de denúncias implementada: `reportService` + `ReportDialog` + `ReportButton`.
+- Alvos suportados: `product`, `seller`, `message`, `conversation`, `order`, `sale`, `user`, `payment`, `other`.
+- Motivos são específicos por tipo de alvo (anúncio enganoso, contato externo, golpe, conta recuperada, comprovante falso, etc.) e trazem severidade sugerida (`low`/`medium`/`high`/`critical`).
+- Integrado em: `/produto/$id` (reportar anúncio/vendedor), `/loja/$slug` (reportar vendedor), `/mensagens/$id` (denunciar conversa e contato externo), `OrderChatCard` (denunciar conversa do pedido), `/pedidos/$id` via `OrderActionsCard` (denunciar vendedor/comportamento — separado da mediação), `/vendedor/vendas/$id` (reportar comprador/problema na venda).
+- Admin `/admin/denuncias` reconstruída sobre `reportService.getReportsForAdmin()` com filtros (status, severidade, busca), tabela detalhada e drawer de detalhe com: contexto (pedido, conversa, produto, loja), evidências, notas internas, ações mockadas (assumir, revisar, alerta, encaminhar mediação, suspender anúncio, bloquear usuário).
+- Denúncia (comportamento/golpe/contato externo) é **diferente** de mediação de pedido (problema de entrega). O texto do card de ações do pedido reforça essa distinção.
+- **Nada é persistido**: sem LocalStorage, sem Cookies, sem backend. Evidências (prints, vídeos, links, mensagens) são apenas cards mockados. Ações admin não alteram nenhum dado real.
+- Envio real de denúncias, upload de evidências, moderação, audit log e ações destrutivas (suspender anúncio, bloquear usuário) **exigem backend seguro, RBAC e storage** — nada disso está implementado.

@@ -108,3 +108,11 @@ Regras oficiais de produto da LIT Buy como marketplace intermediador de produtos
 - Moderação é organizada por perfis (Admin, Moderador de anúncios, Moderador de disputas, Suporte, Financeiro, Conteúdo, Leitura).
 - Financeiro, LIT Points, níveis de vendedor e planos comerciais (LIT-MAX, Prata, Ouro, Diamante) são configuráveis pelo admin em modo visual.
 - Feature flags controlam recursos globais (checkout, pagamentos, chat, KYC obrigatório, modo manutenção).
+
+## Denúncias (Sprint 18.15 — mock)
+
+- Usuários podem denunciar anúncio, vendedor, comprador, mensagem, conversa, pedido, venda, usuário e pagamento.
+- Comportamento proibido inclui: contato externo, golpe, fraude, falsificação de reputação, produto proibido, anúncio enganoso, comprovante falso, assédio.
+- Denúncia serve para moderação. Problema de entrega em pedido segue por **mediação** (DISPUTE_FLOW).
+- Denúncias falsas poderão gerar penalidades em produção.
+- Nesta fase, denúncias são visuais/mockadas — nenhuma ação real ocorre.

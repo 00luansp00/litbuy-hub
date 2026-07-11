@@ -143,3 +143,10 @@ puramente visuais deve sobreviver ao merge com o backend real.
 - Notificações apontam para rotas reais quando existem (`/pedidos/$id`, `/vendedor/vendas/$id`, `/mensagens/$id`, `/admin/*`, `/lit-points`, etc.).
 - **Nada é persistido**: sem LocalStorage, sem Cookies, sem backend. Push, e-mail, SMS, WebSocket e Service Worker **não** são implementados — exigem backend real, opt-in do usuário e infra de mensageria.
 - Dados sensíveis nunca devem aparecer em notificações — títulos e descrições são genéricos e mascarados.
+
+## Sprint 18.15 — Denúncias (limitações)
+
+- Denúncias reais exigem backend, moderação humana, audit log e RBAC nas ações admin.
+- Evidências reais (imagens, vídeos, links, mensagens) exigem storage seguro com scanning de conteúdo, retenção limitada e controle de acesso.
+- Ações destrutivas (suspender anúncio, bloquear usuário) nunca podem depender do frontend.
+- Nada nesta sprint persiste em backend, LocalStorage ou Cookies. Toda simulação é em memória.

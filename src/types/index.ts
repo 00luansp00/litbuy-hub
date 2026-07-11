@@ -561,7 +561,134 @@ export type CheckoutAnalyticsEventName =
   | "notification_opened_mocked"
   | "notification_marked_read_mocked"
   | "notification_all_read_mocked"
-  | "notification_clicked_mocked";
+  | "notification_clicked_mocked"
+  | "report_dialog_opened_mocked"
+  | "report_submitted_mocked"
+  | "report_reason_selected_mocked"
+  | "admin_report_review_opened_mocked"
+  | "admin_report_action_mocked";
+
+// ==================================================
+// Denúncias / Reports (Sprint 18.15) — 100% mockado.
+// ==================================================
+
+export type ReportTargetType =
+  | "product"
+  | "seller"
+  | "message"
+  | "conversation"
+  | "order"
+  | "sale"
+  | "user"
+  | "payment"
+  | "other";
+
+export type ReportSeverity = "low" | "medium" | "high" | "critical";
+
+export type ReportStatus =
+  | "draft"
+  | "submitted"
+  | "under_review"
+  | "action_required"
+  | "resolved"
+  | "rejected"
+  | "closed";
+
+export type ReportSource =
+  | "product_page"
+  | "seller_page"
+  | "message_thread"
+  | "order_page"
+  | "sale_page"
+  | "chat_order"
+  | "admin"
+  | "other";
+
+export interface ReportReason {
+  value: string;
+  label: string;
+  severity: ReportSeverity;
+  description?: string;
+}
+
+export interface ReportEvidence {
+  id: string;
+  kind: "image" | "video" | "text" | "link" | "message";
+  label: string;
+  hint?: string;
+}
+
+export interface ReportContext {
+  productId?: string;
+  productTitle?: string;
+  sellerId?: string;
+  sellerSlug?: string;
+  buyerId?: string;
+  orderId?: string;
+  orderCode?: string;
+  saleId?: string;
+  conversationId?: string;
+  messageId?: string;
+  paymentId?: string;
+  category?: string;
+  subcategory?: string;
+  listingModel?: string;
+  productType?: string;
+  verificationStatus?: string;
+  sellerLevel?: string;
+  riskLevel?: ReportSeverity;
+}
+
+export interface ReportPayload {
+  targetType: ReportTargetType;
+  targetId: string;
+  targetLabel: string;
+  reason: string;
+  reasonLabel: string;
+  severity: ReportSeverity;
+  description: string;
+  evidence: ReportEvidence[];
+  context?: ReportContext;
+  source?: ReportSource;
+}
+
+export interface ReportResolution {
+  action:
+    | "acknowledged"
+    | "warning_issued"
+    | "listing_suspended"
+    | "user_blocked"
+    | "escalated_to_mediation"
+    | "dismissed";
+  note?: string;
+  actor?: string;
+  at: string;
+}
+
+export interface Report {
+  id: string;
+  code: string;
+  targetType: ReportTargetType;
+  targetId: string;
+  targetLabel: string;
+  reason: string;
+  reasonLabel: string;
+  severity: ReportSeverity;
+  status: ReportStatus;
+  description: string;
+  reporterId: string;
+  reporterName: string;
+  reportedUserId?: string;
+  reportedUserName?: string;
+  context?: ReportContext;
+  evidence: ReportEvidence[];
+  source: ReportSource;
+  assignedTo?: string;
+  createdAt: string;
+  updatedAt: string;
+  resolution?: ReportResolution;
+  internalNotes?: string[];
+}
 
 
 
@@ -1960,6 +2087,9 @@ export interface SellerSale {
   mediationStatus: MediationStatus;
   sellerPlan?: "prata" | "ouro" | "diamante";
   litPointsEstimate?: number;
+  buyerId?: string;
+  productId?: string;
+  conversationId?: string;
 }
 
 export interface SellerSaleDetail extends SellerSale {
