@@ -20,12 +20,6 @@ export const Route = createFileRoute("/admin/configuracoes")({
 
 
 function AdminSettingsPage() {
-  const [platformFee, setPlatformFee] = useState("10");
-  const [minWithdraw, setMinWithdraw] = useState("50");
-  const [moderationAuto, setModerationAuto] = useState(true);
-  const [twoFA, setTwoFA] = useState(true);
-  const [emailAlerts, setEmailAlerts] = useState(false);
-  const [darkAdmin, setDarkAdmin] = useState(true);
 
   const [platformFee, setPlatformFee] = useState("10");
   const [minWithdraw, setMinWithdraw] = useState("50");
