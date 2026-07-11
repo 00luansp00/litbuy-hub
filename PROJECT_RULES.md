@@ -211,3 +211,13 @@ Documentos relacionados: `ORDER_LIFECYCLE.md`, `DIGITAL_DELIVERY_FLOW.md`, `DISP
 - Categorias/subcategorias, taxas, planos, LIT Points, feature flags e conteúdo institucional visíveis no admin devem ser controlados por backend em produção.
 - Audit log real é obrigatório para ações sensíveis (financeiro, permissão, KYC, remoção).
 - `AdminGate` é proteção **visual** — RBAC real deve viver no backend.
+
+## Sprint 18.13 — Detalhe da Venda, Chat do Pedido, Entrega e Mediação (mock)
+
+- Pagamento aprovado (mock) formaliza a criação de uma conversa vinculada ao pedido (`order_related`), acessível em `/pedidos/$id` e em `/mensagens/$id`.
+- Chat do pedido é o canal oficial para entrega, suporte e mediação. Conversa fora da plataforma reduz proteção futura.
+- Entrega manual e entrega automática são exibidas de forma **visual/mockada** (nunca revelam dados reais). Cofre e criptografia reais exigem backend.
+- Central de Mediação (mock) cobre motivos, provas, réplica do vendedor, timeline e trechos do chat como evidência.
+- Rota `/vendedor/vendas/$id` mostra a visão do vendedor: comprador, produto, pagamento, entrega, chat, financeiro, timeline e mediação.
+- Services: `sellerSaleService`, extensões em `orderService` e `messageService`; nenhum dado é persistido.
+- Confirmação de recebimento, liberação de saldo, uploads reais e decisões de mediação **só podem ocorrer no backend real**.

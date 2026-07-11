@@ -240,3 +240,13 @@ são **proteção visual**. Segurança real vai para o backend (ver
 - **Dashboard**: `/admin` ganha bloco de Ações Rápidas com deep-links para as novas áreas.
 - **Configurações**: aba de Feature Flags integrada ao `/admin/configuracoes`.
 - **Futuro (backend)**: substituir mocks por serviços de config, RBAC, CMS, gateway, motor de reputação, KYC provider e audit log imutável.
+
+## Sprint 18.13 — Detalhe da Venda, Chat do Pedido, Entrega e Mediação (mock)
+
+- Pagamento aprovado (mock) formaliza a criação de uma conversa vinculada ao pedido (`order_related`), acessível em `/pedidos/$id` e em `/mensagens/$id`.
+- Chat do pedido é o canal oficial para entrega, suporte e mediação. Conversa fora da plataforma reduz proteção futura.
+- Entrega manual e entrega automática são exibidas de forma **visual/mockada** (nunca revelam dados reais). Cofre e criptografia reais exigem backend.
+- Central de Mediação (mock) cobre motivos, provas, réplica do vendedor, timeline e trechos do chat como evidência.
+- Rota `/vendedor/vendas/$id` mostra a visão do vendedor: comprador, produto, pagamento, entrega, chat, financeiro, timeline e mediação.
+- Services: `sellerSaleService`, extensões em `orderService` e `messageService`; nenhum dado é persistido.
+- Confirmação de recebimento, liberação de saldo, uploads reais e decisões de mediação **só podem ocorrer no backend real**.

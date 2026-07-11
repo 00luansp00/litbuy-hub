@@ -47,3 +47,13 @@ Fluxo futuro de disputa. **Documentação de planejamento.** Não implementado.
 
 - Disputa **não** é implementada como ação real no frontend. Nenhuma decisão financeira parte do cliente.
 - Estado atual: apenas visual/mock em `/admin/disputas` e telas de vendedor.
+
+## Sprint 18.13 — Detalhe da Venda, Chat do Pedido, Entrega e Mediação (mock)
+
+- Pagamento aprovado (mock) formaliza a criação de uma conversa vinculada ao pedido (`order_related`), acessível em `/pedidos/$id` e em `/mensagens/$id`.
+- Chat do pedido é o canal oficial para entrega, suporte e mediação. Conversa fora da plataforma reduz proteção futura.
+- Entrega manual e entrega automática são exibidas de forma **visual/mockada** (nunca revelam dados reais). Cofre e criptografia reais exigem backend.
+- Central de Mediação (mock) cobre motivos, provas, réplica do vendedor, timeline e trechos do chat como evidência.
+- Rota `/vendedor/vendas/$id` mostra a visão do vendedor: comprador, produto, pagamento, entrega, chat, financeiro, timeline e mediação.
+- Services: `sellerSaleService`, extensões em `orderService` e `messageService`; nenhum dado é persistido.
+- Confirmação de recebimento, liberação de saldo, uploads reais e decisões de mediação **só podem ocorrer no backend real**.

@@ -1,5 +1,5 @@
 import { motion } from "motion/react";
-import { toast } from "sonner";
+import { Link } from "@tanstack/react-router";
 import { ArrowRight } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { formatBRL } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { SellerSalePreview, SellerSaleStatus } from "@/types";
+
 
 const STATUS_LABEL: Record<SellerSaleStatus, string> = {
   pending: "Aguardando",
@@ -106,17 +107,16 @@ export function SellerRecentSalesCard({
                   </span>
                   {!compact && (
                     <Button
+                      asChild
                       variant="ghost"
                       size="sm"
                       className="h-7 px-2 text-xs"
-                      onClick={() =>
-                        toast("Em breve", {
-                          description: "Detalhes da venda serão liberados com backend.",
-                        })
-                      }
                     >
-                      Detalhes <ArrowRight className="ml-1 h-3 w-3" />
+                      <Link to="/vendedor/vendas/$id" params={{ id: s.id }}>
+                        Detalhes <ArrowRight className="ml-1 h-3 w-3" />
+                      </Link>
                     </Button>
+
                   )}
                 </div>
               </li>

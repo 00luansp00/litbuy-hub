@@ -2,13 +2,18 @@ import { products } from "@/data/products";
 import type {
   DigitalDelivery,
   Dispute,
+  MediationCase,
   Order,
   OrderItem,
   OrderReview,
   OrderStatus,
   OrderTimelineEvent,
   ReviewDraft,
+  SaleDeliveryMode,
+  SaleDeliveryStatus,
+  MediationStatus,
 } from "@/types";
+
 
 /**
  * orderService — camada mockada de pedidos (pós-compra).
@@ -95,6 +100,24 @@ function buildOrder(index: number): Order {
         }
       : undefined;
 
+  const deliveryMode: SaleDeliveryMode = p.instantDelivery ? "automatic" : "manual";
+  const deliveryStatus: SaleDeliveryStatus =
+    status === "completed"
+      ? "completed"
+      : status === "awaiting_buyer_confirmation"
+        ? "awaiting_buyer_confirmation"
+        : status === "delivered_by_seller"
+          ? "delivered_by_seller"
+          : status === "pending_payment"
+            ? "awaiting_payment"
+            : status === "cancelled"
+              ? "cancelled"
+              : deliveryMode === "automatic"
+                ? "automatic_delivery_released"
+                : "awaiting_seller_delivery";
+  const mediationStatus: MediationStatus =
+    index === 3 ? "under_review" : "none";
+
   return {
     id: `order-${index + 1}`,
     code: `LIT-${(102345 + index).toString()}`,
@@ -119,7 +142,6 @@ function buildOrder(index: number): Order {
     delivery,
     dispute,
     review,
-    // Sprint 18.9 — mock: alguns pedidos exibem Proteção LIT ativa.
     litProtection:
       index % 2 === 0
         ? {
@@ -129,8 +151,25 @@ function buildOrder(index: number): Order {
             ).toISOString(),
           }
         : undefined,
+    conversationId: `oc-${index + 1}`,
+    saleId: `sale-${index + 1}`,
+    paymentId: `pay-${index + 1}`,
+    deliveryMode,
+    deliveryStatus,
+    sellerPlan: index % 3 === 0 ? "ouro" : index % 3 === 1 ? "prata" : "diamante",
+    hasAutomaticMessage: index % 2 === 0,
+    protectionLitActive: index % 2 === 0,
+    mediationStatus,
+    evidenceCount: mediationStatus !== "none" ? 2 : 0,
+    sellerResponseStatus:
+      mediationStatus === "under_review" ? "submitted" : "none",
+    automaticMessage:
+      index % 2 === 0
+        ? "Olá! Obrigado pela compra. Sua entrega será acompanhada por aqui dentro da LIT Buy. Mantenha toda a comunicação pela plataforma para sua segurança."
+        : undefined,
   };
 }
+
 
 const ORDERS: Order[] = Array.from({ length: 5 }, (_, i) => buildOrder(i));
 
@@ -262,4 +301,108 @@ export const orderService = {
       rating: (payload.productRating + payload.sellerRating) / 2,
     });
   },
+
+  async getOrderConversation(orderId: string): Promise<string | null> {
+    const order = await this.getOrderById(orderId);
+    return order?.conversationId ?? null;
+  },
+
+  async getOrderDeliveryStatus(orderId: string): Promise<SaleDeliveryStatus | null> {
+    const order = await this.getOrderById(orderId);
+    return order?.deliveryStatus ?? null;
+  },
+
+  async getOrderMediation(orderId: string): Promise<MediationCase | null> {
+    const order = await this.getOrderById(orderId);
+    if (!order || !order.mediationStatus || order.mediationStatus === "none") return null;
+    return buildMediationCase(order);
+  },
+
+  async getOrderEvidence(orderId: string): Promise<MediationCase["evidence"]> {
+    const m = await this.getOrderMediation(orderId);
+    return m?.evidence ?? [];
+  },
+
+  simulateReportDeliveryProblem(
+    orderId: string,
+    payload: { reason: string; description: string },
+  ): Promise<{ ok: true; orderId: string; reason: string }> {
+    return delay({ ok: true, orderId, reason: payload.reason });
+  },
+
+  simulateOpenMediation(
+    orderId: string,
+    payload: { reason: string; description: string },
+  ): Promise<{ ok: true; orderId: string; reason: string }> {
+    return delay({ ok: true, orderId, reason: payload.reason });
+  },
 };
+
+function buildMediationCase(order: Order): MediationCase {
+  const openedAt = new Date(Date.now() - 1000 * 60 * 60 * 12).toISOString();
+  const updatedAt = new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString();
+  return {
+    id: `med-${order.id}`,
+    orderId: order.id,
+    saleId: order.saleId,
+    status: order.mediationStatus ?? "under_review",
+    reason: "produto_nao_recebido",
+    amountInDispute: order.total,
+    respondByAt: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
+    openedAt,
+    updatedAt,
+    timeline: [
+      { id: "mt1", at: openedAt, actor: "buyer", label: "Comprador abriu mediação" },
+      {
+        id: "mt2",
+        at: new Date(Date.now() - 1000 * 60 * 60 * 8).toISOString(),
+        actor: "system",
+        label: "Vendedor notificado",
+      },
+      {
+        id: "mt3",
+        at: updatedAt,
+        actor: "seller",
+        label: "Vendedor enviou réplica",
+      },
+    ],
+    evidence: [
+      {
+        id: "ev1",
+        actor: "buyer",
+        kind: "image",
+        label: "Print do erro (mock)",
+        submittedAt: openedAt,
+      },
+      {
+        id: "ev2",
+        actor: "seller",
+        kind: "text",
+        label: "Comprovante de envio (mock)",
+        submittedAt: updatedAt,
+      },
+    ],
+    sellerResponse:
+      order.sellerResponseStatus === "submitted"
+        ? {
+            id: "sr1",
+            submittedAt: updatedAt,
+            text: "Entreguei o item pelo chat conforme instruções. Print anexado.",
+          }
+        : undefined,
+    chatExcerpts: [
+      {
+        id: "cx1",
+        author: "buyer",
+        text: "Não recebi o código ainda, pode confirmar?",
+        sentAt: openedAt,
+      },
+      {
+        id: "cx2",
+        author: "seller",
+        text: "Enviei agora pelo chat, veja o print acima.",
+        sentAt: updatedAt,
+      },
+    ],
+  };
+}

@@ -123,3 +123,13 @@ puramente visuais deve sobreviver ao merge com o backend real.
 - Taxas, saques, LIT Points e cotações devem ser calculados/persistidos no backend, nunca a partir do frontend.
 - Todas as ações administrativas sensíveis (aprovar KYC, alterar taxa, bloquear saque, remover anúncio, editar permissão) exigem audit log imutável com ator, IP, entidade, antes/depois e resultado.
 - CMS real deve incluir versionamento, agendamento, review e rollback.
+
+## Sprint 18.13 — Detalhe da Venda, Chat do Pedido, Entrega e Mediação (mock)
+
+- Pagamento aprovado (mock) formaliza a criação de uma conversa vinculada ao pedido (`order_related`), acessível em `/pedidos/$id` e em `/mensagens/$id`.
+- Chat do pedido é o canal oficial para entrega, suporte e mediação. Conversa fora da plataforma reduz proteção futura.
+- Entrega manual e entrega automática são exibidas de forma **visual/mockada** (nunca revelam dados reais). Cofre e criptografia reais exigem backend.
+- Central de Mediação (mock) cobre motivos, provas, réplica do vendedor, timeline e trechos do chat como evidência.
+- Rota `/vendedor/vendas/$id` mostra a visão do vendedor: comprador, produto, pagamento, entrega, chat, financeiro, timeline e mediação.
+- Services: `sellerSaleService`, extensões em `orderService` e `messageService`; nenhum dado é persistido.
+- Confirmação de recebimento, liberação de saldo, uploads reais e decisões de mediação **só podem ocorrer no backend real**.
