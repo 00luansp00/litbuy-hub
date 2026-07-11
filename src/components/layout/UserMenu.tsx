@@ -188,6 +188,17 @@ export function UserMenu() {
           </>
         )}
 
+        {isAdmin && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link to="/admin">
+                <ShieldCheck className="h-4 w-4" /> Painel administrativo
+              </Link>
+            </DropdownMenuItem>
+          </>
+        )}
+
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={handleLogout} className="text-destructive focus:text-destructive">
           <LogOut className="h-4 w-4" /> Sair
