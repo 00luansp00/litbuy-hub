@@ -258,3 +258,16 @@ Docs de suporte atualizados: `DATABASE_SCHEMA.md`, `ENTITY_RELATIONSHIP.md`, `SU
 - Ação "Confirmar recebimento" é mockada e sinaliza que em produção o pagamento seria liberado ao vendedor.
 - `/vendedor/vendas/$id` NÃO foi criada nesta sprint para manter baixo risco; a visão do vendedor sobre o pedido permanece como toast/documentação.
 - Limitações: nenhum backend, nenhuma persistência, nenhum dado sensível real, nenhum pagamento real, nenhuma disputa real acionada.
+
+## Mensagens (Sprint 18.5)
+
+- Novo `messageService` (`src/services/messageService.ts`) fornece conversas, mensagens, contexto e envio simulado. Nenhuma rota consome mocks diretamente.
+- Novos tipos: `Conversation`, `ConversationParticipant`, `ConversationMessage`, `ConversationContext`, `MessageAttachment`, `MessageStatus`, `ConversationType`.
+- Nova rota `/mensagens/$id` protegida por `AuthGate`, com layout de lista + conversa aberta (desktop) e conversa empilhada (mobile).
+- Rota `/mensagens` reescrita: agora mostra lista de conversas + painel vazio no desktop, orientando a seleção.
+- Componentes novos em `src/components/messages/`: `ConversationsList`, `ConversationListItem`, `ConversationHeader`, `ConversationContextCard`, `MessagesThread`, `MessageBubble`, `MessageComposer`, `MessageEmptyState`, `MessageSecurityNotice`.
+- Contexto da conversa: pré-compra mostra produto + botão "Ver produto"; pós-compra mostra pedido + botão "Ver pedido"; suporte mostra aviso oficial.
+- Composer visual: envio simulado via `simulateSendMessage` adiciona a mensagem apenas em estado local (não persistido). Anexos e emojis exibem toast "Em breve".
+- Aviso de segurança: destaque de que a conversa deve ficar na plataforma e que mensagens podem ser evidência em disputa.
+- Integrações: `ContactSellerCard` (loja pública) e `OrderActionsCard` (pedido) agora linkam para `/mensagens`. `RecentMessagesCard` teve o botão "Abrir" convertido em Link para `/mensagens`.
+- Limitações: nenhum backend, nenhum WebSocket, nenhum chat real, nenhum upload real, nenhuma notificação real, nenhuma persistência, nada em LocalStorage/Cookies, nenhuma moderação real.

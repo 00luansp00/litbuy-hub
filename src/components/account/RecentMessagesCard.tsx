@@ -1,5 +1,4 @@
 import { Link } from "@tanstack/react-router";
-import { toast } from "sonner";
 import { ArrowRight } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -100,16 +99,12 @@ export function RecentMessagesCard({
                 </span>
               )}
               <Button
+                asChild
                 size="sm"
                 variant="ghost"
                 className="shrink-0"
-                onClick={() =>
-                  toast("Em breve", {
-                    description: "O chat com o vendedor será liberado em uma próxima sprint.",
-                  })
-                }
               >
-                Abrir
+                <Link to="/mensagens">Abrir</Link>
               </Button>
             </li>
           ))}
