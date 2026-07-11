@@ -212,7 +212,7 @@ function buildConversation(seed: Seed): {
     productTitle: product?.title,
     productImage: product?.imageUrl,
     productPrice: product?.price,
-    orderId: seed.orderCode ? seed.orderCode.toLowerCase() : undefined,
+    orderId: seed.orderId,
     orderCode: seed.orderCode,
     orderStatus: seed.orderStatus,
     sellerSlug: counterpart.sellerSlug,
