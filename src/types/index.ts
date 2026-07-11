@@ -557,7 +557,12 @@ export type CheckoutAnalyticsEventName =
   | "buyer_confirmed_delivery_mocked"
   | "mediation_opened_mocked"
   | "seller_response_submitted_mocked"
-  | "evidence_uploaded_mocked";
+  | "evidence_uploaded_mocked"
+  | "notification_opened_mocked"
+  | "notification_marked_read_mocked"
+  | "notification_all_read_mocked"
+  | "notification_clicked_mocked";
+
 
 
 export interface CheckoutAnalyticsEvent {
