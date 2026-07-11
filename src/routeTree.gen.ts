@@ -151,11 +151,6 @@ const ProdutoIdRoute = ProdutoIdRouteImport.update({
   path: '/produto/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
-const PagamentoIdRoute = PagamentoIdRouteImport.update({
-  id: '/pagamento/$id',
-  path: '/pagamento/$id',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const PedidosIdRoute = PedidosIdRouteImport.update({
   id: '/$id',
   path: '/$id',
