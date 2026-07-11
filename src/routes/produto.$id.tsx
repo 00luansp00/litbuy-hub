@@ -16,6 +16,7 @@ import { ProductReviews } from "@/components/product/ProductReviews";
 import { PurchaseCard } from "@/components/product/PurchaseCard";
 import { SellerLevelBadge } from "@/components/seller/SellerLevelBadge";
 import { SellerVerificationBadge } from "@/components/verification/SellerVerificationBadge";
+import { ReportButton } from "@/components/report/ReportButton";
 import { productService } from "@/services/productService";
 import { reviewService } from "@/services/reviewService";
 
@@ -131,6 +132,40 @@ function ProductPage() {
               href={enrichedSeller.slug ? "/loja/$slug" : undefined}
               hrefParams={enrichedSeller.slug ? { slug: enrichedSeller.slug } : undefined}
             />
+
+            <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-border pt-3">
+              <ReportButton
+                targetType="product"
+                targetId={product.id}
+                targetLabel={product.title}
+                label="Reportar anúncio"
+                variant="ghost"
+                size="sm"
+                source="product_page"
+                context={{
+                  productId: product.id,
+                  productTitle: product.title,
+                  sellerId: enrichedSeller.id,
+                  sellerSlug: enrichedSeller.slug,
+                  category: product.categoryName,
+                  subcategory: product.categorySlug,
+                  productType: product.productType,
+                }}
+              />
+              <ReportButton
+                targetType="seller"
+                targetId={enrichedSeller.id}
+                targetLabel={enrichedSeller.name}
+                label="Reportar vendedor"
+                variant="ghost"
+                size="sm"
+                source="product_page"
+                context={{
+                  sellerId: enrichedSeller.id,
+                  sellerSlug: enrichedSeller.slug,
+                }}
+              />
+            </div>
           </div>
         </motion.div>
 

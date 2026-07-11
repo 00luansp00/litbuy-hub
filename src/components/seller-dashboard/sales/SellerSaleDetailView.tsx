@@ -18,6 +18,7 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { formatBRL } from "@/lib/format";
 import { OrderMediationCard } from "@/components/orders/OrderMediationCard";
+import { ReportButton } from "@/components/report/ReportButton";
 import { sellerSaleService } from "@/services/sellerSaleService";
 import { messageService } from "@/services/messageService";
 import { analyticsService } from "@/services/analyticsService";
@@ -166,6 +167,40 @@ export function SellerSaleDetailView({ sale }: Props) {
               {new Date(sale.createdAt).toLocaleDateString("pt-BR")}
             </Info>
           </dl>
+
+          <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-border pt-3">
+            <ReportButton
+              targetType="user"
+              targetId={sale.buyerId ?? sale.id}
+              targetLabel={sale.buyerName}
+              label="Reportar comprador"
+              variant="ghost"
+              size="sm"
+              source="sale_page"
+              context={{
+                saleId: sale.id,
+                orderId: sale.orderId,
+                buyerId: sale.buyerId,
+                productId: sale.productId,
+                conversationId: sale.conversationId,
+              }}
+            />
+            <ReportButton
+              targetType="sale"
+              targetId={sale.id}
+              targetLabel={`Venda ${sale.code}`}
+              label="Reportar problema na venda"
+              variant="ghost"
+              size="sm"
+              source="sale_page"
+              context={{
+                saleId: sale.id,
+                orderId: sale.orderId,
+                buyerId: sale.buyerId,
+                productId: sale.productId,
+              }}
+            />
+          </div>
         </section>
 
         {/* Produto */}

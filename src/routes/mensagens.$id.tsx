@@ -8,6 +8,7 @@ import { ConversationsList } from "@/components/messages/ConversationsList";
 import { MessageComposer } from "@/components/messages/MessageComposer";
 import { MessageSecurityNotice } from "@/components/messages/MessageSecurityNotice";
 import { MessagesThread } from "@/components/messages/MessagesThread";
+import { ReportButton } from "@/components/report/ReportButton";
 import { messageService } from "@/services/messageService";
 import type { ConversationMessage } from "@/types";
 
@@ -82,6 +83,38 @@ function ConversationDetailPage() {
               <MessageComposer onSend={handleSend} />
             </div>
             <MessageSecurityNotice />
+            <div className="flex flex-wrap justify-end gap-2">
+              <ReportButton
+                targetType="conversation"
+                targetId={conversation.id}
+                targetLabel={`Conversa com ${conversation.counterpart.name}`}
+                label="Denunciar conversa"
+                variant="outline"
+                size="sm"
+                source="message_thread"
+                context={{
+                  conversationId: conversation.id,
+                  sellerId: conversation.counterpart.sellerSlug
+                    ? conversation.counterpart.id
+                    : undefined,
+                  orderId:
+                    conversation.type === "order_related"
+                      ? conversation.context?.orderId
+                      : undefined,
+                }}
+              />
+              <ReportButton
+                targetType="message"
+                targetId={conversation.id}
+                targetLabel={`Última mensagem em conversa com ${conversation.counterpart.name}`}
+                label="Reportar contato externo"
+                variant="ghost"
+                size="sm"
+                source="message_thread"
+                defaultReason="external_contact_attempt"
+                context={{ conversationId: conversation.id }}
+              />
+            </div>
           </div>
         </div>
       </div>

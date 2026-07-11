@@ -75,3 +75,10 @@ Regras futuras de mensagens. **Documentação de planejamento.** Não implementa
 - Notificações apontam para rotas reais quando existem (`/pedidos/$id`, `/vendedor/vendas/$id`, `/mensagens/$id`, `/admin/*`, `/lit-points`, etc.).
 - **Nada é persistido**: sem LocalStorage, sem Cookies, sem backend. Push, e-mail, SMS, WebSocket e Service Worker **não** são implementados — exigem backend real, opt-in do usuário e infra de mensageria.
 - Dados sensíveis nunca devem aparecer em notificações — títulos e descrições são genéricos e mascarados.
+
+## Denúncia em mensagens (Sprint 18.15 — mock)
+
+- Toda conversa e mensagem pode ser denunciada via `ReportButton` (`targetType: conversation` ou `message`).
+- Tentativa de contato externo é motivo prioritário (`external_contact_attempt` / `external_channels`), severidade alta.
+- Mensagens sanitizadas (ex.: `[CONTATO REMOVIDO PELA MODERAÇÃO]`) devem oferecer ação visível de reportar tentativa de contato externo.
+- Anti-poaching visual continua ativo. Moderação real exige backend.

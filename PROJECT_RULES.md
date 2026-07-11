@@ -231,3 +231,12 @@ Documentos relacionados: `ORDER_LIFECYCLE.md`, `DIGITAL_DELIVERY_FLOW.md`, `DISP
 - Notificações apontam para rotas reais quando existem (`/pedidos/$id`, `/vendedor/vendas/$id`, `/mensagens/$id`, `/admin/*`, `/lit-points`, etc.).
 - **Nada é persistido**: sem LocalStorage, sem Cookies, sem backend. Push, e-mail, SMS, WebSocket e Service Worker **não** são implementados — exigem backend real, opt-in do usuário e infra de mensageria.
 - Dados sensíveis nunca devem aparecer em notificações — títulos e descrições são genéricos e mascarados.
+
+## Sprint 18.15 — Denúncias (mock)
+
+- Denúncias são 100% mockadas nesta fase. Nenhum dado é persistido.
+- **Denúncia ≠ mediação**: mediação resolve problema de entrega/produto em um pedido; denúncia sinaliza comportamento irregular (golpe, contato externo, abuso, spam, anúncio proibido).
+- Toda denúncia usa `reportService` + `ReportDialog` + `ReportButton`. Nenhuma tela deve ler mocks de denúncia diretamente.
+- Contato externo (WhatsApp/Discord/Telegram/telefone/e-mail) sempre deve ser reportável em mensagens e conversas.
+- Denúncia real exigirá backend, moderação, RBAC, audit log e storage seguro de evidências.
+- Ações admin (suspender anúncio, bloquear usuário, encaminhar mediação) são mockadas com toast — não alteram nada real.
