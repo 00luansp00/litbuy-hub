@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Save } from "lucide-react";
 import { toast } from "sonner";
@@ -10,10 +10,14 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { adminAdvancedService } from "@/services/adminAdvancedService";
+import type { AdminFeatureFlag } from "@/types";
 
 export const Route = createFileRoute("/admin/configuracoes")({
   component: AdminSettingsPage,
 });
+
 
 function AdminSettingsPage() {
   const [platformFee, setPlatformFee] = useState("10");
@@ -23,11 +27,29 @@ function AdminSettingsPage() {
   const [emailAlerts, setEmailAlerts] = useState(false);
   const [darkAdmin, setDarkAdmin] = useState(true);
 
+  const [platformFee, setPlatformFee] = useState("10");
+  const [minWithdraw, setMinWithdraw] = useState("50");
+  const [moderationAuto, setModerationAuto] = useState(true);
+  const [twoFA, setTwoFA] = useState(true);
+  const [emailAlerts, setEmailAlerts] = useState(false);
+  const [darkAdmin, setDarkAdmin] = useState(true);
+  const [flags, setFlags] = useState<AdminFeatureFlag[]>([]);
+
+  useEffect(() => {
+    adminAdvancedService.getFeatureFlags().then(setFlags);
+  }, []);
+
+  const toggleFlag = (key: string) => {
+    setFlags((prev) => prev.map((f) => (f.key === key ? { ...f, enabled: !f.enabled } : f)));
+    toast("Flag alternada (mock)");
+  };
+
   const save = (label: string) =>
     toast(`${label} salvo`, {
       description:
         "Configuração administrativa mockada — nenhuma alteração real foi feita.",
     });
+
 
   return (
     <AdminLayout
