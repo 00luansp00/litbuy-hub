@@ -33,7 +33,11 @@ function CarteiraPage() {
         title="Carteira LIT"
         description="Saldo interno, transações e movimentações da sua conta."
       >
-        <WalletSummaryCard wallet={wallet} showAll hideHeader />
+        <div className="space-y-6">
+          <WalletSummaryCard wallet={wallet} showAll hideHeader />
+          <LitPointsSummaryCard />
+        </div>
+
       </AccountLayout>
     </AuthGate>
   );
