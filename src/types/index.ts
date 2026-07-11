@@ -136,6 +136,88 @@ export interface Product {
   trustScore?: number;
   /** Marca explicitamente o anúncio como "Mais vendido". */
   bestSeller?: boolean;
+
+  // ==============================
+  // Sprint 18.8 — compatibilidade com o motor avançado de anúncios (18.7).
+  // Todos os campos são opcionais para não quebrar produtos antigos.
+  // ==============================
+  listingModel?: ListingModel;
+  productType?: ListingProductType;
+  deliveryMode?: ListingDeliveryMode;
+  promotionTier?: ListingPromotionTier;
+  sellerPlan?: SellerPlanType;
+  variants?: ListingVariant[];
+  accountInfo?: ListingAccountInfo;
+  attributes?: ListingAttributeValue[];
+  subcategorySlug?: string;
+  subcategoryName?: string;
+  coverImage?: string;
+  galleryImages?: string[];
+  /** Configuração de moeda virtual (mock — cotação demonstrativa). */
+  virtualCurrency?: VirtualCurrencyConfig;
+  /** Preço "a partir de" — usado para produtos dinâmicos no card. */
+  fromPrice?: number;
+  /** Preço fixo do serviço; se ausente com model=service pode ser "sob orçamento". */
+  servicePricingType?: ListingServicePricingType;
+}
+
+// ==================================================
+// Sprint 18.8 — tipos do lado comprador (produto avançado).
+// ==================================================
+
+export interface VirtualCurrencyConfig {
+  /** Nome/unidade (ex.: "Gold", "Robux", "Diamantes"). */
+  unit: string;
+  /** Preço mockado por unidade. */
+  pricePerUnit: number;
+  /** Quantidade mínima para compra. */
+  minQuantity: number;
+  /** Passo (incremento) sugerido para o input. */
+  step?: number;
+  /** Estoque disponível na unidade da moeda. */
+  availableStock: number;
+}
+
+export interface VirtualCurrencyQuote {
+  quantity: number;
+  unit: string;
+  unitPrice: number;
+  total: number;
+  belowMin: boolean;
+  overStock: boolean;
+}
+
+export interface ProductVariantSelection {
+  productId: string;
+  variantId: string;
+  variantTitle: string;
+  unitPrice: number;
+}
+
+export type ProductPurchaseMode =
+  | "normal"
+  | "dynamic"
+  | "service_fixed"
+  | "service_quote"
+  | "virtual_currency";
+
+export interface ProductQuestionAnswer {
+  id: string;
+  authorName: string;
+  authorRole: "seller" | "support";
+  text: string;
+  /** ISO date. */
+  answeredAt: string;
+}
+
+export interface ProductQuestion {
+  id: string;
+  productId: string;
+  authorName: string;
+  text: string;
+  /** ISO date. */
+  askedAt: string;
+  answer?: ProductQuestionAnswer;
 }
 
 
@@ -252,7 +334,15 @@ export interface AccountNotification {
 // Estado 100% em memória; nenhum backend/persistência.
 // ==================================================
 
+export interface CartItemVariant {
+  variantId: string;
+  variantTitle: string;
+  variantPrice: number;
+}
+
 export interface CartItem {
+  /** Chave composta: productId ou `${productId}::${variantId}` / `::vc::qty`. */
+  key: string;
   productId: string;
   slug: string;
   title: string;
@@ -266,6 +356,26 @@ export interface CartItem {
   quantity: number;
   instantDelivery?: boolean;
   verifiedSeller?: boolean;
+
+  // Sprint 18.8 — compatível com produto dinâmico / moeda virtual.
+  selectedVariantId?: string;
+  selectedVariantTitle?: string;
+  selectedVariantPrice?: number;
+  /** Marca item como cotação de moeda virtual (unitLabel = unidade, quantity = qtd). */
+  virtualCurrencyUnit?: string;
+}
+
+export interface MiniCartItem {
+  key: string;
+  productId: string;
+  slug: string;
+  title: string;
+  image: string;
+  quantity: number;
+  unitPrice: number;
+  subtotal: number;
+  variantTitle?: string;
+  virtualCurrencyUnit?: string;
 }
 
 export type CartCouponKind = "percent" | "fixed";

@@ -301,3 +301,18 @@ Docs de suporte atualizados: `DATABASE_SCHEMA.md`, `ENTITY_RELATIONSHIP.md`, `SU
 
 ### Próximo passo sugerido
 - Sprint 18.8 — Produto Dinâmico na página pública + Perguntas Públicas + Mini Cart.
+
+## Sprint 18.8 — Produto Dinâmico, Perguntas Públicas e Mini Cart
+
+- ProductCard suporta Normal, Dinâmico, Serviço (fixo/orçamento) e Moeda Virtual.
+- Página /produto/$id mostra ProductDetailsSpecs, AccountInfoCard (quando aplicável),
+  ProductVariantSelector, VirtualCurrencyQuoteBox e ProductQuestions.
+- PurchaseCard integra variação selecionada, cotação de moeda virtual,
+  fluxo de serviço sob orçamento e abre MiniCartModal após add válido.
+- CartProvider aceita variação/cotação por chave composta sem persistência.
+- MessageComposer e perguntas públicas usam censura visual mockada (moderation.ts).
+- Typecheck limpo. Nenhum backend, nenhum LocalStorage, nenhum Cookie.
+
+### Limitações conhecidas
+- Moderação, cotação real, multi-vendedor e cofre automático exigem backend.
+- Perguntas são in-memory: recarregar a página reseta a lista.

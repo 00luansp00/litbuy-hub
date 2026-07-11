@@ -67,3 +67,15 @@ puramente visuais deve sobreviver ao merge com o backend real.
   a comunicação deve permanecer dentro da LIT Buy.
 - **Campos de conta** (procedência, recuperação) serão prova em disputas
   futuras — precisarão de validação e política formal de aceitação.
+
+## Sprint 18.8 — considerações
+
+- **Moderação real exige backend.** A função `sanitizeExternalContact()` é
+  apenas mock client-side; um atacante pode contornar. Deve haver moderação
+  no servidor com regras versionadas e log de auditoria.
+- **Negociação fora da plataforma remove proteção futura** — não implementado,
+  mas os avisos já preparam o comprador/vendedor.
+- **Dados sensíveis (login, senha, seed) nunca são exibidos no frontend.**
+  O componente `AccountInfoCard` apresenta apenas metadados declarados.
+- **Cotação de moeda virtual e multi-vendedor** são demonstrativos; a divisão
+  entre vendedores deve ocorrer em transação atômica no backend.

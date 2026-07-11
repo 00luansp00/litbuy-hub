@@ -34,7 +34,7 @@ export function CheckoutItemsReview({ items }: CheckoutItemsReviewProps) {
 
       <ul className="divide-y divide-border">
         {items.map((item) => (
-          <li key={item.productId} className="flex gap-3 py-3 first:pt-0 last:pb-0">
+          <li key={item.key} className="flex gap-3 py-3 first:pt-0 last:pb-0">
             <Link
               to="/produto/$id"
               params={{ id: item.slug }}
@@ -67,6 +67,16 @@ export function CheckoutItemsReview({ items }: CheckoutItemsReviewProps) {
               >
                 {item.title}
               </Link>
+              {item.selectedVariantTitle && (
+                <div className="mt-0.5 text-[11px] text-primary">
+                  Variação: {item.selectedVariantTitle}
+                </div>
+              )}
+              {item.virtualCurrencyUnit && (
+                <div className="mt-0.5 text-[11px] text-primary">
+                  {item.quantity.toLocaleString("pt-BR")} {item.virtualCurrencyUnit}
+                </div>
+              )}
               <div className="mt-0.5 text-[11px] text-muted-foreground">
                 Vendedor: <span className="text-foreground">{item.sellerName}</span>
               </div>

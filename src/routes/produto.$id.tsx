@@ -6,9 +6,12 @@ import { ProductGrid } from "@/components/common/ProductGrid";
 import { ProductSkeleton } from "@/components/common/ProductSkeleton";
 import { SectionHeader } from "@/components/common/SectionHeader";
 import { SellerInfo } from "@/components/common/SellerInfo";
+import { AccountInfoCard } from "@/components/product/AccountInfoCard";
 import { ProductDescription } from "@/components/product/ProductDescription";
+import { ProductDetailsSpecs } from "@/components/product/ProductDetailsSpecs";
 import { ProductGallery } from "@/components/product/ProductGallery";
 import { ProductInfo } from "@/components/product/ProductInfo";
+import { ProductQuestions } from "@/components/product/ProductQuestions";
 import { ProductReviews } from "@/components/product/ProductReviews";
 import { PurchaseCard } from "@/components/product/PurchaseCard";
 import { productService } from "@/services/productService";
@@ -32,17 +35,20 @@ export const Route = createFileRoute("/produto/$id")({
 function ProductPage() {
   const { product, related, reviews } = Route.useLoaderData();
 
-  // Galeria mockada — replica a imagem principal em variantes para simular múltiplas fotos.
-  const gallery = [
-    product.imageUrl,
-    product.imageUrl.replace("/600/600", "/601/600"),
-    product.imageUrl.replace("/600/600", "/600/601"),
-    product.imageUrl.replace("/600/600", "/602/602"),
-  ];
+  // Galeria: usa coverImage + galleryImages se existirem, senão fallback antigo.
+  const gallery =
+    product.galleryImages && product.galleryImages.length > 0
+      ? [product.coverImage ?? product.imageUrl, ...product.galleryImages]
+      : [
+          product.coverImage ?? product.imageUrl,
+          product.imageUrl.replace("/600/600", "/601/600"),
+          product.imageUrl.replace("/600/600", "/600/601"),
+          product.imageUrl.replace("/600/600", "/602/602"),
+        ];
 
   const description =
     product.description ??
-    `${product.title} — entrega ${product.instantDelivery ? "instantânea" : "rápida"} e vendedor ${product.verifiedSeller ? "verificado" : "avaliado"} pela LIT Buy.\n\nAntes da compra, verifique as informações e a reputação do anunciante. Todas as transações são protegidas pela nossa garantia da plataforma, com suporte dedicado em caso de qualquer problema.\n\nDúvidas? Envie uma mensagem diretamente ao vendedor pelo chat integrado (em breve).`;
+    `${product.title} — entrega ${product.instantDelivery ? "instantânea" : "rápida"} e vendedor ${product.verifiedSeller ? "verificado" : "avaliado"} pela LIT Buy.\n\nAntes da compra, verifique as informações e a reputação do anunciante. Todas as transações são protegidas pela nossa garantia da plataforma, com suporte dedicado em caso de qualquer problema.\n\nDúvidas? Use a seção de perguntas públicas abaixo ou envie uma mensagem privada ao vendedor.`;
 
   const seller =
     product.seller ??
@@ -94,11 +100,17 @@ function ProductPage() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.05 }}
-          className="lg:col-span-4"
+          className="lg:col-span-4 space-y-6"
         >
           <ProductInfo product={product} />
 
-          <div className="mt-6 rounded-2xl border border-border bg-card p-5">
+          <ProductDetailsSpecs product={product} />
+
+          {product.productType === "account" && product.accountInfo && (
+            <AccountInfoCard info={product.accountInfo} />
+          )}
+
+          <div className="rounded-2xl border border-border bg-card p-5">
             <h3 className="mb-3 text-sm font-semibold text-foreground">
               Sobre o vendedor
             </h3>
@@ -127,6 +139,8 @@ function ProductPage() {
           total={product.reviewsCount}
         />
       </div>
+
+      <ProductQuestions productId={product.id} />
 
       <section>
         <SectionHeader

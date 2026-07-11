@@ -3,12 +3,17 @@ import { Paperclip, Send, Smile } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { moderateText } from "@/utils/moderation";
 
 interface MessageComposerProps {
   onSend: (text: string) => void;
   disabled?: boolean;
 }
 
+/**
+ * MessageComposer — envio de mensagem privada (mockado).
+ * Aplica censura visual anti-poaching antes de enviar o texto.
+ */
 export function MessageComposer({ onSend, disabled }: MessageComposerProps) {
   const [text, setText] = useState("");
 
@@ -16,7 +21,13 @@ export function MessageComposer({ onSend, disabled }: MessageComposerProps) {
     e.preventDefault();
     const value = text.trim();
     if (!value) return;
-    onSend(value);
+    const mod = moderateText(value);
+    if (mod.removed) {
+      toast.warning("Contato externo removido", {
+        description: "Sua mensagem foi enviada sem os dados de contato.",
+      });
+    }
+    onSend(mod.sanitized);
     setText("");
   };
 
@@ -72,7 +83,9 @@ export function MessageComposer({ onSend, disabled }: MessageComposerProps) {
         </Button>
       </div>
       <p className="mt-2 text-[10px] text-muted-foreground">
-        Envio em modo demonstração — nenhuma mensagem é persistida.
+        Mantenha a conversa dentro da LIT Buy. Tentativas de contato externo
+        podem remover a proteção da compra. Envio em modo demonstração — nada é
+        persistido.
       </p>
     </form>
   );

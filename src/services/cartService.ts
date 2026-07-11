@@ -1,23 +1,24 @@
 import { products } from "@/data/products";
 import { getUnavailabilityReason } from "@/services/productService";
-import type { CartCoupon, CartItem, CartSummary, Product } from "@/types";
-
+import type {
+  CartCoupon,
+  CartItem,
+  CartSummary,
+  ListingVariant,
+  Product,
+} from "@/types";
 
 /**
  * cartService — camada mockada de regras do carrinho.
- * Centraliza cálculos e validação de cupom para substituição
- * futura por API/back-end sem alterar UI ou CartProvider.
+ * Suporta variação selecionada (produto dinâmico) e cotação de moeda virtual
+ * a partir da Sprint 18.8. O item é identificado pela chave composta `key`
+ * (productId, productId::variantId ou productId::vc::qty).
  */
 
-const PLATFORM_FEE_RATE = 0; // 0% enquanto está em fase visual
+const PLATFORM_FEE_RATE = 0;
 
 const COUPONS: Record<string, CartCoupon> = {
-  LIT10: {
-    code: "LIT10",
-    kind: "percent",
-    value: 10,
-    label: "10% de desconto",
-  },
+  LIT10: { code: "LIT10", kind: "percent", value: 10, label: "10% de desconto" },
   PRIMEIRA: {
     code: "PRIMEIRA",
     kind: "fixed",
@@ -26,21 +27,53 @@ const COUPONS: Record<string, CartCoupon> = {
   },
 };
 
-function buildCartItemFromProduct(product: Product, quantity = 1): CartItem {
+export interface BuildCartItemOptions {
+  quantity?: number;
+  variant?: ListingVariant;
+  /** Sobrescreve preço unitário (moeda virtual). */
+  unitPriceOverride?: number;
+  /** Sobrescreve título exibido (moeda virtual, ex: "50.000 Gold"). */
+  titleOverride?: string;
+  /** Marca item como cotação de moeda virtual. */
+  virtualCurrencyUnit?: string;
+}
+
+function buildKey(
+  productId: string,
+  variantId?: string,
+  virtualCurrencyUnit?: string,
+  quantity?: number,
+): string {
+  if (variantId) return `${productId}::${variantId}`;
+  if (virtualCurrencyUnit) return `${productId}::vc::${quantity ?? 1}`;
+  return productId;
+}
+
+function buildCartItemFromProduct(
+  product: Product,
+  opts: BuildCartItemOptions = {},
+): CartItem {
+  const { quantity = 1, variant, unitPriceOverride, titleOverride, virtualCurrencyUnit } = opts;
+  const unitPrice = unitPriceOverride ?? variant?.price ?? product.price;
   return {
+    key: buildKey(product.id, variant?.id, virtualCurrencyUnit, quantity),
     productId: product.id,
     slug: product.slug,
-    title: product.title,
-    image: product.imageUrl,
+    title: titleOverride ?? product.title,
+    image: product.coverImage ?? product.imageUrl,
     category: product.categoryName,
     categorySlug: product.categorySlug,
     sellerName: product.seller?.name ?? "LIT Seller",
     sellerSlug: product.seller?.slug,
-    price: product.price,
-    oldPrice: product.originalPrice,
-    quantity: Math.max(1, Math.min(99, quantity)),
+    price: unitPrice,
+    oldPrice: unitPriceOverride ? undefined : product.originalPrice,
+    quantity: Math.max(1, Math.min(9999, quantity)),
     instantDelivery: product.instantDelivery,
     verifiedSeller: product.verifiedSeller ?? product.seller?.verified,
+    selectedVariantId: variant?.id,
+    selectedVariantTitle: variant?.title,
+    selectedVariantPrice: variant?.price,
+    virtualCurrencyUnit,
   };
 }
 
@@ -65,15 +98,11 @@ function calculateCartSummary(
   return { itemCount, subtotal, discount, platformFee, total };
 }
 
-function validateCoupon(code: string): {
-  coupon: CartCoupon | null;
-  message: string;
-} {
+function validateCoupon(code: string): { coupon: CartCoupon | null; message: string } {
   const normalized = code.trim().toUpperCase();
   if (!normalized) return { coupon: null, message: "Informe um código de cupom." };
   const coupon = COUPONS[normalized];
-  if (!coupon)
-    return { coupon: null, message: "Cupom inválido ou expirado." };
+  if (!coupon) return { coupon: null, message: "Cupom inválido ou expirado." };
   return { coupon, message: `Cupom ${coupon.code} aplicado — ${coupon.label}.` };
 }
 
@@ -82,11 +111,6 @@ export interface CartUnavailableEntry {
   reason: NonNullable<ReturnType<typeof getUnavailabilityReason>>;
 }
 
-/**
- * Retorna itens do carrinho cujo produto (no catálogo mock) ficou
- * indisponível. Substituível futuramente por endpoint que valida o
- * carrinho no backend antes do checkout.
- */
 function findUnavailableItems(items: CartItem[]): CartUnavailableEntry[] {
   const out: CartUnavailableEntry[] = [];
   for (const item of items) {
@@ -103,5 +127,5 @@ export const cartService = {
   calculateCartSummary,
   validateCoupon,
   findUnavailableItems,
+  buildKey,
 };
-

@@ -168,3 +168,14 @@ Documentos relacionados: `ORDER_LIFECYCLE.md`, `DIGITAL_DELIVERY_FLOW.md`, `DISP
 - Campos de conta (procedência, recuperação, verificação) exigirão validação e política de segurança futura.
 - Atributos dinâmicos por jogo/subcategoria devem ser configuráveis futuramente pelo admin/backend.
 - Nenhum dado do wizard é persistido; nem LocalStorage, nem Cookies.
+
+## Sprint 18.8 — Produto avançado no lado comprador
+
+- Produto Dinâmico exige seleção de variação antes de compra/checkout.
+- Produto Serviço "sob orçamento" não vai direto ao carrinho: encaminha para /mensagens.
+- Produto Moeda Virtual usa cotação visual demonstrativa; lógica real será backend.
+- Perguntas públicas do anúncio são distintas das mensagens privadas.
+- Contato externo (WhatsApp, Discord, Telegram, links, e-mails, números longos)
+  é desencorajado e censurado visualmente em perguntas e mensagens.
+- MiniCartModal é apenas uma camada de UX; **não substitui /carrinho nem /checkout**.
+- Nada é persistido: sem LocalStorage, sem Cookies, sem backend.

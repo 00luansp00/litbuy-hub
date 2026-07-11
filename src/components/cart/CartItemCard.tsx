@@ -16,19 +16,21 @@ export function CartItemCard({ item }: CartItemCardProps) {
   const { updateQuantity, removeItem } = useCart();
 
   const dec = () => {
-    updateQuantity(item.productId, item.quantity - 1);
+    updateQuantity(item.key, item.quantity - 1);
     toast("Quantidade atualizada");
   };
   const inc = () => {
-    updateQuantity(item.productId, item.quantity + 1);
+    updateQuantity(item.key, item.quantity + 1);
     toast("Quantidade atualizada");
   };
   const remove = () => {
-    removeItem(item.productId);
+    removeItem(item.key);
     toast.success("Item removido do carrinho");
   };
 
   const lineTotal = item.price * item.quantity;
+  const variantLabel = item.selectedVariantTitle;
+  const virtualUnit = item.virtualCurrencyUnit;
 
   return (
     <motion.article
@@ -70,6 +72,14 @@ export function CartItemCard({ item }: CartItemCardProps) {
             >
               {item.title}
             </Link>
+            {variantLabel && (
+              <div className="mt-1 text-xs text-primary">Variação: {variantLabel}</div>
+            )}
+            {virtualUnit && (
+              <div className="mt-1 text-xs text-primary">
+                {item.quantity.toLocaleString("pt-BR")} {virtualUnit}
+              </div>
+            )}
             <div className="mt-1 text-xs text-muted-foreground">
               Vendedor:{" "}
               {item.sellerSlug ? (
@@ -97,26 +107,28 @@ export function CartItemCard({ item }: CartItemCardProps) {
         </div>
 
         <div className="mt-auto flex flex-wrap items-end justify-between gap-3">
-          <div className="inline-flex items-center rounded-lg border border-border">
-            <button
-              type="button"
-              onClick={dec}
-              aria-label="Diminuir"
-              className="grid h-8 w-8 place-items-center text-muted-foreground hover:text-foreground"
-            >
-              <Minus className="h-3.5 w-3.5" />
-            </button>
-            <span className="w-8 text-center text-sm font-medium">{item.quantity}</span>
-            <button
-              type="button"
-              onClick={inc}
-              aria-label="Aumentar"
-              className="grid h-8 w-8 place-items-center text-muted-foreground hover:text-foreground"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
-          </div>
-          <div className="text-right">
+          {!virtualUnit && (
+            <div className="inline-flex items-center rounded-lg border border-border">
+              <button
+                type="button"
+                onClick={dec}
+                aria-label="Diminuir"
+                className="grid h-8 w-8 place-items-center text-muted-foreground hover:text-foreground"
+              >
+                <Minus className="h-3.5 w-3.5" />
+              </button>
+              <span className="w-8 text-center text-sm font-medium">{item.quantity}</span>
+              <button
+                type="button"
+                onClick={inc}
+                aria-label="Aumentar"
+                className="grid h-8 w-8 place-items-center text-muted-foreground hover:text-foreground"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+          <div className="text-right ml-auto">
             {item.oldPrice && (
               <div className="text-[11px] text-muted-foreground line-through">
                 {formatBRL(item.oldPrice * item.quantity)}
@@ -126,7 +138,9 @@ export function CartItemCard({ item }: CartItemCardProps) {
               {formatBRL(lineTotal)}
             </div>
             <div className="text-[11px] text-muted-foreground">
-              {item.quantity} × {formatBRL(item.price)}
+              {virtualUnit
+                ? `${item.quantity.toLocaleString("pt-BR")} ${virtualUnit}`
+                : `${item.quantity} × ${formatBRL(item.price)}`}
             </div>
           </div>
         </div>
