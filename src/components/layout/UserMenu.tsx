@@ -170,16 +170,9 @@ export function UserMenu() {
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={handleSwitchToSeller}>
-              {hasSellerProfile ? (
-                <>
-                  <ArrowLeftRight className="h-4 w-4" /> Mudar para modo vendedor
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-4 w-4" /> Vender na LIT Buy
-                </>
-              )}
+              <ArrowLeftRight className="h-4 w-4" /> Mudar para modo vendedor
             </DropdownMenuItem>
+
           </>
         )}
 
