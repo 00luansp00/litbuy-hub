@@ -7,7 +7,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { sellerDashboardService } from "@/services/sellerDashboardService";
 import type { SellerListing } from "@/types";
 
-export const Route = createFileRoute("/vendedor/anuncios")({
+export const Route = createFileRoute("/vendedor/anuncios/")({
   component: () => (
     <AuthGate
       title="Entre para acessar seus anúncios"

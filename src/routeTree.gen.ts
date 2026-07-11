@@ -27,7 +27,6 @@ import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as VendedorVendasRouteImport } from './routes/vendedor.vendas'
 import { Route as VendedorFinanceiroRouteImport } from './routes/vendedor.financeiro'
 import { Route as VendedorAvaliacoesRouteImport } from './routes/vendedor.avaliacoes'
-import { Route as VendedorAnunciosRouteImport } from './routes/vendedor.anuncios'
 import { Route as ProdutoIdRouteImport } from './routes/produto.$id'
 import { Route as LojaSlugRouteImport } from './routes/loja.$slug'
 import { Route as CategoriaSlugRouteImport } from './routes/categoria.$slug'
@@ -39,6 +38,7 @@ import { Route as AdminDisputasRouteImport } from './routes/admin.disputas'
 import { Route as AdminDenunciasRouteImport } from './routes/admin.denuncias'
 import { Route as AdminConfiguracoesRouteImport } from './routes/admin.configuracoes'
 import { Route as AdminAnunciosRouteImport } from './routes/admin.anuncios'
+import { Route as VendedorAnunciosIndexRouteImport } from './routes/vendedor.anuncios.index'
 import { Route as VendedorAnunciosNovoRouteImport } from './routes/vendedor.anuncios.novo'
 
 const VendedorRoute = VendedorRouteImport.update({
@@ -131,11 +131,6 @@ const VendedorAvaliacoesRoute = VendedorAvaliacoesRouteImport.update({
   path: '/avaliacoes',
   getParentRoute: () => VendedorRoute,
 } as any)
-const VendedorAnunciosRoute = VendedorAnunciosRouteImport.update({
-  id: '/anuncios',
-  path: '/anuncios',
-  getParentRoute: () => VendedorRoute,
-} as any)
 const ProdutoIdRoute = ProdutoIdRouteImport.update({
   id: '/produto/$id',
   path: '/produto/$id',
@@ -191,10 +186,15 @@ const AdminAnunciosRoute = AdminAnunciosRouteImport.update({
   path: '/anuncios',
   getParentRoute: () => AdminRoute,
 } as any)
+const VendedorAnunciosIndexRoute = VendedorAnunciosIndexRouteImport.update({
+  id: '/anuncios/',
+  path: '/anuncios/',
+  getParentRoute: () => VendedorRoute,
+} as any)
 const VendedorAnunciosNovoRoute = VendedorAnunciosNovoRouteImport.update({
-  id: '/novo',
-  path: '/novo',
-  getParentRoute: () => VendedorAnunciosRoute,
+  id: '/anuncios/novo',
+  path: '/anuncios/novo',
+  getParentRoute: () => VendedorRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -222,13 +222,13 @@ export interface FileRoutesByFullPath {
   '/categoria/$slug': typeof CategoriaSlugRoute
   '/loja/$slug': typeof LojaSlugRoute
   '/produto/$id': typeof ProdutoIdRoute
-  '/vendedor/anuncios': typeof VendedorAnunciosRouteWithChildren
   '/vendedor/avaliacoes': typeof VendedorAvaliacoesRoute
   '/vendedor/financeiro': typeof VendedorFinanceiroRoute
   '/vendedor/vendas': typeof VendedorVendasRoute
   '/admin/': typeof AdminIndexRoute
   '/vendedor/': typeof VendedorIndexRoute
   '/vendedor/anuncios/novo': typeof VendedorAnunciosNovoRoute
+  '/vendedor/anuncios/': typeof VendedorAnunciosIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -253,13 +253,13 @@ export interface FileRoutesByTo {
   '/categoria/$slug': typeof CategoriaSlugRoute
   '/loja/$slug': typeof LojaSlugRoute
   '/produto/$id': typeof ProdutoIdRoute
-  '/vendedor/anuncios': typeof VendedorAnunciosRouteWithChildren
   '/vendedor/avaliacoes': typeof VendedorAvaliacoesRoute
   '/vendedor/financeiro': typeof VendedorFinanceiroRoute
   '/vendedor/vendas': typeof VendedorVendasRoute
   '/admin': typeof AdminIndexRoute
   '/vendedor': typeof VendedorIndexRoute
   '/vendedor/anuncios/novo': typeof VendedorAnunciosNovoRoute
+  '/vendedor/anuncios': typeof VendedorAnunciosIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -287,13 +287,13 @@ export interface FileRoutesById {
   '/categoria/$slug': typeof CategoriaSlugRoute
   '/loja/$slug': typeof LojaSlugRoute
   '/produto/$id': typeof ProdutoIdRoute
-  '/vendedor/anuncios': typeof VendedorAnunciosRouteWithChildren
   '/vendedor/avaliacoes': typeof VendedorAvaliacoesRoute
   '/vendedor/financeiro': typeof VendedorFinanceiroRoute
   '/vendedor/vendas': typeof VendedorVendasRoute
   '/admin/': typeof AdminIndexRoute
   '/vendedor/': typeof VendedorIndexRoute
   '/vendedor/anuncios/novo': typeof VendedorAnunciosNovoRoute
+  '/vendedor/anuncios/': typeof VendedorAnunciosIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -322,13 +322,13 @@ export interface FileRouteTypes {
     | '/categoria/$slug'
     | '/loja/$slug'
     | '/produto/$id'
-    | '/vendedor/anuncios'
     | '/vendedor/avaliacoes'
     | '/vendedor/financeiro'
     | '/vendedor/vendas'
     | '/admin/'
     | '/vendedor/'
     | '/vendedor/anuncios/novo'
+    | '/vendedor/anuncios/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -353,13 +353,13 @@ export interface FileRouteTypes {
     | '/categoria/$slug'
     | '/loja/$slug'
     | '/produto/$id'
-    | '/vendedor/anuncios'
     | '/vendedor/avaliacoes'
     | '/vendedor/financeiro'
     | '/vendedor/vendas'
     | '/admin'
     | '/vendedor'
     | '/vendedor/anuncios/novo'
+    | '/vendedor/anuncios'
   id:
     | '__root__'
     | '/'
@@ -386,13 +386,13 @@ export interface FileRouteTypes {
     | '/categoria/$slug'
     | '/loja/$slug'
     | '/produto/$id'
-    | '/vendedor/anuncios'
     | '/vendedor/avaliacoes'
     | '/vendedor/financeiro'
     | '/vendedor/vendas'
     | '/admin/'
     | '/vendedor/'
     | '/vendedor/anuncios/novo'
+    | '/vendedor/anuncios/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -542,13 +542,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VendedorAvaliacoesRouteImport
       parentRoute: typeof VendedorRoute
     }
-    '/vendedor/anuncios': {
-      id: '/vendedor/anuncios'
-      path: '/anuncios'
-      fullPath: '/vendedor/anuncios'
-      preLoaderRoute: typeof VendedorAnunciosRouteImport
-      parentRoute: typeof VendedorRoute
-    }
     '/produto/$id': {
       id: '/produto/$id'
       path: '/produto/$id'
@@ -626,12 +619,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminAnunciosRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/vendedor/anuncios/': {
+      id: '/vendedor/anuncios/'
+      path: '/anuncios'
+      fullPath: '/vendedor/anuncios/'
+      preLoaderRoute: typeof VendedorAnunciosIndexRouteImport
+      parentRoute: typeof VendedorRoute
+    }
     '/vendedor/anuncios/novo': {
       id: '/vendedor/anuncios/novo'
-      path: '/novo'
+      path: '/anuncios/novo'
       fullPath: '/vendedor/anuncios/novo'
       preLoaderRoute: typeof VendedorAnunciosNovoRouteImport
-      parentRoute: typeof VendedorAnunciosRoute
+      parentRoute: typeof VendedorRoute
     }
   }
 }
@@ -662,31 +662,22 @@ const AdminRouteChildren: AdminRouteChildren = {
 
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
-interface VendedorAnunciosRouteChildren {
-  VendedorAnunciosNovoRoute: typeof VendedorAnunciosNovoRoute
-}
-
-const VendedorAnunciosRouteChildren: VendedorAnunciosRouteChildren = {
-  VendedorAnunciosNovoRoute: VendedorAnunciosNovoRoute,
-}
-
-const VendedorAnunciosRouteWithChildren =
-  VendedorAnunciosRoute._addFileChildren(VendedorAnunciosRouteChildren)
-
 interface VendedorRouteChildren {
-  VendedorAnunciosRoute: typeof VendedorAnunciosRouteWithChildren
   VendedorAvaliacoesRoute: typeof VendedorAvaliacoesRoute
   VendedorFinanceiroRoute: typeof VendedorFinanceiroRoute
   VendedorVendasRoute: typeof VendedorVendasRoute
   VendedorIndexRoute: typeof VendedorIndexRoute
+  VendedorAnunciosNovoRoute: typeof VendedorAnunciosNovoRoute
+  VendedorAnunciosIndexRoute: typeof VendedorAnunciosIndexRoute
 }
 
 const VendedorRouteChildren: VendedorRouteChildren = {
-  VendedorAnunciosRoute: VendedorAnunciosRouteWithChildren,
   VendedorAvaliacoesRoute: VendedorAvaliacoesRoute,
   VendedorFinanceiroRoute: VendedorFinanceiroRoute,
   VendedorVendasRoute: VendedorVendasRoute,
   VendedorIndexRoute: VendedorIndexRoute,
+  VendedorAnunciosNovoRoute: VendedorAnunciosNovoRoute,
+  VendedorAnunciosIndexRoute: VendedorAnunciosIndexRoute,
 }
 
 const VendedorRouteWithChildren = VendedorRoute._addFileChildren(
