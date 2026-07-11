@@ -42,6 +42,7 @@ const items: AccountNavItem[] = [
   { label: "Mensagens", icon: MessageSquare, to: "/mensagens" },
   { label: "Carteira", icon: Wallet, to: "/carteira" },
   { label: "Verificação", icon: ShieldCheck, to: "/perfil/verificacao" },
+  { label: "Afiliados", icon: Users, to: "/afiliados" },
   {
     label: "Segurança",
     icon: ShieldCheck,
