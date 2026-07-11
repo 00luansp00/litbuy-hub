@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { AdminMetricCard } from "@/components/admin/AdminMetricCard";
 import { AdminDashboardSection } from "@/components/admin/AdminDashboardSection";
@@ -17,6 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { BarChart3, ClipboardList, FileText, Flag, Gavel, Layers, Package, ShieldCheck, Wallet } from "lucide-react";
 import { adminService } from "@/services/adminService";
 import type { AdminDashboardSummary } from "@/types";
 
@@ -54,6 +55,36 @@ function AdminDashboardPage() {
               <Skeleton key={i} className="h-[110px] rounded-2xl" />
             ))}
       </div>
+
+      {/* Ações rápidas */}
+      <AdminDashboardSection title="Ações rápidas" description="Atalhos para as áreas mais usadas.">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          {[
+            { to: "/admin/anuncios", icon: Package, label: "Revisar anúncios" },
+            { to: "/admin/denuncias", icon: Flag, label: "Revisar denúncias" },
+            { to: "/admin/disputas", icon: Gavel, label: "Revisar disputas" },
+            { to: "/admin/verificacoes", icon: ShieldCheck, label: "Revisar KYC" },
+            { to: "/admin/relatorios", icon: BarChart3, label: "Ver relatórios" },
+            { to: "/admin/financeiro", icon: Wallet, label: "Financeiro" },
+            { to: "/admin/catalogo", icon: Layers, label: "Catálogo" },
+            { to: "/admin/conteudo", icon: FileText, label: "Conteúdo" },
+            { to: "/admin/auditoria", icon: ClipboardList, label: "Auditoria" },
+          ].map((a) => {
+            const Icon = a.icon;
+            return (
+              <Link
+                key={a.to}
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                to={a.to as any}
+                className="group flex items-center gap-2 rounded-xl border border-border bg-card p-3 text-sm text-muted-foreground hover:border-primary/50 hover:text-foreground"
+              >
+                <Icon className="h-4 w-4 text-primary" />
+                <span className="truncate">{a.label}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </AdminDashboardSection>
 
       {/* Alertas críticos */}
       <AdminDashboardSection

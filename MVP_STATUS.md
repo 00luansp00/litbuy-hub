@@ -358,3 +358,11 @@ Docs de suporte atualizados: `DATABASE_SCHEMA.md`, `ENTITY_RELATIONSHIP.md`, `SU
 - Nova rota `/vendedor/equipe` com membros, convites, cargos, matriz de permissões e atividade — todos mockados.
 - `sellerTeamService` com métodos de convite/atualização/remoção simulados.
 - Limitações: nenhum KYC real, sem upload, sem RBAC, sem envio de e-mail, sem persistência.
+
+## Sprint 18.12 — Admin Avançado / Configurações Gerenciáveis
+- Novas rotas: `/admin/catalogo`, `/admin/permissoes`, `/admin/verificacoes`, `/admin/financeiro`, `/admin/conteudo`, `/admin/relatorios`, `/admin/auditoria` — todas mockadas.
+- `adminAdvancedService` centraliza categorias/subcategorias, permissões, roles, KYC queue, taxas, métodos de pagamento, LIT Points, níveis, planos, feature flags, páginas de conteúdo, relatórios e audit log.
+- Dashboard `/admin` ganha bloco de ações rápidas.
+- `/admin/configuracoes` ganha aba de Feature Flags mockadas.
+- `AdminSidebar` reorganizado em grupos: Operação · Pessoas · Plataforma.
+- Limitações: nada é persistido; RBAC, feature flags, CMS, taxas e audit log reais exigem backend.

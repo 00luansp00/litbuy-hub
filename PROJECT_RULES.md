@@ -204,3 +204,10 @@ Documentos relacionados: `ORDER_LIFECYCLE.md`, `DIGITAL_DELIVERY_FLOW.md`, `DISP
 - Nenhum componente pode acessar mocks de verificação/equipe diretamente — sempre via `verificationService` e `sellerTeamService`.
 - Verificação real exigirá backend seguro, storage protegido, fornecedor de KYC e conformidade LGPD.
 - Permissões reais exigirão RBAC completo e audit log; convites reais exigirão e-mail com token expirável.
+
+## Sprint 18.12 — Admin Avançado
+- Todas as ações do admin (aprovar, alternar flag, editar taxa, publicar conteúdo, decidir KYC) são **mockadas**. Toasts e estado local apenas.
+- Nenhuma rota admin deve acessar mocks diretamente — sempre via `adminAdvancedService` ou `adminService`.
+- Categorias/subcategorias, taxas, planos, LIT Points, feature flags e conteúdo institucional visíveis no admin devem ser controlados por backend em produção.
+- Audit log real é obrigatório para ações sensíveis (financeiro, permissão, KYC, remoção).
+- `AdminGate` é proteção **visual** — RBAC real deve viver no backend.

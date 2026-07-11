@@ -1589,3 +1589,157 @@ export interface InviteMemberPayload {
   roleId: SellerTeamRole["id"];
   message?: string;
 }
+
+// ============================================================================
+// Sprint 18.12 — Admin avançado (visual/mockado)
+// ============================================================================
+
+
+export interface AdminCategoryRow {
+  id: string;
+  slug: string;
+  name: string;
+  icon: string;
+  color?: string;
+  active: boolean;
+  featured: boolean;
+  order: number;
+  listingsCount: number;
+  reports: number;
+  risk: AdminRiskLevel;
+}
+
+export interface AdminSubcategoryRow {
+  id: string;
+  slug: string;
+  name: string;
+  categoryId: string;
+  active: boolean;
+  listingsCount: number;
+}
+
+export interface AdminPermissionDef {
+  key: string;
+  label: string;
+  group: "catalog" | "listings" | "users" | "kyc" | "financial" | "content" | "system";
+  sensitive?: boolean;
+}
+
+export interface AdminRoleDef {
+  id: string;
+  name: string;
+  description: string;
+  active: boolean;
+  permissions: string[];
+  members: number;
+}
+
+export interface AdminKycReview {
+  id: string;
+  userName: string;
+  userEmail: string;
+  submittedAt: string;
+  status: "pending_review" | "needs_more_info" | "approved" | "rejected";
+  risk: AdminRiskLevel;
+  documentType: "rg" | "cnh" | "passport";
+  selfieProvided: boolean;
+}
+
+export interface AdminFeeConfig {
+  id: string;
+  label: string;
+  percent: number;
+  fixed?: number;
+  active: boolean;
+  note?: string;
+}
+
+export interface AdminPaymentMethodRow {
+  id: "pix" | "boleto" | "card" | "lit_balance" | "lit_points" | "crypto";
+  name: string;
+  active: boolean;
+  feePercent: number;
+  minValue: number;
+  maxValue: number;
+  expirationHours?: number;
+  environment: "demo" | "future";
+}
+
+export interface AdminLitPointsConfig {
+  active: boolean;
+  pointsPerPurchase: number;
+  pointsPerSale: number;
+  pointsPerReview: number;
+  campaignBonus: number;
+  expirationDays: number;
+  maxUsePercentPerOrder: number;
+  quote: number;
+}
+
+export interface AdminSellerLevelConfigRow {
+  id: string;
+  name: string;
+  minSales: number;
+  minRating: number;
+  maxDisputeRate: number;
+  platformFeePercent: number;
+  releaseHours: number;
+  priority: number;
+  active: boolean;
+}
+
+export interface AdminPlanBenefitConfig {
+  id: "lit_max" | "prata" | "ouro" | "diamante";
+  name: string;
+  active: boolean;
+  priceMonthly?: number;
+  feePercent?: number;
+  benefits: string[];
+  searchBoost?: number;
+}
+
+export interface AdminFeatureFlag {
+  key: string;
+  label: string;
+  description: string;
+  enabled: boolean;
+  category: "marketplace" | "payment" | "growth" | "safety" | "system";
+}
+
+export interface AdminContentPage {
+  id: string;
+  slug: string;
+  title: string;
+  kind: "page" | "banner" | "faq" | "policy" | "campaign";
+  status: "published" | "draft";
+  updatedAt: string;
+  version: number;
+}
+
+export interface AdminReportMetric {
+  id: string;
+  label: string;
+  value: string;
+  delta: string;
+  deltaDirection: "up" | "down" | "neutral";
+}
+
+export interface AdminReportRow {
+  id: string;
+  label: string;
+  value: string;
+  share?: number;
+}
+
+export interface AdminAuditLogEntry {
+  id: string;
+  actor: string;
+  actorRole: string;
+  action: string;
+  entity: string;
+  date: string;
+  ip: string;
+  severity: "info" | "warning" | "critical";
+  result: "ok" | "denied" | "failed";
+  summary?: string;
+}

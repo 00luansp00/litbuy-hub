@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Save } from "lucide-react";
 import { toast } from "sonner";
@@ -10,24 +10,40 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { adminAdvancedService } from "@/services/adminAdvancedService";
+import type { AdminFeatureFlag } from "@/types";
 
 export const Route = createFileRoute("/admin/configuracoes")({
   component: AdminSettingsPage,
 });
 
+
 function AdminSettingsPage() {
+
   const [platformFee, setPlatformFee] = useState("10");
   const [minWithdraw, setMinWithdraw] = useState("50");
   const [moderationAuto, setModerationAuto] = useState(true);
   const [twoFA, setTwoFA] = useState(true);
   const [emailAlerts, setEmailAlerts] = useState(false);
   const [darkAdmin, setDarkAdmin] = useState(true);
+  const [flags, setFlags] = useState<AdminFeatureFlag[]>([]);
+
+  useEffect(() => {
+    adminAdvancedService.getFeatureFlags().then(setFlags);
+  }, []);
+
+  const toggleFlag = (key: string) => {
+    setFlags((prev) => prev.map((f) => (f.key === key ? { ...f, enabled: !f.enabled } : f)));
+    toast("Flag alternada (mock)");
+  };
 
   const save = (label: string) =>
     toast(`${label} salvo`, {
       description:
         "Configuração administrativa mockada — nenhuma alteração real foi feita.",
     });
+
 
   return (
     <AdminLayout
@@ -177,6 +193,45 @@ function AdminSettingsPage() {
           <li>· Análise de comportamento</li>
           <li>· Exportação para BI</li>
         </ul>
+      </AdminDashboardSection>
+
+      <AdminDashboardSection
+        title="Feature Flags"
+        description="Ative ou desative recursos da plataforma — visual/mockado."
+      >
+        <Tabs defaultValue="all">
+          <TabsList className="flex-wrap">
+            <TabsTrigger value="all">Todos</TabsTrigger>
+            <TabsTrigger value="marketplace">Marketplace</TabsTrigger>
+            <TabsTrigger value="payment">Pagamento</TabsTrigger>
+            <TabsTrigger value="growth">Crescimento</TabsTrigger>
+            <TabsTrigger value="safety">Segurança</TabsTrigger>
+            <TabsTrigger value="system">Sistema</TabsTrigger>
+          </TabsList>
+          {(["all", "marketplace", "payment", "growth", "safety", "system"] as const).map((cat) => (
+            <TabsContent key={cat} value={cat}>
+              <div className="grid gap-2 md:grid-cols-2">
+                {flags
+                  .filter((f) => cat === "all" || f.category === cat)
+                  .map((f) => (
+                    <div key={f.key} className="flex items-start justify-between gap-3 rounded-xl border border-border bg-surface/40 p-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium text-foreground">{f.label}</p>
+                          <Badge variant="outline" className="text-[10px]">{f.category}</Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground">{f.description}</p>
+                      </div>
+                      <Switch checked={f.enabled} onCheckedChange={() => toggleFlag(f.key)} />
+                    </div>
+                  ))}
+              </div>
+            </TabsContent>
+          ))}
+        </Tabs>
+        <p className="mt-3 text-[11px] text-muted-foreground">
+          Feature flags reais exigem serviço de configuração seguro no backend, com cache e rollout gradual.
+        </p>
       </AdminDashboardSection>
     </AdminLayout>
   );

@@ -232,3 +232,11 @@ são **proteção visual**. Segurança real vai para o backend (ver
 - **Componentes de equipe**: `src/components/seller-dashboard/team/` — `SellerTeamOverview`, `SellerTeamMembersList`, `SellerTeamMemberCard`, `SellerTeamInviteDialog`, `SellerTeamRolesCards`, `SellerTeamPermissionsMatrix`, `SellerTeamActivity`, `SellerTeamSecurityNotice`.
 - **Integrações leves**: sidebar do usuário e do vendedor ganham entradas Verificação/Equipe; `/perfil` e `/vendedor` mostram `VerificationStatusCard`; wizard mostra aviso não bloqueante.
 - **Futuro (backend)**: substituir `verificationService` por integração com fornecedor de KYC e substituir `sellerTeamService` por RBAC real com convites por e-mail e audit log.
+
+## Sprint 18.12 — Admin Avançado
+- **Service**: `src/services/adminAdvancedService.ts` (catálogo, permissões, KYC, financeiro, planos, flags, conteúdo, relatórios, auditoria).
+- **Rotas novas**: `/admin/catalogo`, `/admin/permissoes`, `/admin/verificacoes`, `/admin/financeiro`, `/admin/conteudo`, `/admin/relatorios`, `/admin/auditoria`.
+- **Sidebar**: `AdminSidebar` agora agrupado em Operação / Pessoas / Plataforma.
+- **Dashboard**: `/admin` ganha bloco de Ações Rápidas com deep-links para as novas áreas.
+- **Configurações**: aba de Feature Flags integrada ao `/admin/configuracoes`.
+- **Futuro (backend)**: substituir mocks por serviços de config, RBAC, CMS, gateway, motor de reputação, KYC provider e audit log imutável.

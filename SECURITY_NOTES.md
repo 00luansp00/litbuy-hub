@@ -114,3 +114,12 @@ puramente visuais deve sobreviver ao merge com o backend real.
 - Ações críticas (saque, alteração de configurações, remoção de membro) exigem audit log e, preferencialmente, MFA.
 - Convites reais precisam de token de uso único, expiração e verificação de e-mail.
 - Membros nunca devem compartilhar senha; cada operador é uma conta.
+
+## Sprint 18.12 — Admin (avisos)
+- `AdminGate` é uma cortina **visual**. Não valida sessão, papel ou permissão de fato.
+- `isAdmin` no frontend é demonstrativo — decisão real deve ser server-side com JWT/claim assinado.
+- Permissões e perfis mostrados em `/admin/permissoes` são visuais. Aplicar RBAC no backend antes de qualquer endpoint sensível.
+- Feature flags nunca podem viver apenas no cliente para decisões de segurança (KYC obrigatório, modo manutenção, pagamentos). Precisam de serviço central com cache e propagação.
+- Taxas, saques, LIT Points e cotações devem ser calculados/persistidos no backend, nunca a partir do frontend.
+- Todas as ações administrativas sensíveis (aprovar KYC, alterar taxa, bloquear saque, remover anúncio, editar permissão) exigem audit log imutável com ator, IP, entidade, antes/depois e resultado.
+- CMS real deve incluir versionamento, agendamento, review e rollback.
