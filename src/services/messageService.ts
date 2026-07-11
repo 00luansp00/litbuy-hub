@@ -34,6 +34,7 @@ interface Seed {
   id: string;
   type: Conversation["type"];
   productIdx?: number;
+  orderId?: string;
   orderCode?: string;
   orderStatus?: NonNullable<ConversationContext["orderStatus"]>;
   unread: number;
