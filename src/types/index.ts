@@ -660,3 +660,73 @@ export interface AdminDashboardSummary {
 
 
 
+// ==================================================
+// Busca Global (Search) — tipos consumidos pelo
+// searchService, pela rota /buscar e pelos componentes
+// em src/components/search. Tudo mockado nesta sprint;
+// substituível por API/backend futuramente.
+// ==================================================
+
+export type SearchSortOption =
+  | "relevance"
+  | "price_asc"
+  | "price_desc"
+  | "best_selling"
+  | "best_rated"
+  | "recent";
+
+export interface SearchSortDescriptor {
+  value: SearchSortOption;
+  label: string;
+}
+
+export interface SearchFilters {
+  categorySlug?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  instantDelivery?: boolean;
+  verifiedSeller?: boolean;
+  onlyAvailable?: boolean;
+  minRating?: number;
+  platform?: string;
+}
+
+export interface SearchFilterOption<V = string> {
+  value: V;
+  label: string;
+  count?: number;
+}
+
+export interface SearchFacets {
+  categories: SearchFilterOption[];
+  priceRange: { min: number; max: number };
+}
+
+export interface SearchResult {
+  query: string;
+  products: Product[];
+  total: number;
+  sort: SearchSortOption;
+  filters: SearchFilters;
+}
+
+export interface SearchSuggestion {
+  id: string;
+  label: string;
+  kind: "product" | "category" | "seller" | "query";
+  href?: string;
+}
+
+export interface PopularSearch {
+  id: string;
+  term: string;
+  hits?: number;
+}
+
+export interface SearchStats {
+  query: string;
+  total: number;
+  categoriesMatched: number;
+  sellersMatched: number;
+}
+

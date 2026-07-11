@@ -1,5 +1,6 @@
-import { Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useRef, useState } from "react";
+
 import {
   Search,
   Menu,
@@ -36,9 +37,18 @@ const navLinks = [
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [mobileSearchQuery, setMobileSearchQuery] = useState("");
   const { isAuthenticated } = useAuth();
   const { itemCount } = useCart();
+  const navigate = useNavigate();
+  const inputRef = useRef<HTMLInputElement>(null);
 
+  const submitSearch = (term: string) => {
+    const q = term.trim();
+    navigate({ to: "/buscar", search: q ? { q } : {} });
+    setMobileOpen(false);
+  };
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -46,6 +56,8 @@ export function Navbar() {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+
 
   return (
     <header
@@ -81,14 +93,31 @@ export function Navbar() {
         </DropdownMenu>
 
         {/* Search */}
-        <div className="hidden md:flex relative flex-1 max-w-xl">
-          <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <form
+          className="hidden md:flex relative flex-1 max-w-xl"
+          onSubmit={(e) => {
+            e.preventDefault();
+            submitSearch(searchQuery);
+          }}
+          role="search"
+        >
+          <button
+            type="submit"
+            aria-label="Buscar"
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <Search className="h-4 w-4" />
+          </button>
           <Input
+            ref={inputRef}
             type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Buscar produtos, jogos, categorias..."
             className="pl-9 bg-surface border-border focus-visible:ring-primary/40"
           />
-        </div>
+        </form>
+
 
         {/* Nav links */}
         <nav className="hidden lg:flex items-center gap-1 ml-auto">
@@ -154,10 +183,30 @@ export function Navbar() {
       {mobileOpen && (
         <div className="md:hidden border-t border-border bg-background">
           <div className="container-lit py-4 space-y-4">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Buscar..." className="pl-9 bg-surface" />
-            </div>
+            <form
+              className="relative"
+              onSubmit={(e) => {
+                e.preventDefault();
+                submitSearch(mobileSearchQuery);
+              }}
+              role="search"
+            >
+              <button
+                type="submit"
+                aria-label="Buscar"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+              >
+                <Search className="h-4 w-4" />
+              </button>
+              <Input
+                type="search"
+                value={mobileSearchQuery}
+                onChange={(e) => setMobileSearchQuery(e.target.value)}
+                placeholder="Buscar..."
+                className="pl-9 bg-surface"
+              />
+            </form>
+
             <div className="grid grid-cols-2 gap-2">
               {categories.slice(0, 6).map((c) => (
                 <Button
