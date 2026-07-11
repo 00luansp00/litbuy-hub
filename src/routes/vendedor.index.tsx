@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { Users, ArrowRight } from "lucide-react";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { SellerDashboardLayout } from "@/components/seller-dashboard/SellerDashboardLayout";
 import { SellerMetricCard } from "@/components/seller-dashboard/SellerMetricCard";
