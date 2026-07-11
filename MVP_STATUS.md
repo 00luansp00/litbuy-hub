@@ -245,3 +245,16 @@ Docs de suporte atualizados: `DATABASE_SCHEMA.md`, `ENTITY_RELATIONSHIP.md`, `SU
 - Navbar (desktop e mobile) submete via `<form>` para `/buscar?q=termo`.
 - Substituição futura: `searchService` deve ser reescrito para consumir API/backend (Postgres FTS, Algolia, Meilisearch) mantendo a mesma assinatura de contrato.
 - Páginas NÃO devem filtrar `@/data/*` diretamente para busca — sempre passar por `searchService`.
+
+## Pós-compra (Sprint 18.4)
+
+- Novo `orderService` (`src/services/orderService.ts`) fornece pedidos mockados, timeline, entrega digital, disputa e avaliação.
+- Nova rota `/pedidos/$id` protegida por `AuthGate`, com Breadcrumb, cabeçalho, timeline, itens, card de entrega digital, disputa e avaliação.
+- `RecentOrdersCard` agora linka o botão "Ver detalhes" para `/pedidos/$id`.
+- Componentes novos em `src/components/orders/`: `OrderHeader`, `OrderStatusBadge`, `OrderTimeline`, `OrderItemsList`, `DigitalDeliveryCard`, `OrderSecurityNotice`, `OrderActionsCard`, `OrderDisputeCard`, `OrderReviewCard`.
+- Entrega digital: dados sensíveis ficam mascarados (`••••`) com blur; botão "Revelar" apenas mostra toast informando que dados reais exigem backend seguro. Nada é armazenado.
+- Disputa: modal com motivo + descrição; envio é apenas `toast` via `orderService.simulateOpenDispute` — nenhuma persistência.
+- Avaliação: só liberada quando `status === "completed"`; envio via `orderService.simulateSubmitReview` mostra toast — nenhuma nota é salva.
+- Ação "Confirmar recebimento" é mockada e sinaliza que em produção o pagamento seria liberado ao vendedor.
+- `/vendedor/vendas/$id` NÃO foi criada nesta sprint para manter baixo risco; a visão do vendedor sobre o pedido permanece como toast/documentação.
+- Limitações: nenhum backend, nenhuma persistência, nenhum dado sensível real, nenhum pagamento real, nenhuma disputa real acionada.

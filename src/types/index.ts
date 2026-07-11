@@ -730,3 +730,142 @@ export interface SearchStats {
   sellersMatched: number;
 }
 
+
+// ==================================================
+// Pedido (Order) — pós-compra mockado.
+// Consumido pelo orderService, pela rota /pedidos/$id e
+// pelos componentes em src/components/orders/*.
+// Todos os fluxos abaixo são visuais/mockados nesta sprint.
+// ==================================================
+
+export type OrderStatus =
+  | "pending_payment"
+  | "paid"
+  | "awaiting_seller_delivery"
+  | "delivered_by_seller"
+  | "awaiting_buyer_confirmation"
+  | "completed"
+  | "cancelled"
+  | "disputed"
+  | "refunded";
+
+export type DeliveryStatus =
+  | "pending"
+  | "in_progress"
+  | "delivered"
+  | "confirmed"
+  | "failed";
+
+export type DisputeStatus =
+  | "none"
+  | "open"
+  | "under_review"
+  | "resolved_buyer"
+  | "resolved_seller"
+  | "cancelled";
+
+export interface OrderItem {
+  id: string;
+  productId: string;
+  productSlug: string;
+  productTitle: string;
+  productImage: string;
+  quantity: number;
+  unitPrice: number;
+  subtotal: number;
+}
+
+export interface OrderTimelineEvent {
+  id: string;
+  kind:
+    | "created"
+    | "paid"
+    | "seller_notified"
+    | "delivery_started"
+    | "delivered"
+    | "buyer_confirmed"
+    | "completed"
+    | "dispute_opened"
+    | "refunded"
+    | "cancelled";
+  label: string;
+  description?: string;
+  /** ISO date. */
+  at: string;
+  /** Evento ainda não ocorrido (visual futuro). */
+  pending?: boolean;
+}
+
+export interface DigitalDelivery {
+  status: DeliveryStatus;
+  method: "auto" | "manual" | "chat";
+  /** Instrução mockada para o comprador. */
+  instructions?: string;
+  /** Nunca preencher com dado real — apenas placeholder visual. */
+  maskedPayload?: string;
+  /** ISO date de entrega, se houver. */
+  deliveredAt?: string;
+}
+
+export interface Dispute {
+  id: string;
+  orderId: string;
+  status: DisputeStatus;
+  reason?: string;
+  description?: string;
+  /** ISO date. */
+  openedAt?: string;
+  /** ISO date. */
+  updatedAt?: string;
+}
+
+export interface OrderReview {
+  id: string;
+  orderId: string;
+  productRating?: number;
+  sellerRating?: number;
+  comment?: string;
+  /** ISO date. */
+  submittedAt?: string;
+}
+
+export interface ReviewDraft {
+  productRating: number;
+  sellerRating: number;
+  comment: string;
+}
+
+export interface OrderBuyer {
+  id: string;
+  name: string;
+  email?: string;
+  avatarUrl?: string;
+}
+
+export interface OrderSellerRef {
+  id: string;
+  name: string;
+  slug?: string;
+  avatarUrl?: string;
+  verified?: boolean;
+}
+
+export interface Order {
+  id: string;
+  code: string;
+  status: OrderStatus;
+  /** ISO date. */
+  createdAt: string;
+  /** ISO date. */
+  updatedAt: string;
+  total: number;
+  paymentMethod: string;
+  buyer: OrderBuyer;
+  seller: OrderSellerRef;
+  items: OrderItem[];
+  delivery: DigitalDelivery;
+  dispute?: Dispute;
+  review?: OrderReview;
+}
+
+
