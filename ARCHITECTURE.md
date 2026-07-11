@@ -224,3 +224,11 @@ são **proteção visual**. Segurança real vai para o backend (ver
 - Services: `litPointsService`, `sellerLevelService`, `platformEconomicsService` — todos mockados, sem persistência.
 - Integrações leves em `/carteira`, `/vendedor`, `/vendedor/financeiro`, `/loja/$slug` e `/produto/$id`.
 - Footer aponta para `/lit-points` e `/taxas`.
+
+## Sprint 18.11 — Verificação e Equipe do Vendedor
+- **Services**: `src/services/verificationService.ts`, `src/services/sellerTeamService.ts`.
+- **Rotas**: `/perfil/verificacao`, `/vendedor/equipe` (usam `AuthGate` e os layouts existentes).
+- **Componentes de verificação**: `src/components/verification/` — `VerificationStatusCard`, `VerificationSteps`, `VerificationBasicStep`, `VerificationSmsStep`, `VerificationDocumentStep`, `VerificationSelfieStep`, `VerificationReviewStep`, `VerificationTimeline`, `VerificationSecurityNotice`, `SellerVerificationBadge`.
+- **Componentes de equipe**: `src/components/seller-dashboard/team/` — `SellerTeamOverview`, `SellerTeamMembersList`, `SellerTeamMemberCard`, `SellerTeamInviteDialog`, `SellerTeamRolesCards`, `SellerTeamPermissionsMatrix`, `SellerTeamActivity`, `SellerTeamSecurityNotice`.
+- **Integrações leves**: sidebar do usuário e do vendedor ganham entradas Verificação/Equipe; `/perfil` e `/vendedor` mostram `VerificationStatusCard`; wizard mostra aviso não bloqueante.
+- **Futuro (backend)**: substituir `verificationService` por integração com fornecedor de KYC e substituir `sellerTeamService` por RBAC real com convites por e-mail e audit log.
