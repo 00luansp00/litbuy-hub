@@ -414,6 +414,7 @@ const FILTERS: NotificationFilter[] = [
   { id: "mediation", label: "Mediação", types: ["mediation"] },
   { id: "security", label: "Segurança", types: ["security", "kyc", "report"] },
   { id: "admin", label: "Admin", types: ["admin", "listing"] },
+  { id: "affiliate", label: "Afiliados", types: ["affiliate"] },
   { id: "system", label: "Sistema", types: ["system", "reward"] },
 ];
 
