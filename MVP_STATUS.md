@@ -397,3 +397,12 @@ Docs de suporte atualizados: `DATABASE_SCHEMA.md`, `ENTITY_RELATIONSHIP.md`, `SU
 - Denúncia (comportamento/golpe/contato externo) é **diferente** de mediação de pedido (problema de entrega). O texto do card de ações do pedido reforça essa distinção.
 - **Nada é persistido**: sem LocalStorage, sem Cookies, sem backend. Evidências (prints, vídeos, links, mensagens) são apenas cards mockados. Ações admin não alteram nenhum dado real.
 - Envio real de denúncias, upload de evidências, moderação, audit log e ações destrutivas (suspender anúncio, bloquear usuário) **exigem backend seguro, RBAC e storage** — nada disso está implementado.
+
+## Sprint 18.16 — Programa de Afiliados (concluída)
+- Rota `/afiliados` criada com AuthGate.
+- `affiliateService` mockado (perfil, link, stats, conversões, comissões, campanhas, materiais, regras, FAQ, prévia de saque).
+- Componentes visuais dedicados em `src/components/affiliate/`.
+- Integrações leves: card no `/perfil`, diferenciação de saldos no `/carteira`, link no `/vendedor`, seção no `/admin/relatorios`.
+- Notificações de afiliados (`type: affiliate`) somadas ao `notificationService`.
+- Analytics mockados: `affiliate_page_viewed_mocked`, `affiliate_link_copied_mocked`, `affiliate_material_copied_mocked`, `affiliate_payout_requested_mocked`, `affiliate_campaign_clicked_mocked`.
+- Limitações: sem tracking real, sem cookies, sem comissão real, sem saque real, sem persistência.

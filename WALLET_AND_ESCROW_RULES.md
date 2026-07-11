@@ -78,3 +78,10 @@ Regras futuras de saldo, carteira e intermediação. **Documentação de planeja
 - Rota `/vendedor/vendas/$id` mostra a visão do vendedor: comprador, produto, pagamento, entrega, chat, financeiro, timeline e mediação.
 - Services: `sellerSaleService`, extensões em `orderService` e `messageService`; nenhum dado é persistido.
 - Confirmação de recebimento, liberação de saldo, uploads reais e decisões de mediação **só podem ocorrer no backend real**.
+
+## Sprint 18.16 — Comissões de afiliado
+- Comissões de afiliado são **separadas** do Saldo LIT e dos LIT Points.
+- Estados demonstrativos: `pending`, `available`, `paid`, `cancelled`, `reversed`.
+- Comissão só pode virar `available` após confirmação do pedido e fim do prazo de disputa.
+- Saque real exigirá backend financeiro, KYC e integração bancária; hoje é apenas botão mockado.
+- Comissão nunca deve se misturar visualmente com Saldo LIT (dinheiro) ou LIT Points (fidelidade).

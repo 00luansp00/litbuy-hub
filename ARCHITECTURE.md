@@ -269,3 +269,11 @@ são **proteção visual**. Segurança real vai para o backend (ver
 - Admin `/admin/denuncias` consome `reportService.getReportsForAdmin()` e mostra drawer de detalhe com contexto, evidências, notas internas e ações mockadas.
 - Tipos centralizados: `Report`, `ReportTargetType`, `ReportReason`, `ReportPayload`, `ReportStatus`, `ReportSeverity`, `ReportEvidence`, `ReportContext`, `ReportSource`, `ReportResolution` em `src/types/index.ts`.
 - Futuro: substituir mocks por backend/moderação/audit log; evidências em storage seguro; ações admin protegidas por RBAC.
+
+## Sprint 18.16 — Afiliados
+- Rota: `/afiliados` (AuthGate).
+- Service: `src/services/affiliateService.ts` (mock).
+- Componentes em `src/components/affiliate/` — Hero, Status, Link, Stats, Conversions, Commission, Campaigns, Materials, Rules, Faq, SecurityNotice, PayoutPreview, ProfileCard.
+- Integrações leves em `/perfil`, `/carteira`, `/vendedor`, `/admin/relatorios`.
+- Notificações de afiliados: tipo `affiliate` no `notificationService` (mock).
+- Futuro: backend de tracking/atribuição, antifraude, financeiro e admin de afiliados.
