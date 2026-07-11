@@ -21,6 +21,7 @@ type AccountRoute =
   | "/mensagens"
   | "/carteira"
   | "/perfil/verificacao"
+  | "/afiliados"
   | "/vendedor";
 
 interface AccountNavItem {
