@@ -333,5 +333,123 @@ export interface MockOrder {
   estimatedDelivery: string;
 }
 
+// ==================================================
+// Área do Vendedor (Seller Dashboard) — tipos consumidos
+// pelo sellerDashboardService e pelos componentes em
+// src/components/seller-dashboard. Tudo 100% mockado.
+// ==================================================
+
+export type SellerListingStatus =
+  | "active"
+  | "paused"
+  | "in_review"
+  | "rejected"
+  | "sold";
+
+export interface SellerListing {
+  id: string;
+  slug: string;
+  title: string;
+  image: string;
+  categoryName: string;
+  categorySlug: string;
+  price: number;
+  stock: number;
+  sales: number;
+  views: number;
+  rating: number;
+  status: SellerListingStatus;
+  createdAt: string; // ISO
+  instantDelivery?: boolean;
+}
+
+export type SellerSaleStatus =
+  | "pending"
+  | "paid"
+  | "delivered"
+  | "completed"
+  | "refunded"
+  | "cancelled";
+
+export interface SellerSalePreview {
+  id: string;
+  code: string;
+  buyerName: string;
+  buyerAvatar?: string;
+  productTitle: string;
+  productImage: string;
+  amount: number;
+  status: SellerSaleStatus;
+  createdAt: string;
+}
+
+export type SellerFinancialMovementKind =
+  | "sale"
+  | "fee"
+  | "refund"
+  | "withdraw"
+  | "adjustment";
+
+export interface SellerFinancialMovement {
+  id: string;
+  kind: SellerFinancialMovementKind;
+  description: string;
+  amount: number; // positivo/negativo
+  createdAt: string;
+}
+
+export interface SellerFinancialSummary {
+  available: number;
+  pending: number;
+  totalSold: number;
+  totalFees: number;
+  currency: "BRL";
+  movements: SellerFinancialMovement[];
+}
+
+export type SellerNotificationTone = "info" | "success" | "warning" | "danger";
+
+export interface SellerNotification {
+  id: string;
+  title: string;
+  description: string;
+  tone: SellerNotificationTone;
+  icon: string;
+  createdAt: string;
+  read?: boolean;
+}
+
+export interface SellerPerformanceMetric {
+  id: string;
+  label: string;
+  value: string;
+  icon: string;
+  delta?: string;
+  deltaDirection?: "up" | "down" | "neutral";
+  tone?: AccountMetricTone;
+  hint?: string;
+}
+
+export interface SellerDashboardSummary {
+  seller: Seller;
+  metrics: SellerPerformanceMetric[];
+  pendingOrders: number;
+  monthlyRevenue: number;
+  responseRate: number; // 0-100
+}
+
+export interface CreateListingDraft {
+  categorySlug?: string;
+  platform?: string;
+  listingKind?: string;
+  title?: string;
+  description?: string;
+  price?: number;
+  stock?: number;
+  instantDelivery?: boolean;
+  images?: string[];
+}
+
+
 
 
