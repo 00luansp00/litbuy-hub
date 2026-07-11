@@ -1594,7 +1594,6 @@ export interface InviteMemberPayload {
 // Sprint 18.12 — Admin avançado (visual/mockado)
 // ============================================================================
 
-export type AdminRiskLevel = "low" | "medium" | "high" | "critical";
 
 export interface AdminCategoryRow {
   id: string;
