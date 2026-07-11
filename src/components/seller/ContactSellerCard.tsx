@@ -28,11 +28,6 @@ export function ContactSellerCard({ seller, className }: ContactSellerCardProps)
   const responseTime =
     seller.responseTime ?? seller.stats?.responseTime ?? "algumas horas";
 
-  const handleMessage = () =>
-    toast("Chat em breve", {
-      description: "O chat com o vendedor será liberado em uma próxima sprint.",
-    });
-
   const handleFollow = () =>
     toast(`Você seguiu ${seller.name}`, {
       description: "Você receberá novidades quando estiver logado (mock).",
