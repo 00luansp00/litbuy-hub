@@ -101,7 +101,12 @@ function LoginPage() {
         <Button asChild type="button" variant="outline" className="w-full">
           <Link to="/cadastro">Criar conta gratuita</Link>
         </Button>
+
+        <p className="text-center text-xs text-muted-foreground">
+          Demo admin: <span className="font-mono text-foreground">admin@litbuy.com</span>
+        </p>
       </form>
+
     </AuthLayout>
   );
 }
