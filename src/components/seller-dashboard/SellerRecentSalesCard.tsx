@@ -1,5 +1,5 @@
 import { motion } from "motion/react";
-import { toast } from "sonner";
+import { Link } from "@tanstack/react-router";
 import { ArrowRight } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { formatBRL } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { SellerSalePreview, SellerSaleStatus } from "@/types";
+
 
 const STATUS_LABEL: Record<SellerSaleStatus, string> = {
   pending: "Aguardando",
