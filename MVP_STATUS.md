@@ -348,3 +348,13 @@ Docs de suporte atualizados: `DATABASE_SCHEMA.md`, `ENTITY_RELATIONSHIP.md`, `SU
 - Services: `litPointsService`, `sellerLevelService`, `platformEconomicsService` — todos mockados, sem persistência.
 - Integrações leves em `/carteira`, `/vendedor`, `/vendedor/financeiro`, `/loja/$slug` e `/produto/$id`.
 - Footer aponta para `/lit-points` e `/taxas`.
+
+## Sprint 18.11 — Verificação/KYC + Equipe do Vendedor
+- Fluxo visual de KYC (`/perfil/verificacao`) com etapas Dados básicos, SMS, Documento, Selfie e Revisão — 100% mockado.
+- `verificationService` centraliza status, etapas, documentos aceitos, timeline e simulações.
+- Selo "Vendedor Verificado" via `SellerVerificationBadge` em `/loja/$slug` e `/produto/$id`.
+- Card de verificação em `/perfil` e `/vendedor` (não bloqueia acessos).
+- Aviso discreto de verificação no wizard `/vendedor/anuncios/novo` (não bloqueia criação).
+- Nova rota `/vendedor/equipe` com membros, convites, cargos, matriz de permissões e atividade — todos mockados.
+- `sellerTeamService` com métodos de convite/atualização/remoção simulados.
+- Limitações: nenhum KYC real, sem upload, sem RBAC, sem envio de e-mail, sem persistência.

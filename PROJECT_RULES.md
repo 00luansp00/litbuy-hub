@@ -196,3 +196,11 @@ Documentos relacionados: `ORDER_LIFECYCLE.md`, `DIGITAL_DELIVERY_FLOW.md`, `DISP
 - Services: `litPointsService`, `sellerLevelService`, `platformEconomicsService` — todos mockados, sem persistência.
 - Integrações leves em `/carteira`, `/vendedor`, `/vendedor/financeiro`, `/loja/$slug` e `/produto/$id`.
 - Footer aponta para `/lit-points` e `/taxas`.
+
+## Sprint 18.11 — Verificação e Equipe
+- Verificação/KYC é **mockada**. Nenhum documento, selfie ou dado sensível real deve ser inserido.
+- O selo "Vendedor Verificado" é apenas visual e vem de `verificationService.getSellerVerificationBadge`.
+- Equipe do vendedor é visual/mockada. Cargos e permissões existem só para demonstração.
+- Nenhum componente pode acessar mocks de verificação/equipe diretamente — sempre via `verificationService` e `sellerTeamService`.
+- Verificação real exigirá backend seguro, storage protegido, fornecedor de KYC e conformidade LGPD.
+- Permissões reais exigirão RBAC completo e audit log; convites reais exigirão e-mail com token expirável.

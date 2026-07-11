@@ -19,6 +19,7 @@ type AccountRoute =
   | "/favoritos"
   | "/mensagens"
   | "/carteira"
+  | "/perfil/verificacao"
   | "/vendedor";
 
 interface AccountNavItem {
@@ -38,6 +39,7 @@ const items: AccountNavItem[] = [
   { label: "Favoritos", icon: Heart, to: "/favoritos" },
   { label: "Mensagens", icon: MessageSquare, to: "/mensagens" },
   { label: "Carteira", icon: Wallet, to: "/carteira" },
+  { label: "Verificação", icon: ShieldCheck, to: "/perfil/verificacao" },
   {
     label: "Segurança",
     icon: ShieldCheck,

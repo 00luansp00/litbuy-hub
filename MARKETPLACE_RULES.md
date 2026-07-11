@@ -97,3 +97,8 @@ Regras oficiais de produto da LIT Buy como marketplace intermediador de produtos
 - Services: `litPointsService`, `sellerLevelService`, `platformEconomicsService` — todos mockados, sem persistência.
 - Integrações leves em `/carteira`, `/vendedor`, `/vendedor/financeiro`, `/loja/$slug` e `/produto/$id`.
 - Footer aponta para `/lit-points` e `/taxas`.
+
+## Verificação e Equipe (visual — Sprint 18.11)
+- Vendedores podem exibir o selo "Vendedor Verificado" quando aprovados pelo KYC (mock).
+- Em produção, KYC poderá ser exigido para publicar categorias sensíveis, sacar valores altos ou acessar recursos avançados.
+- Vendedores podem ter equipe com múltiplos cargos (Dono, Gerente, Atendente, Operador de entrega, Financeiro). Permissões e convites são visuais nesta fase.

@@ -11,6 +11,7 @@ import { SellerQuickActions } from "@/components/seller-dashboard/SellerQuickAct
 import { SellerPerformanceCard } from "@/components/seller-dashboard/SellerPerformanceCard";
 import { SellerOnboardingCard } from "@/components/seller-dashboard/SellerOnboardingCard";
 import { SellerLevelCard } from "@/components/seller-dashboard/SellerLevelCard";
+import { VerificationStatusCard } from "@/components/verification/VerificationStatusCard";
 
 import { sellerDashboardService } from "@/services/sellerDashboardService";
 import type {
@@ -82,7 +83,14 @@ function VendedorDashboard() {
 
       <SellerOnboardingCard />
 
-      <SellerLevelCard />
+      <div className="grid gap-4 md:grid-cols-2">
+        <VerificationStatusCard status="not_started" compact />
+        <SellerLevelCard />
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        Aviso: na operação real, a verificação de identidade poderá ser exigida para vender,
+        sacar ou acessar recursos avançados.
+      </p>
 
 
       {/* Duas colunas: vendas + performance/financeiro */}

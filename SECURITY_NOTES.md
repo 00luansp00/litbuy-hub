@@ -104,3 +104,13 @@ puramente visuais deve sobreviver ao merge com o backend real.
 - Services: `litPointsService`, `sellerLevelService`, `platformEconomicsService` — todos mockados, sem persistência.
 - Integrações leves em `/carteira`, `/vendedor`, `/vendedor/financeiro`, `/loja/$slug` e `/produto/$id`.
 - Footer aponta para `/lit-points` e `/taxas`.
+
+## Sprint 18.11 — KYC e Equipe (avisos)
+- O fluxo `/perfil/verificacao` é **estritamente demonstrativo**. Não coleta, não valida e não armazena documentos, selfies ou dados sensíveis.
+- KYC real exige backend seguro, storage criptografado, fornecedor especializado (ex.: provedor de KYC), OCR e prova de vida.
+- Dados pessoais e documentos precisam seguir LGPD (base legal, retenção mínima, direito ao esquecimento, DPO).
+- SMS, documento e selfie de produção **não podem trafegar/persistir no frontend**.
+- Equipe do vendedor (`/vendedor/equipe`) é visual. Permissões reais exigem RBAC no backend e autenticação individual por membro.
+- Ações críticas (saque, alteração de configurações, remoção de membro) exigem audit log e, preferencialmente, MFA.
+- Convites reais precisam de token de uso único, expiração e verificação de e-mail.
+- Membros nunca devem compartilhar senha; cada operador é uma conta.

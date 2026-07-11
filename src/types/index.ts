@@ -1455,3 +1455,137 @@ export interface PayoutReleaseRule {
 
 
 
+
+// ============================================================================
+// Sprint 18.11 — Verificação (KYC) e Equipe do Vendedor (visual/mockado)
+// ============================================================================
+
+export type VerificationStatus =
+  | "not_started"
+  | "in_progress"
+  | "pending_review"
+  | "approved"
+  | "rejected"
+  | "needs_more_info";
+
+export type VerificationStepStatus =
+  | "pending"
+  | "in_progress"
+  | "completed"
+  | "failed";
+
+export type VerificationDocumentType =
+  | "rg"
+  | "cnh"
+  | "passport"
+  | "foreign_id";
+
+export interface VerificationStep {
+  id: "basic" | "sms" | "document" | "selfie" | "review";
+  title: string;
+  description: string;
+  status: VerificationStepStatus;
+  icon: string;
+}
+
+export interface VerificationRequirement {
+  id: string;
+  label: string;
+  helper?: string;
+}
+
+export interface VerificationAcceptedDocument {
+  type: VerificationDocumentType;
+  label: string;
+  description: string;
+}
+
+export interface VerificationTimelineEvent {
+  id: string;
+  date: string;
+  title: string;
+  description?: string;
+  tone: "info" | "success" | "warning" | "muted";
+}
+
+export interface VerificationSubmission {
+  ok: true;
+  submissionId: string;
+  status: VerificationStatus;
+}
+
+export interface SellerVerificationBadge {
+  sellerId: string;
+  status: VerificationStatus;
+  label: string;
+  since?: string;
+}
+
+// --------------------------- Equipe do vendedor ---------------------------
+
+export type SellerTeamMemberStatus = "active" | "pending" | "suspended";
+
+export type SellerTeamPermissionKey =
+  | "view_dashboard"
+  | "manage_listings"
+  | "create_listing"
+  | "reply_messages"
+  | "manage_deliveries"
+  | "view_sales"
+  | "view_financials"
+  | "request_withdraw"
+  | "manage_team"
+  | "manage_store_settings"
+  | "handle_disputes";
+
+export interface SellerTeamPermission {
+  key: SellerTeamPermissionKey;
+  label: string;
+  description: string;
+  sensitive?: boolean;
+}
+
+export interface SellerTeamRole {
+  id: "owner" | "manager" | "attendant" | "delivery" | "finance";
+  name: string;
+  description: string;
+  tone: "primary" | "accent" | "success" | "warning" | "muted";
+  permissions: SellerTeamPermissionKey[];
+}
+
+export interface SellerTeamMember {
+  id: string;
+  name: string;
+  email: string;
+  avatarUrl?: string;
+  roleId: SellerTeamRole["id"];
+  status: SellerTeamMemberStatus;
+  lastActive?: string;
+  joinedAt: string;
+}
+
+export interface SellerTeamInvite {
+  id: string;
+  name: string;
+  email: string;
+  roleId: SellerTeamRole["id"];
+  message?: string;
+  sentAt: string;
+}
+
+export interface SellerTeamActivityEvent {
+  id: string;
+  memberName: string;
+  action: string;
+  target?: string;
+  date: string;
+  tone: "info" | "success" | "warning" | "muted";
+  icon: string;
+}
+
+export interface InviteMemberPayload {
+  name: string;
+  email: string;
+  roleId: SellerTeamRole["id"];
+  message?: string;
+}

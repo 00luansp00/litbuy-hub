@@ -15,6 +15,7 @@ import { ProductQuestions } from "@/components/product/ProductQuestions";
 import { ProductReviews } from "@/components/product/ProductReviews";
 import { PurchaseCard } from "@/components/product/PurchaseCard";
 import { SellerLevelBadge } from "@/components/seller/SellerLevelBadge";
+import { SellerVerificationBadge } from "@/components/verification/SellerVerificationBadge";
 import { productService } from "@/services/productService";
 import { reviewService } from "@/services/reviewService";
 
@@ -117,7 +118,10 @@ function ProductPage() {
               <h3 className="text-sm font-semibold text-foreground">
                 Sobre o vendedor
               </h3>
-              <SellerLevelBadge sellerId={enrichedSeller.id} size="sm" />
+              <div className="flex flex-wrap items-center gap-1.5">
+                <SellerLevelBadge sellerId={enrichedSeller.id} size="sm" />
+                <SellerVerificationBadge sellerId={enrichedSeller.id} size="sm" />
+              </div>
             </div>
 
             <SellerInfo

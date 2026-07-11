@@ -8,6 +8,7 @@ import {
   Package,
   ShoppingBag,
   Star,
+  Users,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
@@ -43,6 +44,7 @@ export function SellerDashboardSidebar({
     { label: "Vendas", icon: ShoppingBag, to: "/vendedor/vendas" },
     { label: "Financeiro", icon: Wallet, to: "/vendedor/financeiro" },
     { label: "Avaliações", icon: Star, to: "/vendedor/avaliacoes" },
+    { label: "Equipe", icon: Users, to: "/vendedor/equipe" },
   ];
 
   if (publicSlug) {

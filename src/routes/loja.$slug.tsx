@@ -11,6 +11,7 @@ import { SellerProducts } from "@/components/seller/SellerProducts";
 import { SellerReviews } from "@/components/seller/SellerReviews";
 import { SellerStats } from "@/components/seller/SellerStats";
 import { SellerLevelBadge } from "@/components/seller/SellerLevelBadge";
+import { SellerVerificationBadge } from "@/components/verification/SellerVerificationBadge";
 import { sellerService } from "@/services/sellerService";
 
 
@@ -84,6 +85,7 @@ function SellerPage() {
 
           <div className="flex flex-wrap items-center gap-2">
             <SellerLevelBadge sellerId={seller.id} />
+            <SellerVerificationBadge sellerId={seller.id} />
           </div>
 
           <SellerAbout seller={seller} />
