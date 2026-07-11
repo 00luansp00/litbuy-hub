@@ -1,8 +1,18 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { PlaceholderPage } from "@/components/common/PlaceholderPage";
+import { Outlet, createFileRoute } from "@tanstack/react-router";
+import { AdminGate } from "@/components/admin/AdminGate";
 
+/**
+ * Layout do Painel Administrativo. O AdminGate protege visualmente todas
+ * as subrotas /admin/*. Segurança real deve ser implementada no backend.
+ */
 export const Route = createFileRoute("/admin")({
-  component: () => (
-    <PlaceholderPage title="Administração" description="O painel administrativo está em desenvolvimento." icon="ShieldCheck" />
-  ),
+  component: AdminLayoutRoute,
 });
+
+function AdminLayoutRoute() {
+  return (
+    <AdminGate>
+      <Outlet />
+    </AdminGate>
+  );
+}
