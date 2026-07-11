@@ -10,6 +10,7 @@ interface CheckoutSummaryCardProps {
   items: CartItem[];
   coupon: CartCoupon | null;
   paymentMethod?: PaymentMethod;
+  protectionEnabled?: boolean;
   onConfirm: () => void;
   loading?: boolean;
 }
@@ -19,6 +20,7 @@ export function CheckoutSummaryCard({
   items,
   coupon,
   paymentMethod,
+  protectionEnabled,
   onConfirm,
   loading,
 }: CheckoutSummaryCardProps) {
@@ -35,7 +37,8 @@ export function CheckoutSummaryCard({
       <div>
         <h3 className="text-lg font-bold text-foreground">Resumo do pedido</h3>
         <p className="text-xs text-muted-foreground">
-          {summary.itemCount} {summary.itemCount === 1 ? "item" : "itens"} para finalizar
+          {summary.itemCount} {summary.itemCount === 1 ? "item" : "itens"} para
+          finalizar
         </p>
       </div>
 
@@ -48,6 +51,16 @@ export function CheckoutSummaryCard({
             tone="success"
           />
         )}
+        {summary.protectionFee && summary.protectionFee > 0 ? (
+          <Row
+            label="Proteção LIT (+15%)"
+            value={formatBRL(summary.protectionFee)}
+            tone="accent"
+          />
+        ) : null}
+        {summary.operationalFee && summary.operationalFee > 0 ? (
+          <Row label="Taxa operacional" value={formatBRL(summary.operationalFee)} />
+        ) : null}
         {summary.platformFee > 0 && (
           <Row label="Taxa da plataforma" value={formatBRL(summary.platformFee)} />
         )}
@@ -61,6 +74,14 @@ export function CheckoutSummaryCard({
           {formatBRL(summary.total)}
         </span>
       </div>
+
+      {summary.litPointsEarned && summary.litPointsEarned > 0 ? (
+        <div className="flex items-center gap-2 rounded-md border border-accent/30 bg-accent/5 px-3 py-2 text-[11px] text-accent">
+          <Sparkles className="h-3.5 w-3.5" />
+          Você ganhará +{summary.litPointsEarned.toLocaleString("pt-BR")} LIT Points
+          (mock).
+        </div>
+      ) : null}
 
       <div className="rounded-lg border border-dashed border-border bg-surface/60 px-3 py-2 text-xs">
         <span className="text-muted-foreground">Pagamento: </span>
@@ -76,7 +97,7 @@ export function CheckoutSummaryCard({
           </>
         ) : (
           <>
-            <CheckCircle2 className="mr-2 h-4 w-4" /> Finalizar pedido
+            <CheckCircle2 className="mr-2 h-4 w-4" /> Gerar pagamento
           </>
         )}
       </Button>
@@ -84,7 +105,9 @@ export function CheckoutSummaryCard({
       <ul className="space-y-2 text-xs text-muted-foreground">
         <li className="flex items-start gap-2">
           <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-success" />
-          Pagamento protegido pela LIT Buy
+          {protectionEnabled
+            ? "Proteção LIT ativa nesta compra (demo)"
+            : "Pagamento protegido pela LIT Buy"}
         </li>
         {hasInstant && (
           <li className="flex items-start gap-2">
@@ -108,14 +131,18 @@ function Row({
 }: {
   label: string;
   value: string;
-  tone?: "success";
+  tone?: "success" | "accent";
 }) {
   return (
     <div className="flex items-center justify-between">
       <span className="text-muted-foreground">{label}</span>
       <span
         className={
-          tone === "success" ? "font-medium text-success" : "font-medium text-foreground"
+          tone === "success"
+            ? "font-medium text-success"
+            : tone === "accent"
+              ? "font-medium text-accent"
+              : "font-medium text-foreground"
         }
       >
         {value}
