@@ -8,6 +8,8 @@ interface AuthContextValue {
   /** Papel ativo em memória (default "buyer"). Mock — nunca persistido. */
   activeRole: UserRole;
   hasSellerProfile: boolean;
+  /** Acesso administrativo mockado — nunca substitui RBAC real. */
+  isAdmin: boolean;
   login: (email: string, password: string) => Promise<AuthUser>;
   register: (name: string, email: string, password: string) => Promise<AuthUser>;
   requestPasswordReset: (email: string) => Promise<void>;
