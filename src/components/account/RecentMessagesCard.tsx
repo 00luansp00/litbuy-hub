@@ -100,16 +100,12 @@ export function RecentMessagesCard({
                 </span>
               )}
               <Button
+                asChild
                 size="sm"
                 variant="ghost"
                 className="shrink-0"
-                onClick={() =>
-                  toast("Em breve", {
-                    description: "O chat com o vendedor será liberado em uma próxima sprint.",
-                  })
-                }
               >
-                Abrir
+                <Link to="/mensagens">Abrir</Link>
               </Button>
             </li>
           ))}
