@@ -1248,7 +1248,21 @@ export interface Order {
     /** ISO date de expiração da cobertura demonstrativa. */
     expiresAt: string;
   };
+  /* Sprint 18.13 — vínculos mockados de pós-compra. */
+  conversationId?: string;
+  saleId?: string;
+  paymentId?: string;
+  deliveryMode?: import("./index").SaleDeliveryMode;
+  deliveryStatus?: import("./index").SaleDeliveryStatus;
+  sellerPlan?: "prata" | "ouro" | "diamante";
+  hasAutomaticMessage?: boolean;
+  protectionLitActive?: boolean;
+  mediationStatus?: import("./index").MediationStatus;
+  evidenceCount?: number;
+  sellerResponseStatus?: "none" | "pending" | "submitted";
+  automaticMessage?: string;
 }
+
 
 // ============================================================
 // Mensagens / conversas (mockado — Sprint 18.5)
