@@ -1252,12 +1252,13 @@ export interface Order {
   conversationId?: string;
   saleId?: string;
   paymentId?: string;
-  deliveryMode?: import("./index").SaleDeliveryMode;
-  deliveryStatus?: import("./index").SaleDeliveryStatus;
+  deliveryMode?: SaleDeliveryMode;
+  deliveryStatus?: SaleDeliveryStatus;
   sellerPlan?: "prata" | "ouro" | "diamante";
   hasAutomaticMessage?: boolean;
   protectionLitActive?: boolean;
-  mediationStatus?: import("./index").MediationStatus;
+  mediationStatus?: MediationStatus;
+
   evidenceCount?: number;
   sellerResponseStatus?: "none" | "pending" | "submitted";
   automaticMessage?: string;
