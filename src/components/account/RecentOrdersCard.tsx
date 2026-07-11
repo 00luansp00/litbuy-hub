@@ -119,14 +119,13 @@ export function RecentOrdersCard({
                   size="sm"
                   variant="ghost"
                   className="shrink-0"
-                  onClick={() =>
-                    toast("Em breve", {
-                      description: `O acompanhamento do pedido ${order.code} será liberado em uma próxima sprint.`,
-                    })
-                  }
+                  asChild
                 >
-                  Ver
+                  <Link to="/pedidos/$id" params={{ id: order.id }}>
+                    Ver detalhes
+                  </Link>
                 </Button>
+
               </li>
             );
           })}
