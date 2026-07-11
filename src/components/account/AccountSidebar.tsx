@@ -7,12 +7,19 @@ import {
   Settings,
   ShieldCheck,
   ShoppingBag,
+  Store,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type AccountRoute = "/perfil" | "/pedidos" | "/favoritos" | "/mensagens" | "/carteira";
+type AccountRoute =
+  | "/perfil"
+  | "/pedidos"
+  | "/favoritos"
+  | "/mensagens"
+  | "/carteira"
+  | "/vendedor";
 
 interface AccountNavItem {
   label: string;
@@ -21,6 +28,8 @@ interface AccountNavItem {
   /** Quando definido, o item ainda não tem rota — só emite feedback. */
   soon?: boolean;
   soonMessage?: string;
+  /** Destaque discreto (CTA "Vender na LIT Buy"). */
+  cta?: boolean;
 }
 
 const items: AccountNavItem[] = [
@@ -41,6 +50,7 @@ const items: AccountNavItem[] = [
     soon: true,
     soonMessage: "As configurações serão liberadas em uma próxima sprint.",
   },
+  { label: "Vender na LIT Buy", icon: Store, to: "/vendedor", cta: true },
 ];
 
 interface AccountSidebarProps {
@@ -86,7 +96,10 @@ export function AccountSidebar({
             ? isHorizontal
               ? "border-primary/50 bg-primary/10 text-primary"
               : "bg-primary/10 text-primary"
-            : "text-muted-foreground hover:bg-surface hover:text-foreground",
+            : item.cta
+              ? "text-primary hover:bg-primary/10"
+              : "text-muted-foreground hover:bg-surface hover:text-foreground",
+          item.cta && !isHorizontal && "mt-2 border border-dashed border-primary/40",
         );
 
         if (item.soon) {
@@ -117,7 +130,11 @@ export function AccountSidebar({
             <Icon
               className={cn(
                 "h-4 w-4 shrink-0",
-                active ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
+                active
+                  ? "text-primary"
+                  : item.cta
+                    ? "text-primary"
+                    : "text-muted-foreground group-hover:text-foreground",
               )}
             />
             <span className="whitespace-nowrap">{item.label}</span>
