@@ -15,6 +15,7 @@ import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as PedidosRouteImport } from './routes/pedidos'
 import { Route as MensagensRouteImport } from './routes/mensagens'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as LitPointsRouteImport } from './routes/lit-points'
 import { Route as FavoritosRouteImport } from './routes/favoritos'
 import { Route as CheckoutRouteImport } from './routes/checkout'
 import { Route as CarteiraRouteImport } from './routes/carteira'
@@ -74,6 +75,11 @@ const MensagensRoute = MensagensRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LitPointsRoute = LitPointsRouteImport.update({
+  id: '/lit-points',
+  path: '/lit-points',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FavoritosRoute = FavoritosRouteImport.update({
@@ -236,6 +242,7 @@ export interface FileRoutesByFullPath {
   '/carteira': typeof CarteiraRoute
   '/checkout': typeof CheckoutRoute
   '/favoritos': typeof FavoritosRoute
+  '/lit-points': typeof LitPointsRoute
   '/login': typeof LoginRoute
   '/mensagens': typeof MensagensRouteWithChildren
   '/pedidos': typeof PedidosRouteWithChildren
@@ -273,6 +280,7 @@ export interface FileRoutesByTo {
   '/carteira': typeof CarteiraRoute
   '/checkout': typeof CheckoutRoute
   '/favoritos': typeof FavoritosRoute
+  '/lit-points': typeof LitPointsRoute
   '/login': typeof LoginRoute
   '/mensagens': typeof MensagensRouteWithChildren
   '/pedidos': typeof PedidosRouteWithChildren
@@ -310,6 +318,7 @@ export interface FileRoutesById {
   '/carteira': typeof CarteiraRoute
   '/checkout': typeof CheckoutRoute
   '/favoritos': typeof FavoritosRoute
+  '/lit-points': typeof LitPointsRoute
   '/login': typeof LoginRoute
   '/mensagens': typeof MensagensRouteWithChildren
   '/pedidos': typeof PedidosRouteWithChildren
@@ -350,6 +359,7 @@ export interface FileRouteTypes {
     | '/carteira'
     | '/checkout'
     | '/favoritos'
+    | '/lit-points'
     | '/login'
     | '/mensagens'
     | '/pedidos'
@@ -387,6 +397,7 @@ export interface FileRouteTypes {
     | '/carteira'
     | '/checkout'
     | '/favoritos'
+    | '/lit-points'
     | '/login'
     | '/mensagens'
     | '/pedidos'
@@ -423,6 +434,7 @@ export interface FileRouteTypes {
     | '/carteira'
     | '/checkout'
     | '/favoritos'
+    | '/lit-points'
     | '/login'
     | '/mensagens'
     | '/pedidos'
@@ -462,6 +474,7 @@ export interface RootRouteChildren {
   CarteiraRoute: typeof CarteiraRoute
   CheckoutRoute: typeof CheckoutRoute
   FavoritosRoute: typeof FavoritosRoute
+  LitPointsRoute: typeof LitPointsRoute
   LoginRoute: typeof LoginRoute
   MensagensRoute: typeof MensagensRouteWithChildren
   PedidosRoute: typeof PedidosRouteWithChildren
@@ -516,6 +529,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/lit-points': {
+      id: '/lit-points'
+      path: '/lit-points'
+      fullPath: '/lit-points'
+      preLoaderRoute: typeof LitPointsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/favoritos': {
@@ -822,6 +842,7 @@ const rootRouteChildren: RootRouteChildren = {
   CarteiraRoute: CarteiraRoute,
   CheckoutRoute: CheckoutRoute,
   FavoritosRoute: FavoritosRoute,
+  LitPointsRoute: LitPointsRoute,
   LoginRoute: LoginRoute,
   MensagensRoute: MensagensRouteWithChildren,
   PedidosRoute: PedidosRouteWithChildren,
