@@ -175,3 +175,64 @@ Marque cada item ao rodar a suíte manual em desktop, tablet e mobile.
 - [ ] "Editar carrinho" no checkout volta para `/carrinho`
 - [ ] Item indisponível bloqueia finalização
 - [ ] Após sucesso: "Ver meus pedidos" → `/pedidos`, "Continuar comprando" → `/`
+
+## QA Geral do MVP (Sprint 17)
+
+### Typecheck e build
+- [ ] `bunx tsgo --noEmit` roda sem erros
+- [ ] Nenhum import quebrado no console do preview
+- [ ] Nenhum warning novo de hidratação
+
+### Services
+- [ ] Nenhuma rota em `src/routes/` importa de `src/data/` diretamente
+- [ ] `productService`, `categoryService`, `sellerService`, `reviewService`, `accountService`, `cartService`, `checkoutService`, `sellerDashboardService`, `adminService` continuam expostos
+
+### Providers
+- [ ] `AuthProvider` disponível em toda a app; `useAuth()` funciona
+- [ ] `CartProvider` disponível em toda a app; `useCart()` funciona
+- [ ] Alternância comprador ↔ vendedor funciona no `UserMenu`
+- [ ] Contador do carrinho atualiza ao adicionar/remover item
+
+### Rotas principais
+- [ ] Todas as rotas listadas em `ROUTE_AUDIT.md` carregam sem erro
+- [ ] Nenhuma rota fica em branco após navegação (parent com `<Outlet />`)
+- [ ] `/vendedor/anuncios/novo` continua abrindo o wizard
+
+### Responsividade
+- [ ] Sem overflow horizontal na home em 375px
+- [ ] Sidebar do vendedor vira menu horizontal no mobile
+- [ ] Sidebar do admin vira menu horizontal no mobile
+- [ ] Tabelas (admin/vendedor) rolam horizontalmente no mobile
+
+### Produtos indisponíveis
+- [ ] `ProductCard` mostra badge e desabilita CTA
+- [ ] `PurchaseCard` bloqueia compra e adicionar ao carrinho
+- [ ] `CartProvider.addItem` recusa e mostra toast
+- [ ] Checkout bloqueia finalização se houver item indisponível
+
+### Carrinho e checkout
+- [ ] Adicionar/remover/atualizar quantidade funciona
+- [ ] Cupom mockado aplica desconto
+- [ ] Checkout exige login (`AuthGate`)
+- [ ] Sucesso do checkout deixa claro que não houve cobrança real
+
+### Vendedor
+- [ ] Sidebar destaca rota ativa
+- [ ] Wizard `/vendedor/anuncios/novo` mostra `ImageUploader`
+- [ ] Financeiro deixa claro que é mockado
+
+### Admin
+- [ ] `AdminGate` bloqueia acesso quando `isAdmin` é false
+- [ ] Todas as ações administrativas exibem toast mockado
+- [ ] Nenhuma rota admin importa `src/data/` diretamente
+
+### Ações mockadas
+- [ ] Favoritar / compartilhar / seguir / enviar mensagem exibem toast
+- [ ] Editar perfil exibe toast
+- [ ] Sacar / adicionar saldo exibe toast
+- [ ] Publicar / pausar / editar anúncio exibe toast
+- [ ] Ações de disputa e denúncia exibem toast
+
+### Console
+- [ ] Sem erros vermelhos no console do navegador
+- [ ] Sem 404 de assets no painel de rede
