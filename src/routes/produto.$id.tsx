@@ -15,6 +15,7 @@ import { ProductQuestions } from "@/components/product/ProductQuestions";
 import { ProductReviews } from "@/components/product/ProductReviews";
 import { PurchaseCard } from "@/components/product/PurchaseCard";
 import { SellerLevelBadge } from "@/components/seller/SellerLevelBadge";
+import { SellerVerificationBadge } from "@/components/verification/SellerVerificationBadge";
 import { productService } from "@/services/productService";
 import { reviewService } from "@/services/reviewService";
 
