@@ -551,7 +551,14 @@ export type CheckoutAnalyticsEventName =
   | "generate_payment"
   | "purchase_mocked"
   | "search"
-  | "create_listing_mocked";
+  | "create_listing_mocked"
+  | "order_conversation_created_mocked"
+  | "seller_delivery_sent_mocked"
+  | "buyer_confirmed_delivery_mocked"
+  | "mediation_opened_mocked"
+  | "seller_response_submitted_mocked"
+  | "evidence_uploaded_mocked";
+
 
 export interface CheckoutAnalyticsEvent {
   name: CheckoutAnalyticsEventName;
