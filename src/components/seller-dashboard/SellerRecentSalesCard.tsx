@@ -107,17 +107,16 @@ export function SellerRecentSalesCard({
                   </span>
                   {!compact && (
                     <Button
+                      asChild
                       variant="ghost"
                       size="sm"
                       className="h-7 px-2 text-xs"
-                      onClick={() =>
-                        toast("Em breve", {
-                          description: "Detalhes da venda serão liberados com backend.",
-                        })
-                      }
                     >
-                      Detalhes <ArrowRight className="ml-1 h-3 w-3" />
+                      <Link to="/vendedor/vendas/$id" params={{ id: s.id }}>
+                        Detalhes <ArrowRight className="ml-1 h-3 w-3" />
+                      </Link>
                     </Button>
+
                   )}
                 </div>
               </li>
