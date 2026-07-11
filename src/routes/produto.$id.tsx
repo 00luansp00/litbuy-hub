@@ -53,15 +53,15 @@ function ProductPage() {
     product.description ??
     `${product.title} — entrega ${product.instantDelivery ? "instantânea" : "rápida"} e vendedor ${product.verifiedSeller ? "verificado" : "avaliado"} pela LIT Buy.\n\nAntes da compra, verifique as informações e a reputação do anunciante. Todas as transações são protegidas pela nossa garantia da plataforma, com suporte dedicado em caso de qualquer problema.\n\nDúvidas? Use a seção de perguntas públicas abaixo ou envie uma mensagem privada ao vendedor.`;
 
-  const seller =
+  const seller: import("@/types").Seller =
     product.seller ??
-    ({
+    {
       id: "seller-generic",
       name: "LIT Seller",
       avatarUrl: undefined,
       rating: 4.8,
       verified: true,
-    } as const);
+    };
 
   const enrichedSeller = {
     ...seller,
