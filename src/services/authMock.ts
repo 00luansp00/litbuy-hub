@@ -25,6 +25,12 @@ export interface AuthUser {
   sellerName?: string;
   /** Papel ativo na sessão em memória. Default "buyer". */
   activeRole?: UserRole;
+  /**
+   * Marca visual/mockada de acesso administrativo. Habilitada para
+   * demonstrar o Painel Administrativo — NÃO representa RBAC real.
+   * Permissões reais devem ser resolvidas no backend.
+   */
+  isAdmin?: boolean;
 }
 
 export interface AuthSession {
