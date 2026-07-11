@@ -212,6 +212,9 @@ function NovoAnuncioPage() {
       description="Fluxo visual/mockado — nenhum anúncio é publicado, nenhum dado é persistido."
       hideCreateCta
     >
+      <div className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-muted-foreground">
+        Em produção, alguns tipos de anúncio podem exigir <strong className="text-warning">verificação de identidade</strong>. Nesta demonstração, isso não bloqueia a criação.
+      </div>
       {/* Steps */}
       <ol className="flex flex-wrap items-center gap-2 text-xs sm:text-sm">
         {STEPS.map((s, i) => {
