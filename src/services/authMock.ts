@@ -52,21 +52,25 @@ function nameFromEmail(email: string): string {
     .join(" ");
 }
 
+/** Email demo que ativa acesso admin mockado. */
+export const DEMO_ADMIN_EMAIL = "admin@litbuy.com";
+
 function buildMockUser(name: string, email: string): AuthUser {
+  const normalizedEmail = email.trim().toLowerCase();
   return {
     id: "mock-user",
     name,
     email,
-    // Mock: todo usuário logado já tem perfil de vendedor demo,
-    // apontando para a loja "novakeys" (sellers.nova) para permitir
-    // navegar para /loja/$slug. Trocar no futuro por dados reais.
+    // Toda conta comum da LIT Buy é compradora E vendedora por padrão.
+    // hasSellerProfile permanece como campo legado (sempre true no MVP)
+    // e NÃO deve ser usado para bloquear acesso à área do vendedor.
     hasSellerProfile: true,
     sellerSlug: "novakeys",
     sellerName: "NovaKeys Store",
     activeRole: "buyer",
-    // Mock/demo: usuário logado tem acesso ao painel administrativo
-    // apenas visualmente. Nenhuma permissão real é aplicada.
-    isAdmin: true,
+    // Mock/demo: apenas o email demo administrativo recebe isAdmin.
+    // Isso é proteção puramente visual — não representa RBAC real.
+    isAdmin: normalizedEmail === DEMO_ADMIN_EMAIL,
   };
 }
 
@@ -86,6 +90,7 @@ export const authMock = {
     currentUser = buildMockUser(name.trim() || nameFromEmail(email), email);
     return currentUser;
   },
+
 
   async requestPasswordReset(_email: string): Promise<void> {
     await wait(600);

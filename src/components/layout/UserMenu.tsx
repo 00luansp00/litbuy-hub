@@ -12,7 +12,6 @@ import {
   PackagePlus,
   ExternalLink,
   ArrowLeftRight,
-  Sparkles,
   ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -39,8 +38,9 @@ function initials(name: string) {
 }
 
 export function UserMenu() {
-  const { user, logout, activeRole, hasSellerProfile, switchToBuyer, switchToSeller, isAdmin } = useAuth();
+  const { user, logout, activeRole, switchToBuyer, switchToSeller, isAdmin } = useAuth();
   const navigate = useNavigate();
+
   if (!user) return null;
 
   const isSeller = activeRole === "seller";
@@ -51,19 +51,13 @@ export function UserMenu() {
   };
 
   const handleSwitchToSeller = () => {
-    if (!hasSellerProfile) {
-      toast("Comece a vender na LIT Buy", {
-        description: "Crie seu perfil de vendedor para acessar o modo vendedor.",
-      });
-      navigate({ to: "/vendedor" });
-      return;
-    }
     switchToSeller();
     toast.success("Modo vendedor ativado", {
       description: "Você agora está navegando como vendedor.",
     });
     navigate({ to: "/vendedor" });
   };
+
 
   const handleSwitchToBuyer = () => {
     switchToBuyer();
@@ -175,16 +169,9 @@ export function UserMenu() {
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={handleSwitchToSeller}>
-              {hasSellerProfile ? (
-                <>
-                  <ArrowLeftRight className="h-4 w-4" /> Mudar para modo vendedor
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-4 w-4" /> Vender na LIT Buy
-                </>
-              )}
+              <ArrowLeftRight className="h-4 w-4" /> Mudar para modo vendedor
             </DropdownMenuItem>
+
           </>
         )}
 
