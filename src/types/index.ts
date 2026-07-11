@@ -2124,7 +2124,8 @@ export type NotificationType =
   | "security"
   | "admin"
   | "system"
-  | "reward";
+  | "reward"
+  | "affiliate";
 
 export interface NotificationTarget {
   type:
