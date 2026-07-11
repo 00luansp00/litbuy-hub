@@ -279,4 +279,59 @@ export interface CartSummary {
   total: number;
 }
 
+// ==================================================
+// Checkout — tipos consumidos pelo checkoutService e
+// pelos componentes em src/components/checkout.
+// Fluxo 100% mockado; nenhum pagamento/pedido real.
+// ==================================================
+
+export type PaymentMethodId = "pix" | "credit_card" | "lit_balance" | "external_wallet";
+
+export interface PaymentMethod {
+  id: PaymentMethodId;
+  label: string;
+  description: string;
+  /** Nome do ícone Lucide. */
+  icon: string;
+  /** Selo curto ex.: "Instantâneo", "Em breve". */
+  tag?: string;
+  /** Método visualmente desabilitado. */
+  disabled?: boolean;
+}
+
+export interface BuyerProfile {
+  name: string;
+  email: string;
+  verified: boolean;
+  status: string;
+  memberSince?: string;
+}
+
+export interface CheckoutSummary extends CartSummary {
+  paymentMethodId?: PaymentMethodId;
+}
+
+export type CheckoutStep = "review" | "payment" | "success";
+
+export interface CheckoutPayload {
+  buyer: BuyerProfile;
+  paymentMethodId: PaymentMethodId;
+  items: CartItem[];
+  summary: CartSummary;
+}
+
+export type MockOrderStatus = "created" | "pending_payment" | "confirmed";
+
+export interface MockOrder {
+  orderId: string;
+  status: MockOrderStatus;
+  createdAt: string;
+  paymentMethodId: PaymentMethodId;
+  paymentMethodLabel: string;
+  total: number;
+  itemCount: number;
+  estimatedDelivery: string;
+}
+
+
 
