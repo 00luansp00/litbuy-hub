@@ -236,3 +236,54 @@ Marque cada item ao rodar a suíte manual em desktop, tablet e mobile.
 ### Console
 - [ ] Sem erros vermelhos no console do navegador
 - [ ] Sem 404 de assets no painel de rede
+
+## Polimento Visual (Sprint 18)
+
+### Headers de página
+- [ ] Título e subtítulo consistentes entre `/perfil`, `/vendedor` e `/admin`
+- [ ] Badges de contexto ("Modo demonstração", "Admin", "Protegido") aparecem onde faz sentido
+- [ ] Breadcrumbs (quando existem) usam o componente `Breadcrumb`
+
+### Cards
+- [ ] Bordas, sombras e espaçamento internos consistentes
+- [ ] Hover discreto (sem transformações exageradas)
+- [ ] Alinhamento de CTAs no rodapé do card
+
+### Botões e CTAs
+- [ ] Primário / secundário / destructive claramente distintos
+- [ ] Nenhum botão fica mudo — ação real ou toast
+- [ ] Botões desabilitados legíveis (produto indisponível, checkout vazio)
+
+### Toasts
+- [ ] Mensagens curtas, em pt-BR, sem termos técnicos
+- [ ] "Adicionado ao carrinho", "Produto indisponível no momento", "Nenhuma cobrança real foi realizada"
+- [ ] Sonner é a única API de toast usada
+
+### EmptyStates
+- [ ] Todos usam o componente `EmptyState` (ícone + título + descrição + CTA)
+- [ ] Carrinho vazio, checkout vazio, favoritos, mensagens, pedidos, listas admin
+
+### Responsividade
+- [ ] Sem overflow horizontal em 375px nas áreas principais
+- [ ] Sidebar do vendedor e do admin viram menu horizontal no mobile
+- [ ] Cards não estouram largura em 375px
+- [ ] Sticky do checkout/produto não quebra no mobile
+
+### Tabelas mobile
+- [ ] `SellerListingsTable` rola horizontalmente sem cortar conteúdo
+- [ ] Tabelas admin (pedidos, transações, disputas, denúncias) rolam sem quebrar
+
+### Sidebars
+- [ ] `AccountSidebar`, `SellerDashboardSidebar`, `AdminSidebar` destacam item ativo
+- [ ] CTA secundário ("Vender na LIT Buy", "Voltar para minha conta", "Voltar ao marketplace") presente
+
+### Acessibilidade básica
+- [ ] Botões ícone-only têm `aria-label`
+- [ ] Inputs têm `<Label>` ou `aria-label`
+- [ ] Foco visível em botões, links e inputs
+- [ ] Contraste OK — apenas tokens `text-foreground` / `text-muted-foreground`, sem `text-gray-*` arbitrários
+- [ ] Nenhuma cor é o único indicador de status (sempre acompanha texto/ícone)
+
+### Microinterações
+- [ ] Framer Motion apenas em entradas de seção e hovers de card
+- [ ] Nenhuma animação bloqueia interação do usuário
