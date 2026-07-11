@@ -116,3 +116,17 @@ Todos os tokens estão em `src/styles.css` via `@theme inline`. Utilitários cus
 - **ImageUploader (`src/components/common/ImageUploader.tsx`)**: uploader premium visual/mockado — drag-and-drop, thumbnails, simulação de progresso, limite visual e estado de erro. Usa a File API apenas para previews locais (Object URLs). Não envia arquivos, não persiste nada.
 - **Produtos com `stock` e `status`**: `Product.status: "active" | "paused"` e `Product.stock?: number` fazem parte do contrato. A regra de disponibilidade é centralizada em `productService.isProductAvailable()` / `getUnavailabilityReason()`. Nenhum componente deve reimplementar essa regra.
 - **Carrinho e checkout**: `CartProvider.addItem` bloqueia produtos indisponíveis com toast. O checkout detecta itens que ficaram indisponíveis em memória e bloqueia a finalização mockada até que sejam removidos.
+
+## Painel Administrativo (mock)
+
+O Painel Administrativo em `/admin` é totalmente **visual e mockado**.
+
+- **AdminGate** (`src/components/admin/AdminGate.tsx`): proteção visual apenas. Verifica `isAuthenticated` + `isAdmin` do `AuthProvider` (mock em memória). Não é RBAC real.
+- **AdminLayout** (`src/components/admin/AdminLayout.tsx`): casca reutilizável com `AdminHeader`, `AdminSidebar` (desktop) e menu horizontal (mobile).
+- **AdminHeader**: exibe título, badges "Modo demonstração" / "Mock", avatar do admin e ações mockadas (Exportar, Atualizar).
+- **adminService** (`src/services/adminService.ts`): única fonte de dados para as páginas admin. Nenhuma página admin acessa mocks diretamente.
+- Subrotas: `/admin`, `/admin/usuarios`, `/admin/vendedores`, `/admin/anuncios`, `/admin/pedidos`, `/admin/transacoes`, `/admin/disputas`, `/admin/denuncias`, `/admin/configuracoes`.
+- Todas as ações administrativas apenas disparam `toast` — nenhuma alteração é persistida.
+- O usuário mockado atual tem `isAdmin: true` apenas para demonstração do MVP.
+
+Permissões reais (RBAC, moderação, suspensão, disputas, financeiro) exigem backend e serão implementadas em sprints futuras.

@@ -98,3 +98,21 @@ Marque cada item ao rodar a suíte manual em desktop, tablet e mobile.
 - [ ] Sem warnings de key ausente em listas.
 - [ ] `bun run build` completa sem erro.
 - [ ] Typecheck limpo (`tsgo --noEmit`).
+
+## Painel Administrativo (mock)
+
+- [ ] `/admin` carrega dashboard com métricas, alertas, atividade, pedidos, disputas e vendedores em destaque
+- [ ] `/admin` mostra tela "Acesso restrito" quando `isAdmin` for `false`
+- [ ] `/admin` mostra tela de login quando usuário não estiver autenticado
+- [ ] `/admin/usuarios` lista usuários mockados com filtros de busca/status/risco
+- [ ] `/admin/vendedores` lista vendedores mockados com filtros
+- [ ] `/admin/anuncios` lista anúncios mockados com filtros
+- [ ] `/admin/pedidos` lista pedidos mockados com filtros
+- [ ] `/admin/transacoes` lista transações mockadas com filtros
+- [ ] `/admin/disputas` lista disputas mockadas com filtros
+- [ ] `/admin/denuncias` lista denúncias mockadas com filtros
+- [ ] `/admin/configuracoes` mostra seções visuais e botões "Salvar" com toast
+- [ ] Todas as ações administrativas exibem toast informando que são mockadas
+- [ ] Menu do usuário exibe "Painel administrativo" quando `isAdmin` é true
+- [ ] Sidebar admin funciona em desktop e menu horizontal em mobile
+- [ ] Nenhuma ação persiste dados, nenhum backend é acionado

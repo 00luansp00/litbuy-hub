@@ -8,6 +8,8 @@ interface AuthContextValue {
   /** Papel ativo em memória (default "buyer"). Mock — nunca persistido. */
   activeRole: UserRole;
   hasSellerProfile: boolean;
+  /** Acesso administrativo mockado — nunca substitui RBAC real. */
+  isAdmin: boolean;
   login: (email: string, password: string) => Promise<AuthUser>;
   register: (name: string, email: string, password: string) => Promise<AuthUser>;
   requestPasswordReset: (email: string) => Promise<void>;
@@ -104,6 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const activeRole: UserRole = user?.activeRole ?? "buyer";
   const hasSellerProfile = !!user?.hasSellerProfile;
+  const isAdmin = !!user?.isAdmin;
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -112,6 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       activeRole,
       hasSellerProfile,
+      isAdmin,
       login,
       register,
       requestPasswordReset,
@@ -125,6 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       activeRole,
       hasSellerProfile,
+      isAdmin,
       login,
       register,
       requestPasswordReset,

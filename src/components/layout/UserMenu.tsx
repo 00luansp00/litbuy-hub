@@ -13,6 +13,7 @@ import {
   ExternalLink,
   ArrowLeftRight,
   Sparkles,
+  ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -38,7 +39,7 @@ function initials(name: string) {
 }
 
 export function UserMenu() {
-  const { user, logout, activeRole, hasSellerProfile, switchToBuyer, switchToSeller } = useAuth();
+  const { user, logout, activeRole, hasSellerProfile, switchToBuyer, switchToSeller, isAdmin } = useAuth();
   const navigate = useNavigate();
   if (!user) return null;
 
@@ -183,6 +184,17 @@ export function UserMenu() {
                   <Sparkles className="h-4 w-4" /> Vender na LIT Buy
                 </>
               )}
+            </DropdownMenuItem>
+          </>
+        )}
+
+        {isAdmin && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link to="/admin">
+                <ShieldCheck className="h-4 w-4" /> Painel administrativo
+              </Link>
             </DropdownMenuItem>
           </>
         )}

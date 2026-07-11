@@ -23,6 +23,7 @@ import { Route as CadastroRouteImport } from './routes/cadastro'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as VendedorIndexRouteImport } from './routes/vendedor.index'
+import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as VendedorVendasRouteImport } from './routes/vendedor.vendas'
 import { Route as VendedorFinanceiroRouteImport } from './routes/vendedor.financeiro'
 import { Route as VendedorAvaliacoesRouteImport } from './routes/vendedor.avaliacoes'
@@ -30,6 +31,14 @@ import { Route as VendedorAnunciosRouteImport } from './routes/vendedor.anuncios
 import { Route as ProdutoIdRouteImport } from './routes/produto.$id'
 import { Route as LojaSlugRouteImport } from './routes/loja.$slug'
 import { Route as CategoriaSlugRouteImport } from './routes/categoria.$slug'
+import { Route as AdminVendedoresRouteImport } from './routes/admin.vendedores'
+import { Route as AdminUsuariosRouteImport } from './routes/admin.usuarios'
+import { Route as AdminTransacoesRouteImport } from './routes/admin.transacoes'
+import { Route as AdminPedidosRouteImport } from './routes/admin.pedidos'
+import { Route as AdminDisputasRouteImport } from './routes/admin.disputas'
+import { Route as AdminDenunciasRouteImport } from './routes/admin.denuncias'
+import { Route as AdminConfiguracoesRouteImport } from './routes/admin.configuracoes'
+import { Route as AdminAnunciosRouteImport } from './routes/admin.anuncios'
 import { Route as VendedorAnunciosNovoRouteImport } from './routes/vendedor.anuncios.novo'
 
 const VendedorRoute = VendedorRouteImport.update({
@@ -102,6 +111,11 @@ const VendedorIndexRoute = VendedorIndexRouteImport.update({
   path: '/',
   getParentRoute: () => VendedorRoute,
 } as any)
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminRoute,
+} as any)
 const VendedorVendasRoute = VendedorVendasRouteImport.update({
   id: '/vendas',
   path: '/vendas',
@@ -137,6 +151,46 @@ const CategoriaSlugRoute = CategoriaSlugRouteImport.update({
   path: '/categoria/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminVendedoresRoute = AdminVendedoresRouteImport.update({
+  id: '/vendedores',
+  path: '/vendedores',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminUsuariosRoute = AdminUsuariosRouteImport.update({
+  id: '/usuarios',
+  path: '/usuarios',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminTransacoesRoute = AdminTransacoesRouteImport.update({
+  id: '/transacoes',
+  path: '/transacoes',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminPedidosRoute = AdminPedidosRouteImport.update({
+  id: '/pedidos',
+  path: '/pedidos',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminDisputasRoute = AdminDisputasRouteImport.update({
+  id: '/disputas',
+  path: '/disputas',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminDenunciasRoute = AdminDenunciasRouteImport.update({
+  id: '/denuncias',
+  path: '/denuncias',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminConfiguracoesRoute = AdminConfiguracoesRouteImport.update({
+  id: '/configuracoes',
+  path: '/configuracoes',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAnunciosRoute = AdminAnunciosRouteImport.update({
+  id: '/anuncios',
+  path: '/anuncios',
+  getParentRoute: () => AdminRoute,
+} as any)
 const VendedorAnunciosNovoRoute = VendedorAnunciosNovoRouteImport.update({
   id: '/novo',
   path: '/novo',
@@ -145,7 +199,7 @@ const VendedorAnunciosNovoRoute = VendedorAnunciosNovoRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/cadastro': typeof CadastroRoute
   '/carrinho': typeof CarrinhoRoute
   '/carteira': typeof CarteiraRoute
@@ -157,6 +211,14 @@ export interface FileRoutesByFullPath {
   '/perfil': typeof PerfilRoute
   '/recuperar-senha': typeof RecuperarSenhaRoute
   '/vendedor': typeof VendedorRouteWithChildren
+  '/admin/anuncios': typeof AdminAnunciosRoute
+  '/admin/configuracoes': typeof AdminConfiguracoesRoute
+  '/admin/denuncias': typeof AdminDenunciasRoute
+  '/admin/disputas': typeof AdminDisputasRoute
+  '/admin/pedidos': typeof AdminPedidosRoute
+  '/admin/transacoes': typeof AdminTransacoesRoute
+  '/admin/usuarios': typeof AdminUsuariosRoute
+  '/admin/vendedores': typeof AdminVendedoresRoute
   '/categoria/$slug': typeof CategoriaSlugRoute
   '/loja/$slug': typeof LojaSlugRoute
   '/produto/$id': typeof ProdutoIdRoute
@@ -164,12 +226,12 @@ export interface FileRoutesByFullPath {
   '/vendedor/avaliacoes': typeof VendedorAvaliacoesRoute
   '/vendedor/financeiro': typeof VendedorFinanceiroRoute
   '/vendedor/vendas': typeof VendedorVendasRoute
+  '/admin/': typeof AdminIndexRoute
   '/vendedor/': typeof VendedorIndexRoute
   '/vendedor/anuncios/novo': typeof VendedorAnunciosNovoRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
   '/cadastro': typeof CadastroRoute
   '/carrinho': typeof CarrinhoRoute
   '/carteira': typeof CarteiraRoute
@@ -180,6 +242,14 @@ export interface FileRoutesByTo {
   '/pedidos': typeof PedidosRoute
   '/perfil': typeof PerfilRoute
   '/recuperar-senha': typeof RecuperarSenhaRoute
+  '/admin/anuncios': typeof AdminAnunciosRoute
+  '/admin/configuracoes': typeof AdminConfiguracoesRoute
+  '/admin/denuncias': typeof AdminDenunciasRoute
+  '/admin/disputas': typeof AdminDisputasRoute
+  '/admin/pedidos': typeof AdminPedidosRoute
+  '/admin/transacoes': typeof AdminTransacoesRoute
+  '/admin/usuarios': typeof AdminUsuariosRoute
+  '/admin/vendedores': typeof AdminVendedoresRoute
   '/categoria/$slug': typeof CategoriaSlugRoute
   '/loja/$slug': typeof LojaSlugRoute
   '/produto/$id': typeof ProdutoIdRoute
@@ -187,13 +257,14 @@ export interface FileRoutesByTo {
   '/vendedor/avaliacoes': typeof VendedorAvaliacoesRoute
   '/vendedor/financeiro': typeof VendedorFinanceiroRoute
   '/vendedor/vendas': typeof VendedorVendasRoute
+  '/admin': typeof AdminIndexRoute
   '/vendedor': typeof VendedorIndexRoute
   '/vendedor/anuncios/novo': typeof VendedorAnunciosNovoRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/cadastro': typeof CadastroRoute
   '/carrinho': typeof CarrinhoRoute
   '/carteira': typeof CarteiraRoute
@@ -205,6 +276,14 @@ export interface FileRoutesById {
   '/perfil': typeof PerfilRoute
   '/recuperar-senha': typeof RecuperarSenhaRoute
   '/vendedor': typeof VendedorRouteWithChildren
+  '/admin/anuncios': typeof AdminAnunciosRoute
+  '/admin/configuracoes': typeof AdminConfiguracoesRoute
+  '/admin/denuncias': typeof AdminDenunciasRoute
+  '/admin/disputas': typeof AdminDisputasRoute
+  '/admin/pedidos': typeof AdminPedidosRoute
+  '/admin/transacoes': typeof AdminTransacoesRoute
+  '/admin/usuarios': typeof AdminUsuariosRoute
+  '/admin/vendedores': typeof AdminVendedoresRoute
   '/categoria/$slug': typeof CategoriaSlugRoute
   '/loja/$slug': typeof LojaSlugRoute
   '/produto/$id': typeof ProdutoIdRoute
@@ -212,6 +291,7 @@ export interface FileRoutesById {
   '/vendedor/avaliacoes': typeof VendedorAvaliacoesRoute
   '/vendedor/financeiro': typeof VendedorFinanceiroRoute
   '/vendedor/vendas': typeof VendedorVendasRoute
+  '/admin/': typeof AdminIndexRoute
   '/vendedor/': typeof VendedorIndexRoute
   '/vendedor/anuncios/novo': typeof VendedorAnunciosNovoRoute
 }
@@ -231,6 +311,14 @@ export interface FileRouteTypes {
     | '/perfil'
     | '/recuperar-senha'
     | '/vendedor'
+    | '/admin/anuncios'
+    | '/admin/configuracoes'
+    | '/admin/denuncias'
+    | '/admin/disputas'
+    | '/admin/pedidos'
+    | '/admin/transacoes'
+    | '/admin/usuarios'
+    | '/admin/vendedores'
     | '/categoria/$slug'
     | '/loja/$slug'
     | '/produto/$id'
@@ -238,12 +326,12 @@ export interface FileRouteTypes {
     | '/vendedor/avaliacoes'
     | '/vendedor/financeiro'
     | '/vendedor/vendas'
+    | '/admin/'
     | '/vendedor/'
     | '/vendedor/anuncios/novo'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/admin'
     | '/cadastro'
     | '/carrinho'
     | '/carteira'
@@ -254,6 +342,14 @@ export interface FileRouteTypes {
     | '/pedidos'
     | '/perfil'
     | '/recuperar-senha'
+    | '/admin/anuncios'
+    | '/admin/configuracoes'
+    | '/admin/denuncias'
+    | '/admin/disputas'
+    | '/admin/pedidos'
+    | '/admin/transacoes'
+    | '/admin/usuarios'
+    | '/admin/vendedores'
     | '/categoria/$slug'
     | '/loja/$slug'
     | '/produto/$id'
@@ -261,6 +357,7 @@ export interface FileRouteTypes {
     | '/vendedor/avaliacoes'
     | '/vendedor/financeiro'
     | '/vendedor/vendas'
+    | '/admin'
     | '/vendedor'
     | '/vendedor/anuncios/novo'
   id:
@@ -278,6 +375,14 @@ export interface FileRouteTypes {
     | '/perfil'
     | '/recuperar-senha'
     | '/vendedor'
+    | '/admin/anuncios'
+    | '/admin/configuracoes'
+    | '/admin/denuncias'
+    | '/admin/disputas'
+    | '/admin/pedidos'
+    | '/admin/transacoes'
+    | '/admin/usuarios'
+    | '/admin/vendedores'
     | '/categoria/$slug'
     | '/loja/$slug'
     | '/produto/$id'
@@ -285,13 +390,14 @@ export interface FileRouteTypes {
     | '/vendedor/avaliacoes'
     | '/vendedor/financeiro'
     | '/vendedor/vendas'
+    | '/admin/'
     | '/vendedor/'
     | '/vendedor/anuncios/novo'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AdminRoute: typeof AdminRoute
+  AdminRoute: typeof AdminRouteWithChildren
   CadastroRoute: typeof CadastroRoute
   CarrinhoRoute: typeof CarrinhoRoute
   CarteiraRoute: typeof CarteiraRoute
@@ -408,6 +514,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VendedorIndexRouteImport
       parentRoute: typeof VendedorRoute
     }
+    '/admin/': {
+      id: '/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/vendedor/vendas': {
       id: '/vendedor/vendas'
       path: '/vendas'
@@ -457,6 +570,62 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CategoriaSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/vendedores': {
+      id: '/admin/vendedores'
+      path: '/vendedores'
+      fullPath: '/admin/vendedores'
+      preLoaderRoute: typeof AdminVendedoresRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/usuarios': {
+      id: '/admin/usuarios'
+      path: '/usuarios'
+      fullPath: '/admin/usuarios'
+      preLoaderRoute: typeof AdminUsuariosRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/transacoes': {
+      id: '/admin/transacoes'
+      path: '/transacoes'
+      fullPath: '/admin/transacoes'
+      preLoaderRoute: typeof AdminTransacoesRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/pedidos': {
+      id: '/admin/pedidos'
+      path: '/pedidos'
+      fullPath: '/admin/pedidos'
+      preLoaderRoute: typeof AdminPedidosRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/disputas': {
+      id: '/admin/disputas'
+      path: '/disputas'
+      fullPath: '/admin/disputas'
+      preLoaderRoute: typeof AdminDisputasRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/denuncias': {
+      id: '/admin/denuncias'
+      path: '/denuncias'
+      fullPath: '/admin/denuncias'
+      preLoaderRoute: typeof AdminDenunciasRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/configuracoes': {
+      id: '/admin/configuracoes'
+      path: '/configuracoes'
+      fullPath: '/admin/configuracoes'
+      preLoaderRoute: typeof AdminConfiguracoesRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/anuncios': {
+      id: '/admin/anuncios'
+      path: '/anuncios'
+      fullPath: '/admin/anuncios'
+      preLoaderRoute: typeof AdminAnunciosRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/vendedor/anuncios/novo': {
       id: '/vendedor/anuncios/novo'
       path: '/novo'
@@ -466,6 +635,32 @@ declare module '@tanstack/react-router' {
     }
   }
 }
+
+interface AdminRouteChildren {
+  AdminAnunciosRoute: typeof AdminAnunciosRoute
+  AdminConfiguracoesRoute: typeof AdminConfiguracoesRoute
+  AdminDenunciasRoute: typeof AdminDenunciasRoute
+  AdminDisputasRoute: typeof AdminDisputasRoute
+  AdminPedidosRoute: typeof AdminPedidosRoute
+  AdminTransacoesRoute: typeof AdminTransacoesRoute
+  AdminUsuariosRoute: typeof AdminUsuariosRoute
+  AdminVendedoresRoute: typeof AdminVendedoresRoute
+  AdminIndexRoute: typeof AdminIndexRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminAnunciosRoute: AdminAnunciosRoute,
+  AdminConfiguracoesRoute: AdminConfiguracoesRoute,
+  AdminDenunciasRoute: AdminDenunciasRoute,
+  AdminDisputasRoute: AdminDisputasRoute,
+  AdminPedidosRoute: AdminPedidosRoute,
+  AdminTransacoesRoute: AdminTransacoesRoute,
+  AdminUsuariosRoute: AdminUsuariosRoute,
+  AdminVendedoresRoute: AdminVendedoresRoute,
+  AdminIndexRoute: AdminIndexRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
 interface VendedorAnunciosRouteChildren {
   VendedorAnunciosNovoRoute: typeof VendedorAnunciosNovoRoute
@@ -500,7 +695,7 @@ const VendedorRouteWithChildren = VendedorRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AdminRoute: AdminRoute,
+  AdminRoute: AdminRouteWithChildren,
   CadastroRoute: CadastroRoute,
   CarrinhoRoute: CarrinhoRoute,
   CarteiraRoute: CarteiraRoute,

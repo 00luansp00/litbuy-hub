@@ -458,5 +458,205 @@ export interface CreateListingDraft {
 }
 
 
+// ==================================================
+// Painel Administrativo (Admin) — tipos consumidos pelo
+// adminService e pelos componentes em src/components/admin.
+// Tudo mockado; nenhuma ação real, nenhum RBAC real.
+// Os contratos abaixo antecipam um futuro backend.
+// ==================================================
+
+export type AdminStatus =
+  | "active"
+  | "suspended"
+  | "in_review"
+  | "blocked"
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "paused"
+  | "removed"
+  | "sold"
+  | "paid"
+  | "delivered"
+  | "completed"
+  | "cancelled"
+  | "in_dispute"
+  | "refunded"
+  | "awaiting_payment"
+  | "awaiting_buyer"
+  | "awaiting_seller"
+  | "open"
+  | "resolved"
+  | "closed";
+
+export type AdminRiskLevel = "low" | "medium" | "high" | "critical";
+
+export type AdminMetricTone =
+  | "primary"
+  | "accent"
+  | "success"
+  | "warning"
+  | "danger"
+  | "muted";
+
+export interface AdminMetric {
+  id: string;
+  label: string;
+  value: string;
+  icon: string; // lucide name
+  delta?: string;
+  deltaDirection?: "up" | "down" | "neutral";
+  tone?: AdminMetricTone;
+  hint?: string;
+}
+
+export type AdminAccountKind = "buyer" | "seller" | "buyer_seller" | "staff";
+
+export interface AdminUser {
+  id: string;
+  name: string;
+  email: string;
+  avatarUrl?: string;
+  status: AdminStatus;
+  kind: AdminAccountKind;
+  createdAt: string;
+  orders: number;
+  totalSpent: number;
+  risk: AdminRiskLevel;
+}
+
+export interface AdminSeller {
+  id: string;
+  storeName: string;
+  ownerName: string;
+  avatarUrl?: string;
+  slug?: string;
+  status: AdminStatus;
+  verified: boolean;
+  activeListings: number;
+  sales: number;
+  rating: number;
+  volume: number;
+  risk: AdminRiskLevel;
+}
+
+export interface AdminListing {
+  id: string;
+  title: string;
+  image: string;
+  sellerName: string;
+  categoryName: string;
+  price: number;
+  stock: number;
+  status: AdminStatus;
+  sales: number;
+  reports: number;
+  risk: AdminRiskLevel;
+  slug?: string;
+}
+
+export interface AdminOrder {
+  id: string;
+  code: string;
+  buyerName: string;
+  sellerName: string;
+  productTitle: string;
+  amount: number;
+  status: AdminStatus;
+  paymentMethod: string;
+  createdAt: string;
+  risk: AdminRiskLevel;
+}
+
+export type AdminTransactionKind =
+  | "payment"
+  | "withdraw"
+  | "refund"
+  | "fee"
+  | "balance_release";
+
+export interface AdminTransaction {
+  id: string;
+  userName: string;
+  kind: AdminTransactionKind;
+  amount: number;
+  status: AdminStatus;
+  method: string;
+  createdAt: string;
+  reference: string;
+  risk: AdminRiskLevel;
+}
+
+export interface AdminDispute {
+  id: string;
+  orderCode: string;
+  buyerName: string;
+  sellerName: string;
+  reason: string;
+  status: AdminStatus;
+  priority: AdminRiskLevel;
+  openedAt: string;
+  updatedAt: string;
+}
+
+export type AdminReportTargetKind =
+  | "listing"
+  | "seller"
+  | "user"
+  | "message"
+  | "order";
+
+export interface AdminReport {
+  id: string;
+  targetKind: AdminReportTargetKind;
+  targetLabel: string;
+  reporterName: string;
+  reason: string;
+  status: AdminStatus;
+  priority: AdminRiskLevel;
+  createdAt: string;
+}
+
+export type AdminActivityTone = "info" | "success" | "warning" | "danger";
+
+export interface AdminActivityEntry {
+  id: string;
+  title: string;
+  description: string;
+  tone: AdminActivityTone;
+  icon: string;
+  createdAt: string;
+}
+
+export interface AdminAlert {
+  id: string;
+  title: string;
+  description: string;
+  tone: AdminActivityTone;
+  icon: string;
+  action?: { label: string; to: string };
+}
+
+export interface AdminAuditLog {
+  id: string;
+  actor: string;
+  action: string;
+  target: string;
+  createdAt: string;
+  tone?: AdminActivityTone;
+}
+
+export interface AdminDashboardSummary {
+  metrics: AdminMetric[];
+  activity: AdminActivityEntry[];
+  alerts: AdminAlert[];
+  recentOrders: AdminOrder[];
+  pendingListings: AdminListing[];
+  openDisputes: AdminDispute[];
+  topSellers: AdminSeller[];
+}
+
+
+
 
 
