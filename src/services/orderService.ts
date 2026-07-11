@@ -2,13 +2,18 @@ import { products } from "@/data/products";
 import type {
   DigitalDelivery,
   Dispute,
+  MediationCase,
   Order,
   OrderItem,
   OrderReview,
   OrderStatus,
   OrderTimelineEvent,
   ReviewDraft,
+  SaleDeliveryMode,
+  SaleDeliveryStatus,
+  MediationStatus,
 } from "@/types";
+
 
 /**
  * orderService — camada mockada de pedidos (pós-compra).
