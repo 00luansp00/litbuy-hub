@@ -3,6 +3,7 @@ import { motion } from "motion/react";
 import { Heart, ShieldCheck, ShoppingCart, Star } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { ProductBadges } from "./ProductBadges";
 import { SellerInfo } from "./SellerInfo";
 import { formatBRL, formatCompact } from "@/lib/format";
@@ -11,21 +12,42 @@ import { getUnavailabilityReason } from "@/services/productService";
 import { cn } from "@/lib/utils";
 import type { Product } from "@/types";
 
-
-
-
 interface ProductCardProps {
   product: Product;
+}
+
+function isServiceQuote(p: Product): boolean {
+  return (
+    (p.listingModel === "service" || p.productType === "service") &&
+    p.servicePricingType === "quote"
+  );
 }
 
 export function ProductCard({ product }: ProductCardProps) {
   const { addItem } = useCart();
   const unavailability = getUnavailabilityReason(product);
   const isAvailable = !unavailability;
+  const isDynamic = product.listingModel === "dynamic";
+  const isService = product.listingModel === "service" || product.productType === "service";
+  const isVirtualCurrency =
+    product.productType === "virtual_currency" || !!product.virtualCurrency;
+  const isQuote = isServiceQuote(product);
+
+  const requiresPage = isDynamic || isVirtualCurrency || isQuote;
 
   const handleAdd = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (requiresPage) {
+      toast.info(
+        isDynamic
+          ? "Selecione uma variação na página do anúncio."
+          : isVirtualCurrency
+            ? "Escolha a quantidade na página do anúncio."
+            : "Este serviço exige contato com o vendedor.",
+      );
+      return;
+    }
     if (unavailability) {
       toast.error(unavailability.toast);
       return;
@@ -41,6 +63,22 @@ export function ProductCard({ product }: ProductCardProps) {
         ? "text-warning"
         : "text-muted-foreground";
 
+  const displayImage = product.coverImage ?? product.imageUrl;
+
+  const modelBadge = isDynamic
+    ? { label: "Várias opções", tone: "bg-primary/15 text-primary" }
+    : isService
+      ? { label: "Serviço", tone: "bg-accent/15 text-accent" }
+      : isVirtualCurrency
+        ? { label: "Moeda virtual", tone: "bg-warning/15 text-warning" }
+        : null;
+
+  const priceLabel = isQuote
+    ? "Sob orçamento"
+    : isDynamic
+      ? `A partir de ${formatBRL(product.fromPrice ?? product.price)}`
+      : formatBRL(product.price);
+
   return (
     <motion.article
       whileHover={{ y: -6 }}
@@ -53,7 +91,7 @@ export function ProductCard({ product }: ProductCardProps) {
         className="relative block aspect-square overflow-hidden bg-surface"
       >
         <img
-          src={product.imageUrl}
+          src={displayImage}
           alt={product.title}
           loading="lazy"
           className={cn(
@@ -66,7 +104,7 @@ export function ProductCard({ product }: ProductCardProps) {
           variant="overlay"
           className="absolute left-3 top-3 max-w-[calc(100%-4rem)]"
         />
-        {product.discountPercent && isAvailable && (
+        {product.discountPercent && isAvailable && !isDynamic && !isQuote && (
           <span className="absolute right-3 top-3 rounded-md bg-success px-2 py-0.5 text-xs font-semibold text-success-foreground shadow-card">
             -{product.discountPercent}%
           </span>
@@ -112,9 +150,31 @@ export function ProductCard({ product }: ProductCardProps) {
           {product.title}
         </Link>
 
-        {product.seller && (
-          <SellerInfo seller={product.seller} />
+        {(modelBadge || product.promotionTier || product.sellerPlan) && (
+          <div className="flex flex-wrap gap-1">
+            {modelBadge && (
+              <Badge className={cn("text-[10px] font-semibold", modelBadge.tone)} variant="secondary">
+                {modelBadge.label}
+              </Badge>
+            )}
+            {product.promotionTier && (
+              <Badge variant="outline" className="text-[10px] capitalize">
+                {product.promotionTier === "silver"
+                  ? "Prata"
+                  : product.promotionTier === "gold"
+                    ? "Ouro"
+                    : "Diamante"}
+              </Badge>
+            )}
+            {product.sellerPlan === "lit_max" && (
+              <Badge className="bg-gradient-to-r from-primary to-accent text-[10px] text-primary-foreground">
+                LIT-MAX
+              </Badge>
+            )}
+          </div>
         )}
+
+        {product.seller && <SellerInfo seller={product.seller} />}
 
         {product.trustScore != null && (
           <div className={`flex items-center gap-1 text-[11px] ${trustTone}`}>
@@ -125,37 +185,40 @@ export function ProductCard({ product }: ProductCardProps) {
 
         <div className="mt-auto flex items-end justify-between gap-2">
           <div>
-            {product.originalPrice && (
+            {product.originalPrice && !isDynamic && !isQuote && (
               <div className="text-xs text-muted-foreground line-through">
                 {formatBRL(product.originalPrice)}
               </div>
             )}
-            <div className="text-lg font-bold text-foreground">
-              {formatBRL(product.price)}
-            </div>
+            <div className="text-lg font-bold text-foreground">{priceLabel}</div>
             <div className="text-[11px] text-muted-foreground">
-              {formatCompact(product.soldCount)} vendidos
+              {isVirtualCurrency && product.virtualCurrency
+                ? `${product.virtualCurrency.unit} • estoque ${formatCompact(product.virtualCurrency.availableStock)}`
+                : `${formatCompact(product.soldCount)} vendidos`}
             </div>
           </div>
-          <Button
-            size="icon"
-            variant="default"
-            aria-label={
-              isAvailable ? "Adicionar ao carrinho" : unavailability!.label
-            }
-            onClick={handleAdd}
-            disabled={!isAvailable}
-            aria-disabled={!isAvailable}
-            className={cn(
-              "transition-transform",
-              isAvailable
-                ? "hover:scale-110"
-                : "cursor-not-allowed opacity-60",
-            )}
-          >
-            <ShoppingCart className="h-4 w-4" />
-          </Button>
-
+          {requiresPage ? (
+            <Button asChild size="sm" variant="secondary">
+              <Link to="/produto/$id" params={{ id: product.slug }}>
+                {isQuote ? "Solicitar" : isDynamic ? "Ver opções" : "Ver oferta"}
+              </Link>
+            </Button>
+          ) : (
+            <Button
+              size="icon"
+              variant="default"
+              aria-label={isAvailable ? "Adicionar ao carrinho" : unavailability!.label}
+              onClick={handleAdd}
+              disabled={!isAvailable}
+              aria-disabled={!isAvailable}
+              className={cn(
+                "transition-transform",
+                isAvailable ? "hover:scale-110" : "cursor-not-allowed opacity-60",
+              )}
+            >
+              <ShoppingCart className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </div>
     </motion.article>
