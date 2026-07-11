@@ -31,6 +31,7 @@ import { Route as VendedorAvaliacoesRouteImport } from './routes/vendedor.avalia
 import { Route as VendedorAnunciosRouteImport } from './routes/vendedor.anuncios'
 import { Route as ProdutoIdRouteImport } from './routes/produto.$id'
 import { Route as PedidosIdRouteImport } from './routes/pedidos.$id'
+import { Route as PagamentoIdRouteImport } from './routes/pagamento.$id'
 import { Route as MensagensIdRouteImport } from './routes/mensagens.$id'
 import { Route as LojaSlugRouteImport } from './routes/loja.$slug'
 import { Route as CategoriaSlugRouteImport } from './routes/categoria.$slug'
@@ -155,6 +156,11 @@ const PedidosIdRoute = PedidosIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => PedidosRoute,
 } as any)
+const PagamentoIdRoute = PagamentoIdRouteImport.update({
+  id: '/pagamento/$id',
+  path: '/pagamento/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MensagensIdRoute = MensagensIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -247,6 +253,7 @@ export interface FileRoutesByFullPath {
   '/categoria/$slug': typeof CategoriaSlugRoute
   '/loja/$slug': typeof LojaSlugRoute
   '/mensagens/$id': typeof MensagensIdRoute
+  '/pagamento/$id': typeof PagamentoIdRoute
   '/pedidos/$id': typeof PedidosIdRoute
   '/produto/$id': typeof ProdutoIdRoute
   '/vendedor/anuncios': typeof VendedorAnunciosRouteWithChildren
@@ -282,6 +289,7 @@ export interface FileRoutesByTo {
   '/categoria/$slug': typeof CategoriaSlugRoute
   '/loja/$slug': typeof LojaSlugRoute
   '/mensagens/$id': typeof MensagensIdRoute
+  '/pagamento/$id': typeof PagamentoIdRoute
   '/pedidos/$id': typeof PedidosIdRoute
   '/produto/$id': typeof ProdutoIdRoute
   '/vendedor/avaliacoes': typeof VendedorAvaliacoesRoute
@@ -319,6 +327,7 @@ export interface FileRoutesById {
   '/categoria/$slug': typeof CategoriaSlugRoute
   '/loja/$slug': typeof LojaSlugRoute
   '/mensagens/$id': typeof MensagensIdRoute
+  '/pagamento/$id': typeof PagamentoIdRoute
   '/pedidos/$id': typeof PedidosIdRoute
   '/produto/$id': typeof ProdutoIdRoute
   '/vendedor/anuncios': typeof VendedorAnunciosRouteWithChildren
@@ -358,6 +367,7 @@ export interface FileRouteTypes {
     | '/categoria/$slug'
     | '/loja/$slug'
     | '/mensagens/$id'
+    | '/pagamento/$id'
     | '/pedidos/$id'
     | '/produto/$id'
     | '/vendedor/anuncios'
@@ -393,6 +403,7 @@ export interface FileRouteTypes {
     | '/categoria/$slug'
     | '/loja/$slug'
     | '/mensagens/$id'
+    | '/pagamento/$id'
     | '/pedidos/$id'
     | '/produto/$id'
     | '/vendedor/avaliacoes'
@@ -429,6 +440,7 @@ export interface FileRouteTypes {
     | '/categoria/$slug'
     | '/loja/$slug'
     | '/mensagens/$id'
+    | '/pagamento/$id'
     | '/pedidos/$id'
     | '/produto/$id'
     | '/vendedor/anuncios'
@@ -458,6 +470,7 @@ export interface RootRouteChildren {
   VendedorRoute: typeof VendedorRouteWithChildren
   CategoriaSlugRoute: typeof CategoriaSlugRoute
   LojaSlugRoute: typeof LojaSlugRoute
+  PagamentoIdRoute: typeof PagamentoIdRoute
   ProdutoIdRoute: typeof ProdutoIdRoute
 }
 
@@ -616,6 +629,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/pedidos/$id'
       preLoaderRoute: typeof PedidosIdRouteImport
       parentRoute: typeof PedidosRoute
+    }
+    '/pagamento/$id': {
+      id: '/pagamento/$id'
+      path: '/pagamento/$id'
+      fullPath: '/pagamento/$id'
+      preLoaderRoute: typeof PagamentoIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/mensagens/$id': {
       id: '/mensagens/$id'
@@ -810,6 +830,7 @@ const rootRouteChildren: RootRouteChildren = {
   VendedorRoute: VendedorRouteWithChildren,
   CategoriaSlugRoute: CategoriaSlugRoute,
   LojaSlugRoute: LojaSlugRoute,
+  PagamentoIdRoute: PagamentoIdRoute,
   ProdutoIdRoute: ProdutoIdRoute,
 }
 export const routeTree = rootRouteImport
