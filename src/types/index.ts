@@ -334,7 +334,15 @@ export interface AccountNotification {
 // Estado 100% em memória; nenhum backend/persistência.
 // ==================================================
 
+export interface CartItemVariant {
+  variantId: string;
+  variantTitle: string;
+  variantPrice: number;
+}
+
 export interface CartItem {
+  /** Chave composta: productId ou `${productId}::${variantId}` / `::vc::qty`. */
+  key: string;
   productId: string;
   slug: string;
   title: string;
@@ -348,6 +356,26 @@ export interface CartItem {
   quantity: number;
   instantDelivery?: boolean;
   verifiedSeller?: boolean;
+
+  // Sprint 18.8 — compatível com produto dinâmico / moeda virtual.
+  selectedVariantId?: string;
+  selectedVariantTitle?: string;
+  selectedVariantPrice?: number;
+  /** Marca item como cotação de moeda virtual (unitLabel = unidade, quantity = qtd). */
+  virtualCurrencyUnit?: string;
+}
+
+export interface MiniCartItem {
+  key: string;
+  productId: string;
+  slug: string;
+  title: string;
+  image: string;
+  quantity: number;
+  unitPrice: number;
+  subtotal: number;
+  variantTitle?: string;
+  virtualCurrencyUnit?: string;
 }
 
 export type CartCouponKind = "percent" | "fixed";
