@@ -93,14 +93,31 @@ export function Navbar() {
         </DropdownMenu>
 
         {/* Search */}
-        <div className="hidden md:flex relative flex-1 max-w-xl">
-          <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <form
+          className="hidden md:flex relative flex-1 max-w-xl"
+          onSubmit={(e) => {
+            e.preventDefault();
+            submitSearch(searchQuery);
+          }}
+          role="search"
+        >
+          <button
+            type="submit"
+            aria-label="Buscar"
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <Search className="h-4 w-4" />
+          </button>
           <Input
+            ref={inputRef}
             type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Buscar produtos, jogos, categorias..."
             className="pl-9 bg-surface border-border focus-visible:ring-primary/40"
           />
-        </div>
+        </form>
+
 
         {/* Nav links */}
         <nav className="hidden lg:flex items-center gap-1 ml-auto">
