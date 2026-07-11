@@ -15,9 +15,9 @@ import { Button } from "@/components/ui/button";
 import { useCart } from "@/providers/CartProvider";
 import { useAuth } from "@/providers/AuthProvider";
 import { checkoutService } from "@/services/checkoutService";
-import { products } from "@/data/products";
-import { getUnavailabilityReason } from "@/services/productService";
+import { cartService } from "@/services/cartService";
 import type { CheckoutStep, MockOrder, PaymentMethodId } from "@/types";
+
 
 
 export const Route = createFileRoute("/checkout")({
@@ -42,20 +42,14 @@ function CheckoutContent() {
   const [loading, setLoading] = useState(false);
   const [order, setOrder] = useState<MockOrder | null>(null);
 
-  // Detecta itens indisponíveis usando o catálogo mock — bloqueia
-  // finalização se algum produto virou "paused"/"esgotado" após ser
-  // adicionado ao carrinho.
-  const unavailableItems = useMemo(() => {
-    return items
-      .map((it) => {
-        const product = products.find((p) => p.id === it.productId);
-        if (!product) return null;
-        const reason = getUnavailabilityReason(product);
-        return reason ? { item: it, reason } : null;
-      })
-      .filter((v): v is { item: (typeof items)[number]; reason: NonNullable<ReturnType<typeof getUnavailabilityReason>> } => v !== null);
-  }, [items]);
+  // Detecta itens que ficaram indisponíveis via cartService — bloqueia
+  // finalização se algum produto virou "paused"/"esgotado" em memória.
+  const unavailableItems = useMemo(
+    () => cartService.findUnavailableItems(items),
+    [items],
+  );
   const hasUnavailable = unavailableItems.length > 0;
+
 
   const methods = useMemo(() => checkoutService.getPaymentMethods(), []);
 
