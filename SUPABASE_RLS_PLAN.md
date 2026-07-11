@@ -119,3 +119,14 @@ Planejamento das **políticas de Row Level Security (RLS)** para quando a integr
 3. **Roles fora de `profiles`.** Papéis vivem em `user_roles`, checados via `has_role`.
 4. **Movimentações financeiras jamais escritas pelo cliente.** Sempre via função `security definer` com auditoria.
 5. **Webhooks isolados.** Endpoints públicos ficam em `/api/public/*` e validam assinatura antes de qualquer INSERT.
+
+## Reforços de RLS por regra de marketplace (Sprint 18.2)
+
+- **Comprador só vê os próprios pedidos** — `orders` SELECT: `buyer_id = auth.uid()`.
+- **Vendedor só vê pedidos dos seus produtos** — `order_items` SELECT: `seller_id = auth.uid()`; `orders` visíveis via join server-side, nunca listagem direta.
+- **Admin vê tudo conforme permissão** — `public.has_role(auth.uid(), 'admin')` em policies dedicadas; nunca coluna booleana em `profiles`.
+- **Mensagens só para participantes** — `messages` SELECT: `auth.uid() in (conversation.buyer_id, conversation.seller_id)`; admin lê apenas conversas vinculadas a disputa/denúncia via server function.
+- **Disputas só para partes envolvidas e admin** — `disputes` SELECT: `buyer_id`, `seller_id` ou `has_role('admin')`.
+- **Carteira só para o dono** — `wallet_accounts`, `withdrawals` SELECT: `user_id = auth.uid()`; `wallet_transactions` leitura via server function.
+- **Audit logs imutáveis** — sem INSERT/UPDATE/DELETE por qualquer usuário; escrita só via `security definer` server-side.
+- **Status financeiros não são alterados pelo frontend** — `orders.status`, `disputes.status`, `wallet_transactions.*` sem policy de UPDATE para roles `authenticated`/`anon`; mutações via server functions verificadas.

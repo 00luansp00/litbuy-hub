@@ -105,3 +105,18 @@ Toda funcionalidade sensível (pagamentos, disputas, movimentação de carteira,
 - `/admin` exige login **e** `isAdmin === true` (`AdminGate`).
 - No mock, `isAdmin` é ativado apenas para o email demo `admin@litbuy.com`.
 - Segurança real fica para o backend (RLS + `has_role`).
+
+## Regras de marketplace (Sprint 18.2)
+
+Ver `MARKETPLACE_RULES.md` para a visão consolidada. Regras invioláveis para qualquer contribuição:
+
+- **Não criar pagamento real no frontend.** Nenhuma integração com gateway parte do cliente sem backend/webhooks verificados.
+- **Não criar carteira real no frontend.** Cálculo de saldo, taxa, líquido, pendente/disponível é responsabilidade do backend.
+- **Não criar disputa real no frontend.** Mutações de estado de disputa só via server function autenticada; frontend apenas dispara e exibe.
+- **Não criar entrega real sem backend.** Payload de entrega, evidências e signed URLs exigem servidor.
+- **Não criar avaliação real sem pedido concluído.** Toda review deve estar amarrada a `order_item` de pedido `completed`.
+- **Não permitir compra de produto sem `status === 'active'` e `stock > 0`.** Validação tanto no frontend (UX) quanto no backend (segurança).
+- **Toda conta comum pode comprar e vender** — não existem contas dedicadas de comprador ou vendedor.
+- **Admin real exige backend + `user_roles` + `has_role()` + RLS.** Hoje o gate é mock (`isAdmin` derivado do email).
+
+Documentos relacionados: `ORDER_LIFECYCLE.md`, `DIGITAL_DELIVERY_FLOW.md`, `DISPUTE_FLOW.md`, `WALLET_AND_ESCROW_RULES.md`, `LISTING_STATUS_RULES.md`, `REVIEW_RULES.md`, `MESSAGING_RULES.md`.

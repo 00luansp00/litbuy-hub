@@ -74,3 +74,18 @@ auth.users ──1:1── users ──1:1── profiles
 4. **Roles em tabela separada.** Papéis (admin, moderador, seller_verified) NÃO ficam em `profiles`; ficam em `user_roles` (a ser detalhada). Isso previne escalação de privilégio.
 5. **Soft delete.** Produtos, pedidos e mensagens removidos são marcados via `deleted_at`; nunca deletados fisicamente para preservar histórico financeiro.
 6. **Auditoria financeira.** Toda alteração de saldo produz uma linha em `wallet_transactions`. Nunca há UPDATE do saldo sem transação correspondente.
+
+## Relacionamentos-chave (Sprint 18.2)
+
+Reforços conceituais alinhados a `MARKETPLACE_RULES.md`:
+
+- **user compra e vende** — não há entidade separada de comprador/vendedor; a mesma `user` origina `orders` e detém `sellers`/`products`.
+- **user pode ter seller profile público** — `sellers` 1:1 opcional com `users`, expondo `/loja/$slug`.
+- **order pertence ao buyer** — `orders.buyer_id → users.id`.
+- **order_item referencia product e seller** — `order_items.product_id`, `order_items.seller_id` (denormalizado no momento da compra para preservar histórico).
+- **review referencia order_item** — `product_reviews.order_item_id` (obrigatório, único).
+- **dispute referencia order** — `disputes.order_id` (uma disputa aberta por vez por pedido).
+- **wallet pertence ao user** — `wallet_accounts.user_id` 1:1.
+- **transaction referencia wallet** — `wallet_transactions.wallet_id`, com `order_id`/`dispute_id` opcionais.
+- **conversation pode referenciar order** — `conversations.order_id nullable`.
+- **admin actions geram audit log** — toda mutação administrativa produz linha em `admin_audit_logs`.
