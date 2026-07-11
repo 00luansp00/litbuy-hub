@@ -44,3 +44,14 @@ Regras futuras de mensagens. **Documentação de planejamento.** Não implementa
 ## Estado atual (mock)
 
 - Não há chat implementado. Rotas de mensagens são placeholders.
+
+## Sprint 18.8 — anti-poaching visual (mock)
+
+- MessageComposer aplica `moderateText()` antes de enviar: contatos externos
+  (URLs, e-mails, telefones longos, WhatsApp/Telegram/Discord, @menções) são
+  substituídos por `[CONTATO REMOVIDO PELA MODERAÇÃO]`.
+- Perguntas públicas (`ProductQuestions`) usam a mesma censura.
+- É apenas censura visual em client — moderação real exige backend com filas,
+  revisão humana e políticas formais.
+- Aviso permanente ao usuário: "Mantenha a conversa dentro da LIT Buy.
+  Tentativas de contato externo podem remover a proteção da compra."

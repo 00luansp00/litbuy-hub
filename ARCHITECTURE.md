@@ -182,3 +182,18 @@ são **proteção visual**. Segurança real vai para o backend (ver
 - Decisão: manter tudo mockado; sem backend, sem persistência, sem upload real.
 - Futuro: cofre de entrega automática exige backend com criptografia e
   auditoria; atributos por subcategoria devem migrar para configuração no admin.
+
+## Sprint 18.8 — módulos adicionados
+
+- `src/components/product/ProductVariantSelector.tsx` — seletor de variação (dynamic).
+- `src/components/product/VirtualCurrencyQuoteBox.tsx` — cotação visual de moeda virtual.
+- `src/components/product/AccountInfoCard.tsx` — informações declaradas de conta.
+- `src/components/product/ProductDetailsSpecs.tsx` — resumo do anúncio.
+- `src/components/product/ProductQuestions.tsx` — perguntas públicas.
+- `src/components/cart/MiniCartModal.tsx` — confirmação pós-add ao carrinho.
+- `src/services/questionService.ts` — mock de perguntas públicas (em memória).
+- `src/utils/moderation.ts` — censura visual anti-poaching (mock).
+- CartItem passa a suportar `selectedVariantId/Title/Price` e `virtualCurrencyUnit`;
+  chave composta em `item.key`. Compatível com produtos antigos.
+- Product recebe campos opcionais (listingModel, productType, variants,
+  virtualCurrency, accountInfo, deliveryMode, promotionTier, sellerPlan, ...).

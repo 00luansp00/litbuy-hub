@@ -73,3 +73,16 @@ Regras oficiais de produto da LIT Buy como marketplace intermediador de produtos
   taxa demonstrativa.
 - **Campos especiais para Conta**: procedência, recuperação, verificações
   e garantia informada ficam anexos ao anúncio.
+
+## Sprint 18.8 — regras do lado comprador
+
+- **Perguntas públicas** aparecem no anúncio e ajudam outros compradores;
+  são distintas de mensagens privadas em /mensagens/$id.
+- **Produto dinâmico**: comprador precisa selecionar variação antes de comprar;
+  variações sem estoque/pausadas ficam bloqueadas.
+- **Serviço sob orçamento**: não permite adicionar ao carrinho direto;
+  encaminha para conversa com o vendedor.
+- **Moeda virtual**: cotação visual demonstrativa (unit price × quantidade),
+  quantidade mínima e estoque exibidos; multi-vendedor real será backend.
+- **Anti-evasão de taxas**: contato externo em qualquer canal público ou privado
+  é censurado visualmente. Negociação fora da LIT Buy remove a proteção.
