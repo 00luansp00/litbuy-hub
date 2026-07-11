@@ -155,3 +155,47 @@ reimplementadas com cuidado** antes de qualquer produção:
 Documentos de apoio: `ARCHITECTURE.md`, `PROJECT_RULES.md`,
 `ROUTE_AUDIT.md`, `QA_CHECKLIST.md`, `DATABASE_SCHEMA.md`,
 `SUPABASE_RLS_PLAN.md`, `ENTITY_RELATIONSHIP.md`.
+
+---
+
+## Polimento UX/UI (Sprint 18)
+
+Esta sprint foi exclusivamente de polimento visual, UX, acessibilidade
+básica, responsividade e consistência geral. **Nenhuma funcionalidade
+nova foi implementada, nenhum backend foi ligado, nenhuma regra de
+negócio foi alterada.**
+
+Pontos revisados:
+
+- **Headers de página** — padrão consistente entre Área do usuário,
+  Área do vendedor e Admin (título + subtítulo + badges de contexto).
+- **Cards** — bordas, sombras, espaçamento e alinhamento de CTAs
+  seguem o design system em `src/styles.css` (tokens semânticos).
+- **Botões e CTAs** — primário/secundário/destructive vêm do shadcn
+  Button; botões mockados sempre exibem toast (sonner), nunca ficam
+  mudos.
+- **Toasts** — mensagens curtas e profissionais em pt-BR. Erros
+  técnicos ficam no console; a UI informa o usuário final.
+- **EmptyStates** — reutilizam o componente `EmptyState` com ícone +
+  título + descrição curta + CTA útil.
+- **Skeletons** — `ProductSkeleton` e placeholders `animate-pulse`
+  padronizados; nada de spinners genéricos.
+- **Responsividade** — sidebars viram menu horizontal com scroll no
+  mobile; tabelas admin/vendedor usam overflow-x elegante.
+- **Tabelas mobile** — `SellerListingsTable`, tabelas admin e listas
+  financeiras rolam horizontalmente com wrappers `overflow-x-auto`.
+- **Acessibilidade básica** — botões ícone-only com `aria-label`,
+  labels associadas a inputs, foco visível via Tailwind ring, uso de
+  tokens `text-foreground` / `text-muted-foreground` para contraste
+  adequado.
+- **Microinterações** — Framer Motion apenas em entradas de seção e
+  hovers de card, nada exagerado.
+- **Copywriting** — "Modo demonstração" no lugar de "mockado",
+  "Disponível em uma próxima etapa" no lugar de "funcionalidade
+  futura", nas mensagens voltadas ao usuário final.
+- **Badges de status** — mantidos com `AdminStatusBadge`,
+  `AdminRiskBadge` e badges de produto (Ativo / Pausado / Esgotado /
+  Indisponível) usando variantes shadcn.
+
+O MVP está pronto para a etapa de preparação para
+GitHub/Cursor/desenvolvedor.
