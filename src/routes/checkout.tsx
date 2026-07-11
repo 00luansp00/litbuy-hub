@@ -146,7 +146,7 @@ function CheckoutContent() {
               <ul className="space-y-2">
                 {unavailableItems.map(({ item, reason }) => (
                   <li
-                    key={item.productId}
+                    key={item.key}
                     className="flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-background/40 p-2 text-xs"
                   >
                     <span className="truncate text-foreground">
@@ -159,7 +159,7 @@ function CheckoutContent() {
                       size="sm"
                       variant="outline"
                       onClick={() => {
-                        removeItem(item.productId);
+                        removeItem(item.key);
                         toast.success("Item removido do carrinho.");
                       }}
                     >
