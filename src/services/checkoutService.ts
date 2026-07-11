@@ -18,33 +18,42 @@ const PAYMENT_METHODS: PaymentMethod[] = [
   {
     id: "pix",
     label: "Pix",
-    description:
-      "Pagamento instantâneo via QR Code será gerado quando a integração real for ativada.",
+    description: "Pagamento instantâneo demonstrativo.",
     icon: "QrCode",
     tag: "Instantâneo",
   },
   {
+    id: "boleto",
+    label: "Boleto",
+    description: "Boleto demonstrativo com linha digitável fictícia.",
+    icon: "FileText",
+    tag: "Até 2 dias",
+  },
+  {
     id: "credit_card",
     label: "Cartão de crédito",
-    description:
-      "Pagamento em até 12x sem juros. A integração real com adquirente será feita em sprint específica.",
+    description: "Demonstração segura — não colete nem insira cartão real.",
     icon: "CreditCard",
     tag: "Até 12x",
   },
   {
     id: "lit_balance",
     label: "Saldo LIT",
-    description:
-      "Use o saldo disponível na carteira LIT quando a carteira real estiver ativa.",
+    description: "Use o saldo demonstrativo da carteira LIT.",
     icon: "Wallet",
-    tag: "Em breve",
-    disabled: true,
+    tag: "Instantâneo",
+  },
+  {
+    id: "lit_points",
+    label: "LIT Points",
+    description: "Pagamento visual com LIT Points (cotação demonstrativa).",
+    icon: "Sparkles",
+    tag: "Beta",
   },
   {
     id: "external_wallet",
-    label: "Carteira externa",
-    description:
-      "Compatível com carteiras digitais parceiras. Disponível após integração oficial.",
+    label: "Cripto (em breve)",
+    description: "Integração cripto disponível após backend real.",
     icon: "Smartphone",
     tag: "Em breve",
     disabled: true,
