@@ -39,8 +39,9 @@ function initials(name: string) {
 }
 
 export function UserMenu() {
-  const { user, logout, activeRole, hasSellerProfile, switchToBuyer, switchToSeller, isAdmin } = useAuth();
+  const { user, logout, activeRole, switchToBuyer, switchToSeller, isAdmin } = useAuth();
   const navigate = useNavigate();
+
   if (!user) return null;
 
   const isSeller = activeRole === "seller";
