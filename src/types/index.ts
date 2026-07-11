@@ -1965,3 +1965,80 @@ export interface SellerSaleDetail extends SellerSale {
   mediation?: MediationCase;
 }
 
+/* ============================================================
+ * Sprint 18.14 — Central de Notificações (visual/mockado)
+ * ============================================================ */
+
+export type NotificationRole = "buyer" | "seller" | "admin" | "all";
+
+export type NotificationPriority = "low" | "medium" | "high" | "critical";
+
+export type NotificationStatus = "unread" | "read" | "archived";
+
+export type NotificationType =
+  | "order"
+  | "payment"
+  | "delivery"
+  | "message"
+  | "mediation"
+  | "sale"
+  | "listing"
+  | "wallet"
+  | "kyc"
+  | "report"
+  | "security"
+  | "admin"
+  | "system"
+  | "reward";
+
+export interface NotificationTarget {
+  type:
+    | "order"
+    | "sale"
+    | "conversation"
+    | "listing"
+    | "user"
+    | "admin"
+    | "route";
+  id?: string;
+}
+
+export interface NotificationAction {
+  label: string;
+  href?: string;
+  toast?: string;
+}
+
+export interface Notification {
+  id: string;
+  title: string;
+  description: string;
+  type: NotificationType;
+  role: NotificationRole;
+  priority: NotificationPriority;
+  status: NotificationStatus;
+  /** ISO date. */
+  createdAt: string;
+  href?: string;
+  target?: NotificationTarget;
+  /** Nome de ícone do lucide-react (opcional). */
+  icon?: string;
+  actionLabel?: string;
+}
+
+export interface NotificationFilter {
+  id: string;
+  label: string;
+  types?: NotificationType[];
+  roles?: NotificationRole[];
+  onlyUnread?: boolean;
+}
+
+export interface NotificationStats {
+  total: number;
+  unread: number;
+  byType: Partial<Record<NotificationType, number>>;
+  byPriority: Partial<Record<NotificationPriority, number>>;
+}
+
+
