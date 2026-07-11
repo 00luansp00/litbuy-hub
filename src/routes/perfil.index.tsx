@@ -74,6 +74,7 @@ function PerfilPage() {
           <aside className="space-y-6">
             <VerificationStatusCard status="not_started" compact />
             <WalletSummaryCard wallet={wallet} />
+            <AffiliateProfileCard status="active" clicks={1284} commissionAvailable={312.7} />
             <AccountNotifications notifications={notifications} />
             <QuickActionsCard />
           </aside>
