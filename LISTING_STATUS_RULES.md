@@ -44,3 +44,13 @@ Qualquer outra combinação → botão "Comprar"/"Adicionar ao carrinho" desabil
 
 - `Product.status` no frontend usa hoje: `active`, `paused`, `draft`, `sold_out`. Faltam: `pending_review`, `rejected`, `removed` — que serão adicionados quando houver moderação real.
 - `Product.stock` já é o campo canônico de estoque.
+
+## Sprint 18.7 — Ciclo do anúncio (mockado)
+
+- `draft` — rascunho salvo no wizard (não persistido no MVP).
+- `in_review` — enviado para análise após "Enviar para análise".
+- `active` — aprovado e visível no marketplace.
+- `rejected` — recusado pela moderação.
+- `paused` — pausado pelo vendedor.
+- `sold` / `out_of_stock` — sem estoque disponível.
+- `removed` — retirado pelo vendedor ou admin.

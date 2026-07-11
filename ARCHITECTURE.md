@@ -163,3 +163,22 @@ são **proteção visual**. Segurança real vai para o backend (ver
 - Navbar (desktop e mobile) submete via `<form>` para `/buscar?q=termo`.
 - Substituição futura: `searchService` deve ser reescrito para consumir API/backend (Postgres FTS, Algolia, Meilisearch) mantendo a mesma assinatura de contrato.
 - Páginas NÃO devem filtrar `@/data/*` diretamente para busca — sempre passar por `searchService`.
+
+## Sprint 18.7 — Listing Wizard Avançado
+
+- Rota: `/vendedor/anuncios/novo` (mantida, apenas evoluída).
+- Componentes: `src/components/seller-dashboard/listing-wizard/*`
+  - `DynamicItemsEditor`, `ServiceFields`, `AccountFields`, `AttributesFields`,
+    `SecureVaultMock`, `PromotionCards`, `LitMaxPlanCard`,
+    `AutomaticMessageField`, `NotificationsPrefs`.
+- Service: `src/services/listingDraftService.ts` (mocks para modelos, tipos,
+  categorias/subcategorias, atributos, planos de destaque e planos de
+  vendedor + `simulateSubmitListingDraft`).
+- Tipos novos em `src/types/index.ts`: `ListingModel`, `ListingProductType`,
+  `ListingVariant`, `ListingDeliveryMode`, `ListingPromotionTier`,
+  `SellerPlanType`, `ListingAccountInfo`, `ListingAttributeConfig`,
+  `ListingAttributeValue`, `ListingNotificationPreferences`,
+  `PromotionTierInfo`, `SellerPlanInfo`, `Subcategory`, `ListingDraft`.
+- Decisão: manter tudo mockado; sem backend, sem persistência, sem upload real.
+- Futuro: cofre de entrega automática exige backend com criptografia e
+  auditoria; atributos por subcategoria devem migrar para configuração no admin.

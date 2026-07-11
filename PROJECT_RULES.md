@@ -156,3 +156,15 @@ Documentos relacionados: `ORDER_LIFECYCLE.md`, `DIGITAL_DELIVERY_FLOW.md`, `DISP
 - Envio de mensagem no MVP é apenas visual (`simulateSendMessage`) e vive somente em estado do componente; nada é persistido em LocalStorage, Cookies ou backend.
 - Integrações de "Enviar mensagem" (loja, produto, pedido) devem apontar para `/mensagens` ou `/mensagens/$id` mockado. Nunca simular envio real de fora do fluxo `/mensagens`.
 - Ao substituir por backend, preservar as assinaturas de `messageService`: `getConversations`, `getConversationById`, `getConversationMessages`, `getConversationContext`, `simulateSendMessage` (que passa a ser `sendMessage` real).
+
+## Sprint 18.7 — Anúncio Avançado (mockado)
+
+- Anúncios podem ser **Normal**, **Dinâmico** ou **Serviço**.
+- Entrega pode ser **Manual** ou **Automática**; entrega automática real exige backend seguro.
+- **Cofre Seguro** de entrega é apenas visual; um cofre real não pode viver no frontend.
+- Credenciais reais (senhas, códigos, tokens) nunca devem ser armazenadas em client-side.
+- **LIT-MAX** é o plano premium próprio da LIT Buy; nenhuma referência a marcas externas.
+- Planos **Prata / Ouro / Diamante** são mockados nesta fase; sem cobrança real.
+- Campos de conta (procedência, recuperação, verificação) exigirão validação e política de segurança futura.
+- Atributos dinâmicos por jogo/subcategoria devem ser configuráveis futuramente pelo admin/backend.
+- Nenhum dado do wizard é persistido; nem LocalStorage, nem Cookies.

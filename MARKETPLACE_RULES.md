@@ -61,3 +61,15 @@ Regras oficiais de produto da LIT Buy como marketplace intermediador de produtos
 
 - Não há backend, persistência, autenticação real, permissão real, pagamento real, entrega real, disputa real, carteira real, avaliação real ou chat real.
 - Todas as ações administrativas e financeiras exibem apenas `toast` (sonner).
+
+## Sprint 18.7 — Regras de anúncio avançado
+
+- **Modelo do anúncio**: Normal (um produto), Dinâmico (variações) ou Serviço.
+- **Entrega automática**: exige cofre seguro com estoque em linhas — real
+  apenas com backend.
+- **LIT-MAX**: plano premium do vendedor; libera mensagem automática ao
+  comprador após pagamento.
+- **Planos de destaque**: Prata / Ouro / Diamante alteram visibilidade e
+  taxa demonstrativa.
+- **Campos especiais para Conta**: procedência, recuperação, verificações
+  e garantia informada ficam anexos ao anúncio.
