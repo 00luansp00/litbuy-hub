@@ -566,7 +566,12 @@ export type CheckoutAnalyticsEventName =
   | "report_submitted_mocked"
   | "report_reason_selected_mocked"
   | "admin_report_review_opened_mocked"
-  | "admin_report_action_mocked";
+  | "admin_report_action_mocked"
+  | "affiliate_page_viewed_mocked"
+  | "affiliate_link_copied_mocked"
+  | "affiliate_material_copied_mocked"
+  | "affiliate_payout_requested_mocked"
+  | "affiliate_campaign_clicked_mocked";
 
 // ==================================================
 // Denúncias / Reports (Sprint 18.15) — 100% mockado.
