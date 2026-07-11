@@ -13,7 +13,7 @@ import { accountService } from "@/services/accountService";
 import { productService } from "@/services/productService";
 import type { Product } from "@/types";
 
-export const Route = createFileRoute("/perfil")({
+export const Route = createFileRoute("/perfil/")({
   loader: async () => {
     const [summary, orders, favorites, messages, wallet, notifications, allProducts] =
       await Promise.all([
