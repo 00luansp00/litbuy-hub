@@ -108,6 +108,26 @@ function VendedorDashboard() {
         <SellerQuickActions />
         <SellerReviewsCard reviews={reviews} />
       </div>
+
+      <div className="rounded-2xl border border-border bg-card p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <Users className="h-4 w-4 text-primary" /> Afiliados LIT Buy
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Indique compradores e vendedores para a LIT Buy e acumule comissão
+              demonstrativa. Comissão real exigirá backend.
+            </p>
+          </div>
+          <Link
+            to="/afiliados"
+            className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10"
+          >
+            Abrir programa <ArrowRight className="h-3 w-3" />
+          </Link>
+        </div>
+      </div>
     </SellerDashboardLayout>
   );
 }
