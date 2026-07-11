@@ -1,4 +1,7 @@
+import { products } from "@/data/products";
+import { getUnavailabilityReason } from "@/services/productService";
 import type { CartCoupon, CartItem, CartSummary, Product } from "@/types";
+
 
 /**
  * cartService — camada mockada de regras do carrinho.
@@ -74,8 +77,31 @@ function validateCoupon(code: string): {
   return { coupon, message: `Cupom ${coupon.code} aplicado — ${coupon.label}.` };
 }
 
+export interface CartUnavailableEntry {
+  item: CartItem;
+  reason: NonNullable<ReturnType<typeof getUnavailabilityReason>>;
+}
+
+/**
+ * Retorna itens do carrinho cujo produto (no catálogo mock) ficou
+ * indisponível. Substituível futuramente por endpoint que valida o
+ * carrinho no backend antes do checkout.
+ */
+function findUnavailableItems(items: CartItem[]): CartUnavailableEntry[] {
+  const out: CartUnavailableEntry[] = [];
+  for (const item of items) {
+    const product = products.find((p) => p.id === item.productId);
+    if (!product) continue;
+    const reason = getUnavailabilityReason(product);
+    if (reason) out.push({ item, reason });
+  }
+  return out;
+}
+
 export const cartService = {
   buildCartItemFromProduct,
   calculateCartSummary,
   validateCoupon,
+  findUnavailableItems,
 };
+

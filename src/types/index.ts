@@ -107,6 +107,9 @@ export interface Review {
 }
 
 
+/** Estado de disponibilidade do anúncio (mock). */
+export type ProductStatus = "active" | "paused";
+
 export interface Product {
   id: string;
   slug: string;
@@ -123,7 +126,10 @@ export interface Product {
   imageUrl: string;
   badge?: "hot" | "new" | "promo" | "top";
   seller?: Seller;
+  /** Estoque disponível (mock). undefined = tratado como disponível. */
   stock?: number;
+  /** Status do anúncio (mock). undefined = "active". */
+  status?: ProductStatus;
   instantDelivery?: boolean;
   verifiedSeller?: boolean;
   /** 0-100 — indicador de confiança agregado do anúncio. */
@@ -131,6 +137,7 @@ export interface Product {
   /** Marca explicitamente o anúncio como "Mais vendido". */
   bestSeller?: boolean;
 }
+
 
 // ==================================================
 // Área do Usuário (Account) — tipos consumidos pelo

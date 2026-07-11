@@ -15,6 +15,7 @@ export const products: Product[] = [
     imageUrl: img("valorant-imortal"), badge: "hot",
     instantDelivery: true, verifiedSeller: true, trustScore: 97,
     seller: sellers.nova, bestSeller: true,
+    stock: 12, status: "active",
   },
   {
     id: "p2", slug: "gift-card-steam-100",
@@ -24,6 +25,7 @@ export const products: Product[] = [
     imageUrl: img("steam-100"), badge: "top",
     instantDelivery: true, verifiedSeller: true, trustScore: 99,
     seller: sellers.pixel,
+    stock: 200, status: "active",
   },
   {
     id: "p3", slug: "moedas-fifa-500k",
@@ -34,6 +36,7 @@ export const products: Product[] = [
     imageUrl: img("fifa-500k"), badge: "promo",
     instantDelivery: true, verifiedSeller: true, trustScore: 92,
     seller: sellers.arena,
+    stock: 45, status: "active",
   },
   {
     id: "p4", slug: "skin-ak47-redline",
@@ -43,6 +46,7 @@ export const products: Product[] = [
     imageUrl: img("ak-redline"), badge: "new",
     verifiedSeller: true, trustScore: 88,
     seller: sellers.drop,
+    stock: 8, status: "active",
   },
   {
     id: "p5", slug: "conta-lol-diamante",
@@ -53,6 +57,7 @@ export const products: Product[] = [
     imageUrl: img("lol-diamante"),
     verifiedSeller: true, trustScore: 84,
     seller: sellers.loot,
+    stock: 3, status: "active",
   },
   {
     id: "p6", slug: "gift-card-google-play-50",
@@ -62,6 +67,7 @@ export const products: Product[] = [
     imageUrl: img("gplay-50"),
     instantDelivery: true, verifiedSeller: true, trustScore: 98,
     seller: sellers.pixel, bestSeller: true,
+    stock: 500, status: "active",
   },
   {
     id: "p7", slug: "servico-boost-rank",
@@ -71,6 +77,7 @@ export const products: Product[] = [
     imageUrl: img("boost-rank"), badge: "hot",
     verifiedSeller: true, trustScore: 91,
     seller: sellers.turbo,
+    stock: 20, status: "active",
   },
   {
     id: "p8", slug: "conta-fortnite-og",
@@ -81,6 +88,8 @@ export const products: Product[] = [
     imageUrl: img("fortnite-og"), badge: "top",
     verifiedSeller: true, trustScore: 95,
     seller: sellers.omega,
+    // Produto ESGOTADO (mock) — usado para validar UI de indisponibilidade.
+    stock: 0, status: "active",
   },
   {
     id: "p9", slug: "jogo-cyberpunk-2077",
@@ -91,6 +100,7 @@ export const products: Product[] = [
     imageUrl: img("cyberpunk"), badge: "promo",
     instantDelivery: true, trustScore: 82,
     seller: sellers.nova,
+    stock: 60, status: "active",
   },
   {
     id: "p10", slug: "assinatura-xbox-gp",
@@ -100,6 +110,7 @@ export const products: Product[] = [
     imageUrl: img("xbox-gp"),
     instantDelivery: true, verifiedSeller: true, trustScore: 96,
     seller: sellers.pixel, bestSeller: true,
+    stock: 80, status: "active",
   },
   {
     id: "p11", slug: "item-mm2-godly",
@@ -109,6 +120,8 @@ export const products: Product[] = [
     imageUrl: img("mm2-godly"), badge: "new",
     verifiedSeller: true, trustScore: 86,
     seller: sellers.loot,
+    // Produto PAUSADO (mock) — usado para validar UI de indisponibilidade.
+    stock: 5, status: "paused",
   },
   {
     id: "p12", slug: "moedas-gta-online",
@@ -119,6 +132,7 @@ export const products: Product[] = [
     imageUrl: img("gta-online"),
     instantDelivery: true, trustScore: 79,
     seller: sellers.turbo,
+    stock: 25, status: "active",
   },
   {
     id: "p13", slug: "diamantes-free-fire-2180",
@@ -129,6 +143,7 @@ export const products: Product[] = [
     imageUrl: img("ff-diamantes"),
     instantDelivery: true, verifiedSeller: true, trustScore: 94,
     seller: sellers.arena, bestSeller: true,
+    stock: 150, status: "active",
   },
   {
     id: "p14", slug: "conta-free-fire-elite",
@@ -138,6 +153,7 @@ export const products: Product[] = [
     imageUrl: img("ff-conta"), badge: "hot",
     verifiedSeller: true, trustScore: 87,
     seller: sellers.neon,
+    stock: 6, status: "active",
   },
   {
     id: "p15", slug: "psn-plus-essential-12m",
@@ -148,6 +164,7 @@ export const products: Product[] = [
     imageUrl: img("psn-plus"),
     instantDelivery: true, verifiedSeller: true, trustScore: 97,
     seller: sellers.pixel,
+    stock: 40, status: "active",
   },
   {
     id: "p16", slug: "nintendo-eshop-100",
@@ -157,6 +174,7 @@ export const products: Product[] = [
     imageUrl: img("nintendo-100"),
     instantDelivery: true, verifiedSeller: true, trustScore: 96,
     seller: sellers.omega,
+    stock: 90, status: "active",
   },
   {
     id: "p17", slug: "robux-2200",
@@ -167,6 +185,7 @@ export const products: Product[] = [
     imageUrl: img("robux"),
     instantDelivery: true, verifiedSeller: true, trustScore: 95,
     seller: sellers.loot, bestSeller: true,
+    stock: 220, status: "active",
   },
   {
     id: "p18", slug: "skin-awp-dragon-lore",
@@ -176,6 +195,7 @@ export const products: Product[] = [
     imageUrl: img("awp-dragonlore"), badge: "top",
     verifiedSeller: true, trustScore: 99,
     seller: sellers.omega,
+    stock: 1, status: "active",
   },
   {
     id: "p19", slug: "skin-butterfly-fade",
@@ -186,6 +206,7 @@ export const products: Product[] = [
     imageUrl: img("butterfly-fade"),
     verifiedSeller: true, trustScore: 93,
     seller: sellers.drop,
+    stock: 2, status: "active",
   },
   {
     id: "p20", slug: "conta-lol-mestre",
@@ -195,6 +216,7 @@ export const products: Product[] = [
     imageUrl: img("lol-mestre"), badge: "top",
     verifiedSeller: true, trustScore: 92,
     seller: sellers.nova,
+    stock: 4, status: "active",
   },
   {
     id: "p21", slug: "vp-valorant-11000",
@@ -205,6 +227,7 @@ export const products: Product[] = [
     imageUrl: img("vp-valorant"),
     instantDelivery: true, verifiedSeller: true, trustScore: 96,
     seller: sellers.arena,
+    stock: 70, status: "active",
   },
   {
     id: "p22", slug: "gift-card-xbox-200",
@@ -214,6 +237,7 @@ export const products: Product[] = [
     imageUrl: img("xbox-200"),
     instantDelivery: true, verifiedSeller: true, trustScore: 98,
     seller: sellers.pixel, bestSeller: true,
+    stock: 120, status: "active",
   },
   {
     id: "p23", slug: "servico-treinamento-cs2",
@@ -223,6 +247,7 @@ export const products: Product[] = [
     imageUrl: img("coach-cs2"), badge: "new",
     verifiedSeller: true, trustScore: 90,
     seller: sellers.turbo,
+    stock: 15, status: "active",
   },
   {
     id: "p24", slug: "jogo-elden-ring",
@@ -233,6 +258,7 @@ export const products: Product[] = [
     imageUrl: img("elden-ring"), badge: "promo",
     instantDelivery: true, verifiedSeller: true, trustScore: 96,
     seller: sellers.nova,
+    stock: 55, status: "active",
   },
   {
     id: "p25", slug: "conta-steam-100-jogos",
@@ -242,6 +268,7 @@ export const products: Product[] = [
     imageUrl: img("steam-100-jogos"), badge: "hot",
     verifiedSeller: true, trustScore: 89,
     seller: sellers.omega,
+    stock: 3, status: "active",
   },
   {
     id: "p26", slug: "gift-card-psn-200",
@@ -251,6 +278,7 @@ export const products: Product[] = [
     imageUrl: img("psn-200"),
     instantDelivery: true, verifiedSeller: true, trustScore: 98,
     seller: sellers.pixel,
+    stock: 100, status: "active",
   },
   {
     id: "p27", slug: "wild-rift-conta",
@@ -261,6 +289,8 @@ export const products: Product[] = [
     imageUrl: img("wild-rift"),
     verifiedSeller: false, trustScore: 78,
     seller: sellers.neon,
+    // Segundo produto PAUSADO (mock) para validar bloqueio no carrinho.
+    stock: 10, status: "paused",
   },
   {
     id: "p28", slug: "servico-desbloqueio-battle-pass",
@@ -270,6 +300,7 @@ export const products: Product[] = [
     imageUrl: img("bp-fortnite"), badge: "hot",
     instantDelivery: true, verifiedSeller: true, trustScore: 91,
     seller: sellers.turbo,
+    stock: 30, status: "active",
   },
   {
     id: "p29", slug: "skin-glock-fade",
@@ -279,6 +310,7 @@ export const products: Product[] = [
     imageUrl: img("glock-fade"), badge: "new",
     verifiedSeller: true, trustScore: 94,
     seller: sellers.drop,
+    stock: 2, status: "active",
   },
   {
     id: "p30", slug: "conta-cs2-prime-mg",
@@ -289,6 +321,7 @@ export const products: Product[] = [
     imageUrl: img("cs2-mg"),
     instantDelivery: true, verifiedSeller: true, trustScore: 90,
     seller: sellers.loot,
+    stock: 7, status: "active",
   },
   {
     id: "p31", slug: "nintendo-switch-online-12m",
@@ -298,6 +331,7 @@ export const products: Product[] = [
     imageUrl: img("nso-12m"),
     instantDelivery: true, verifiedSeller: true, trustScore: 97,
     seller: sellers.pixel,
+    stock: 60, status: "active",
   },
   {
     id: "p32", slug: "moedas-fifa-1m",
@@ -308,5 +342,6 @@ export const products: Product[] = [
     imageUrl: img("fifa-1m"), badge: "promo",
     instantDelivery: true, verifiedSeller: true, trustScore: 92,
     seller: sellers.arena,
+    stock: 35, status: "active",
   },
 ];

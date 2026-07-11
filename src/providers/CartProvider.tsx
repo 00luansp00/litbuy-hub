@@ -1,5 +1,7 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { toast } from "sonner";
 import { cartService } from "@/services/cartService";
+import { getUnavailabilityReason } from "@/services/productService";
 import type { CartCoupon, CartItem, CartSummary, Product } from "@/types";
 
 interface CartContextValue {
@@ -10,7 +12,7 @@ interface CartContextValue {
   platformFee: number;
   total: number;
   coupon: CartCoupon | null;
-  addItem: (product: Product, quantity?: number) => void;
+  addItem: (product: Product, quantity?: number) => boolean;
   removeItem: (productId: string) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
@@ -26,18 +28,29 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [coupon, setCoupon] = useState<CartCoupon | null>(null);
 
   const addItem = useCallback((product: Product, quantity = 1) => {
+    const reason = getUnavailabilityReason(product);
+    if (reason) {
+      toast.error(reason.toast);
+      return false;
+    }
     setItems((prev) => {
       const existing = prev.find((i) => i.productId === product.id);
+      const maxStock = product.stock ?? 99;
       if (existing) {
         return prev.map((i) =>
           i.productId === product.id
-            ? { ...i, quantity: Math.min(99, i.quantity + quantity) }
+            ? {
+                ...i,
+                quantity: Math.min(99, Math.min(maxStock, i.quantity + quantity)),
+              }
             : i,
         );
       }
       return [...prev, cartService.buildCartItemFromProduct(product, quantity)];
     });
+    return true;
   }, []);
+
 
   const removeItem = useCallback((productId: string) => {
     setItems((prev) => prev.filter((i) => i.productId !== productId));

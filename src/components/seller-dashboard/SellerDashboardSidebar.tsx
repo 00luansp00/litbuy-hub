@@ -1,5 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
+  ArrowLeftRight,
   BarChart3,
   ExternalLink,
   LayoutDashboard,
@@ -18,6 +19,7 @@ interface SellerNavItem {
   to: string;
   params?: Record<string, string>;
   external?: boolean;
+  cta?: boolean;
 }
 
 interface SellerDashboardSidebarProps {
@@ -53,6 +55,13 @@ export function SellerDashboardSidebar({
     });
   }
 
+  items.push({
+    label: "Voltar para minha conta",
+    icon: ArrowLeftRight,
+    to: "/perfil",
+    cta: true,
+  });
+
   return (
     <nav
       aria-label="Navegação do vendedor"
@@ -67,6 +76,7 @@ export function SellerDashboardSidebar({
         const Icon = item.icon;
         const active =
           !item.external &&
+          !item.cta &&
           (item.to === "/vendedor"
             ? currentPath === "/vendedor"
             : currentPath.startsWith(item.to));
@@ -80,7 +90,10 @@ export function SellerDashboardSidebar({
             ? isHorizontal
               ? "border-primary/50 bg-primary/10 text-primary"
               : "bg-primary/10 text-primary"
-            : "text-muted-foreground hover:bg-surface hover:text-foreground",
+            : item.cta
+              ? "text-primary hover:bg-primary/10"
+              : "text-muted-foreground hover:bg-surface hover:text-foreground",
+          item.cta && !isHorizontal && "mt-2 border border-dashed border-primary/40",
         );
 
         return (
@@ -95,7 +108,11 @@ export function SellerDashboardSidebar({
             <Icon
               className={cn(
                 "h-4 w-4 shrink-0",
-                active ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
+                active
+                  ? "text-primary"
+                  : item.cta
+                    ? "text-primary"
+                    : "text-muted-foreground group-hover:text-foreground",
               )}
             />
             <span className="whitespace-nowrap">{item.label}</span>

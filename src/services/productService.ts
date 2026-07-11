@@ -32,6 +32,44 @@ export const productService = {
   },
 };
 
+/**
+ * Regra centralizada de disponibilidade de produto (mock).
+ * Produto disponível se `status !== "paused"` e `stock > 0`.
+ * Campos ausentes são tratados como disponíveis para retrocompatibilidade.
+ */
+export function isProductAvailable(product: Pick<Product, "status" | "stock">): boolean {
+  const status = product.status ?? "active";
+  if (status === "paused") return false;
+  if (product.stock !== undefined && product.stock <= 0) return false;
+  return true;
+}
+
+/**
+ * Motivo textual/tone de indisponibilidade — usado por UI para exibir
+ * badge, toast e estados de botão. Retorna null quando disponível.
+ */
+export function getUnavailabilityReason(
+  product: Pick<Product, "status" | "stock">,
+): { kind: "sold_out" | "paused"; label: string; toast: string } | null {
+  const status = product.status ?? "active";
+  if (status === "paused") {
+    return {
+      kind: "paused",
+      label: "Indisponível",
+      toast: "Produto indisponível no momento.",
+    };
+  }
+  if (product.stock !== undefined && product.stock <= 0) {
+    return {
+      kind: "sold_out",
+      label: "Esgotado",
+      toast: "Produto esgotado no momento.",
+    };
+  }
+  return null;
+}
+
+
 export const categoryService = {
   list: (): Promise<Category[]> => delay(categories),
   bySlug: (slug: string): Promise<Category | undefined> =>

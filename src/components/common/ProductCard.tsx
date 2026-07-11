@@ -7,6 +7,8 @@ import { ProductBadges } from "./ProductBadges";
 import { SellerInfo } from "./SellerInfo";
 import { formatBRL, formatCompact } from "@/lib/format";
 import { useCart } from "@/providers/CartProvider";
+import { getUnavailabilityReason } from "@/services/productService";
+import { cn } from "@/lib/utils";
 import type { Product } from "@/types";
 
 
@@ -18,9 +20,16 @@ interface ProductCardProps {
 
 export function ProductCard({ product }: ProductCardProps) {
   const { addItem } = useCart();
+  const unavailability = getUnavailabilityReason(product);
+  const isAvailable = !unavailability;
+
   const handleAdd = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (unavailability) {
+      toast.error(unavailability.toast);
+      return;
+    }
     addItem(product);
     toast.success("Adicionado ao carrinho", { description: product.title });
   };
@@ -47,16 +56,31 @@ export function ProductCard({ product }: ProductCardProps) {
           src={product.imageUrl}
           alt={product.title}
           loading="lazy"
-          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+          className={cn(
+            "h-full w-full object-cover transition-transform duration-500 group-hover:scale-110",
+            !isAvailable && "grayscale-[35%] opacity-80",
+          )}
         />
         <ProductBadges
           product={product}
           variant="overlay"
           className="absolute left-3 top-3 max-w-[calc(100%-4rem)]"
         />
-        {product.discountPercent && (
+        {product.discountPercent && isAvailable && (
           <span className="absolute right-3 top-3 rounded-md bg-success px-2 py-0.5 text-xs font-semibold text-success-foreground shadow-card">
             -{product.discountPercent}%
+          </span>
+        )}
+        {unavailability && (
+          <span
+            className={cn(
+              "absolute right-3 top-3 rounded-md px-2 py-0.5 text-xs font-semibold shadow-card",
+              unavailability.kind === "sold_out"
+                ? "bg-destructive text-destructive-foreground"
+                : "bg-warning text-warning-foreground",
+            )}
+          >
+            {unavailability.label}
           </span>
         )}
         <button
@@ -116,9 +140,18 @@ export function ProductCard({ product }: ProductCardProps) {
           <Button
             size="icon"
             variant="default"
-            aria-label="Adicionar ao carrinho"
+            aria-label={
+              isAvailable ? "Adicionar ao carrinho" : unavailability!.label
+            }
             onClick={handleAdd}
-            className="transition-transform hover:scale-110"
+            disabled={!isAvailable}
+            aria-disabled={!isAvailable}
+            className={cn(
+              "transition-transform",
+              isAvailable
+                ? "hover:scale-110"
+                : "cursor-not-allowed opacity-60",
+            )}
           >
             <ShoppingCart className="h-4 w-4" />
           </Button>
