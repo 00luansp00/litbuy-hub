@@ -3,7 +3,9 @@ import { AuthGate } from "@/components/auth/AuthGate";
 import { AccountLayout } from "@/components/account/AccountLayout";
 import { AccountHeader } from "@/components/account/AccountHeader";
 import { WalletSummaryCard } from "@/components/account/WalletSummaryCard";
+import { LitPointsSummaryCard } from "@/components/account/LitPointsSummaryCard";
 import { accountService } from "@/services/accountService";
+
 
 export const Route = createFileRoute("/carteira")({
   loader: async () => {
