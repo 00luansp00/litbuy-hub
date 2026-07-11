@@ -82,7 +82,12 @@ function SellerPage() {
             </motion.div>
           )}
 
+          <div className="flex flex-wrap items-center gap-2">
+            <SellerLevelBadge sellerId={seller.id} />
+          </div>
+
           <SellerAbout seller={seller} />
+
 
           {seller.badges && seller.badges.length > 0 && (
             <SellerBadges badges={seller.badges} />
