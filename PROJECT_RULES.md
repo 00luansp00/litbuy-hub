@@ -93,3 +93,15 @@ Toda funcionalidade sensível (pagamentos, disputas, movimentação de carteira,
 - Permissões reais (RBAC), moderação, suspensão de contas, resolução de disputas e movimentações financeiras devem ser implementadas no backend.
 - Nenhum dado exibido no painel deve ser persistido, exportado ou transmitido para serviços externos enquanto o backend não existir.
 - Páginas em `/admin/*` devem consumir apenas `adminService`, nunca mocks diretamente.
+
+## Regras de conta (Hotfix 18.1)
+
+- Toda conta comum da LIT Buy é **compradora e vendedora** por padrão.
+- Não existe cadastro/ativação separada de vendedor no MVP.
+- `activeRole` é apenas contexto visual (`"buyer" | "seller"`) — nunca permissão.
+- `/vendedor` e todas as suas subrotas exigem **apenas login** (`AuthGate`).
+- `/vendedor/anuncios/novo` abre para qualquer usuário logado.
+- `hasSellerProfile` é campo legado (sempre `true` no mock) e **não deve** ser usado para bloquear acesso.
+- `/admin` exige login **e** `isAdmin === true` (`AdminGate`).
+- No mock, `isAdmin` é ativado apenas para o email demo `admin@litbuy.com`.
+- Segurança real fica para o backend (RLS + `has_role`).

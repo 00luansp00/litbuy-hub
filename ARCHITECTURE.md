@@ -130,3 +130,23 @@ O Painel Administrativo em `/admin` é totalmente **visual e mockado**.
 - O usuário mockado atual tem `isAdmin: true` apenas para demonstração do MVP.
 
 Permissões reais (RBAC, moderação, suspensão, disputas, financeiro) exigem backend e serão implementadas em sprints futuras.
+
+## Modelo de conta (MVP mockado)
+
+O usuário mockado (`AuthUser` em `src/services/authMock.ts`) tem:
+
+- `id`, `name`, `email`, `avatarUrl?`
+- `activeRole: "buyer" | "seller"` — contexto visual da navegação
+- `sellerSlug` / `sellerName` — loja pública demo (todo usuário tem)
+- `hasSellerProfile` — legado, sempre `true`, **não** usado como gate
+- `isAdmin` — `true` apenas quando o email é `admin@litbuy.com`
+
+`AuthProvider` expõe `switchToBuyer` / `switchToSeller` / `toggleRole`
+que apenas alteram `activeRole` em memória. Não há verificação de perfil,
+não há persistência (`localStorage`/cookie), não há permissão real.
+
+`AuthGate` protege rotas privadas comuns (perfil, pedidos, favoritos,
+mensagens, carteira, checkout **e toda a área do vendedor**) exigindo
+apenas login. `AdminGate` adicionalmente exige `isAdmin` — mas ambos
+são **proteção visual**. Segurança real vai para o backend (ver
+`SECURITY_NOTES.md` e `SUPABASE_RLS_PLAN.md`).

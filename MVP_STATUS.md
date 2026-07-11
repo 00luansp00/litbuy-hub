@@ -199,3 +199,18 @@ Pontos revisados:
 
 O MVP está pronto para a etapa de preparação para
 GitHub/Cursor/desenvolvedor.
+
+---
+
+## Regras de conta (Hotfix 18.1)
+
+- Toda conta comum da LIT Buy é comprador **e** vendedor por padrão.
+  Não há onboarding obrigatório de vendedor no MVP.
+- `activeRole` alterna apenas o contexto visual (buyer/seller); não é
+  permissão real e não bloqueia nada.
+- `/vendedor` e `/vendedor/anuncios/novo` abrem para qualquer usuário
+  logado — `AuthGate` exige apenas login.
+- `/admin` continua protegido por `AdminGate` (login + `isAdmin`).
+- No mock, `isAdmin: true` só é atribuído ao login demo
+  `admin@litbuy.com`. Qualquer outro email loga como usuário comum.
+- Tudo permanece em memória, sem `localStorage` e sem cookies.
