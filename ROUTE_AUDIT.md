@@ -109,3 +109,15 @@ construção.
 - Testar fluxo de compra: home → produto → carrinho → checkout → sucesso.
 - Testar produto indisponível: adicionar ao carrinho deve bloquear.
 - Testar checkout com item indisponível: finalização bloqueada.
+
+## Sprint 18.6 — auditoria pós-mensagens
+
+- `/buscar` — pública, sem `AuthGate`, usa `searchService`.
+- `/pedidos` — protegida por `AuthGate`, lista via `orderService`.
+- `/pedidos/$id` — protegida por `AuthGate`, `notFoundComponent`, timeline + entrega + disputa + avaliação.
+- `/mensagens` — protegida por `AuthGate`, lista de conversas via `messageService`.
+- `/mensagens/$id` — protegida por `AuthGate`, `notFoundComponent`, contexto de produto/pedido/suporte + composer mockado.
+- `/vendedor/*` — protegida por `AuthGate`, todos usuários logados podem acessar.
+- `/admin/*` — protegida por `AdminGate` (checa `isAdmin` via `admin@litbuy.com`).
+- Todas as rotas dinâmicas usam `Link` com `params={{ ... }}` — nenhum `href` interpolado.
+- Nenhuma rota consome `@/data/*` diretamente — sempre via services.
