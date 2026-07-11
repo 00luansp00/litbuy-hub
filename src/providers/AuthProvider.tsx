@@ -71,38 +71,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const switchToSeller = useCallback(() => {
-    let needsOnboarding = false;
-    setUser((prev) => {
-      if (!prev) return prev;
-      if (!prev.hasSellerProfile) {
-        needsOnboarding = true;
-        return prev;
-      }
-      return { ...prev, activeRole: "seller" };
-    });
-    return { ok: !needsOnboarding, needsOnboarding };
+    // Toda conta comum é compradora e vendedora por padrão.
+    // Alternar para "seller" é apenas contexto visual, sem bloqueio.
+    setUser((prev) => (prev ? { ...prev, activeRole: "seller" } : prev));
+    return { ok: true, needsOnboarding: false };
   }, []);
 
   const toggleRole = useCallback(() => {
-    let needsOnboarding = false;
     let role: UserRole = "buyer";
     setUser((prev) => {
       if (!prev) return prev;
-      const current = prev.activeRole ?? "buyer";
-      if (current === "buyer") {
-        if (!prev.hasSellerProfile) {
-          needsOnboarding = true;
-          role = "buyer";
-          return prev;
-        }
-        role = "seller";
-        return { ...prev, activeRole: "seller" };
-      }
-      role = "buyer";
-      return { ...prev, activeRole: "buyer" };
+      const next: UserRole = (prev.activeRole ?? "buyer") === "buyer" ? "seller" : "buyer";
+      role = next;
+      return { ...prev, activeRole: next };
     });
-    return { ok: !needsOnboarding, needsOnboarding, role };
+    return { ok: true, needsOnboarding: false, role };
   }, []);
+
 
   const activeRole: UserRole = user?.activeRole ?? "buyer";
   const hasSellerProfile = !!user?.hasSellerProfile;
