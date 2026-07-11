@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   ShoppingBag,
   Store,
+  Users,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
