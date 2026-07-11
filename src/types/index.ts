@@ -402,7 +402,13 @@ export interface CartSummary {
 // Fluxo 100% mockado; nenhum pagamento/pedido real.
 // ==================================================
 
-export type PaymentMethodId = "pix" | "credit_card" | "lit_balance" | "external_wallet";
+export type PaymentMethodId =
+  | "pix"
+  | "boleto"
+  | "credit_card"
+  | "lit_balance"
+  | "lit_points"
+  | "external_wallet";
 
 export interface PaymentMethod {
   id: PaymentMethodId;
@@ -422,10 +428,15 @@ export interface BuyerProfile {
   verified: boolean;
   status: string;
   memberSince?: string;
+  /** Documento fiscal fictício mascarado — nunca real. */
+  maskedTaxId?: string;
 }
 
 export interface CheckoutSummary extends CartSummary {
   paymentMethodId?: PaymentMethodId;
+  protectionFee?: number;
+  operationalFee?: number;
+  litPointsEarned?: number;
 }
 
 export type CheckoutStep = "review" | "payment" | "success";
@@ -435,6 +446,7 @@ export interface CheckoutPayload {
   paymentMethodId: PaymentMethodId;
   items: CartItem[];
   summary: CartSummary;
+  protectionEnabled?: boolean;
 }
 
 export type MockOrderStatus = "created" | "pending_payment" | "confirmed";
@@ -449,6 +461,103 @@ export interface MockOrder {
   itemCount: number;
   estimatedDelivery: string;
 }
+
+// ==================================================
+// Sprint 18.9 — Checkout avançado, Proteção LIT,
+// LIT Points e pagamento pendente (tudo mockado).
+// ==================================================
+
+export type PaymentStatus =
+  | "pending"
+  | "processing"
+  | "approved"
+  | "rejected"
+  | "expired"
+  | "cancelled";
+
+export type CheckoutProtectionPlanId = "standard" | "lit_protection";
+
+export interface CheckoutProtectionPlan {
+  id: CheckoutProtectionPlanId;
+  name: string;
+  tagline: string;
+  benefits: string[];
+  /** Percentual sobre o subtotal (ex.: 0.15 = +15%). */
+  extraFeePct: number;
+  recommendedFor?: ListingProductType[];
+}
+
+export interface LitPointsCheckoutPreview {
+  balance: number;
+  earned: number;
+  bonusFromProtection: number;
+  /** BRL por 1 LIT Point (cotação demonstrativa). */
+  quote: number;
+  requiredForOrder: number;
+}
+
+export interface MockWalletBalance {
+  balance: number;
+  currency: "BRL";
+}
+
+export interface PaymentOperationalFee {
+  method: PaymentMethodId;
+  amount: number;
+  label: string;
+}
+
+export interface PaymentSummary {
+  subtotal: number;
+  discount: number;
+  protectionFee: number;
+  operationalFee: number;
+  total: number;
+  litPointsEarned: number;
+}
+
+export interface PaymentPendingDetails {
+  pixCode?: string;
+  boletoLine?: string;
+  boletoBarcode?: string;
+  cardLast4?: string;
+  installments?: number;
+  litPointsUsed?: number;
+  litBalanceUsed?: number;
+}
+
+export interface PaymentIntent {
+  id: string;
+  orderCode: string;
+  method: PaymentMethodId;
+  methodLabel: string;
+  status: PaymentStatus;
+  amount: number;
+  createdAt: string;
+  expiresAt?: string;
+  items: CartItem[];
+  summary: PaymentSummary;
+  buyer: BuyerProfile;
+  protectionEnabled: boolean;
+  details: PaymentPendingDetails;
+}
+
+export type CheckoutAnalyticsEventName =
+  | "view_item"
+  | "add_to_cart"
+  | "begin_checkout"
+  | "select_payment_method"
+  | "add_protection_plan"
+  | "generate_payment"
+  | "purchase_mocked"
+  | "search"
+  | "create_listing_mocked";
+
+export interface CheckoutAnalyticsEvent {
+  name: CheckoutAnalyticsEventName;
+  payload?: Record<string, unknown>;
+}
+
 
 // ==================================================
 // Área do Vendedor (Seller Dashboard) — tipos consumidos
@@ -1126,6 +1235,12 @@ export interface Order {
   delivery: DigitalDelivery;
   dispute?: Dispute;
   review?: OrderReview;
+  /** Sprint 18.9 — Proteção LIT (mock). */
+  litProtection?: {
+    active: boolean;
+    /** ISO date de expiração da cobertura demonstrativa. */
+    expiresAt: string;
+  };
 }
 
 // ============================================================

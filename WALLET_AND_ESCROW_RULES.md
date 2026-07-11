@@ -43,3 +43,12 @@ Regras futuras de saldo, carteira e intermediação. **Documentação de planeja
 
 - `/vendedor/financeiro` e `/admin/transacoes` exibem valores mockados.
 - Nenhum saque, estorno ou movimentação real ocorre.
+
+## Sprint 18.9 — Saldo LIT e LIT Points no checkout (mock)
+
+- Saldo LIT no checkout é apenas visual (`getMockWalletBalance`); nenhum
+  débito ocorre.
+- LIT Points no checkout usam cotação demonstrativa (1 ponto ≈ R$ 0,02)
+  e nenhum ponto real é debitado.
+- Integração real exige carteira, ledger e regras de expiração/cotação
+  definidas pelo backend.

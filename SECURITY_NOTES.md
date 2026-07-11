@@ -79,3 +79,17 @@ puramente visuais deve sobreviver ao merge com o backend real.
   O componente `AccountInfoCard` apresenta apenas metadados declarados.
 - **Cotação de moeda virtual e multi-vendedor** são demonstrativos; a divisão
   entre vendedores deve ocorrer em transação atômica no backend.
+
+## Sprint 18.9 — Pagamento
+
+- **Não colete cartão real** no frontend. Nem PAN, nem CVV, nem validade
+  reais. O bloco de cartão do checkout é uma demonstração com placeholders.
+- **Não gere Pix real** no frontend puro. Chaves e QR devem vir do PSP.
+- **Não emita boleto real** no frontend. Somente o banco/PSP emite.
+- **Não valide CPF real** e não trafegue CPF real em texto simples.
+- **LIT Points e Saldo LIT reais** exigem backend com carteira, ledger e
+  transação atômica. O frontend nunca deve debitar saldo/pontos.
+- **Proteção LIT** real exige regras jurídicas, cobertura declarada,
+  antifraude e reserva financeira. Nunca prometer cobertura sem backend.
+- `analyticsService` não envia eventos; ao ligar um provider real, prefira
+  server-side para evitar bloqueadores e vazamento de PII.
