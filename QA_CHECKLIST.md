@@ -116,3 +116,62 @@ Marque cada item ao rodar a suíte manual em desktop, tablet e mobile.
 - [ ] Menu do usuário exibe "Painel administrativo" quando `isAdmin` é true
 - [ ] Sidebar admin funciona em desktop e menu horizontal em mobile
 - [ ] Nenhuma ação persiste dados, nenhum backend é acionado
+
+## Navegação e Rotas (Hotfix 16.2)
+
+### Navbar
+- [ ] Logo volta para `/`
+- [ ] Ícone do carrinho abre `/carrinho` e mostra contador correto
+- [ ] Links de "Entrar" e "Criar conta" abrem `/login` e `/cadastro`
+- [ ] Avatar abre `UserMenu` quando autenticado
+
+### UserMenu — modo comprador
+- [ ] Meu perfil → `/perfil`
+- [ ] Pedidos → `/pedidos`
+- [ ] Favoritos → `/favoritos`
+- [ ] Carteira → `/carteira`
+- [ ] Mensagens → `/mensagens`
+- [ ] "Vender na LIT Buy" → `/vendedor` (com toast se sem perfil)
+- [ ] "Painel administrativo" só aparece se `isAdmin`
+- [ ] Sair mostra toast e desloga
+
+### UserMenu — modo vendedor
+- [ ] Painel do vendedor → `/vendedor`
+- [ ] Meus anúncios → `/vendedor/anuncios`
+- [ ] Criar anúncio → `/vendedor/anuncios/novo`
+- [ ] Vendas → `/vendedor/vendas`
+- [ ] Financeiro → `/vendedor/financeiro`
+- [ ] Minha loja pública → `/loja/$slug`
+- [ ] "Mudar para modo comprador" volta com toast
+
+### Área do vendedor
+- [ ] Sidebar destaca a rota ativa
+- [ ] Botão "Criar anúncio" (header + sidebar + quick actions) abre `/vendedor/anuncios/novo`
+- [ ] "Ver loja pública" abre `/loja/$slug`
+- [ ] "Voltar para minha conta" abre `/perfil`
+- [ ] Todas as subrotas carregam sem ficar presas no dashboard
+
+### Área admin
+- [ ] Sidebar destaca a rota ativa
+- [ ] Todas as subrotas carregam dentro do `AdminLayout`
+- [ ] "Voltar ao marketplace" abre `/`
+- [ ] Ações administrativas exibem toast
+
+### Produto
+- [ ] Breadcrumb navega corretamente
+- [ ] Link do vendedor abre `/loja/$slug`
+- [ ] Link da categoria abre `/categoria/$slug`
+- [ ] Produtos relacionados abrem `/produto/$id`
+- [ ] Produto indisponível bloqueia compra e carrinho
+
+### Loja pública
+- [ ] Produtos da loja abrem `/produto/$id`
+- [ ] Ações mockadas (seguir, mensagem, compartilhar) exibem toast
+- [ ] Slug inexistente exibe EmptyState
+
+### Carrinho e checkout
+- [ ] "Continuar comprando" (carrinho vazio) leva a rota válida
+- [ ] "Ir para checkout" só habilita com itens no carrinho
+- [ ] "Editar carrinho" no checkout volta para `/carrinho`
+- [ ] Item indisponível bloqueia finalização
+- [ ] Após sucesso: "Ver meus pedidos" → `/pedidos`, "Continuar comprando" → `/`
