@@ -31,6 +31,7 @@ import { Route as VendedorAvaliacoesRouteImport } from './routes/vendedor.avalia
 import { Route as VendedorAnunciosRouteImport } from './routes/vendedor.anuncios'
 import { Route as ProdutoIdRouteImport } from './routes/produto.$id'
 import { Route as PedidosIdRouteImport } from './routes/pedidos.$id'
+import { Route as MensagensIdRouteImport } from './routes/mensagens.$id'
 import { Route as LojaSlugRouteImport } from './routes/loja.$slug'
 import { Route as CategoriaSlugRouteImport } from './routes/categoria.$slug'
 import { Route as AdminVendedoresRouteImport } from './routes/admin.vendedores'
@@ -154,6 +155,11 @@ const PedidosIdRoute = PedidosIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => PedidosRoute,
 } as any)
+const MensagensIdRoute = MensagensIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => MensagensRoute,
+} as any)
 const LojaSlugRoute = LojaSlugRouteImport.update({
   id: '/loja/$slug',
   path: '/loja/$slug',
@@ -225,7 +231,7 @@ export interface FileRoutesByFullPath {
   '/checkout': typeof CheckoutRoute
   '/favoritos': typeof FavoritosRoute
   '/login': typeof LoginRoute
-  '/mensagens': typeof MensagensRoute
+  '/mensagens': typeof MensagensRouteWithChildren
   '/pedidos': typeof PedidosRouteWithChildren
   '/perfil': typeof PerfilRoute
   '/recuperar-senha': typeof RecuperarSenhaRoute
@@ -240,6 +246,7 @@ export interface FileRoutesByFullPath {
   '/admin/vendedores': typeof AdminVendedoresRoute
   '/categoria/$slug': typeof CategoriaSlugRoute
   '/loja/$slug': typeof LojaSlugRoute
+  '/mensagens/$id': typeof MensagensIdRoute
   '/pedidos/$id': typeof PedidosIdRoute
   '/produto/$id': typeof ProdutoIdRoute
   '/vendedor/anuncios': typeof VendedorAnunciosRouteWithChildren
@@ -260,7 +267,7 @@ export interface FileRoutesByTo {
   '/checkout': typeof CheckoutRoute
   '/favoritos': typeof FavoritosRoute
   '/login': typeof LoginRoute
-  '/mensagens': typeof MensagensRoute
+  '/mensagens': typeof MensagensRouteWithChildren
   '/pedidos': typeof PedidosRouteWithChildren
   '/perfil': typeof PerfilRoute
   '/recuperar-senha': typeof RecuperarSenhaRoute
@@ -274,6 +281,7 @@ export interface FileRoutesByTo {
   '/admin/vendedores': typeof AdminVendedoresRoute
   '/categoria/$slug': typeof CategoriaSlugRoute
   '/loja/$slug': typeof LojaSlugRoute
+  '/mensagens/$id': typeof MensagensIdRoute
   '/pedidos/$id': typeof PedidosIdRoute
   '/produto/$id': typeof ProdutoIdRoute
   '/vendedor/avaliacoes': typeof VendedorAvaliacoesRoute
@@ -295,7 +303,7 @@ export interface FileRoutesById {
   '/checkout': typeof CheckoutRoute
   '/favoritos': typeof FavoritosRoute
   '/login': typeof LoginRoute
-  '/mensagens': typeof MensagensRoute
+  '/mensagens': typeof MensagensRouteWithChildren
   '/pedidos': typeof PedidosRouteWithChildren
   '/perfil': typeof PerfilRoute
   '/recuperar-senha': typeof RecuperarSenhaRoute
@@ -310,6 +318,7 @@ export interface FileRoutesById {
   '/admin/vendedores': typeof AdminVendedoresRoute
   '/categoria/$slug': typeof CategoriaSlugRoute
   '/loja/$slug': typeof LojaSlugRoute
+  '/mensagens/$id': typeof MensagensIdRoute
   '/pedidos/$id': typeof PedidosIdRoute
   '/produto/$id': typeof ProdutoIdRoute
   '/vendedor/anuncios': typeof VendedorAnunciosRouteWithChildren
@@ -348,6 +357,7 @@ export interface FileRouteTypes {
     | '/admin/vendedores'
     | '/categoria/$slug'
     | '/loja/$slug'
+    | '/mensagens/$id'
     | '/pedidos/$id'
     | '/produto/$id'
     | '/vendedor/anuncios'
@@ -382,6 +392,7 @@ export interface FileRouteTypes {
     | '/admin/vendedores'
     | '/categoria/$slug'
     | '/loja/$slug'
+    | '/mensagens/$id'
     | '/pedidos/$id'
     | '/produto/$id'
     | '/vendedor/avaliacoes'
@@ -417,6 +428,7 @@ export interface FileRouteTypes {
     | '/admin/vendedores'
     | '/categoria/$slug'
     | '/loja/$slug'
+    | '/mensagens/$id'
     | '/pedidos/$id'
     | '/produto/$id'
     | '/vendedor/anuncios'
@@ -439,7 +451,7 @@ export interface RootRouteChildren {
   CheckoutRoute: typeof CheckoutRoute
   FavoritosRoute: typeof FavoritosRoute
   LoginRoute: typeof LoginRoute
-  MensagensRoute: typeof MensagensRoute
+  MensagensRoute: typeof MensagensRouteWithChildren
   PedidosRoute: typeof PedidosRouteWithChildren
   PerfilRoute: typeof PerfilRoute
   RecuperarSenhaRoute: typeof RecuperarSenhaRoute
@@ -605,6 +617,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PedidosIdRouteImport
       parentRoute: typeof PedidosRoute
     }
+    '/mensagens/$id': {
+      id: '/mensagens/$id'
+      path: '/$id'
+      fullPath: '/mensagens/$id'
+      preLoaderRoute: typeof MensagensIdRouteImport
+      parentRoute: typeof MensagensRoute
+    }
     '/loja/$slug': {
       id: '/loja/$slug'
       path: '/loja/$slug'
@@ -718,6 +737,18 @@ const AdminRouteChildren: AdminRouteChildren = {
 
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
+interface MensagensRouteChildren {
+  MensagensIdRoute: typeof MensagensIdRoute
+}
+
+const MensagensRouteChildren: MensagensRouteChildren = {
+  MensagensIdRoute: MensagensIdRoute,
+}
+
+const MensagensRouteWithChildren = MensagensRoute._addFileChildren(
+  MensagensRouteChildren,
+)
+
 interface PedidosRouteChildren {
   PedidosIdRoute: typeof PedidosIdRoute
 }
@@ -772,7 +803,7 @@ const rootRouteChildren: RootRouteChildren = {
   CheckoutRoute: CheckoutRoute,
   FavoritosRoute: FavoritosRoute,
   LoginRoute: LoginRoute,
-  MensagensRoute: MensagensRoute,
+  MensagensRoute: MensagensRouteWithChildren,
   PedidosRoute: PedidosRouteWithChildren,
   PerfilRoute: PerfilRoute,
   RecuperarSenhaRoute: RecuperarSenhaRoute,
