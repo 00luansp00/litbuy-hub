@@ -1,5 +1,6 @@
-import { Link } from "@tanstack/react-router";
+import { useRouter } from "@tanstack/react-router";
 import { Check, Archive } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { NotificationTypeIcon } from "./NotificationTypeIcon";
