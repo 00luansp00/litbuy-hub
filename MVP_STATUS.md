@@ -279,3 +279,25 @@ Docs de suporte atualizados: `DATABASE_SCHEMA.md`, `ENTITY_RELATIONSHIP.md`, `SU
 - Fluxos críticos verificados: busca global, pós-compra, entrega digital, disputa visual, avaliação visual, mensagens detalhadas, compra, carrinho, checkout, vendedor e admin.
 - Nenhum backend, chat real, pagamento real, disputa real, upload real ou persistência foi introduzido.
 - Projeto pronto para Sprint 19 — handoff técnico (GitHub/Cursor/desenvolvedor).
+
+## Sprint 18.7 — Anúncio Avançado (concluída)
+
+- Wizard de `/vendedor/anuncios/novo` evoluído para 6 etapas.
+- Suporte visual a modelos Normal, Dinâmico e Serviço.
+- Categoria + subcategoria, tipo de produto, atributos dinâmicos por jogo.
+- Campos especiais para produto do tipo Conta.
+- Imagem de capa separada da galeria (ambas via `ImageUploader` demo).
+- Entrega Manual/Automática + Cofre Seguro mockado com preview mascarado.
+- Planos de destaque Prata/Ouro/Diamante e plano LIT-MAX com mensagem automática.
+- Preferências de notificação de venda (in-app, browser, e-mail futuro,
+  integração externa futura).
+- Novo service `listingDraftService` e novos tipos em `src/types/index.ts`.
+- Typecheck limpo.
+
+### Limitações atuais
+- Sem backend, sem persistência (nem LocalStorage, nem Cookies).
+- Sem upload real, sem cofre real, sem criptografia real.
+- Sem envio de mensagem real, sem cobrança de plano, sem assinatura LIT-MAX real.
+
+### Próximo passo sugerido
+- Sprint 18.8 — Produto Dinâmico na página pública + Perguntas Públicas + Mini Cart.

@@ -54,3 +54,16 @@ Antes de qualquer publicação real:
 
 Nada do `src/services/authMock.ts`, `src/data/*`, ou dos `*Gate`
 puramente visuais deve sobreviver ao merge com o backend real.
+
+## Sprint 18.7 — Anúncio Avançado
+
+- **Cofre Seguro de Entrega**: implementação real exige backend, criptografia
+  em repouso e trilha de auditoria — impossível fazer com segurança no cliente.
+- No MVP, nunca inserir credenciais, senhas ou códigos reais no cofre demo.
+- **Upload de imagens** real exigirá Storage seguro (tamanho, MIME, moderação);
+  o wizard atual usa apenas previews locais.
+- **Mensagem automática LIT-MAX** não pode conter contato externo
+  (WhatsApp, Telegram, Discord pessoal, links externos) nem dados sensíveis;
+  a comunicação deve permanecer dentro da LIT Buy.
+- **Campos de conta** (procedência, recuperação) serão prova em disputas
+  futuras — precisarão de validação e política formal de aceitação.
