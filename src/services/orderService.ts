@@ -119,6 +119,16 @@ function buildOrder(index: number): Order {
     delivery,
     dispute,
     review,
+    // Sprint 18.9 — mock: alguns pedidos exibem Proteção LIT ativa.
+    litProtection:
+      index % 2 === 0
+        ? {
+            active: true,
+            expiresAt: new Date(
+              new Date(createdAt).getTime() + 90 * 24 * 3600_000,
+            ).toISOString(),
+          }
+        : undefined,
   };
 }
 
