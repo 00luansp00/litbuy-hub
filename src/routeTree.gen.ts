@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as VendedorRouteImport } from './routes/vendedor'
+import { Route as TaxasRouteImport } from './routes/taxas'
 import { Route as RecuperarSenhaRouteImport } from './routes/recuperar-senha'
 import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as PedidosRouteImport } from './routes/pedidos'
@@ -50,6 +51,11 @@ import { Route as VendedorAnunciosNovoRouteImport } from './routes/vendedor.anun
 const VendedorRoute = VendedorRouteImport.update({
   id: '/vendedor',
   path: '/vendedor',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TaxasRoute = TaxasRouteImport.update({
+  id: '/taxas',
+  path: '/taxas',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RecuperarSenhaRoute = RecuperarSenhaRouteImport.update({
@@ -248,6 +254,7 @@ export interface FileRoutesByFullPath {
   '/pedidos': typeof PedidosRouteWithChildren
   '/perfil': typeof PerfilRoute
   '/recuperar-senha': typeof RecuperarSenhaRoute
+  '/taxas': typeof TaxasRoute
   '/vendedor': typeof VendedorRouteWithChildren
   '/admin/anuncios': typeof AdminAnunciosRoute
   '/admin/configuracoes': typeof AdminConfiguracoesRoute
@@ -286,6 +293,7 @@ export interface FileRoutesByTo {
   '/pedidos': typeof PedidosRouteWithChildren
   '/perfil': typeof PerfilRoute
   '/recuperar-senha': typeof RecuperarSenhaRoute
+  '/taxas': typeof TaxasRoute
   '/admin/anuncios': typeof AdminAnunciosRoute
   '/admin/configuracoes': typeof AdminConfiguracoesRoute
   '/admin/denuncias': typeof AdminDenunciasRoute
@@ -324,6 +332,7 @@ export interface FileRoutesById {
   '/pedidos': typeof PedidosRouteWithChildren
   '/perfil': typeof PerfilRoute
   '/recuperar-senha': typeof RecuperarSenhaRoute
+  '/taxas': typeof TaxasRoute
   '/vendedor': typeof VendedorRouteWithChildren
   '/admin/anuncios': typeof AdminAnunciosRoute
   '/admin/configuracoes': typeof AdminConfiguracoesRoute
@@ -365,6 +374,7 @@ export interface FileRouteTypes {
     | '/pedidos'
     | '/perfil'
     | '/recuperar-senha'
+    | '/taxas'
     | '/vendedor'
     | '/admin/anuncios'
     | '/admin/configuracoes'
@@ -403,6 +413,7 @@ export interface FileRouteTypes {
     | '/pedidos'
     | '/perfil'
     | '/recuperar-senha'
+    | '/taxas'
     | '/admin/anuncios'
     | '/admin/configuracoes'
     | '/admin/denuncias'
@@ -440,6 +451,7 @@ export interface FileRouteTypes {
     | '/pedidos'
     | '/perfil'
     | '/recuperar-senha'
+    | '/taxas'
     | '/vendedor'
     | '/admin/anuncios'
     | '/admin/configuracoes'
@@ -480,6 +492,7 @@ export interface RootRouteChildren {
   PedidosRoute: typeof PedidosRouteWithChildren
   PerfilRoute: typeof PerfilRoute
   RecuperarSenhaRoute: typeof RecuperarSenhaRoute
+  TaxasRoute: typeof TaxasRoute
   VendedorRoute: typeof VendedorRouteWithChildren
   CategoriaSlugRoute: typeof CategoriaSlugRoute
   LojaSlugRoute: typeof LojaSlugRoute
@@ -494,6 +507,13 @@ declare module '@tanstack/react-router' {
       path: '/vendedor'
       fullPath: '/vendedor'
       preLoaderRoute: typeof VendedorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/taxas': {
+      id: '/taxas'
+      path: '/taxas'
+      fullPath: '/taxas'
+      preLoaderRoute: typeof TaxasRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/recuperar-senha': {
@@ -848,6 +868,7 @@ const rootRouteChildren: RootRouteChildren = {
   PedidosRoute: PedidosRouteWithChildren,
   PerfilRoute: PerfilRoute,
   RecuperarSenhaRoute: RecuperarSenhaRoute,
+  TaxasRoute: TaxasRoute,
   VendedorRoute: VendedorRouteWithChildren,
   CategoriaSlugRoute: CategoriaSlugRoute,
   LojaSlugRoute: LojaSlugRoute,
