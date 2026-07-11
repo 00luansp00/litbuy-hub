@@ -183,10 +183,30 @@ export function Navbar() {
       {mobileOpen && (
         <div className="md:hidden border-t border-border bg-background">
           <div className="container-lit py-4 space-y-4">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Buscar..." className="pl-9 bg-surface" />
-            </div>
+            <form
+              className="relative"
+              onSubmit={(e) => {
+                e.preventDefault();
+                submitSearch(mobileSearchQuery);
+              }}
+              role="search"
+            >
+              <button
+                type="submit"
+                aria-label="Buscar"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+              >
+                <Search className="h-4 w-4" />
+              </button>
+              <Input
+                type="search"
+                value={mobileSearchQuery}
+                onChange={(e) => setMobileSearchQuery(e.target.value)}
+                placeholder="Buscar..."
+                className="pl-9 bg-surface"
+              />
+            </form>
+
             <div className="grid grid-cols-2 gap-2">
               {categories.slice(0, 6).map((c) => (
                 <Button
