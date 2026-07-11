@@ -85,3 +85,11 @@ Toda funcionalidade sensível (pagamentos, disputas, movimentação de carteira,
 - O `ImageUploader` atual é apenas visual: **nenhum upload real, nenhuma persistência, nenhum Storage**. Substituição por uploader real deve preservar a API do componente.
 - Produtos com `stock <= 0` ou `status === "paused"` são considerados indisponíveis. Não podem ser adicionados ao carrinho e não podem finalizar checkout.
 - Regras reais de estoque, reserva e validação de disponibilidade devem viver no backend futuramente — o mock atual serve apenas para preparar a UI.
+
+## Painel Administrativo
+
+- Ações administrativas reais exigem backend — não podem ocorrer no frontend.
+- `AdminGate` é proteção visual apenas, não é segurança real.
+- Permissões reais (RBAC), moderação, suspensão de contas, resolução de disputas e movimentações financeiras devem ser implementadas no backend.
+- Nenhum dado exibido no painel deve ser persistido, exportado ou transmitido para serviços externos enquanto o backend não existir.
+- Páginas em `/admin/*` devem consumir apenas `adminService`, nunca mocks diretamente.
