@@ -20,7 +20,7 @@ import type {
   SellerSalePreview,
 } from "@/types";
 
-export const Route = createFileRoute("/vendedor")({
+export const Route = createFileRoute("/vendedor/")({
   component: VendedorPage,
 });
 
