@@ -2177,4 +2177,136 @@ export interface NotificationStats {
   byPriority: Partial<Record<NotificationPriority, number>>;
 }
 
+/* ============================================================
+ * Sprint 18.16 — Programa de Afiliados (visual/mockado)
+ * ============================================================ */
+
+export type AffiliateStatus =
+  | "inactive"
+  | "active"
+  | "pending_review"
+  | "suspended";
+
+export type AffiliateCommissionStatus =
+  | "pending"
+  | "available"
+  | "paid"
+  | "cancelled"
+  | "reversed";
+
+export type AffiliateConversionType =
+  | "signup"
+  | "first_purchase"
+  | "first_sale"
+  | "recurring_sale"
+  | "special_campaign";
+
+export type AffiliateCampaignStatus = "active" | "upcoming" | "ended";
+
+export type AffiliateMaterialType =
+  | "banner"
+  | "text"
+  | "invite_card"
+  | "creator_link"
+  | "guide";
+
+export interface AffiliateProfile {
+  id: string;
+  displayName: string;
+  code: string;
+  status: AffiliateStatus;
+  joinedAt: string;
+  tier: "starter" | "growth" | "pro" | "elite";
+  suspensionReason?: string;
+}
+
+export interface AffiliateLink {
+  url: string;
+  code: string;
+  shortUrl: string;
+  qrCodeLabel: string;
+}
+
+export interface AffiliateStats {
+  clicks: number;
+  signups: number;
+  buyersConverted: number;
+  sellersReferred: number;
+  salesGenerated: number;
+  conversionRate: number;
+  commissionPending: number;
+  commissionAvailable: number;
+  commissionTotal: number;
+}
+
+export interface AffiliateConversion {
+  id: string;
+  createdAt: string;
+  type: AffiliateConversionType;
+  referredUserMasked: string;
+  status: "confirmed" | "pending" | "cancelled" | "reversed";
+  saleAmount?: number;
+  commissionAmount: number;
+  commissionStatus: AffiliateCommissionStatus;
+}
+
+export interface AffiliateCommission {
+  id: string;
+  createdAt: string;
+  description: string;
+  amount: number;
+  status: AffiliateCommissionStatus;
+  releaseForecast?: string;
+}
+
+export interface AffiliateCommissionSummary {
+  pending: number;
+  available: number;
+  paid: number;
+  cancelled: number;
+  reversed: number;
+  minimumPayout: number;
+  nextForecast?: string;
+}
+
+export interface AffiliateCampaign {
+  id: string;
+  title: string;
+  description: string;
+  period: string;
+  bonusLabel: string;
+  status: AffiliateCampaignStatus;
+  ctaLabel: string;
+}
+
+export interface AffiliateMaterial {
+  id: string;
+  title: string;
+  description: string;
+  type: AffiliateMaterialType;
+  copyText?: string;
+  previewLabel: string;
+}
+
+export interface AffiliateRule {
+  id: string;
+  title: string;
+  description: string;
+  tone: "info" | "warning" | "danger";
+}
+
+export interface AffiliateFaqItem {
+  q: string;
+  a: string;
+}
+
+export interface AffiliatePayoutPreview {
+  eligibleAmount: number;
+  minimumPayout: number;
+  estimatedProcessingDays: number;
+  requiresKyc: boolean;
+  note: string;
+}
+
+
 
