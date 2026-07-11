@@ -117,7 +117,10 @@ function ProductPage() {
               <h3 className="text-sm font-semibold text-foreground">
                 Sobre o vendedor
               </h3>
-              <SellerLevelBadge sellerId={enrichedSeller.id} size="sm" />
+              <div className="flex flex-wrap items-center gap-1.5">
+                <SellerLevelBadge sellerId={enrichedSeller.id} size="sm" />
+                <SellerVerificationBadge sellerId={enrichedSeller.id} size="sm" />
+              </div>
             </div>
 
             <SellerInfo
