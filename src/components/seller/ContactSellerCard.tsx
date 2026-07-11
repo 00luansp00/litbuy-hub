@@ -64,8 +64,10 @@ export function ContactSellerCard({ seller, className }: ContactSellerCardProps)
       </div>
 
       <div className="flex flex-col gap-2">
-        <Button size="lg" className="w-full" onClick={handleMessage}>
-          <MessageCircle className="mr-2 h-4 w-4" /> Enviar mensagem
+        <Button asChild size="lg" className="w-full">
+          <Link to="/mensagens">
+            <MessageCircle className="mr-2 h-4 w-4" /> Enviar mensagem
+          </Link>
         </Button>
         <Button
           size="lg"
