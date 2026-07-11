@@ -12,7 +12,7 @@ import {
   PackagePlus,
   ExternalLink,
   ArrowLeftRight,
-  Sparkles,
+  ShieldCheck,
   ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
