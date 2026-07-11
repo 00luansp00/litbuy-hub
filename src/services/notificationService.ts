@@ -360,6 +360,45 @@ const NOTIFICATIONS: Notification[] = [
     createdAt: iso(72),
     icon: "Info",
   },
+
+  // ================= Afiliados =================
+  {
+    id: "n-aff-1",
+    title: "Nova conversão de afiliado",
+    description: "Um usuário indicado por você concluiu o cadastro (mock).",
+    type: "affiliate",
+    role: "all",
+    priority: "medium",
+    status: "unread",
+    createdAt: iso(0.6),
+    href: "/afiliados",
+    icon: "Users",
+    actionLabel: "Ver afiliados",
+  },
+  {
+    id: "n-aff-2",
+    title: "Comissão disponível",
+    description: "Sua comissão de afiliado está disponível para saque demonstrativo.",
+    type: "affiliate",
+    role: "all",
+    priority: "high",
+    status: "unread",
+    createdAt: iso(1.2),
+    href: "/afiliados",
+    icon: "Wallet",
+  },
+  {
+    id: "n-aff-3",
+    title: "Campanha iniciada",
+    description: "A campanha 'Convide vendedores' está ativa (mock).",
+    type: "affiliate",
+    role: "all",
+    priority: "low",
+    status: "read",
+    createdAt: iso(3),
+    href: "/afiliados",
+    icon: "Megaphone",
+  },
 ];
 
 // Estado mutável em memória (não persistido).
