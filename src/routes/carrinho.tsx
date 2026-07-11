@@ -67,7 +67,7 @@ function CarrinhoPage() {
             <div className="space-y-3">
               <AnimatePresence initial={false}>
                 {items.map((item) => (
-                  <CartItemCard key={item.productId} item={item} />
+                  <CartItemCard key={item.key} item={item} />
                 ))}
               </AnimatePresence>
             </div>
