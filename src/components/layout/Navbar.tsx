@@ -24,7 +24,9 @@ import { categories } from "@/data/categories";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/AuthProvider";
 import { useCart } from "@/providers/CartProvider";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { UserMenu } from "./UserMenu";
+
 
 
 const navLinks = [
@@ -142,6 +144,14 @@ export function Navbar() {
           <Button asChild variant="ghost" size="icon" aria-label="Mensagens" className="hidden sm:inline-flex">
             <Link to="/mensagens"><MessageSquare className="h-5 w-5" /></Link>
           </Button>
+          {/* Sino: dropdown no desktop, navegação direta no mobile. */}
+          <div className="hidden sm:inline-flex">
+            <NotificationBell />
+          </div>
+          <div className="sm:hidden inline-flex">
+            <NotificationBell compact />
+          </div>
+
           <Button asChild variant="ghost" size="icon" aria-label="Carrinho" className="relative">
             <Link to="/carrinho">
               <ShoppingCart className="h-5 w-5" />
