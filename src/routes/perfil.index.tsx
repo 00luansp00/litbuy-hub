@@ -10,6 +10,7 @@ import { RecentMessagesCard } from "@/components/account/RecentMessagesCard";
 import { RecentOrdersCard } from "@/components/account/RecentOrdersCard";
 import { WalletSummaryCard } from "@/components/account/WalletSummaryCard";
 import { VerificationStatusCard } from "@/components/verification/VerificationStatusCard";
+import { AffiliateProfileCard } from "@/components/affiliate/AffiliateProfileCard";
 import { accountService } from "@/services/accountService";
 import { productService } from "@/services/productService";
 import type { Product } from "@/types";
