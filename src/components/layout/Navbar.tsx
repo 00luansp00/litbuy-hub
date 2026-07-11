@@ -37,9 +37,18 @@ const navLinks = [
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [mobileSearchQuery, setMobileSearchQuery] = useState("");
   const { isAuthenticated } = useAuth();
   const { itemCount } = useCart();
+  const navigate = useNavigate();
+  const inputRef = useRef<HTMLInputElement>(null);
 
+  const submitSearch = (term: string) => {
+    const q = term.trim();
+    navigate({ to: "/buscar", search: q ? { q } : {} });
+    setMobileOpen(false);
+  };
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -47,6 +56,8 @@ export function Navbar() {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+
 
   return (
     <header
