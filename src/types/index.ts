@@ -1235,6 +1235,12 @@ export interface Order {
   delivery: DigitalDelivery;
   dispute?: Dispute;
   review?: OrderReview;
+  /** Sprint 18.9 — Proteção LIT (mock). */
+  litProtection?: {
+    active: boolean;
+    /** ISO date de expiração da cobertura demonstrativa. */
+    expiresAt: string;
+  };
 }
 
 // ============================================================
