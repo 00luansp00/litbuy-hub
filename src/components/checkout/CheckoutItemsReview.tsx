@@ -67,6 +67,16 @@ export function CheckoutItemsReview({ items }: CheckoutItemsReviewProps) {
               >
                 {item.title}
               </Link>
+              {item.selectedVariantTitle && (
+                <div className="mt-0.5 text-[11px] text-primary">
+                  Variação: {item.selectedVariantTitle}
+                </div>
+              )}
+              {item.virtualCurrencyUnit && (
+                <div className="mt-0.5 text-[11px] text-primary">
+                  {item.quantity.toLocaleString("pt-BR")} {item.virtualCurrencyUnit}
+                </div>
+              )}
               <div className="mt-0.5 text-[11px] text-muted-foreground">
                 Vendedor: <span className="text-foreground">{item.sellerName}</span>
               </div>
