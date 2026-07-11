@@ -120,3 +120,16 @@ Ver `MARKETPLACE_RULES.md` para a visão consolidada. Regras invioláveis para q
 - **Admin real exige backend + `user_roles` + `has_role()` + RLS.** Hoje o gate é mock (`isAdmin` derivado do email).
 
 Documentos relacionados: `ORDER_LIFECYCLE.md`, `DIGITAL_DELIVERY_FLOW.md`, `DISPUTE_FLOW.md`, `WALLET_AND_ESCROW_RULES.md`, `LISTING_STATUS_RULES.md`, `REVIEW_RULES.md`, `MESSAGING_RULES.md`.
+
+## Busca Global (Sprint 18.3)
+
+- Rota `/buscar` recebe query string `?q=termo` (validado com zod via `validateSearch`).
+- `searchService` (`src/services/searchService.ts`) centraliza toda a lógica de busca mockada: filtra por título, categoria, vendedor e descrição.
+- Métodos: `searchProducts`, `getPopularSearches`, `getSearchSuggestions`, `getSearchFilters`, `getSearchStats`.
+- Componentes visuais em `src/components/search/`: `SearchPageHeader`, `SearchFiltersPanel`, `SearchSortBar`, `PopularSearches`, `SearchSuggestions`.
+- Reutiliza `ProductGrid`, `ProductCard`, `EmptyState`, `CategoriesGrid`, `SectionHeader`.
+- Filtros e ordenação são aplicados em memória (mock). Nenhum backend/API/indexação real foi implementado.
+- Produtos indisponíveis continuam bloqueados pelo `ProductCard` (regra de `getUnavailabilityReason` preservada).
+- Navbar (desktop e mobile) submete via `<form>` para `/buscar?q=termo`.
+- Substituição futura: `searchService` deve ser reescrito para consumir API/backend (Postgres FTS, Algolia, Meilisearch) mantendo a mesma assinatura de contrato.
+- Páginas NÃO devem filtrar `@/data/*` diretamente para busca — sempre passar por `searchService`.
