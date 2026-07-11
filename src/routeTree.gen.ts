@@ -27,6 +27,7 @@ import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as VendedorVendasRouteImport } from './routes/vendedor.vendas'
 import { Route as VendedorFinanceiroRouteImport } from './routes/vendedor.financeiro'
 import { Route as VendedorAvaliacoesRouteImport } from './routes/vendedor.avaliacoes'
+import { Route as VendedorAnunciosRouteImport } from './routes/vendedor.anuncios'
 import { Route as ProdutoIdRouteImport } from './routes/produto.$id'
 import { Route as LojaSlugRouteImport } from './routes/loja.$slug'
 import { Route as CategoriaSlugRouteImport } from './routes/categoria.$slug'
@@ -131,6 +132,11 @@ const VendedorAvaliacoesRoute = VendedorAvaliacoesRouteImport.update({
   path: '/avaliacoes',
   getParentRoute: () => VendedorRoute,
 } as any)
+const VendedorAnunciosRoute = VendedorAnunciosRouteImport.update({
+  id: '/anuncios',
+  path: '/anuncios',
+  getParentRoute: () => VendedorRoute,
+} as any)
 const ProdutoIdRoute = ProdutoIdRouteImport.update({
   id: '/produto/$id',
   path: '/produto/$id',
@@ -187,14 +193,14 @@ const AdminAnunciosRoute = AdminAnunciosRouteImport.update({
   getParentRoute: () => AdminRoute,
 } as any)
 const VendedorAnunciosIndexRoute = VendedorAnunciosIndexRouteImport.update({
-  id: '/anuncios/',
-  path: '/anuncios/',
-  getParentRoute: () => VendedorRoute,
+  id: '/',
+  path: '/',
+  getParentRoute: () => VendedorAnunciosRoute,
 } as any)
 const VendedorAnunciosNovoRoute = VendedorAnunciosNovoRouteImport.update({
-  id: '/anuncios/novo',
-  path: '/anuncios/novo',
-  getParentRoute: () => VendedorRoute,
+  id: '/novo',
+  path: '/novo',
+  getParentRoute: () => VendedorAnunciosRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -222,6 +228,7 @@ export interface FileRoutesByFullPath {
   '/categoria/$slug': typeof CategoriaSlugRoute
   '/loja/$slug': typeof LojaSlugRoute
   '/produto/$id': typeof ProdutoIdRoute
+  '/vendedor/anuncios': typeof VendedorAnunciosRouteWithChildren
   '/vendedor/avaliacoes': typeof VendedorAvaliacoesRoute
   '/vendedor/financeiro': typeof VendedorFinanceiroRoute
   '/vendedor/vendas': typeof VendedorVendasRoute
@@ -287,6 +294,7 @@ export interface FileRoutesById {
   '/categoria/$slug': typeof CategoriaSlugRoute
   '/loja/$slug': typeof LojaSlugRoute
   '/produto/$id': typeof ProdutoIdRoute
+  '/vendedor/anuncios': typeof VendedorAnunciosRouteWithChildren
   '/vendedor/avaliacoes': typeof VendedorAvaliacoesRoute
   '/vendedor/financeiro': typeof VendedorFinanceiroRoute
   '/vendedor/vendas': typeof VendedorVendasRoute
@@ -322,6 +330,7 @@ export interface FileRouteTypes {
     | '/categoria/$slug'
     | '/loja/$slug'
     | '/produto/$id'
+    | '/vendedor/anuncios'
     | '/vendedor/avaliacoes'
     | '/vendedor/financeiro'
     | '/vendedor/vendas'
@@ -386,6 +395,7 @@ export interface FileRouteTypes {
     | '/categoria/$slug'
     | '/loja/$slug'
     | '/produto/$id'
+    | '/vendedor/anuncios'
     | '/vendedor/avaliacoes'
     | '/vendedor/financeiro'
     | '/vendedor/vendas'
@@ -542,6 +552,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VendedorAvaliacoesRouteImport
       parentRoute: typeof VendedorRoute
     }
+    '/vendedor/anuncios': {
+      id: '/vendedor/anuncios'
+      path: '/anuncios'
+      fullPath: '/vendedor/anuncios'
+      preLoaderRoute: typeof VendedorAnunciosRouteImport
+      parentRoute: typeof VendedorRoute
+    }
     '/produto/$id': {
       id: '/produto/$id'
       path: '/produto/$id'
@@ -621,17 +638,17 @@ declare module '@tanstack/react-router' {
     }
     '/vendedor/anuncios/': {
       id: '/vendedor/anuncios/'
-      path: '/anuncios'
+      path: '/'
       fullPath: '/vendedor/anuncios/'
       preLoaderRoute: typeof VendedorAnunciosIndexRouteImport
-      parentRoute: typeof VendedorRoute
+      parentRoute: typeof VendedorAnunciosRoute
     }
     '/vendedor/anuncios/novo': {
       id: '/vendedor/anuncios/novo'
-      path: '/anuncios/novo'
+      path: '/novo'
       fullPath: '/vendedor/anuncios/novo'
       preLoaderRoute: typeof VendedorAnunciosNovoRouteImport
-      parentRoute: typeof VendedorRoute
+      parentRoute: typeof VendedorAnunciosRoute
     }
   }
 }
@@ -662,22 +679,33 @@ const AdminRouteChildren: AdminRouteChildren = {
 
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
-interface VendedorRouteChildren {
-  VendedorAvaliacoesRoute: typeof VendedorAvaliacoesRoute
-  VendedorFinanceiroRoute: typeof VendedorFinanceiroRoute
-  VendedorVendasRoute: typeof VendedorVendasRoute
-  VendedorIndexRoute: typeof VendedorIndexRoute
+interface VendedorAnunciosRouteChildren {
   VendedorAnunciosNovoRoute: typeof VendedorAnunciosNovoRoute
   VendedorAnunciosIndexRoute: typeof VendedorAnunciosIndexRoute
 }
 
+const VendedorAnunciosRouteChildren: VendedorAnunciosRouteChildren = {
+  VendedorAnunciosNovoRoute: VendedorAnunciosNovoRoute,
+  VendedorAnunciosIndexRoute: VendedorAnunciosIndexRoute,
+}
+
+const VendedorAnunciosRouteWithChildren =
+  VendedorAnunciosRoute._addFileChildren(VendedorAnunciosRouteChildren)
+
+interface VendedorRouteChildren {
+  VendedorAnunciosRoute: typeof VendedorAnunciosRouteWithChildren
+  VendedorAvaliacoesRoute: typeof VendedorAvaliacoesRoute
+  VendedorFinanceiroRoute: typeof VendedorFinanceiroRoute
+  VendedorVendasRoute: typeof VendedorVendasRoute
+  VendedorIndexRoute: typeof VendedorIndexRoute
+}
+
 const VendedorRouteChildren: VendedorRouteChildren = {
+  VendedorAnunciosRoute: VendedorAnunciosRouteWithChildren,
   VendedorAvaliacoesRoute: VendedorAvaliacoesRoute,
   VendedorFinanceiroRoute: VendedorFinanceiroRoute,
   VendedorVendasRoute: VendedorVendasRoute,
   VendedorIndexRoute: VendedorIndexRoute,
-  VendedorAnunciosNovoRoute: VendedorAnunciosNovoRoute,
-  VendedorAnunciosIndexRoute: VendedorAnunciosIndexRoute,
 }
 
 const VendedorRouteWithChildren = VendedorRoute._addFileChildren(
