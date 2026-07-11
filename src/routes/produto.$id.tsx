@@ -14,8 +14,10 @@ import { ProductInfo } from "@/components/product/ProductInfo";
 import { ProductQuestions } from "@/components/product/ProductQuestions";
 import { ProductReviews } from "@/components/product/ProductReviews";
 import { PurchaseCard } from "@/components/product/PurchaseCard";
+import { SellerLevelBadge } from "@/components/seller/SellerLevelBadge";
 import { productService } from "@/services/productService";
 import { reviewService } from "@/services/reviewService";
+
 
 export const Route = createFileRoute("/produto/$id")({
   loader: async ({ params }) => {
