@@ -287,3 +287,93 @@ Marque cada item ao rodar a suíte manual em desktop, tablet e mobile.
 ### Microinterações
 - [ ] Framer Motion apenas em entradas de seção e hovers de card
 - [ ] Nenhuma animação bloqueia interação do usuário
+
+---
+
+## Sprint 18.6 — QA final dos fluxos críticos
+
+### Busca global (`/buscar`)
+- [ ] Navbar (desktop e mobile) submete `<form>` para `/buscar?q=termo`.
+- [ ] `/buscar` sem `q` renderiza estado inicial (buscas populares + categorias).
+- [ ] `/buscar?q=steam` mostra resultados via `ProductGrid`/`ProductCard`.
+- [ ] `SearchFiltersPanel` (categoria, preço, entrega, vendedor, disponibilidade, avaliação, plataforma) não quebra ao alternar filtros.
+- [ ] `SearchSortBar` reordena resultados sem crash.
+- [ ] `EmptyState` aparece quando nenhum resultado combina.
+- [ ] Nenhuma rota consome `@/data/*` diretamente para busca — sempre `searchService`.
+
+### Pedidos (`/pedidos` e `/pedidos/$id`)
+- [ ] `/pedidos` lista pedidos do comprador via `orderService`.
+- [ ] `RecentOrdersCard` "Ver detalhes" abre `/pedidos/$id`.
+- [ ] `/pedidos/$id` cai em `notFoundComponent` para id inexistente.
+- [ ] Header do pedido mostra código, data, total e método de pagamento.
+- [ ] `OrderTimeline` renderiza eventos com ícones e horários.
+- [ ] `OrderItemsList` linka produto e loja do vendedor.
+- [ ] `AuthGate` bloqueia o detalhe quando deslogado.
+
+### Entrega digital
+- [ ] `DigitalDeliveryCard` mostra status e método (auto/manual).
+- [ ] Payload aparece mascarado (`••••`) com blur até o "Revelar".
+- [ ] Botão "Revelar" apenas dispara toast — nenhum dado sensível real.
+- [ ] Ação "Confirmar recebimento" é toast e sinaliza liberação de pagamento em produção.
+- [ ] Aviso de segurança (`OrderSecurityNotice`) aparece no aside.
+
+### Disputa visual
+- [ ] `OrderDisputeCard` abre modal com motivo + descrição.
+- [ ] Envio dispara toast via `orderService.simulateOpenDispute` sem persistir.
+- [ ] Disputa existente aparece com status; disputa é bloqueada em pedidos `cancelled`/`refunded`.
+
+### Avaliação visual
+- [ ] `OrderReviewCard` só libera formulário quando `status === "completed"`.
+- [ ] Avaliação separada de produto e vendedor.
+- [ ] Envio dispara toast via `orderService.simulateSubmitReview` — nenhuma nota é salva.
+
+### Mensagens (`/mensagens` e `/mensagens/$id`)
+- [ ] `/mensagens` mostra lista de conversas + painel vazio no desktop.
+- [ ] `/mensagens` em mobile mostra somente a lista.
+- [ ] `/mensagens/$id` abre `ConversationHeader`, `ConversationContextCard`, `MessagesThread` e `MessageComposer`.
+- [ ] Contexto pré-compra: mostra produto + botão "Ver produto".
+- [ ] Contexto pós-compra: mostra pedido + botão "Ver pedido".
+- [ ] Contexto suporte: mostra aviso oficial (sem produto).
+- [ ] Composer envia via `simulateSendMessage` e adiciona a mensagem só ao estado local.
+- [ ] Anexo / emoji disparam toast "Em breve".
+- [ ] `MessageSecurityNotice` visível em ambas as telas.
+- [ ] `ContactSellerCard` (loja) e `OrderActionsCard` (pedido) apontam para `/mensagens`.
+- [ ] `RecentMessagesCard` "Abrir" linka para `/mensagens`.
+- [ ] `AuthGate` bloqueia mensagens quando deslogado.
+- [ ] Id inválido em `/mensagens/$id` cai em `notFoundComponent`.
+
+### Compra e checkout
+- [ ] `ProductCard` adiciona ao carrinho normalmente.
+- [ ] Produto indisponível é bloqueado por `getUnavailabilityReason` (`ProductCard`/`PurchaseCard`).
+- [ ] `PurchaseCard` respeita estoque e status.
+- [ ] `/carrinho` funciona (aumentar/diminuir/remover).
+- [ ] `/checkout` funciona e exige login via `AuthGate`.
+- [ ] Sucesso do checkout deixa claro que nenhuma cobrança real foi feita.
+- [ ] Pedido fictício NÃO é persistido em backend/LocalStorage.
+
+### Vendedor
+- [ ] `/vendedor` carrega dashboard.
+- [ ] `/vendedor/anuncios` e `/vendedor/anuncios/novo` carregam; `ImageUploader` aparece (mock).
+- [ ] `/vendedor/vendas`, `/vendedor/financeiro`, `/vendedor/avaliacoes` carregam.
+- [ ] Botões mockados usam toast.
+- [ ] Todos usuários logados podem vender — nenhuma barreira real.
+
+### Admin
+- [ ] `/admin` exige AdminGate.
+- [ ] `admin@litbuy.com` ativa `isAdmin` no `AuthProvider`.
+- [ ] Usuário comum é bloqueado no AdminGate.
+- [ ] Subrotas `/admin/usuarios`, `/admin/vendedores`, `/admin/anuncios`, `/admin/pedidos`, `/admin/transacoes`, `/admin/disputas`, `/admin/denuncias`, `/admin/configuracoes` carregam.
+- [ ] Ações admin usam toast e sinalizam modo demonstração.
+
+### Regras globais
+- [ ] Ações mockadas sempre têm toast em pt-BR.
+- [ ] Nenhum dado sensível real é exibido em qualquer tela.
+- [ ] `sonner` continua sendo a única API de toast.
+- [ ] Typecheck (`tsgo --noEmit`) passa limpo.
+
+### Handoff técnico
+- [ ] `MVP_STATUS.md` reflete todas as sprints 17→18.5.
+- [ ] `PROJECT_RULES.md` documenta regras de mensagens/pedidos/pós-compra.
+- [ ] `MARKETPLACE_RULES.md`, `ORDER_LIFECYCLE.md`, `DIGITAL_DELIVERY_FLOW.md`, `DISPUTE_FLOW.md`, `WALLET_AND_ESCROW_RULES.md`, `LISTING_STATUS_RULES.md`, `REVIEW_RULES.md`, `MESSAGING_RULES.md` presentes.
+- [ ] `SECURITY_NOTES.md` presente e coerente com o modelo mockado.
+- [ ] Nenhum backend, Supabase, WebSocket, pagamento, upload ou permissão real foi implementado no MVP.

@@ -271,3 +271,11 @@ Docs de suporte atualizados: `DATABASE_SCHEMA.md`, `ENTITY_RELATIONSHIP.md`, `SU
 - Aviso de segurança: destaque de que a conversa deve ficar na plataforma e que mensagens podem ser evidência em disputa.
 - Integrações: `ContactSellerCard` (loja pública) e `OrderActionsCard` (pedido) agora linkam para `/mensagens`. `RecentMessagesCard` teve o botão "Abrir" convertido em Link para `/mensagens`.
 - Limitações: nenhum backend, nenhum WebSocket, nenhum chat real, nenhum upload real, nenhuma notificação real, nenhuma persistência, nada em LocalStorage/Cookies, nenhuma moderação real.
+
+## QA final (Sprint 18.6)
+
+- Typecheck (`tsgo --noEmit`) passa limpo após todas as sprints 17→18.5.
+- Rotas novas auditadas: `/buscar`, `/pedidos/$id`, `/mensagens/$id` (todas com `AuthGate` quando aplicável e `notFoundComponent` nos detalhes dinâmicos).
+- Fluxos críticos verificados: busca global, pós-compra, entrega digital, disputa visual, avaliação visual, mensagens detalhadas, compra, carrinho, checkout, vendedor e admin.
+- Nenhum backend, chat real, pagamento real, disputa real, upload real ou persistência foi introduzido.
+- Projeto pronto para Sprint 19 — handoff técnico (GitHub/Cursor/desenvolvedor).
