@@ -10,7 +10,9 @@ import { SellerHero } from "@/components/seller/SellerHero";
 import { SellerProducts } from "@/components/seller/SellerProducts";
 import { SellerReviews } from "@/components/seller/SellerReviews";
 import { SellerStats } from "@/components/seller/SellerStats";
+import { SellerLevelBadge } from "@/components/seller/SellerLevelBadge";
 import { sellerService } from "@/services/sellerService";
+
 
 export const Route = createFileRoute("/loja/$slug")({
   loader: async ({ params }) => {
