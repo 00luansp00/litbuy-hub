@@ -22,9 +22,15 @@ import { Route as CarrinhoRouteImport } from './routes/carrinho'
 import { Route as CadastroRouteImport } from './routes/cadastro'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as VendedorIndexRouteImport } from './routes/vendedor.index'
+import { Route as VendedorVendasRouteImport } from './routes/vendedor.vendas'
+import { Route as VendedorFinanceiroRouteImport } from './routes/vendedor.financeiro'
+import { Route as VendedorAvaliacoesRouteImport } from './routes/vendedor.avaliacoes'
+import { Route as VendedorAnunciosRouteImport } from './routes/vendedor.anuncios'
 import { Route as ProdutoIdRouteImport } from './routes/produto.$id'
 import { Route as LojaSlugRouteImport } from './routes/loja.$slug'
 import { Route as CategoriaSlugRouteImport } from './routes/categoria.$slug'
+import { Route as VendedorAnunciosNovoRouteImport } from './routes/vendedor.anuncios.novo'
 
 const VendedorRoute = VendedorRouteImport.update({
   id: '/vendedor',
@@ -91,6 +97,31 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const VendedorIndexRoute = VendedorIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => VendedorRoute,
+} as any)
+const VendedorVendasRoute = VendedorVendasRouteImport.update({
+  id: '/vendas',
+  path: '/vendas',
+  getParentRoute: () => VendedorRoute,
+} as any)
+const VendedorFinanceiroRoute = VendedorFinanceiroRouteImport.update({
+  id: '/financeiro',
+  path: '/financeiro',
+  getParentRoute: () => VendedorRoute,
+} as any)
+const VendedorAvaliacoesRoute = VendedorAvaliacoesRouteImport.update({
+  id: '/avaliacoes',
+  path: '/avaliacoes',
+  getParentRoute: () => VendedorRoute,
+} as any)
+const VendedorAnunciosRoute = VendedorAnunciosRouteImport.update({
+  id: '/anuncios',
+  path: '/anuncios',
+  getParentRoute: () => VendedorRoute,
+} as any)
 const ProdutoIdRoute = ProdutoIdRouteImport.update({
   id: '/produto/$id',
   path: '/produto/$id',
@@ -106,6 +137,11 @@ const CategoriaSlugRoute = CategoriaSlugRouteImport.update({
   path: '/categoria/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const VendedorAnunciosNovoRoute = VendedorAnunciosNovoRouteImport.update({
+  id: '/novo',
+  path: '/novo',
+  getParentRoute: () => VendedorAnunciosRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -120,10 +156,16 @@ export interface FileRoutesByFullPath {
   '/pedidos': typeof PedidosRoute
   '/perfil': typeof PerfilRoute
   '/recuperar-senha': typeof RecuperarSenhaRoute
-  '/vendedor': typeof VendedorRoute
+  '/vendedor': typeof VendedorRouteWithChildren
   '/categoria/$slug': typeof CategoriaSlugRoute
   '/loja/$slug': typeof LojaSlugRoute
   '/produto/$id': typeof ProdutoIdRoute
+  '/vendedor/anuncios': typeof VendedorAnunciosRouteWithChildren
+  '/vendedor/avaliacoes': typeof VendedorAvaliacoesRoute
+  '/vendedor/financeiro': typeof VendedorFinanceiroRoute
+  '/vendedor/vendas': typeof VendedorVendasRoute
+  '/vendedor/': typeof VendedorIndexRoute
+  '/vendedor/anuncios/novo': typeof VendedorAnunciosNovoRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -138,10 +180,15 @@ export interface FileRoutesByTo {
   '/pedidos': typeof PedidosRoute
   '/perfil': typeof PerfilRoute
   '/recuperar-senha': typeof RecuperarSenhaRoute
-  '/vendedor': typeof VendedorRoute
   '/categoria/$slug': typeof CategoriaSlugRoute
   '/loja/$slug': typeof LojaSlugRoute
   '/produto/$id': typeof ProdutoIdRoute
+  '/vendedor/anuncios': typeof VendedorAnunciosRouteWithChildren
+  '/vendedor/avaliacoes': typeof VendedorAvaliacoesRoute
+  '/vendedor/financeiro': typeof VendedorFinanceiroRoute
+  '/vendedor/vendas': typeof VendedorVendasRoute
+  '/vendedor': typeof VendedorIndexRoute
+  '/vendedor/anuncios/novo': typeof VendedorAnunciosNovoRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -157,10 +204,16 @@ export interface FileRoutesById {
   '/pedidos': typeof PedidosRoute
   '/perfil': typeof PerfilRoute
   '/recuperar-senha': typeof RecuperarSenhaRoute
-  '/vendedor': typeof VendedorRoute
+  '/vendedor': typeof VendedorRouteWithChildren
   '/categoria/$slug': typeof CategoriaSlugRoute
   '/loja/$slug': typeof LojaSlugRoute
   '/produto/$id': typeof ProdutoIdRoute
+  '/vendedor/anuncios': typeof VendedorAnunciosRouteWithChildren
+  '/vendedor/avaliacoes': typeof VendedorAvaliacoesRoute
+  '/vendedor/financeiro': typeof VendedorFinanceiroRoute
+  '/vendedor/vendas': typeof VendedorVendasRoute
+  '/vendedor/': typeof VendedorIndexRoute
+  '/vendedor/anuncios/novo': typeof VendedorAnunciosNovoRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -181,6 +234,12 @@ export interface FileRouteTypes {
     | '/categoria/$slug'
     | '/loja/$slug'
     | '/produto/$id'
+    | '/vendedor/anuncios'
+    | '/vendedor/avaliacoes'
+    | '/vendedor/financeiro'
+    | '/vendedor/vendas'
+    | '/vendedor/'
+    | '/vendedor/anuncios/novo'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -195,10 +254,15 @@ export interface FileRouteTypes {
     | '/pedidos'
     | '/perfil'
     | '/recuperar-senha'
-    | '/vendedor'
     | '/categoria/$slug'
     | '/loja/$slug'
     | '/produto/$id'
+    | '/vendedor/anuncios'
+    | '/vendedor/avaliacoes'
+    | '/vendedor/financeiro'
+    | '/vendedor/vendas'
+    | '/vendedor'
+    | '/vendedor/anuncios/novo'
   id:
     | '__root__'
     | '/'
@@ -217,6 +281,12 @@ export interface FileRouteTypes {
     | '/categoria/$slug'
     | '/loja/$slug'
     | '/produto/$id'
+    | '/vendedor/anuncios'
+    | '/vendedor/avaliacoes'
+    | '/vendedor/financeiro'
+    | '/vendedor/vendas'
+    | '/vendedor/'
+    | '/vendedor/anuncios/novo'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -232,7 +302,7 @@ export interface RootRouteChildren {
   PedidosRoute: typeof PedidosRoute
   PerfilRoute: typeof PerfilRoute
   RecuperarSenhaRoute: typeof RecuperarSenhaRoute
-  VendedorRoute: typeof VendedorRoute
+  VendedorRoute: typeof VendedorRouteWithChildren
   CategoriaSlugRoute: typeof CategoriaSlugRoute
   LojaSlugRoute: typeof LojaSlugRoute
   ProdutoIdRoute: typeof ProdutoIdRoute
@@ -331,6 +401,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/vendedor/': {
+      id: '/vendedor/'
+      path: '/'
+      fullPath: '/vendedor/'
+      preLoaderRoute: typeof VendedorIndexRouteImport
+      parentRoute: typeof VendedorRoute
+    }
+    '/vendedor/vendas': {
+      id: '/vendedor/vendas'
+      path: '/vendas'
+      fullPath: '/vendedor/vendas'
+      preLoaderRoute: typeof VendedorVendasRouteImport
+      parentRoute: typeof VendedorRoute
+    }
+    '/vendedor/financeiro': {
+      id: '/vendedor/financeiro'
+      path: '/financeiro'
+      fullPath: '/vendedor/financeiro'
+      preLoaderRoute: typeof VendedorFinanceiroRouteImport
+      parentRoute: typeof VendedorRoute
+    }
+    '/vendedor/avaliacoes': {
+      id: '/vendedor/avaliacoes'
+      path: '/avaliacoes'
+      fullPath: '/vendedor/avaliacoes'
+      preLoaderRoute: typeof VendedorAvaliacoesRouteImport
+      parentRoute: typeof VendedorRoute
+    }
+    '/vendedor/anuncios': {
+      id: '/vendedor/anuncios'
+      path: '/anuncios'
+      fullPath: '/vendedor/anuncios'
+      preLoaderRoute: typeof VendedorAnunciosRouteImport
+      parentRoute: typeof VendedorRoute
+    }
     '/produto/$id': {
       id: '/produto/$id'
       path: '/produto/$id'
@@ -352,8 +457,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CategoriaSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/vendedor/anuncios/novo': {
+      id: '/vendedor/anuncios/novo'
+      path: '/novo'
+      fullPath: '/vendedor/anuncios/novo'
+      preLoaderRoute: typeof VendedorAnunciosNovoRouteImport
+      parentRoute: typeof VendedorAnunciosRoute
+    }
   }
 }
+
+interface VendedorAnunciosRouteChildren {
+  VendedorAnunciosNovoRoute: typeof VendedorAnunciosNovoRoute
+}
+
+const VendedorAnunciosRouteChildren: VendedorAnunciosRouteChildren = {
+  VendedorAnunciosNovoRoute: VendedorAnunciosNovoRoute,
+}
+
+const VendedorAnunciosRouteWithChildren =
+  VendedorAnunciosRoute._addFileChildren(VendedorAnunciosRouteChildren)
+
+interface VendedorRouteChildren {
+  VendedorAnunciosRoute: typeof VendedorAnunciosRouteWithChildren
+  VendedorAvaliacoesRoute: typeof VendedorAvaliacoesRoute
+  VendedorFinanceiroRoute: typeof VendedorFinanceiroRoute
+  VendedorVendasRoute: typeof VendedorVendasRoute
+  VendedorIndexRoute: typeof VendedorIndexRoute
+}
+
+const VendedorRouteChildren: VendedorRouteChildren = {
+  VendedorAnunciosRoute: VendedorAnunciosRouteWithChildren,
+  VendedorAvaliacoesRoute: VendedorAvaliacoesRoute,
+  VendedorFinanceiroRoute: VendedorFinanceiroRoute,
+  VendedorVendasRoute: VendedorVendasRoute,
+  VendedorIndexRoute: VendedorIndexRoute,
+}
+
+const VendedorRouteWithChildren = VendedorRoute._addFileChildren(
+  VendedorRouteChildren,
+)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -368,7 +511,7 @@ const rootRouteChildren: RootRouteChildren = {
   PedidosRoute: PedidosRoute,
   PerfilRoute: PerfilRoute,
   RecuperarSenhaRoute: RecuperarSenhaRoute,
-  VendedorRoute: VendedorRoute,
+  VendedorRoute: VendedorRouteWithChildren,
   CategoriaSlugRoute: CategoriaSlugRoute,
   LojaSlugRoute: LojaSlugRoute,
   ProdutoIdRoute: ProdutoIdRoute,
