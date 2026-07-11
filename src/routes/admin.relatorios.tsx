@@ -80,6 +80,26 @@ function AdminReportsPage() {
         </AdminDashboardSection>
       </div>
 
+      <AdminDashboardSection
+        title="Afiliados (visual)"
+        description="Visão demonstrativa do programa de afiliados. Backend futuro gerenciará comissões, campanhas, bloqueios, tracking e fraudes."
+      >
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-5">
+          {[
+            { label: "Afiliados ativos", value: "128" },
+            { label: "Comissões pendentes", value: "R$ 2.481,20" },
+            { label: "Vendas por afiliados", value: "312" },
+            { label: "Suspeitas de fraude", value: "4" },
+            { label: "Campanha ativa", value: "Convide vendedores" },
+          ].map((s) => (
+            <div key={s.label} className="rounded-xl border border-border bg-surface/40 p-3">
+              <div className="text-[11px] uppercase text-muted-foreground">{s.label}</div>
+              <div className="mt-1 text-sm font-semibold text-foreground">{s.value}</div>
+            </div>
+          ))}
+        </div>
+      </AdminDashboardSection>
+
       <AdminDashboardSection title="Outros relatórios" description="Módulos previstos para a versão com backend.">
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3 text-xs text-muted-foreground">
           {[
@@ -92,7 +112,7 @@ function AdminReportsPage() {
             "Uso de LIT Points",
             "Adesão ao LIT-MAX",
             "Uso da Proteção LIT",
-            "Afiliados (futuro)",
+            "Afiliados: comissões, campanhas, bloqueios e fraudes",
           ].map((r) => (
             <div key={r} className="rounded-xl border border-dashed border-border bg-surface/30 p-3">
               {r}
