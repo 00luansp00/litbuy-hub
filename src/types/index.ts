@@ -868,4 +868,78 @@ export interface Order {
   review?: OrderReview;
 }
 
+// ============================================================
+// Mensagens / conversas (mockado — Sprint 18.5)
+// ============================================================
+
+export type ConversationType = "pre_purchase" | "order_related" | "support";
+export type MessageStatus = "sent" | "delivered" | "read" | "pending";
+export type ParticipantRole = "buyer" | "seller" | "support" | "system";
+
+export interface ConversationParticipant {
+  id: string;
+  name: string;
+  avatarUrl?: string;
+  role: ParticipantRole;
+  sellerSlug?: string;
+  verified?: boolean;
+}
+
+export interface MessageAttachment {
+  id: string;
+  kind: "image" | "file" | "link";
+  label: string;
+  url?: string;
+}
+
+export interface ConversationMessage {
+  id: string;
+  conversationId: string;
+  authorId: string;
+  authorRole: ParticipantRole;
+  text: string;
+  /** ISO date. */
+  sentAt: string;
+  status: MessageStatus;
+  attachments?: MessageAttachment[];
+  system?: boolean;
+}
+
+export interface ConversationLastMessage {
+  text: string;
+  /** ISO date. */
+  sentAt: string;
+  authorRole: ParticipantRole;
+}
+
+export interface ConversationContext {
+  type: ConversationType;
+  productId?: string;
+  productSlug?: string;
+  productTitle?: string;
+  productImage?: string;
+  productPrice?: number;
+  orderId?: string;
+  orderCode?: string;
+  orderStatus?: OrderStatus;
+  sellerSlug?: string;
+  sellerName?: string;
+  note?: string;
+}
+
+export interface Conversation {
+  id: string;
+  type: ConversationType;
+  participants: ConversationParticipant[];
+  /** Contraparte principal (não o usuário atual). */
+  counterpart: ConversationParticipant;
+  lastMessage: ConversationLastMessage;
+  unreadCount: number;
+  productId?: string;
+  orderId?: string;
+  sellerSlug?: string;
+  context: ConversationContext;
+}
+
+
 
