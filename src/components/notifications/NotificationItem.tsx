@@ -33,105 +33,101 @@ export function NotificationItem({
   onClick,
   compact,
 }: Props) {
+  const router = useRouter();
   const unread = notification.status === "unread";
 
-  const body = (
-    <div className="flex items-start gap-3">
-      <NotificationTypeIcon notification={notification} />
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span
-            className={cn(
-              "truncate text-sm font-medium",
-              unread ? "text-foreground" : "text-muted-foreground",
-            )}
-          >
-            {notification.title}
-          </span>
-          {unread && (
-            <span
-              aria-label="Não lida"
-              className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-primary"
-            />
-          )}
-          {!compact && (
-            <NotificationPriorityBadge priority={notification.priority} />
-          )}
-        </div>
-        <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
-          {notification.description}
-        </p>
-        <p className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-          {timeAgo(notification.createdAt)}
-        </p>
-      </div>
-      {!compact && (
-        <div className="flex shrink-0 flex-col items-end gap-1">
-          {unread && onMarkRead && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-[11px]"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onMarkRead(notification.id);
-              }}
-              aria-label="Marcar como lida"
-            >
-              <Check className="h-3 w-3" />
-            </Button>
-          )}
-          {onArchive && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-[11px]"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onArchive(notification.id);
-              }}
-              aria-label="Arquivar"
-            >
-              <Archive className="h-3 w-3" />
-            </Button>
-          )}
-        </div>
-      )}
-    </div>
-  );
+  const handleActivate = () => {
+    onClick?.(notification);
+    if (notification.href) {
+      void router.navigate({ to: notification.href });
+    }
+  };
 
   const wrapperClass = cn(
-    "block rounded-xl border border-border bg-card p-3 transition-colors hover:bg-surface/60",
+    "block cursor-pointer rounded-xl border border-border bg-card p-3 text-left transition-colors hover:bg-surface/60",
     unread && "border-primary/30 bg-primary/[0.03]",
   );
-
-  if (notification.href) {
-    return (
-      <Link
-        to={notification.href as "/notificacoes"}
-        onClick={() => onClick?.(notification)}
-        className={wrapperClass}
-      >
-        {body}
-      </Link>
-    );
-  }
 
   return (
     <div
       role="button"
       tabIndex={0}
-      onClick={() => onClick?.(notification)}
+      onClick={handleActivate}
       onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") onClick?.(notification);
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          handleActivate();
+        }
       }}
       className={wrapperClass}
     >
-      {body}
+      <div className="flex items-start gap-3">
+        <NotificationTypeIcon notification={notification} />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span
+              className={cn(
+                "truncate text-sm font-medium",
+                unread ? "text-foreground" : "text-muted-foreground",
+              )}
+            >
+              {notification.title}
+            </span>
+            {unread && (
+              <span
+                aria-label="Não lida"
+                className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-primary"
+              />
+            )}
+            {!compact && (
+              <NotificationPriorityBadge priority={notification.priority} />
+            )}
+          </div>
+          <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+            {notification.description}
+          </p>
+          <p className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+            {timeAgo(notification.createdAt)}
+          </p>
+        </div>
+        {!compact && (
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            {unread && onMarkRead && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-[11px]"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onMarkRead(notification.id);
+                }}
+                aria-label="Marcar como lida"
+              >
+                <Check className="h-3 w-3" />
+              </Button>
+            )}
+            {onArchive && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-[11px]"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onArchive(notification.id);
+                }}
+                aria-label="Arquivar"
+              >
+                <Archive className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
+
