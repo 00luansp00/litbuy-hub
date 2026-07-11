@@ -146,3 +146,13 @@ Documentos relacionados: `ORDER_LIFECYCLE.md`, `DIGITAL_DELIVERY_FLOW.md`, `DISP
 - Ação "Confirmar recebimento" é mockada e sinaliza que em produção o pagamento seria liberado ao vendedor.
 - `/vendedor/vendas/$id` NÃO foi criada nesta sprint para manter baixo risco; a visão do vendedor sobre o pedido permanece como toast/documentação.
 - Limitações: nenhum backend, nenhuma persistência, nenhum dado sensível real, nenhum pagamento real, nenhuma disputa real acionada.
+
+## Mensagens (Sprint 18.5)
+
+- Chat real exige backend dedicado (Supabase Realtime ou WebSocket) — não implementado no MVP.
+- Todas as conversas são mockadas via `messageService`. Rotas NUNCA devem importar `@/data/*` para mensagens.
+- Mensagens vinculadas a pedido (`context.type === "order_related"`) devem ser preservadas no backend futuro e ficarão associadas ao pedido para efeito de disputa.
+- Mensagens podem ser usadas como evidência em disputas — o aviso `MessageSecurityNotice` documenta essa regra na UI.
+- Envio de mensagem no MVP é apenas visual (`simulateSendMessage`) e vive somente em estado do componente; nada é persistido em LocalStorage, Cookies ou backend.
+- Integrações de "Enviar mensagem" (loja, produto, pedido) devem apontar para `/mensagens` ou `/mensagens/$id` mockado. Nunca simular envio real de fora do fluxo `/mensagens`.
+- Ao substituir por backend, preservar as assinaturas de `messageService`: `getConversations`, `getConversationById`, `getConversationMessages`, `getConversationContext`, `simulateSendMessage` (que passa a ser `sendMessage` real).
