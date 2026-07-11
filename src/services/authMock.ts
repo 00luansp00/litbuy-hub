@@ -2,13 +2,29 @@
  * Mock de autenticação — 100% em memória.
  * Nenhum LocalStorage, cookie, JWT ou backend envolvido.
  * A assinatura pública imita o que será um AuthService real no futuro.
+ *
+ * A partir do ajuste arquitetural pós-Sprint 14, o mesmo usuário pode
+ * atuar como comprador e vendedor na mesma conta. Os campos
+ * hasSellerProfile / sellerSlug / sellerName / activeRole são 100% mockados
+ * e existem apenas para preparar UI (UserMenu, CTAs, dashboards) para o
+ * duplo papel — nenhum backend implementa isso ainda.
  */
+
+export type UserRole = "buyer" | "seller";
 
 export interface AuthUser {
   id: string;
   name: string;
   email: string;
   avatarUrl?: string;
+  /** Se o usuário já criou perfil de vendedor. Mock. */
+  hasSellerProfile?: boolean;
+  /** Slug público da loja do vendedor (usado em /loja/$slug). Mock. */
+  sellerSlug?: string;
+  /** Nome público da loja do vendedor. Mock. */
+  sellerName?: string;
+  /** Papel ativo na sessão em memória. Default "buyer". */
+  activeRole?: UserRole;
 }
 
 export interface AuthSession {
@@ -30,6 +46,21 @@ function nameFromEmail(email: string): string {
     .join(" ");
 }
 
+function buildMockUser(name: string, email: string): AuthUser {
+  return {
+    id: "mock-user",
+    name,
+    email,
+    // Mock: todo usuário logado já tem perfil de vendedor demo,
+    // apontando para a loja "novakeys" (sellers.nova) para permitir
+    // navegar para /loja/$slug. Trocar no futuro por dados reais.
+    hasSellerProfile: true,
+    sellerSlug: "novakeys",
+    sellerName: "NovaKeys Store",
+    activeRole: "buyer",
+  };
+}
+
 export const authMock = {
   getSession(): AuthSession {
     return { user: currentUser, isAuthenticated: !!currentUser };
@@ -37,21 +68,13 @@ export const authMock = {
 
   async login(email: string, _password: string): Promise<AuthUser> {
     await wait(600);
-    currentUser = {
-      id: "mock-user",
-      name: nameFromEmail(email),
-      email,
-    };
+    currentUser = buildMockUser(nameFromEmail(email), email);
     return currentUser;
   },
 
   async register(name: string, email: string, _password: string): Promise<AuthUser> {
     await wait(700);
-    currentUser = {
-      id: "mock-user",
-      name: name.trim() || nameFromEmail(email),
-      email,
-    };
+    currentUser = buildMockUser(name.trim() || nameFromEmail(email), email);
     return currentUser;
   },
 

@@ -1,14 +1,20 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
-import { authMock, type AuthUser } from "@/services/authMock";
+import { authMock, type AuthUser, type UserRole } from "@/services/authMock";
 
 interface AuthContextValue {
   user: AuthUser | null;
   isAuthenticated: boolean;
   loading: boolean;
+  /** Papel ativo em memória (default "buyer"). Mock — nunca persistido. */
+  activeRole: UserRole;
+  hasSellerProfile: boolean;
   login: (email: string, password: string) => Promise<AuthUser>;
   register: (name: string, email: string, password: string) => Promise<AuthUser>;
   requestPasswordReset: (email: string) => Promise<void>;
   logout: () => Promise<void>;
+  switchToBuyer: () => void;
+  switchToSeller: () => { ok: boolean; needsOnboarding: boolean };
+  toggleRole: () => { ok: boolean; needsOnboarding: boolean; role: UserRole };
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -58,17 +64,75 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const switchToBuyer = useCallback(() => {
+    setUser((prev) => (prev ? { ...prev, activeRole: "buyer" } : prev));
+  }, []);
+
+  const switchToSeller = useCallback(() => {
+    let needsOnboarding = false;
+    setUser((prev) => {
+      if (!prev) return prev;
+      if (!prev.hasSellerProfile) {
+        needsOnboarding = true;
+        return prev;
+      }
+      return { ...prev, activeRole: "seller" };
+    });
+    return { ok: !needsOnboarding, needsOnboarding };
+  }, []);
+
+  const toggleRole = useCallback(() => {
+    let needsOnboarding = false;
+    let role: UserRole = "buyer";
+    setUser((prev) => {
+      if (!prev) return prev;
+      const current = prev.activeRole ?? "buyer";
+      if (current === "buyer") {
+        if (!prev.hasSellerProfile) {
+          needsOnboarding = true;
+          role = "buyer";
+          return prev;
+        }
+        role = "seller";
+        return { ...prev, activeRole: "seller" };
+      }
+      role = "buyer";
+      return { ...prev, activeRole: "buyer" };
+    });
+    return { ok: !needsOnboarding, needsOnboarding, role };
+  }, []);
+
+  const activeRole: UserRole = user?.activeRole ?? "buyer";
+  const hasSellerProfile = !!user?.hasSellerProfile;
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
       isAuthenticated: !!user,
       loading,
+      activeRole,
+      hasSellerProfile,
       login,
       register,
       requestPasswordReset,
       logout,
+      switchToBuyer,
+      switchToSeller,
+      toggleRole,
     }),
-    [user, loading, login, register, requestPasswordReset, logout],
+    [
+      user,
+      loading,
+      activeRole,
+      hasSellerProfile,
+      login,
+      register,
+      requestPasswordReset,
+      logout,
+      switchToBuyer,
+      switchToSeller,
+      toggleRole,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
