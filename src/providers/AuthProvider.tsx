@@ -106,6 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const activeRole: UserRole = user?.activeRole ?? "buyer";
   const hasSellerProfile = !!user?.hasSellerProfile;
+  const isAdmin = !!user?.isAdmin;
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -114,6 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       activeRole,
       hasSellerProfile,
+      isAdmin,
       login,
       register,
       requestPasswordReset,
@@ -127,6 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       activeRole,
       hasSellerProfile,
+      isAdmin,
       login,
       register,
       requestPasswordReset,
