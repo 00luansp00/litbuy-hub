@@ -446,6 +446,7 @@ export interface SellerDashboardSummary {
 }
 
 export interface CreateListingDraft {
+  // Campos legados (mantidos para compatibilidade com o service).
   categorySlug?: string;
   platform?: string;
   listingKind?: string;
@@ -455,7 +456,156 @@ export interface CreateListingDraft {
   stock?: number;
   instantDelivery?: boolean;
   images?: string[];
+
+  // Sprint 18.7 — anúncio avançado (visual/mockado).
+  model?: ListingModel;
+  productType?: ListingProductType;
+  subcategorySlug?: string;
+  attributes?: ListingAttributeValue[];
+
+  dynamicItems?: ListingVariant[];
+  service?: ListingServiceInfo;
+  account?: ListingAccountInfo;
+
+  coverImageId?: string;
+  galleryImageIds?: string[];
+
+  deliveryMode?: ListingDeliveryMode;
+  secureVaultLines?: string[];
+
+  promotionTier?: ListingPromotionTier;
+  sellerPlan?: SellerPlanType;
+  autoMessage?: string;
+
+  notifications?: ListingNotificationPreferences;
 }
+
+/** Alias semântico para o payload do wizard avançado. */
+export type ListingDraft = CreateListingDraft;
+
+// ==================================================
+// Sprint 18.7 — tipos do wizard avançado de anúncio.
+// Tudo visual/mockado; sem backend, sem persistência.
+// ==================================================
+
+export type ListingModel = "normal" | "dynamic" | "service";
+
+export type ListingProductType =
+  | "account"
+  | "virtual_currency"
+  | "gift_card"
+  | "key"
+  | "skin"
+  | "item"
+  | "service"
+  | "subscription"
+  | "game"
+  | "software"
+  | "other";
+
+export type ListingDeliveryMode = "manual" | "automatic";
+
+export type ListingPromotionTier = "silver" | "gold" | "diamond";
+
+export type SellerPlanType = "standard" | "lit_max";
+
+export type ListingServicePricingType = "fixed" | "quote";
+
+export interface ListingVariant {
+  id: string;
+  title: string;
+  description?: string;
+  price: number;
+  stock: number;
+  status: "active" | "paused";
+}
+
+export interface ListingServiceInfo {
+  title?: string;
+  description?: string;
+  basePrice?: number;
+  pricingType?: ListingServicePricingType;
+  estimatedDelivery?: string;
+  buyerRequirements?: string;
+  notes?: string;
+}
+
+export type AccountProvenance =
+  | "original_owner"
+  | "reseller"
+  | "third_party"
+  | "other";
+
+export type AccountRecoveryLevel =
+  | "full"
+  | "partial"
+  | "none"
+  | "unknown";
+
+export interface ListingAccountInfo {
+  provenance?: AccountProvenance;
+  recoveryLevel?: AccountRecoveryLevel;
+  emailVerified?: boolean;
+  phoneLinked?: boolean;
+  documentLinked?: boolean;
+  fullAccess?: boolean;
+  recoveryRisk?: "low" | "medium" | "high";
+  warrantyNote?: string;
+}
+
+export interface Subcategory {
+  slug: string;
+  name: string;
+  categorySlug: string;
+}
+
+export type ListingAttributeInputType =
+  | "text"
+  | "number"
+  | "select";
+
+export interface ListingAttributeConfig {
+  key: string;
+  label: string;
+  type: ListingAttributeInputType;
+  options?: string[];
+  placeholder?: string;
+}
+
+export interface ListingAttributeValue {
+  key: string;
+  value: string;
+}
+
+export interface ListingImageConfig {
+  coverImageId?: string;
+  galleryImageIds: string[];
+}
+
+export interface ListingNotificationPreferences {
+  inApp: boolean;
+  browser: boolean;
+  emailFuture: boolean;
+  externalIntegrationFuture: boolean;
+}
+
+export interface PromotionTierInfo {
+  tier: ListingPromotionTier;
+  name: string;
+  tagline: string;
+  benefits: string[];
+  demoFeePct: number;
+  recommended?: boolean;
+}
+
+export interface SellerPlanInfo {
+  plan: SellerPlanType;
+  name: string;
+  tagline: string;
+  benefits: string[];
+  premium?: boolean;
+}
+
 
 
 // ==================================================
