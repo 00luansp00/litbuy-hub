@@ -1,8 +1,24 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { toast } from "sonner";
-import { cartService } from "@/services/cartService";
+import { cartService, type BuildCartItemOptions } from "@/services/cartService";
 import { getUnavailabilityReason } from "@/services/productService";
-import type { CartCoupon, CartItem, CartSummary, Product } from "@/types";
+import type { CartCoupon, CartItem, CartSummary, ListingVariant, Product } from "@/types";
+
+export interface AddItemOptions {
+  quantity?: number;
+  variant?: ListingVariant;
+  unitPriceOverride?: number;
+  titleOverride?: string;
+  virtualCurrencyUnit?: string;
+  silent?: boolean;
+}
 
 interface CartContextValue {
   items: CartItem[];
@@ -12,9 +28,9 @@ interface CartContextValue {
   platformFee: number;
   total: number;
   coupon: CartCoupon | null;
-  addItem: (product: Product, quantity?: number) => boolean;
-  removeItem: (productId: string) => void;
-  updateQuantity: (productId: string, quantity: number) => void;
+  addItem: (product: Product, options?: AddItemOptions) => CartItem | null;
+  removeItem: (key: string) => void;
+  updateQuantity: (key: string, quantity: number) => void;
   clearCart: () => void;
   applyCoupon: (code: string) => { ok: boolean; message: string };
   removeCoupon: () => void;
@@ -27,40 +43,59 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [coupon, setCoupon] = useState<CartCoupon | null>(null);
 
-  const addItem = useCallback((product: Product, quantity = 1) => {
+  const addItem = useCallback((product: Product, options: AddItemOptions = {}) => {
     const reason = getUnavailabilityReason(product);
     if (reason) {
-      toast.error(reason.toast);
-      return false;
+      if (!options.silent) toast.error(reason.toast);
+      return null;
     }
-    setItems((prev) => {
-      const existing = prev.find((i) => i.productId === product.id);
-      const maxStock = product.stock ?? 99;
-      if (existing) {
-        return prev.map((i) =>
-          i.productId === product.id
-            ? {
-                ...i,
-                quantity: Math.min(99, Math.min(maxStock, i.quantity + quantity)),
-              }
-            : i,
-        );
+    if (product.listingModel === "dynamic" && !options.variant) {
+      if (!options.silent) {
+        toast.error("Selecione uma variação antes de adicionar ao carrinho.");
       }
-      return [...prev, cartService.buildCartItemFromProduct(product, quantity)];
-    });
-    return true;
-  }, []);
+      return null;
+    }
+    if (options.variant) {
+      if (options.variant.status === "paused") {
+        if (!options.silent) toast.error("Variação indisponível no momento.");
+        return null;
+      }
+      if (options.variant.stock <= 0) {
+        if (!options.silent) toast.error("Variação sem estoque.");
+        return null;
+      }
+    }
 
+    const build: BuildCartItemOptions = {
+      quantity: options.quantity ?? 1,
+      variant: options.variant,
+      unitPriceOverride: options.unitPriceOverride,
+      titleOverride: options.titleOverride,
+      virtualCurrencyUnit: options.virtualCurrencyUnit,
+    };
+    const newItem = cartService.buildCartItemFromProduct(product, build);
 
-  const removeItem = useCallback((productId: string) => {
-    setItems((prev) => prev.filter((i) => i.productId !== productId));
-  }, []);
-
-  const updateQuantity = useCallback((productId: string, quantity: number) => {
     setItems((prev) => {
-      if (quantity <= 0) return prev.filter((i) => i.productId !== productId);
+      const existing = prev.find((i) => i.key === newItem.key);
+      if (existing) {
+        const maxStock = options.variant?.stock ?? product.stock ?? 9999;
+        const nextQty = Math.min(9999, Math.min(maxStock, existing.quantity + newItem.quantity));
+        return prev.map((i) => (i.key === newItem.key ? { ...i, quantity: nextQty } : i));
+      }
+      return [...prev, newItem];
+    });
+    return newItem;
+  }, []);
+
+  const removeItem = useCallback((key: string) => {
+    setItems((prev) => prev.filter((i) => i.key !== key));
+  }, []);
+
+  const updateQuantity = useCallback((key: string, quantity: number) => {
+    setItems((prev) => {
+      if (quantity <= 0) return prev.filter((i) => i.key !== key);
       return prev.map((i) =>
-        i.productId === productId ? { ...i, quantity: Math.min(99, quantity) } : i,
+        i.key === key ? { ...i, quantity: Math.min(9999, quantity) } : i,
       );
     });
   }, []);
