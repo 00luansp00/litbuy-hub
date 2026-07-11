@@ -1,31 +1,40 @@
+import { useState } from "react";
 import { createFileRoute, notFound } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { Breadcrumb } from "@/components/common/Breadcrumb";
 import { DigitalDeliveryCard } from "@/components/orders/DigitalDeliveryCard";
 import { OrderActionsCard } from "@/components/orders/OrderActionsCard";
+import { OrderChatCard } from "@/components/orders/OrderChatCard";
 import { OrderDisputeCard } from "@/components/orders/OrderDisputeCard";
 import { OrderHeader } from "@/components/orders/OrderHeader";
 import { OrderItemsList } from "@/components/orders/OrderItemsList";
+import { OrderMediationCard } from "@/components/orders/OrderMediationCard";
+import { OrderProblemDialog } from "@/components/orders/OrderProblemDialog";
 import { OrderReviewCard } from "@/components/orders/OrderReviewCard";
 import { OrderSecurityNotice } from "@/components/orders/OrderSecurityNotice";
 import { OrderTimeline } from "@/components/orders/OrderTimeline";
 import { EmptyState } from "@/components/common/EmptyState";
 import { orderService } from "@/services/orderService";
+import { analyticsService } from "@/services/analyticsService";
 
 export const Route = createFileRoute("/pedidos/$id")({
   loader: async ({ params }) => {
     const order = await orderService.getOrderById(params.id);
     if (!order) throw notFound();
-    const timeline = await orderService.getOrderTimeline(order.id);
-    return { order, timeline };
+    const [timeline, mediation] = await Promise.all([
+      orderService.getOrderTimeline(order.id),
+      orderService.getOrderMediation(order.id),
+    ]);
+    return { order, timeline, mediation };
   },
   component: OrderDetailPage,
   notFoundComponent: OrderNotFound,
 });
 
 function OrderDetailPage() {
-  const { order, timeline } = Route.useLoaderData();
+  const { order, timeline, mediation } = Route.useLoaderData();
+  const [problemOpen, setProblemOpen] = useState(false);
 
   const canConfirm =
     order.status === "delivered_by_seller" ||
@@ -57,18 +66,24 @@ function OrderDetailPage() {
               canConfirm={canConfirm}
               onConfirm={() => {
                 orderService.simulateConfirmDelivery(order.id);
+                analyticsService.track("buyer_confirmed_delivery_mocked", {
+                  orderId: order.id,
+                });
                 toast.success("Recebimento confirmado (mock)", {
                   description:
                     "Em produção, o pagamento seria liberado ao vendedor.",
                 });
               }}
-              onReport={() =>
-                toast("Reportar problema", {
-                  description: "Use o botão 'Abrir disputa' abaixo.",
-                })
-              }
+              onReport={() => setProblemOpen(true)}
+            />
+            <OrderChatCard
+              order={order}
+              onReportProblem={() => setProblemOpen(true)}
             />
             <OrderTimeline events={timeline} />
+            {mediation && (
+              <OrderMediationCard mediation={mediation} perspective="buyer" />
+            )}
             <OrderDisputeCard
               orderId={order.id}
               dispute={order.dispute}
@@ -87,6 +102,12 @@ function OrderDetailPage() {
           </aside>
         </div>
       </div>
+
+      <OrderProblemDialog
+        orderId={order.id}
+        open={problemOpen}
+        onOpenChange={setProblemOpen}
+      />
     </AuthGate>
   );
 }
@@ -97,9 +118,10 @@ function OrderNotFound() {
       <EmptyState
         icon="SearchX"
         title="Pedido não encontrado"
-        description="O pedido que você procura não existe ou foi removido."
+        description="O pedido que você procura não existe ou foi removida."
         action={{ label: "Ver meus pedidos", to: "/pedidos" }}
       />
     </div>
   );
 }
+
