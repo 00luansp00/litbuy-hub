@@ -100,6 +100,24 @@ function buildOrder(index: number): Order {
         }
       : undefined;
 
+  const deliveryMode: SaleDeliveryMode = p.instantDelivery ? "automatic" : "manual";
+  const deliveryStatus: SaleDeliveryStatus =
+    status === "completed"
+      ? "completed"
+      : status === "awaiting_buyer_confirmation"
+        ? "awaiting_buyer_confirmation"
+        : status === "delivered_by_seller"
+          ? "delivered_by_seller"
+          : status === "pending_payment"
+            ? "awaiting_payment"
+            : status === "cancelled"
+              ? "cancelled"
+              : deliveryMode === "automatic"
+                ? "automatic_delivery_released"
+                : "awaiting_seller_delivery";
+  const mediationStatus: MediationStatus =
+    index === 3 ? "under_review" : "none";
+
   return {
     id: `order-${index + 1}`,
     code: `LIT-${(102345 + index).toString()}`,
@@ -124,7 +142,6 @@ function buildOrder(index: number): Order {
     delivery,
     dispute,
     review,
-    // Sprint 18.9 — mock: alguns pedidos exibem Proteção LIT ativa.
     litProtection:
       index % 2 === 0
         ? {
@@ -134,8 +151,25 @@ function buildOrder(index: number): Order {
             ).toISOString(),
           }
         : undefined,
+    conversationId: `oc-${index + 1}`,
+    saleId: `sale-${index + 1}`,
+    paymentId: `pay-${index + 1}`,
+    deliveryMode,
+    deliveryStatus,
+    sellerPlan: index % 3 === 0 ? "ouro" : index % 3 === 1 ? "prata" : "diamante",
+    hasAutomaticMessage: index % 2 === 0,
+    protectionLitActive: index % 2 === 0,
+    mediationStatus,
+    evidenceCount: mediationStatus !== "none" ? 2 : 0,
+    sellerResponseStatus:
+      mediationStatus === "under_review" ? "submitted" : "none",
+    automaticMessage:
+      index % 2 === 0
+        ? "Olá! Obrigado pela compra. Sua entrega será acompanhada por aqui dentro da LIT Buy. Mantenha toda a comunicação pela plataforma para sua segurança."
+        : undefined,
   };
 }
+
 
 const ORDERS: Order[] = Array.from({ length: 5 }, (_, i) => buildOrder(i));
 
