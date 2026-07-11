@@ -1743,3 +1743,203 @@ export interface AdminAuditLogEntry {
   result: "ok" | "denied" | "failed";
   summary?: string;
 }
+
+/* ============================================================
+ * Sprint 18.13 — Detalhe da Venda, Chat do Pedido, Entrega e Mediação
+ * (todos os tipos abaixo suportam somente dados mockados/visuais)
+ * ============================================================ */
+
+export type SaleDeliveryMode = "manual" | "automatic";
+
+export type SaleDeliveryStatus =
+  | "awaiting_payment"
+  | "payment_approved"
+  | "awaiting_seller_delivery"
+  | "delivered_by_seller"
+  | "automatic_delivery_released"
+  | "awaiting_buyer_confirmation"
+  | "completed"
+  | "disputed"
+  | "cancelled"
+  | "refunded";
+
+export type MediationStatus =
+  | "none"
+  | "opened"
+  | "awaiting_buyer_evidence"
+  | "awaiting_seller_response"
+  | "under_review"
+  | "resolved_buyer"
+  | "resolved_seller"
+  | "refunded"
+  | "closed";
+
+export type MediationActor = "buyer" | "seller" | "mediator" | "system";
+
+export interface MediationEvidence {
+  id: string;
+  actor: MediationActor;
+  kind: "image" | "video" | "text" | "file";
+  label: string;
+  /** URL ou preview mockado; nunca dado real. */
+  preview?: string;
+  submittedAt: string;
+}
+
+export interface MediationTimelineEvent {
+  id: string;
+  at: string;
+  actor: MediationActor;
+  label: string;
+  description?: string;
+}
+
+export interface SellerMediationResponse {
+  id: string;
+  submittedAt: string;
+  text: string;
+}
+
+export interface AdminMediationDecision {
+  id: string;
+  decidedAt: string;
+  outcome: MediationStatus;
+  note?: string;
+}
+
+export interface MediationCase {
+  id: string;
+  orderId: string;
+  saleId?: string;
+  status: MediationStatus;
+  reason: string;
+  amountInDispute: number;
+  respondByAt?: string;
+  openedAt: string;
+  updatedAt: string;
+  timeline: MediationTimelineEvent[];
+  evidence: MediationEvidence[];
+  sellerResponse?: SellerMediationResponse;
+  adminDecision?: AdminMediationDecision;
+  /** Trechos do chat usados como evidência. */
+  chatExcerpts?: Array<{ id: string; author: MediationActor; text: string; sentAt: string }>;
+}
+
+export interface OrderChatAttachment {
+  id: string;
+  kind: "image" | "file" | "link";
+  label: string;
+}
+
+export interface OrderChatMessage {
+  id: string;
+  conversationId: string;
+  orderId: string;
+  authorId: string;
+  authorRole: ParticipantRole;
+  text: string;
+  sentAt: string;
+  system?: boolean;
+  attachments?: OrderChatAttachment[];
+}
+
+export interface OrderConversationContext {
+  conversationId: string;
+  orderId: string;
+  orderCode: string;
+  buyerId: string;
+  sellerId: string;
+  productId: string;
+  saleId?: string;
+  paymentId?: string;
+  orderStatus: OrderStatus;
+  deliveryStatus: SaleDeliveryStatus;
+  hasAutomaticMessage: boolean;
+  automaticMessage?: string;
+}
+
+export interface OrderLinkedConversation {
+  conversation: Conversation;
+  context: OrderConversationContext;
+  messages: ConversationMessage[];
+}
+
+export interface AutomaticDeliveryPreview {
+  status: "released" | "pending" | "unavailable";
+  maskedPayload: string;
+  unitsRemaining: number;
+  unitsTotal: number;
+  releasedAt?: string;
+}
+
+export interface DeliveryInstruction {
+  id: string;
+  text: string;
+  sentAt: string;
+}
+
+export interface SellerSaleFinancialSummary {
+  gross: number;
+  platformFee: number;
+  planLabel?: string;
+  litMaxFee?: number;
+  litProtectionFee?: number;
+  net: number;
+  pending: number;
+  blockedInDispute: number;
+  expectedReleaseAt?: string;
+  sellerLevelHint?: string;
+}
+
+export interface SellerSaleTimelineEvent {
+  id: string;
+  at: string;
+  kind:
+    | "order_created"
+    | "payment_approved"
+    | "chat_created"
+    | "automatic_message_sent"
+    | "seller_notified"
+    | "delivery_sent"
+    | "buyer_confirmed"
+    | "dispute_opened"
+    | "mediation_under_review"
+    | "mediation_decision"
+    | "completed";
+  label: string;
+  description?: string;
+  pending?: boolean;
+}
+
+export interface SellerSale {
+  id: string;
+  code: string;
+  orderId: string;
+  orderCode: string;
+  status: SellerSaleStatus;
+  createdAt: string;
+  amount: number;
+  buyerName: string;
+  buyerAvatar?: string;
+  productTitle: string;
+  productImage: string;
+  productSlug: string;
+  variationLabel?: string;
+  paymentMethod: string;
+  deliveryMode: SaleDeliveryMode;
+  deliveryStatus: SaleDeliveryStatus;
+  hasAutomaticMessage: boolean;
+  protectionLitActive: boolean;
+  mediationStatus: MediationStatus;
+  sellerPlan?: "prata" | "ouro" | "diamante";
+  litPointsEstimate?: number;
+}
+
+export interface SellerSaleDetail extends SellerSale {
+  timeline: SellerSaleTimelineEvent[];
+  financial: SellerSaleFinancialSummary;
+  automaticDelivery?: AutomaticDeliveryPreview;
+  deliveryInstructions: DeliveryInstruction[];
+  mediation?: MediationCase;
+}
+
