@@ -267,6 +267,62 @@ export const messageService = {
   ): Promise<ConversationContext | null> =>
     delay(conversationsById.get(conversationId)?.conversation.context ?? null),
 
+  /** Conversa vinculada a um pedido (order_related). */
+  getConversationByOrderId: (orderId: string): Promise<Conversation | null> =>
+    delay(
+      store.find((s) => s.conversation.orderId === orderId)?.conversation ??
+        null,
+    ),
+
+  getOrderConversation: (orderId: string): Promise<Conversation | null> =>
+    messageService.getConversationByOrderId(orderId),
+
+  getOrderConversationMessages: (
+    orderId: string,
+  ): Promise<ConversationMessage[]> =>
+    delay(
+      store.find((s) => s.conversation.orderId === orderId)?.messages.slice() ??
+        [],
+    ),
+
+  /** Conversa vinculada a uma venda (visão vendedor). */
+  getSellerSaleConversation: async (
+    saleId: string,
+  ): Promise<Conversation | null> => {
+    // Mock: sale-N ↔ order-N.
+    const orderId = saleId.replace(/^sale-/, "order-");
+    return messageService.getConversationByOrderId(orderId);
+  },
+
+  /** Retorna a mensagem automática mockada do vendedor (ex.: LIT-MAX). */
+  getAutomaticSellerMessage: (orderId: string): Promise<string | null> => {
+    const conv = store.find((s) => s.conversation.orderId === orderId);
+    if (!conv) return delay(null);
+    return delay(
+      "Olá! Obrigado pela compra. Sua entrega será acompanhada por aqui dentro da LIT Buy. Mantenha toda a comunicação pela plataforma para sua segurança.",
+    );
+  },
+
+  /**
+   * Simula a criação de uma conversa vinculada ao pedido após
+   * o pagamento aprovado. Não persiste — apenas devolve a conversa
+   * mockada existente (ou null se não houver seed correspondente).
+   */
+  simulateCreateOrderConversation: (
+    orderId: string,
+  ): Promise<Conversation | null> =>
+    messageService.getConversationByOrderId(orderId),
+
+  /**
+   * Simula envio de mensagem em conversa de pedido.
+   * Nada é persistido.
+   */
+  simulateSendOrderMessage: (
+    conversationId: string,
+    text: string,
+  ): Promise<ConversationMessage> =>
+    messageService.simulateSendMessage(conversationId, text),
+
   /**
    * Simula envio de mensagem. Não persiste em backend nem em
    * LocalStorage. Retorna a mensagem que seria criada.
@@ -290,3 +346,4 @@ export const messageService = {
 
   getCurrentUser: (): ConversationParticipant => CURRENT_USER,
 };
+
