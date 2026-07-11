@@ -64,6 +64,9 @@ function buildMockUser(name: string, email: string): AuthUser {
     sellerSlug: "novakeys",
     sellerName: "NovaKeys Store",
     activeRole: "buyer",
+    // Mock/demo: usuário logado tem acesso ao painel administrativo
+    // apenas visualmente. Nenhuma permissão real é aplicada.
+    isAdmin: true,
   };
 }
 
