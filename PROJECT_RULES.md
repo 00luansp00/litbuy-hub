@@ -240,3 +240,13 @@ Documentos relacionados: `ORDER_LIFECYCLE.md`, `DIGITAL_DELIVERY_FLOW.md`, `DISP
 - Contato externo (WhatsApp/Discord/Telegram/telefone/e-mail) sempre deve ser reportável em mensagens e conversas.
 - Denúncia real exigirá backend, moderação, RBAC, audit log e storage seguro de evidências.
 - Ações admin (suspender anúncio, bloquear usuário, encaminhar mediação) são mockadas com toast — não alteram nada real.
+
+## Sprint 18.16 — Programa de Afiliados (mock)
+
+- Programa de afiliados é **100% visual/mockado** nesta fase.
+- Comissão real exige backend, cálculo server-side e atribuição confiável.
+- Tracking real exige backend, cookies com consentimento e atribuição segura.
+- Saque real exige backend financeiro, KYC e integração bancária.
+- Autoindicação, spam, cliques automatizados e múltiplas contas devem ser bloqueados no backend.
+- Comissões não podem depender apenas do frontend — cálculo deve ser server-side.
+- Nenhum dado do programa de afiliados persiste (sem LocalStorage, sem Cookies).

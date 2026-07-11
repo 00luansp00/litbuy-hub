@@ -116,3 +116,12 @@ Regras oficiais de produto da LIT Buy como marketplace intermediador de produtos
 - Denúncia serve para moderação. Problema de entrega em pedido segue por **mediação** (DISPUTE_FLOW).
 - Denúncias falsas poderão gerar penalidades em produção.
 - Nesta fase, denúncias são visuais/mockadas — nenhuma ação real ocorre.
+
+## Programa de Afiliados (Sprint 18.16 — mock)
+- Qualquer conta ativa pode participar (comprador, vendedor ou usuário comum).
+- Comissão é gerada por conversões válidas (cadastro, primeira compra, primeira venda, recorrentes, campanhas).
+- Autoindicação e uso de múltiplas contas são proibidos.
+- Spam, tráfego incentivado fraudulento e cliques automatizados podem suspender o afiliado.
+- Pedidos cancelados, reembolsados ou perdidos em disputa cancelam/estornam a comissão vinculada.
+- Uso pago da marca LIT Buy pode exigir autorização.
+- Tudo nesta fase é demonstrativo — não há tracking, atribuição, cálculo ou saque reais.

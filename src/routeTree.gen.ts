@@ -23,6 +23,7 @@ import { Route as CarteiraRouteImport } from './routes/carteira'
 import { Route as CarrinhoRouteImport } from './routes/carrinho'
 import { Route as CadastroRouteImport } from './routes/cadastro'
 import { Route as BuscarRouteImport } from './routes/buscar'
+import { Route as AfiliadosRouteImport } from './routes/afiliados'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as VendedorIndexRouteImport } from './routes/vendedor.index'
@@ -127,6 +128,11 @@ const CadastroRoute = CadastroRouteImport.update({
 const BuscarRoute = BuscarRouteImport.update({
   id: '/buscar',
   path: '/buscar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AfiliadosRoute = AfiliadosRouteImport.update({
+  id: '/afiliados',
+  path: '/afiliados',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminRoute = AdminRouteImport.update({
@@ -308,6 +314,7 @@ const VendedorAnunciosNovoRoute = VendedorAnunciosNovoRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteWithChildren
+  '/afiliados': typeof AfiliadosRoute
   '/buscar': typeof BuscarRoute
   '/cadastro': typeof CadastroRoute
   '/carrinho': typeof CarrinhoRoute
@@ -358,6 +365,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/afiliados': typeof AfiliadosRoute
   '/buscar': typeof BuscarRoute
   '/cadastro': typeof CadastroRoute
   '/carrinho': typeof CarrinhoRoute
@@ -408,6 +416,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteWithChildren
+  '/afiliados': typeof AfiliadosRoute
   '/buscar': typeof BuscarRoute
   '/cadastro': typeof CadastroRoute
   '/carrinho': typeof CarrinhoRoute
@@ -461,6 +470,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/admin'
+    | '/afiliados'
     | '/buscar'
     | '/cadastro'
     | '/carrinho'
@@ -511,6 +521,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/afiliados'
     | '/buscar'
     | '/cadastro'
     | '/carrinho'
@@ -560,6 +571,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/admin'
+    | '/afiliados'
     | '/buscar'
     | '/cadastro'
     | '/carrinho'
@@ -612,6 +624,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRouteWithChildren
+  AfiliadosRoute: typeof AfiliadosRoute
   BuscarRoute: typeof BuscarRoute
   CadastroRoute: typeof CadastroRoute
   CarrinhoRoute: typeof CarrinhoRoute
@@ -732,6 +745,13 @@ declare module '@tanstack/react-router' {
       path: '/buscar'
       fullPath: '/buscar'
       preLoaderRoute: typeof BuscarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/afiliados': {
+      id: '/afiliados'
+      path: '/afiliados'
+      fullPath: '/afiliados'
+      preLoaderRoute: typeof AfiliadosRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin': {
@@ -1095,6 +1115,7 @@ const VendedorRouteWithChildren = VendedorRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRouteWithChildren,
+  AfiliadosRoute: AfiliadosRoute,
   BuscarRoute: BuscarRoute,
   CadastroRoute: CadastroRoute,
   CarrinhoRoute: CarrinhoRoute,

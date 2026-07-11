@@ -12,6 +12,7 @@ import {
   ShieldAlert,
   ShoppingBag,
   Sparkles,
+  Users,
   Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -32,6 +33,7 @@ const TYPE_ICON: Record<Notification["type"], React.ComponentType<{ className?: 
   admin: Shield,
   system: HelpCircle,
   reward: Sparkles,
+  affiliate: Users,
 };
 
 const PRIORITY_TONE: Record<NotificationPriority, string> = {

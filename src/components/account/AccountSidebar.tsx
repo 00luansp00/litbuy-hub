@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   ShoppingBag,
   Store,
+  Users,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
@@ -20,6 +21,7 @@ type AccountRoute =
   | "/mensagens"
   | "/carteira"
   | "/perfil/verificacao"
+  | "/afiliados"
   | "/vendedor";
 
 interface AccountNavItem {
@@ -40,6 +42,7 @@ const items: AccountNavItem[] = [
   { label: "Mensagens", icon: MessageSquare, to: "/mensagens" },
   { label: "Carteira", icon: Wallet, to: "/carteira" },
   { label: "Verificação", icon: ShieldCheck, to: "/perfil/verificacao" },
+  { label: "Afiliados", icon: Users, to: "/afiliados" },
   {
     label: "Segurança",
     icon: ShieldCheck,

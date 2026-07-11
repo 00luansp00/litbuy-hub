@@ -10,6 +10,7 @@ import { RecentMessagesCard } from "@/components/account/RecentMessagesCard";
 import { RecentOrdersCard } from "@/components/account/RecentOrdersCard";
 import { WalletSummaryCard } from "@/components/account/WalletSummaryCard";
 import { VerificationStatusCard } from "@/components/verification/VerificationStatusCard";
+import { AffiliateProfileCard } from "@/components/affiliate/AffiliateProfileCard";
 import { accountService } from "@/services/accountService";
 import { productService } from "@/services/productService";
 import type { Product } from "@/types";
@@ -74,6 +75,7 @@ function PerfilPage() {
           <aside className="space-y-6">
             <VerificationStatusCard status="not_started" compact />
             <WalletSummaryCard wallet={wallet} />
+            <AffiliateProfileCard status="active" clicks={1284} commissionAvailable={312.7} />
             <AccountNotifications notifications={notifications} />
             <QuickActionsCard />
           </aside>

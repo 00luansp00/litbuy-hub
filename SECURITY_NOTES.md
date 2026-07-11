@@ -150,3 +150,11 @@ puramente visuais deve sobreviver ao merge com o backend real.
 - Evidências reais (imagens, vídeos, links, mensagens) exigem storage seguro com scanning de conteúdo, retenção limitada e controle de acesso.
 - Ações destrutivas (suspender anúncio, bloquear usuário) nunca podem depender do frontend.
 - Nada nesta sprint persiste em backend, LocalStorage ou Cookies. Toda simulação é em memória.
+
+## Sprint 18.16 — Afiliados (limitações)
+- Tracking real exige backend, cookies com consentimento (LGPD) e atribuição server-side.
+- Antifraude é obrigatório: detecção de autoindicação, cliques automatizados, múltiplas contas e padrões suspeitos.
+- Comissão real exige cálculo server-side, ledger dedicado e audit log imutável.
+- Saque real exige verificação de identidade (KYC), aprovação financeira e integração bancária.
+- Nenhum dado do programa de afiliados persiste no MVP (sem LocalStorage, sem Cookies).
+- Frontend NÃO deve decidir status de comissão, valor liberado, elegibilidade a saque ou legitimidade de indicação.
