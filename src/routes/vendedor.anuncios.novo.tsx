@@ -6,7 +6,6 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
-  ImagePlus,
   Package,
   Save,
   Send,
@@ -21,9 +20,14 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { SellerDashboardLayout } from "@/components/seller-dashboard/SellerDashboardLayout";
+import {
+  ImageUploader,
+  type ImageUploaderItem,
+} from "@/components/common/ImageUploader";
 import { sellerDashboardService } from "@/services/sellerDashboardService";
 import { cn } from "@/lib/utils";
 import type { CreateListingDraft } from "@/types";
+
 
 export const Route = createFileRoute("/vendedor/anuncios/novo")({
   component: () => (
@@ -58,12 +62,14 @@ function NovoAnuncioPage() {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [draft, setDraft] = useState<CreateListingDraft>({ instantDelivery: true });
+  const [images, setImages] = useState<ImageUploaderItem[]>([]);
   const [loading, setLoading] = useState(false);
 
   const update = <K extends keyof CreateListingDraft>(
     key: K,
     value: CreateListingDraft[K],
   ) => setDraft((d) => ({ ...d, [key]: value }));
+
 
   const goNext = () => setStep((s) => Math.min(4, s + 1));
   const goPrev = () => setStep((s) => Math.max(1, s - 1));
@@ -263,29 +269,16 @@ function NovoAnuncioPage() {
           <div className="space-y-5">
             <SectionTitle
               title="Imagens"
-              description="Adicione até 6 imagens do produto. Upload real será liberado em breve."
+              description="Adicione até 6 imagens do produto. Modo demonstração — nenhum arquivo é enviado."
             />
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() =>
-                    toast("Upload em breve", {
-                      description: "O envio real de imagens será liberado com backend.",
-                    })
-                  }
-                  className="grid aspect-square place-items-center rounded-xl border-2 border-dashed border-border bg-surface/40 text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
-                >
-                  <div className="flex flex-col items-center gap-1.5 text-xs">
-                    <ImagePlus className="h-6 w-6" />
-                    <span>Adicionar</span>
-                  </div>
-                </button>
-              ))}
-            </div>
+            <ImageUploader
+              value={images}
+              onChange={setImages}
+              maxImages={6}
+            />
           </div>
         )}
+
 
         {step === 4 && (
           <div className="space-y-5">
