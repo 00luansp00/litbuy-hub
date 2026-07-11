@@ -30,7 +30,6 @@ import { Route as VendedorFinanceiroRouteImport } from './routes/vendedor.financ
 import { Route as VendedorAvaliacoesRouteImport } from './routes/vendedor.avaliacoes'
 import { Route as VendedorAnunciosRouteImport } from './routes/vendedor.anuncios'
 import { Route as ProdutoIdRouteImport } from './routes/produto.$id'
-import { Route as PagamentoIdRouteImport } from './routes/pagamento.$id'
 import { Route as PedidosIdRouteImport } from './routes/pedidos.$id'
 import { Route as PagamentoIdRouteImport } from './routes/pagamento.$id'
 import { Route as MensagensIdRouteImport } from './routes/mensagens.$id'
@@ -150,6 +149,11 @@ const VendedorAnunciosRoute = VendedorAnunciosRouteImport.update({
 const ProdutoIdRoute = ProdutoIdRouteImport.update({
   id: '/produto/$id',
   path: '/produto/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PagamentoIdRoute = PagamentoIdRouteImport.update({
+  id: '/pagamento/$id',
+  path: '/pagamento/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PedidosIdRoute = PedidosIdRouteImport.update({
