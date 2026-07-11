@@ -1,14 +1,16 @@
 import { useEffect, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
-import { ArrowDownRight, ArrowUpRight } from "lucide-react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { ArrowDownRight, ArrowUpRight, ExternalLink } from "lucide-react";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { SellerDashboardLayout } from "@/components/seller-dashboard/SellerDashboardLayout";
 import { SellerFinancialCard } from "@/components/seller-dashboard/SellerFinancialCard";
+import { SellerLevelCard } from "@/components/seller-dashboard/SellerLevelCard";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Badge } from "@/components/ui/badge";
 import { formatBRL } from "@/lib/format";
 import { sellerDashboardService } from "@/services/sellerDashboardService";
 import type { SellerFinancialSummary } from "@/types";
+
 
 export const Route = createFileRoute("/vendedor/financeiro")({
   component: () => (
