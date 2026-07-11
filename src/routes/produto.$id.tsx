@@ -14,8 +14,10 @@ import { ProductInfo } from "@/components/product/ProductInfo";
 import { ProductQuestions } from "@/components/product/ProductQuestions";
 import { ProductReviews } from "@/components/product/ProductReviews";
 import { PurchaseCard } from "@/components/product/PurchaseCard";
+import { SellerLevelBadge } from "@/components/seller/SellerLevelBadge";
 import { productService } from "@/services/productService";
 import { reviewService } from "@/services/reviewService";
+
 
 export const Route = createFileRoute("/produto/$id")({
   loader: async ({ params }) => {
@@ -111,9 +113,13 @@ function ProductPage() {
           )}
 
           <div className="rounded-2xl border border-border bg-card p-5">
-            <h3 className="mb-3 text-sm font-semibold text-foreground">
-              Sobre o vendedor
-            </h3>
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-foreground">
+                Sobre o vendedor
+              </h3>
+              <SellerLevelBadge sellerId={enrichedSeller.id} size="sm" />
+            </div>
+
             <SellerInfo
               seller={enrichedSeller}
               size="lg"

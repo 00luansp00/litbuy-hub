@@ -10,6 +10,8 @@ import { SellerNotificationsCard } from "@/components/seller-dashboard/SellerNot
 import { SellerQuickActions } from "@/components/seller-dashboard/SellerQuickActions";
 import { SellerPerformanceCard } from "@/components/seller-dashboard/SellerPerformanceCard";
 import { SellerOnboardingCard } from "@/components/seller-dashboard/SellerOnboardingCard";
+import { SellerLevelCard } from "@/components/seller-dashboard/SellerLevelCard";
+
 import { sellerDashboardService } from "@/services/sellerDashboardService";
 import type {
   SellerDashboardSummary,
@@ -79,6 +81,9 @@ function VendedorDashboard() {
       </div>
 
       <SellerOnboardingCard />
+
+      <SellerLevelCard />
+
 
       {/* Duas colunas: vendas + performance/financeiro */}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">

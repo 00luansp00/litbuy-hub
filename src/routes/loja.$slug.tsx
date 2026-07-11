@@ -10,7 +10,9 @@ import { SellerHero } from "@/components/seller/SellerHero";
 import { SellerProducts } from "@/components/seller/SellerProducts";
 import { SellerReviews } from "@/components/seller/SellerReviews";
 import { SellerStats } from "@/components/seller/SellerStats";
+import { SellerLevelBadge } from "@/components/seller/SellerLevelBadge";
 import { sellerService } from "@/services/sellerService";
+
 
 export const Route = createFileRoute("/loja/$slug")({
   loader: async ({ params }) => {
@@ -80,7 +82,12 @@ function SellerPage() {
             </motion.div>
           )}
 
+          <div className="flex flex-wrap items-center gap-2">
+            <SellerLevelBadge sellerId={seller.id} />
+          </div>
+
           <SellerAbout seller={seller} />
+
 
           {seller.badges && seller.badges.length > 0 && (
             <SellerBadges badges={seller.badges} />

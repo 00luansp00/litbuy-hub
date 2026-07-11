@@ -10,11 +10,13 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as VendedorRouteImport } from './routes/vendedor'
+import { Route as TaxasRouteImport } from './routes/taxas'
 import { Route as RecuperarSenhaRouteImport } from './routes/recuperar-senha'
 import { Route as PerfilRouteImport } from './routes/perfil'
 import { Route as PedidosRouteImport } from './routes/pedidos'
 import { Route as MensagensRouteImport } from './routes/mensagens'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as LitPointsRouteImport } from './routes/lit-points'
 import { Route as FavoritosRouteImport } from './routes/favoritos'
 import { Route as CheckoutRouteImport } from './routes/checkout'
 import { Route as CarteiraRouteImport } from './routes/carteira'
@@ -51,6 +53,11 @@ const VendedorRoute = VendedorRouteImport.update({
   path: '/vendedor',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TaxasRoute = TaxasRouteImport.update({
+  id: '/taxas',
+  path: '/taxas',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RecuperarSenhaRoute = RecuperarSenhaRouteImport.update({
   id: '/recuperar-senha',
   path: '/recuperar-senha',
@@ -74,6 +81,11 @@ const MensagensRoute = MensagensRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LitPointsRoute = LitPointsRouteImport.update({
+  id: '/lit-points',
+  path: '/lit-points',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FavoritosRoute = FavoritosRouteImport.update({
@@ -236,11 +248,13 @@ export interface FileRoutesByFullPath {
   '/carteira': typeof CarteiraRoute
   '/checkout': typeof CheckoutRoute
   '/favoritos': typeof FavoritosRoute
+  '/lit-points': typeof LitPointsRoute
   '/login': typeof LoginRoute
   '/mensagens': typeof MensagensRouteWithChildren
   '/pedidos': typeof PedidosRouteWithChildren
   '/perfil': typeof PerfilRoute
   '/recuperar-senha': typeof RecuperarSenhaRoute
+  '/taxas': typeof TaxasRoute
   '/vendedor': typeof VendedorRouteWithChildren
   '/admin/anuncios': typeof AdminAnunciosRoute
   '/admin/configuracoes': typeof AdminConfiguracoesRoute
@@ -273,11 +287,13 @@ export interface FileRoutesByTo {
   '/carteira': typeof CarteiraRoute
   '/checkout': typeof CheckoutRoute
   '/favoritos': typeof FavoritosRoute
+  '/lit-points': typeof LitPointsRoute
   '/login': typeof LoginRoute
   '/mensagens': typeof MensagensRouteWithChildren
   '/pedidos': typeof PedidosRouteWithChildren
   '/perfil': typeof PerfilRoute
   '/recuperar-senha': typeof RecuperarSenhaRoute
+  '/taxas': typeof TaxasRoute
   '/admin/anuncios': typeof AdminAnunciosRoute
   '/admin/configuracoes': typeof AdminConfiguracoesRoute
   '/admin/denuncias': typeof AdminDenunciasRoute
@@ -310,11 +326,13 @@ export interface FileRoutesById {
   '/carteira': typeof CarteiraRoute
   '/checkout': typeof CheckoutRoute
   '/favoritos': typeof FavoritosRoute
+  '/lit-points': typeof LitPointsRoute
   '/login': typeof LoginRoute
   '/mensagens': typeof MensagensRouteWithChildren
   '/pedidos': typeof PedidosRouteWithChildren
   '/perfil': typeof PerfilRoute
   '/recuperar-senha': typeof RecuperarSenhaRoute
+  '/taxas': typeof TaxasRoute
   '/vendedor': typeof VendedorRouteWithChildren
   '/admin/anuncios': typeof AdminAnunciosRoute
   '/admin/configuracoes': typeof AdminConfiguracoesRoute
@@ -350,11 +368,13 @@ export interface FileRouteTypes {
     | '/carteira'
     | '/checkout'
     | '/favoritos'
+    | '/lit-points'
     | '/login'
     | '/mensagens'
     | '/pedidos'
     | '/perfil'
     | '/recuperar-senha'
+    | '/taxas'
     | '/vendedor'
     | '/admin/anuncios'
     | '/admin/configuracoes'
@@ -387,11 +407,13 @@ export interface FileRouteTypes {
     | '/carteira'
     | '/checkout'
     | '/favoritos'
+    | '/lit-points'
     | '/login'
     | '/mensagens'
     | '/pedidos'
     | '/perfil'
     | '/recuperar-senha'
+    | '/taxas'
     | '/admin/anuncios'
     | '/admin/configuracoes'
     | '/admin/denuncias'
@@ -423,11 +445,13 @@ export interface FileRouteTypes {
     | '/carteira'
     | '/checkout'
     | '/favoritos'
+    | '/lit-points'
     | '/login'
     | '/mensagens'
     | '/pedidos'
     | '/perfil'
     | '/recuperar-senha'
+    | '/taxas'
     | '/vendedor'
     | '/admin/anuncios'
     | '/admin/configuracoes'
@@ -462,11 +486,13 @@ export interface RootRouteChildren {
   CarteiraRoute: typeof CarteiraRoute
   CheckoutRoute: typeof CheckoutRoute
   FavoritosRoute: typeof FavoritosRoute
+  LitPointsRoute: typeof LitPointsRoute
   LoginRoute: typeof LoginRoute
   MensagensRoute: typeof MensagensRouteWithChildren
   PedidosRoute: typeof PedidosRouteWithChildren
   PerfilRoute: typeof PerfilRoute
   RecuperarSenhaRoute: typeof RecuperarSenhaRoute
+  TaxasRoute: typeof TaxasRoute
   VendedorRoute: typeof VendedorRouteWithChildren
   CategoriaSlugRoute: typeof CategoriaSlugRoute
   LojaSlugRoute: typeof LojaSlugRoute
@@ -481,6 +507,13 @@ declare module '@tanstack/react-router' {
       path: '/vendedor'
       fullPath: '/vendedor'
       preLoaderRoute: typeof VendedorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/taxas': {
+      id: '/taxas'
+      path: '/taxas'
+      fullPath: '/taxas'
+      preLoaderRoute: typeof TaxasRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/recuperar-senha': {
@@ -516,6 +549,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/lit-points': {
+      id: '/lit-points'
+      path: '/lit-points'
+      fullPath: '/lit-points'
+      preLoaderRoute: typeof LitPointsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/favoritos': {
@@ -822,11 +862,13 @@ const rootRouteChildren: RootRouteChildren = {
   CarteiraRoute: CarteiraRoute,
   CheckoutRoute: CheckoutRoute,
   FavoritosRoute: FavoritosRoute,
+  LitPointsRoute: LitPointsRoute,
   LoginRoute: LoginRoute,
   MensagensRoute: MensagensRouteWithChildren,
   PedidosRoute: PedidosRouteWithChildren,
   PerfilRoute: PerfilRoute,
   RecuperarSenhaRoute: RecuperarSenhaRoute,
+  TaxasRoute: TaxasRoute,
   VendedorRoute: VendedorRouteWithChildren,
   CategoriaSlugRoute: CategoriaSlugRoute,
   LojaSlugRoute: LojaSlugRoute,

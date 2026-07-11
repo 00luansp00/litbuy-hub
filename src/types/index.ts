@@ -1316,5 +1316,142 @@ export interface Conversation {
   context: ConversationContext;
 }
 
+/* ============================================================
+ * Sprint 18.10 — LIT Points, Tarifas, Prazos e Níveis de Vendedor
+ * ============================================================ */
+
+export type LitPointsTransactionType =
+  | "earned_purchase"
+  | "earned_sale"
+  | "earned_review"
+  | "earned_bonus"
+  | "redeemed_discount"
+  | "expired"
+  | "adjusted";
+
+export interface LitPointsBalance {
+  total: number;
+  pending: number;
+  earnedThisMonth: number;
+  expiringSoon: number;
+  nextExpirationDate?: string;
+}
+
+export interface LitPointsTransaction {
+  id: string;
+  type: LitPointsTransactionType;
+  amount: number;
+  description: string;
+  createdAt: string;
+}
+
+export interface LitPointsRule {
+  id: string;
+  icon: string;
+  title: string;
+  description: string;
+}
+
+export interface LitPointsUsageRule {
+  id: string;
+  icon: string;
+  title: string;
+  description: string;
+}
+
+export interface LitPointsEarningPreview {
+  purchaseAmount: number;
+  basePoints: number;
+  bonusPoints: number;
+  totalPoints: number;
+  tierMultiplier: number;
+}
+
+export interface LitPointsTierBenefit {
+  level: SellerLevelName;
+  multiplier: number;
+  description: string;
+}
+
+export interface LitPointsFaqItem {
+  q: string;
+  a: string;
+}
+
+export type SellerLevelName =
+  | "Bronze"
+  | "Prata"
+  | "Ouro"
+  | "Diamante"
+  | "Elite";
+
+export interface SellerLevelRequirement {
+  label: string;
+  value: string;
+}
+
+export interface SellerLevelBenefit {
+  icon: string;
+  title: string;
+  description: string;
+}
+
+export interface SellerLevelFeeRule {
+  /** Taxa demonstrativa da plataforma em % sobre o valor da venda. */
+  platformFeePercent: number;
+}
+
+export interface SellerLevelPayoutRule {
+  /** Prazo demonstrativo, em horas, para liberação do saldo após conclusão. */
+  releaseHours: number;
+}
+
+export interface SellerLevel {
+  name: SellerLevelName;
+  color: string;
+  icon: string;
+  tagline: string;
+  requirements: SellerLevelRequirement[];
+  benefits: SellerLevelBenefit[];
+  fee: SellerLevelFeeRule;
+  payout: SellerLevelPayoutRule;
+}
+
+export interface SellerLevelProgress {
+  current: SellerLevelName;
+  next?: SellerLevelName;
+  completedSales: number;
+  positiveReviews: number;
+  disputeRate: number;
+  responseTime: string;
+  onTimeRate: number;
+  progressToNext: number; // 0-100
+}
+
+export interface PromotionTierPricing {
+  tier: "Prata" | "Ouro" | "Diamante";
+  description: string;
+  visibility: string;
+  feeHint: string;
+}
+
+export interface LitMaxBenefit {
+  icon: string;
+  title: string;
+  description: string;
+}
+
+export interface PaymentMethodFee {
+  method: string;
+  fee: string;
+  note?: string;
+}
+
+export interface PayoutReleaseRule {
+  situation: string;
+  behavior: string;
+}
+
+
 
 

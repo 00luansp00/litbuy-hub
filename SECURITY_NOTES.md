@@ -93,3 +93,14 @@ puramente visuais deve sobreviver ao merge com o backend real.
   antifraude e reserva financeira. Nunca prometer cobertura sem backend.
 - `analyticsService` não envia eventos; ao ligar um provider real, prefira
   server-side para evitar bloqueadores e vazamento de PII.
+
+## Sprint 18.10 — LIT Points, Tarifas, Prazos e Níveis de Vendedor
+
+- Programa LIT Points é próprio da LIT Buy. Não é dinheiro, não é saldo financeiro, não pode ser sacado.
+- Rotas públicas `/lit-points` e `/taxas` explicam programa, tarifas, prazos e níveis de vendedor.
+- Níveis Bronze/Prata/Ouro/Diamante/Elite são visuais e mockados.
+- Taxas e prazos exibidos são demonstrativos. Cálculo real, cobrança, split, escrow, saques e assinatura LIT-MAX exigem backend.
+- Saldo LIT é separado de LIT Points. Saldo pendente/disponível/bloqueado é apenas visual.
+- Services: `litPointsService`, `sellerLevelService`, `platformEconomicsService` — todos mockados, sem persistência.
+- Integrações leves em `/carteira`, `/vendedor`, `/vendedor/financeiro`, `/loja/$slug` e `/produto/$id`.
+- Footer aponta para `/lit-points` e `/taxas`.

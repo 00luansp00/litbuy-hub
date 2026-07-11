@@ -86,3 +86,14 @@ Regras oficiais de produto da LIT Buy como marketplace intermediador de produtos
   quantidade mínima e estoque exibidos; multi-vendedor real será backend.
 - **Anti-evasão de taxas**: contato externo em qualquer canal público ou privado
   é censurado visualmente. Negociação fora da LIT Buy remove a proteção.
+
+## Sprint 18.10 — LIT Points, Tarifas, Prazos e Níveis de Vendedor
+
+- Programa LIT Points é próprio da LIT Buy. Não é dinheiro, não é saldo financeiro, não pode ser sacado.
+- Rotas públicas `/lit-points` e `/taxas` explicam programa, tarifas, prazos e níveis de vendedor.
+- Níveis Bronze/Prata/Ouro/Diamante/Elite são visuais e mockados.
+- Taxas e prazos exibidos são demonstrativos. Cálculo real, cobrança, split, escrow, saques e assinatura LIT-MAX exigem backend.
+- Saldo LIT é separado de LIT Points. Saldo pendente/disponível/bloqueado é apenas visual.
+- Services: `litPointsService`, `sellerLevelService`, `platformEconomicsService` — todos mockados, sem persistência.
+- Integrações leves em `/carteira`, `/vendedor`, `/vendedor/financeiro`, `/loja/$slug` e `/produto/$id`.
+- Footer aponta para `/lit-points` e `/taxas`.
