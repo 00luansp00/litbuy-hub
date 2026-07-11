@@ -108,3 +108,11 @@ Todos os tokens estão em `src/styles.css` via `@theme inline`. Utilitários cus
 - Sempre passar por `useAuth()` para qualquer decisão baseada em sessão.
 - Sempre passar por `src/services/*` para leitura/escrita de dados — nunca importar mocks direto na UI.
 
+
+## Ajuste arquitetural pós-Sprint 14
+
+- **Duplo papel do usuário**: a mesma conta pode atuar como comprador e vendedor. O mock (`authMock` / `AuthUser`) expõe `hasSellerProfile`, `sellerSlug`, `sellerName` e `activeRole` (`"buyer" | "seller"`). O `AuthProvider` expõe `switchToBuyer()`, `switchToSeller()` e `toggleRole()` — tudo em memória, sem persistência, sem LocalStorage, sem cookies.
+- **UserMenu adaptativo**: o menu do Navbar troca entre opções de comprador e vendedor a partir de `activeRole` e permite alternar via toast + navegação.
+- **ImageUploader (`src/components/common/ImageUploader.tsx`)**: uploader premium visual/mockado — drag-and-drop, thumbnails, simulação de progresso, limite visual e estado de erro. Usa a File API apenas para previews locais (Object URLs). Não envia arquivos, não persiste nada.
+- **Produtos com `stock` e `status`**: `Product.status: "active" | "paused"` e `Product.stock?: number` fazem parte do contrato. A regra de disponibilidade é centralizada em `productService.isProductAvailable()` / `getUnavailabilityReason()`. Nenhum componente deve reimplementar essa regra.
+- **Carrinho e checkout**: `CartProvider.addItem` bloqueia produtos indisponíveis com toast. O checkout detecta itens que ficaram indisponíveis em memória e bloqueia a finalização mockada até que sejam removidos.

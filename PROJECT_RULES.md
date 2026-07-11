@@ -78,3 +78,10 @@ Toda funcionalidade sensível (pagamentos, disputas, movimentação de carteira,
 - Toda nova entidade de dados deve ser refletida em `DATABASE_SCHEMA.md`, `ENTITY_RELATIONSHIP.md` e, se aplicável, `SUPABASE_RLS_PLAN.md`.
 - Decisões arquiteturais relevantes devem ser registradas neste arquivo ou em ADRs futuros.
 
+
+## Regras adicionais (pós-Sprint 14)
+
+- A mesma conta pode ter papel comprador e vendedor. `activeRole` é 100% mockado em memória — nunca persistir em LocalStorage, cookies ou backend nesta fase.
+- O `ImageUploader` atual é apenas visual: **nenhum upload real, nenhuma persistência, nenhum Storage**. Substituição por uploader real deve preservar a API do componente.
+- Produtos com `stock <= 0` ou `status === "paused"` são considerados indisponíveis. Não podem ser adicionados ao carrinho e não podem finalizar checkout.
+- Regras reais de estoque, reserva e validação de disponibilidade devem viver no backend futuramente — o mock atual serve apenas para preparar a UI.
