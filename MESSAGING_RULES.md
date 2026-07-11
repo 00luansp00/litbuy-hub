@@ -65,3 +65,13 @@ Regras futuras de mensagens. **Documentação de planejamento.** Não implementa
 - Rota `/vendedor/vendas/$id` mostra a visão do vendedor: comprador, produto, pagamento, entrega, chat, financeiro, timeline e mediação.
 - Services: `sellerSaleService`, extensões em `orderService` e `messageService`; nenhum dado é persistido.
 - Confirmação de recebimento, liberação de saldo, uploads reais e decisões de mediação **só podem ocorrer no backend real**.
+
+## Sprint 18.14 — Central de Notificações (mock)
+
+- Central visual/mockada: `notificationService` + `NotificationProvider` (`useNotifications`).
+- Sino na Navbar (`NotificationBell`): dropdown no desktop, navegação para `/notificacoes` no mobile.
+- Rota nova: `/notificacoes` com filtros, contagem de não lidas, marcar como lida / marcar todas / arquivar (tudo em memória).
+- Notificações são geradas por papel — comprador, vendedor, admin — e cobrem pedido, pagamento, entrega, chat, mediação, vendas, KYC, denúncias, financeiro e admin.
+- Notificações apontam para rotas reais quando existem (`/pedidos/$id`, `/vendedor/vendas/$id`, `/mensagens/$id`, `/admin/*`, `/lit-points`, etc.).
+- **Nada é persistido**: sem LocalStorage, sem Cookies, sem backend. Push, e-mail, SMS, WebSocket e Service Worker **não** são implementados — exigem backend real, opt-in do usuário e infra de mensageria.
+- Dados sensíveis nunca devem aparecer em notificações — títulos e descrições são genéricos e mascarados.
