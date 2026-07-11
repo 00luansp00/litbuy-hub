@@ -49,8 +49,18 @@ function FinanceiroPage() {
       title="Financeiro"
       description="Saldo, taxas e repasses fictícios — nenhum valor real."
     >
+      <SellerLevelCard />
+
+      <div className="rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">
+        Taxas e prazos exibidos são demonstrativos conforme seu nível.{" "}
+        <Link to="/taxas" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
+          Ver tarifas e prazos <ExternalLink className="h-3 w-3" />
+        </Link>
+      </div>
+
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <SellerFinancialCard financial={financial} />
+
         <section className="rounded-2xl border border-border bg-card p-5 shadow-card">
           <header className="mb-4 flex items-center justify-between">
             <div>
