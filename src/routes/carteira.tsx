@@ -46,8 +46,8 @@ function CarteiraPage() {
       >
         <div className="space-y-6">
           <div className="grid gap-3 md:grid-cols-3">
-            <BalanceCard title="Saldo LIT" subtitle="Movimentação financeira mockada" value={formatBRL(wallet.availableBalance)} />
-            <BalanceCard title="LIT Points" subtitle="Programa próprio — não é dinheiro" value={`${wallet.points ?? 0} pts`} />
+            <BalanceCard title="Saldo LIT" subtitle="Movimentação financeira mockada" value={formatBRL(wallet.balance)} />
+            <BalanceCard title="LIT Points" subtitle="Programa próprio — não é dinheiro" value="Ver detalhes abaixo" />
             <BalanceCard
               title="Comissões de afiliado"
               subtitle="Demonstrativa — exigirá backend"
