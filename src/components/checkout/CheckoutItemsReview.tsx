@@ -34,7 +34,7 @@ export function CheckoutItemsReview({ items }: CheckoutItemsReviewProps) {
 
       <ul className="divide-y divide-border">
         {items.map((item) => (
-          <li key={item.productId} className="flex gap-3 py-3 first:pt-0 last:pb-0">
+          <li key={item.key} className="flex gap-3 py-3 first:pt-0 last:pb-0">
             <Link
               to="/produto/$id"
               params={{ id: item.slug }}
