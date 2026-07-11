@@ -7,8 +7,9 @@ const columns: { title: string; links: { label: string; to: string }[] }[] = [
     title: "Institucional",
     links: [
       { label: "Sobre a LIT Buy", to: "/" },
+      { label: "Tarifas e prazos", to: "/taxas" },
+      { label: "LIT Points", to: "/lit-points" },
       { label: "Carreiras", to: "/" },
-      { label: "Imprensa", to: "/" },
     ],
   },
   {
@@ -30,6 +31,7 @@ const columns: { title: string; links: { label: string; to: string }[] }[] = [
     ],
   },
 ];
+
 
 const socials = [
   { icon: Instagram, label: "Instagram" },
