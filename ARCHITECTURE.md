@@ -197,3 +197,19 @@ são **proteção visual**. Segurança real vai para o backend (ver
   chave composta em `item.key`. Compatível com produtos antigos.
 - Product recebe campos opcionais (listingModel, productType, variants,
   virtualCurrency, accountInfo, deliveryMode, promotionTier, sellerPlan, ...).
+
+## Sprint 18.9 — Checkout avançado e pagamento pendente
+
+- `src/services/paymentService.ts` — métodos, planos de proteção, saldo
+  mock LIT, LIT Points, cálculo de taxas e criação de `PaymentIntent`
+  in-memory. Nenhum pagamento real é gerado.
+- `src/services/analyticsService.ts` — track() mockado
+  (`console.debug` em dev).
+- `src/components/checkout/CheckoutProtectionPlanSection.tsx`,
+  `CheckoutLitPointsCard.tsx`, `PaymentMethodBlock.tsx` — blocos visuais
+  específicos por método.
+- `src/routes/pagamento.$id.tsx` — tela de pagamento pendente.
+- `Order.litProtection` opcional para exibir badge no /pedidos/$id.
+- Futura integração real: substituir `paymentService` por gateway
+  (Pix/Boleto/Cartão) via server function; `analyticsService` por
+  provider server-side.

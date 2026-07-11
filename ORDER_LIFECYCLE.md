@@ -70,3 +70,13 @@ Ciclo de vida futuro de pedidos. **Documentação de planejamento** — não imp
 ## Nota
 
 Hoje, o frontend usa status simplificados nos mocks (`SellerOrder.status`, etc.) que **não** correspondem 1:1 a esta lista. Esta é a **especificação-alvo** para a implementação real com backend.
+
+## Sprint 18.9 — Estados de pagamento (mock)
+
+- **pending** — pagamento gerado, aguardando ação do comprador (Pix/Boleto).
+- **processing** — pagamento em processamento (Cartão demo).
+- **approved** — aprovado em demonstração (Saldo LIT / LIT Points).
+- **rejected / cancelled / expired** — estados visuais reservados.
+
+Ciclo alvo (backend real): `PaymentIntent` criado → webhook do PSP →
+atualiza status → cria/atualiza `Order` correspondente → libera entrega.

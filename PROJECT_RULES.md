@@ -179,3 +179,9 @@ Documentos relacionados: `ORDER_LIFECYCLE.md`, `DIGITAL_DELIVERY_FLOW.md`, `DISP
   é desencorajado e censurado visualmente em perguntas e mensagens.
 - MiniCartModal é apenas uma camada de UX; **não substitui /carrinho nem /checkout**.
 - Nada é persistido: sem LocalStorage, sem Cookies, sem backend.
+- Checkout continua **mockado**. Pix, boleto e cartão são demonstração.
+- Nunca coletar cartão real no frontend; nunca gerar Pix/boleto real.
+- Proteção LIT (+15%) é visual; regras finais dependem de backend/antifraude.
+- LIT Points no checkout são visuais; nenhum ponto real é debitado.
+- Saldo LIT no checkout é mock; carteira real exige backend.
+- Analytics é ganchado mas nunca envia dados reais.

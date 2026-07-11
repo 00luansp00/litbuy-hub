@@ -316,3 +316,24 @@ Docs de suporte atualizados: `DATABASE_SCHEMA.md`, `ENTITY_RELATIONSHIP.md`, `SU
 ### Limitações conhecidas
 - Moderação, cotação real, multi-vendedor e cofre automático exigem backend.
 - Perguntas são in-memory: recarregar a página reseta a lista.
+
+## Sprint 18.9 — Checkout Avançado + Pagamento Pendente
+
+- `/checkout` reescrito: revisão, comprador, Proteção LIT, LIT Points,
+  métodos de pagamento (Pix, Boleto, Cartão demo, Saldo LIT, LIT Points)
+  com bloco específico por método, resumo com Proteção LIT/taxas/pontos.
+- Serviço sob orçamento é bloqueado no checkout.
+- `paymentService` mockado — nenhum pagamento real é criado.
+- Rota `/pagamento/$id` exibe pagamento pendente (Pix, Boleto, Cartão,
+  Saldo LIT, LIT Points) com QR fictício, linha digitável, contador,
+  cópia mock, resumo financeiro e ganho de LIT Points.
+- `/pedidos/$id` mostra badge de Proteção LIT ativa (mock) quando aplicável.
+- `analyticsService` mockado com eventos `view_item`, `add_to_cart`,
+  `begin_checkout`, `select_payment_method`, `add_protection_plan`,
+  `generate_payment`, `purchase_mocked`, `search`, `create_listing_mocked`.
+- Typecheck limpo. Nenhum backend, LocalStorage ou Cookie.
+
+### Limitações conhecidas
+- Pagamentos, carteira e LIT Points são visuais/in-memory (Map).
+- Cartão nunca é coletado; boleto e Pix não são reais.
+- Analytics não envia eventos — apenas `console.debug` em dev.
