@@ -9,6 +9,7 @@ import { RecentFavoritesCard } from "@/components/account/RecentFavoritesCard";
 import { RecentMessagesCard } from "@/components/account/RecentMessagesCard";
 import { RecentOrdersCard } from "@/components/account/RecentOrdersCard";
 import { WalletSummaryCard } from "@/components/account/WalletSummaryCard";
+import { VerificationStatusCard } from "@/components/verification/VerificationStatusCard";
 import { accountService } from "@/services/accountService";
 import { productService } from "@/services/productService";
 import type { Product } from "@/types";
@@ -71,6 +72,7 @@ function PerfilPage() {
           </div>
 
           <aside className="space-y-6">
+            <VerificationStatusCard status="not_started" compact />
             <WalletSummaryCard wallet={wallet} />
             <AccountNotifications notifications={notifications} />
             <QuickActionsCard />
