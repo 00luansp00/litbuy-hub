@@ -13,6 +13,7 @@ import { Route as VendedorRouteImport } from './routes/vendedor'
 import { Route as TaxasRouteImport } from './routes/taxas'
 import { Route as RecuperarSenhaRouteImport } from './routes/recuperar-senha'
 import { Route as PedidosRouteImport } from './routes/pedidos'
+import { Route as NotificacoesRouteImport } from './routes/notificacoes'
 import { Route as MensagensRouteImport } from './routes/mensagens'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LitPointsRouteImport } from './routes/lit-points'
@@ -76,6 +77,11 @@ const RecuperarSenhaRoute = RecuperarSenhaRouteImport.update({
 const PedidosRoute = PedidosRouteImport.update({
   id: '/pedidos',
   path: '/pedidos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NotificacoesRoute = NotificacoesRouteImport.update({
+  id: '/notificacoes',
+  path: '/notificacoes',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MensagensRoute = MensagensRouteImport.update({
@@ -311,6 +317,7 @@ export interface FileRoutesByFullPath {
   '/lit-points': typeof LitPointsRoute
   '/login': typeof LoginRoute
   '/mensagens': typeof MensagensRouteWithChildren
+  '/notificacoes': typeof NotificacoesRoute
   '/pedidos': typeof PedidosRouteWithChildren
   '/recuperar-senha': typeof RecuperarSenhaRoute
   '/taxas': typeof TaxasRoute
@@ -360,6 +367,7 @@ export interface FileRoutesByTo {
   '/lit-points': typeof LitPointsRoute
   '/login': typeof LoginRoute
   '/mensagens': typeof MensagensRouteWithChildren
+  '/notificacoes': typeof NotificacoesRoute
   '/pedidos': typeof PedidosRouteWithChildren
   '/recuperar-senha': typeof RecuperarSenhaRoute
   '/taxas': typeof TaxasRoute
@@ -409,6 +417,7 @@ export interface FileRoutesById {
   '/lit-points': typeof LitPointsRoute
   '/login': typeof LoginRoute
   '/mensagens': typeof MensagensRouteWithChildren
+  '/notificacoes': typeof NotificacoesRoute
   '/pedidos': typeof PedidosRouteWithChildren
   '/recuperar-senha': typeof RecuperarSenhaRoute
   '/taxas': typeof TaxasRoute
@@ -461,6 +470,7 @@ export interface FileRouteTypes {
     | '/lit-points'
     | '/login'
     | '/mensagens'
+    | '/notificacoes'
     | '/pedidos'
     | '/recuperar-senha'
     | '/taxas'
@@ -510,6 +520,7 @@ export interface FileRouteTypes {
     | '/lit-points'
     | '/login'
     | '/mensagens'
+    | '/notificacoes'
     | '/pedidos'
     | '/recuperar-senha'
     | '/taxas'
@@ -558,6 +569,7 @@ export interface FileRouteTypes {
     | '/lit-points'
     | '/login'
     | '/mensagens'
+    | '/notificacoes'
     | '/pedidos'
     | '/recuperar-senha'
     | '/taxas'
@@ -609,6 +621,7 @@ export interface RootRouteChildren {
   LitPointsRoute: typeof LitPointsRoute
   LoginRoute: typeof LoginRoute
   MensagensRoute: typeof MensagensRouteWithChildren
+  NotificacoesRoute: typeof NotificacoesRoute
   PedidosRoute: typeof PedidosRouteWithChildren
   RecuperarSenhaRoute: typeof RecuperarSenhaRoute
   TaxasRoute: typeof TaxasRoute
@@ -649,6 +662,13 @@ declare module '@tanstack/react-router' {
       path: '/pedidos'
       fullPath: '/pedidos'
       preLoaderRoute: typeof PedidosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/notificacoes': {
+      id: '/notificacoes'
+      path: '/notificacoes'
+      fullPath: '/notificacoes'
+      preLoaderRoute: typeof NotificacoesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/mensagens': {
@@ -1084,6 +1104,7 @@ const rootRouteChildren: RootRouteChildren = {
   LitPointsRoute: LitPointsRoute,
   LoginRoute: LoginRoute,
   MensagensRoute: MensagensRouteWithChildren,
+  NotificacoesRoute: NotificacoesRoute,
   PedidosRoute: PedidosRouteWithChildren,
   RecuperarSenhaRoute: RecuperarSenhaRoute,
   TaxasRoute: TaxasRoute,

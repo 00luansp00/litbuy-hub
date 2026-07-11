@@ -86,9 +86,10 @@ function NotificationsPage() {
             }
             action={
               activeFilterId !== "all"
-                ? { label: "Ver todas", onClick: () => setActiveFilterId("all") }
+                ? { label: "Ver todas", to: "/notificacoes" }
                 : undefined
             }
+
           />
         ) : (
           <ul className="space-y-2">
