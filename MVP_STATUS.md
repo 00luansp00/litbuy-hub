@@ -214,3 +214,21 @@ GitHub/Cursor/desenvolvedor.
 - No mock, `isAdmin: true` só é atribuído ao login demo
   `admin@litbuy.com`. Qualquer outro email loga como usuário comum.
 - Tudo permanece em memória, sem `localStorage` e sem cookies.
+
+---
+
+## Regras de Marketplace Planejadas (Sprint 18.2)
+
+Documentação estratégica de marketplace intermediador registrada nesta sprint. **Tudo documentado, nada implementado no backend** — o MVP atual permanece 100% mockado.
+
+- **Fluxo de pedido** — `ORDER_LIFECYCLE.md` define 9 status (`pending_payment` → `refunded`) com quem vê, quem age e transições.
+- **Entrega digital** — `DIGITAL_DELIVERY_FLOW.md` descreve fluxo de entrega, evidências obrigatórias e alertas de segurança.
+- **Disputa** — `DISPUTE_FLOW.md` documenta 7 status, efeito no saldo e papel do admin.
+- **Wallet / escrow** — `WALLET_AND_ESCROW_RULES.md` cobre bruto/taxa/líquido, pendente/disponível/bloqueado, saque e estorno.
+- **Status de anúncio** — `LISTING_STATUS_RULES.md` lista 7 status, visibilidade e regra invariante (`active` + `stock > 0` para compra).
+- **Regras de avaliação** — `REVIEW_RULES.md` amarra review a `order_item` de pedido `completed`.
+- **Mensagens** — `MESSAGING_RULES.md` distingue pré-compra e pós-pedido, define moderação e evidência em disputa.
+- **Admin / auditoria** — toda ação de admin gera `admin_audit_logs` imutável (ver `DATABASE_SCHEMA.md`).
+- **Regras oficiais consolidadas** — `MARKETPLACE_RULES.md`.
+
+Docs de suporte atualizados: `DATABASE_SCHEMA.md`, `ENTITY_RELATIONSHIP.md`, `SUPABASE_RLS_PLAN.md`, `PROJECT_RULES.md`.

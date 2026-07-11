@@ -366,3 +366,18 @@ Documento técnico descrevendo a **modelagem futura** do banco de dados da LIT B
 ## Tabelas auxiliares fora deste escopo
 
 `user_roles`, `audit_logs`, `feature_flags`, `email_events` — serão detalhadas em sprints posteriores.
+
+---
+
+## Cobertura das regras de marketplace (Sprint 18.2)
+
+Verificação documental de que o schema previsto acobera as regras registradas em `MARKETPLACE_RULES.md` e documentos relacionados:
+
+- **Order status** — `orders.status` cobre o ciclo de `ORDER_LIFECYCLE.md` (`pending_payment` → `refunded`).
+- **Delivery status** — prever `order_items.delivery_status` (`pending`, `delivered`, `confirmed`, `auto_confirmed`) + `order_item_deliveries` (payload, hash, timestamp, evidências). Ver `DIGITAL_DELIVERY_FLOW.md`.
+- **Dispute status** — `disputes.status` cobre os estados de `DISPUTE_FLOW.md` (`open`, `waiting_buyer`, `waiting_seller`, `under_review`, `resolved_buyer`, `resolved_seller`, `closed`).
+- **Wallet pending/available/blocked balance** — derivados do ledger `wallet_transactions` (nunca colunas mutáveis diretas); views agregam por estado (`pending`, `available`, `blocked`).
+- **Listing status** — `products.status` cobre `LISTING_STATUS_RULES.md` (`draft`, `pending_review`, `active`, `paused`, `rejected`, `sold_out`, `removed`).
+- **Reviews ligadas a pedido** — `product_reviews.order_item_id` obrigatório e único; ver `REVIEW_RULES.md`.
+- **Conversations ligadas a pedido opcionalmente** — `conversations.order_id nullable` para permitir pré-compra.
+- **Admin audit logs** — tabela `admin_audit_logs` (actor_id, action, target_type, target_id, payload jsonb, created_at) imutável; escrita apenas via server function; leitura restrita a admins.
