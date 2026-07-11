@@ -82,6 +82,9 @@ function VendedorDashboard() {
 
       <SellerOnboardingCard />
 
+      <SellerLevelCard />
+
+
       {/* Duas colunas: vendas + performance/financeiro */}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <SellerRecentSalesCard sales={sales} />
