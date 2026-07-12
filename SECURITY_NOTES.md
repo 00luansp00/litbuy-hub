@@ -158,3 +158,10 @@ puramente visuais deve sobreviver ao merge com o backend real.
 - Saque real exige verificação de identidade (KYC), aprovação financeira e integração bancária.
 - Nenhum dado do programa de afiliados persiste no MVP (sem LocalStorage, sem Cookies).
 - Frontend NÃO deve decidir status de comissão, valor liberado, elegibilidade a saque ou legitimidade de indicação.
+
+## Sprint 18.17 — Confiança pública
+
+- Termos, Privacidade e Política de Reembolso publicados são **rascunhos demonstrativos**. LGPD real exige backend, storage seguro e revisão jurídica.
+- KYC e documentos referenciados em `/como-vender` e `/seguranca` seguem exigindo backend, storage protegido e fornecedor especializado.
+- Formulário de `/contato` é mock — sem envio real, sem persistência. Suporte real não pode depender só do frontend; exigirá canal dedicado (e-mail, ticketing, chat) com autenticação e auditoria.
+- Cookies de tracking, analytics real e consentimento LGPD serão implementados junto com o backend.

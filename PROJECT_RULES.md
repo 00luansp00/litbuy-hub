@@ -250,3 +250,12 @@ Documentos relacionados: `ORDER_LIFECYCLE.md`, `DIGITAL_DELIVERY_FLOW.md`, `DISP
 - Autoindicação, spam, cliques automatizados e múltiplas contas devem ser bloqueados no backend.
 - Comissões não podem depender apenas do frontend — cálculo deve ser server-side.
 - Nenhum dado do programa de afiliados persiste (sem LocalStorage, sem Cookies).
+
+## Sprint 18.17 — Páginas Públicas de Confiança, Regras e Ajuda (mock)
+
+- Rotas institucionais criadas: `/ajuda`, `/como-comprar`, `/como-vender`, `/seguranca`, `/regras-da-plataforma`, `/itens-proibidos`, `/politica-de-reembolso`, `/termos`, `/privacidade`, `/contato`.
+- Todo conteúdo é **rascunho demonstrativo**. Termos e Privacidade **não são jurídicos finais** e exigem revisão profissional antes de produção.
+- Todas as páginas consomem `infoService`. Nenhuma tela lê dados diretamente.
+- Formulário de `/contato` é 100% mockado (`simulateSubmitContactForm` + toast). Nenhum e-mail é enviado. Nada é persistido.
+- Suporte real, CMS, chat de suporte, envio de e-mail e cookies exigem backend.
+- Regras públicas devem ser mantidas alinhadas com `MARKETPLACE_RULES.md`, `SECURITY_NOTES.md` e o painel admin.

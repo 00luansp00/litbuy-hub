@@ -406,3 +406,12 @@ Docs de suporte atualizados: `DATABASE_SCHEMA.md`, `ENTITY_RELATIONSHIP.md`, `SU
 - Notificações de afiliados (`type: affiliate`) somadas ao `notificationService`.
 - Analytics mockados: `affiliate_page_viewed_mocked`, `affiliate_link_copied_mocked`, `affiliate_material_copied_mocked`, `affiliate_payout_requested_mocked`, `affiliate_campaign_clicked_mocked`.
 - Limitações: sem tracking real, sem cookies, sem comissão real, sem saque real, sem persistência.
+
+## Sprint 18.17 — Páginas Públicas de Confiança, Regras e Ajuda ✅
+
+- Novo `infoService` com FAQs, categorias, passos, regras, itens proibidos, política de reembolso, termos, privacidade e canais de contato.
+- Componentes reutilizáveis em `src/components/info/InfoPageLayout.tsx`: `InfoPageLayout`, `InfoSection`, `InfoNavigation`, `InfoCard`, `StepByStep`, `FAQAccordion`, `LegalNotice`, `SafetyNotice`, `RulesList`, `ProhibitedItemsGrid`, `PolicyBlock`, `ContactCard`, `RefundPolicyList`.
+- 10 rotas públicas criadas: `/ajuda`, `/como-comprar`, `/como-vender`, `/seguranca`, `/regras-da-plataforma`, `/itens-proibidos`, `/politica-de-reembolso`, `/termos`, `/privacidade`, `/contato`.
+- Footer reorganizado em Navegue / Confiança / Institucional apontando para as novas páginas.
+- Analytics mockados: `help_page_viewed_mocked`, `safety_page_viewed_mocked`, `contact_form_submitted_mocked`, `policy_page_viewed_mocked`, `prohibited_items_viewed_mocked`.
+- Limitações: sem backend, sem CMS, sem envio real, sem persistência, sem cookies, sem tracking real, sem SEO SSR (a Sprint 18.18 cuidará).

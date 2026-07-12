@@ -10,19 +10,29 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as VendedorRouteImport } from './routes/vendedor'
+import { Route as TermosRouteImport } from './routes/termos'
 import { Route as TaxasRouteImport } from './routes/taxas'
+import { Route as SegurancaRouteImport } from './routes/seguranca'
+import { Route as RegrasDaPlataformaRouteImport } from './routes/regras-da-plataforma'
 import { Route as RecuperarSenhaRouteImport } from './routes/recuperar-senha'
+import { Route as PrivacidadeRouteImport } from './routes/privacidade'
+import { Route as PoliticaDeReembolsoRouteImport } from './routes/politica-de-reembolso'
 import { Route as PedidosRouteImport } from './routes/pedidos'
 import { Route as NotificacoesRouteImport } from './routes/notificacoes'
 import { Route as MensagensRouteImport } from './routes/mensagens'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LitPointsRouteImport } from './routes/lit-points'
+import { Route as ItensProibidosRouteImport } from './routes/itens-proibidos'
 import { Route as FavoritosRouteImport } from './routes/favoritos'
+import { Route as ContatoRouteImport } from './routes/contato'
+import { Route as ComoVenderRouteImport } from './routes/como-vender'
+import { Route as ComoComprarRouteImport } from './routes/como-comprar'
 import { Route as CheckoutRouteImport } from './routes/checkout'
 import { Route as CarteiraRouteImport } from './routes/carteira'
 import { Route as CarrinhoRouteImport } from './routes/carrinho'
 import { Route as CadastroRouteImport } from './routes/cadastro'
 import { Route as BuscarRouteImport } from './routes/buscar'
+import { Route as AjudaRouteImport } from './routes/ajuda'
 import { Route as AfiliadosRouteImport } from './routes/afiliados'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
@@ -65,14 +75,39 @@ const VendedorRoute = VendedorRouteImport.update({
   path: '/vendedor',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TermosRoute = TermosRouteImport.update({
+  id: '/termos',
+  path: '/termos',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TaxasRoute = TaxasRouteImport.update({
   id: '/taxas',
   path: '/taxas',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SegurancaRoute = SegurancaRouteImport.update({
+  id: '/seguranca',
+  path: '/seguranca',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RegrasDaPlataformaRoute = RegrasDaPlataformaRouteImport.update({
+  id: '/regras-da-plataforma',
+  path: '/regras-da-plataforma',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RecuperarSenhaRoute = RecuperarSenhaRouteImport.update({
   id: '/recuperar-senha',
   path: '/recuperar-senha',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacidadeRoute = PrivacidadeRouteImport.update({
+  id: '/privacidade',
+  path: '/privacidade',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PoliticaDeReembolsoRoute = PoliticaDeReembolsoRouteImport.update({
+  id: '/politica-de-reembolso',
+  path: '/politica-de-reembolso',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PedidosRoute = PedidosRouteImport.update({
@@ -100,9 +135,29 @@ const LitPointsRoute = LitPointsRouteImport.update({
   path: '/lit-points',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ItensProibidosRoute = ItensProibidosRouteImport.update({
+  id: '/itens-proibidos',
+  path: '/itens-proibidos',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FavoritosRoute = FavoritosRouteImport.update({
   id: '/favoritos',
   path: '/favoritos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ContatoRoute = ContatoRouteImport.update({
+  id: '/contato',
+  path: '/contato',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ComoVenderRoute = ComoVenderRouteImport.update({
+  id: '/como-vender',
+  path: '/como-vender',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ComoComprarRoute = ComoComprarRouteImport.update({
+  id: '/como-comprar',
+  path: '/como-comprar',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CheckoutRoute = CheckoutRouteImport.update({
@@ -128,6 +183,11 @@ const CadastroRoute = CadastroRouteImport.update({
 const BuscarRoute = BuscarRouteImport.update({
   id: '/buscar',
   path: '/buscar',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AjudaRoute = AjudaRouteImport.update({
+  id: '/ajuda',
+  path: '/ajuda',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AfiliadosRoute = AfiliadosRouteImport.update({
@@ -315,19 +375,29 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteWithChildren
   '/afiliados': typeof AfiliadosRoute
+  '/ajuda': typeof AjudaRoute
   '/buscar': typeof BuscarRoute
   '/cadastro': typeof CadastroRoute
   '/carrinho': typeof CarrinhoRoute
   '/carteira': typeof CarteiraRoute
   '/checkout': typeof CheckoutRoute
+  '/como-comprar': typeof ComoComprarRoute
+  '/como-vender': typeof ComoVenderRoute
+  '/contato': typeof ContatoRoute
   '/favoritos': typeof FavoritosRoute
+  '/itens-proibidos': typeof ItensProibidosRoute
   '/lit-points': typeof LitPointsRoute
   '/login': typeof LoginRoute
   '/mensagens': typeof MensagensRouteWithChildren
   '/notificacoes': typeof NotificacoesRoute
   '/pedidos': typeof PedidosRouteWithChildren
+  '/politica-de-reembolso': typeof PoliticaDeReembolsoRoute
+  '/privacidade': typeof PrivacidadeRoute
   '/recuperar-senha': typeof RecuperarSenhaRoute
+  '/regras-da-plataforma': typeof RegrasDaPlataformaRoute
+  '/seguranca': typeof SegurancaRoute
   '/taxas': typeof TaxasRoute
+  '/termos': typeof TermosRoute
   '/vendedor': typeof VendedorRouteWithChildren
   '/admin/anuncios': typeof AdminAnunciosRoute
   '/admin/auditoria': typeof AdminAuditoriaRoute
@@ -366,19 +436,29 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/afiliados': typeof AfiliadosRoute
+  '/ajuda': typeof AjudaRoute
   '/buscar': typeof BuscarRoute
   '/cadastro': typeof CadastroRoute
   '/carrinho': typeof CarrinhoRoute
   '/carteira': typeof CarteiraRoute
   '/checkout': typeof CheckoutRoute
+  '/como-comprar': typeof ComoComprarRoute
+  '/como-vender': typeof ComoVenderRoute
+  '/contato': typeof ContatoRoute
   '/favoritos': typeof FavoritosRoute
+  '/itens-proibidos': typeof ItensProibidosRoute
   '/lit-points': typeof LitPointsRoute
   '/login': typeof LoginRoute
   '/mensagens': typeof MensagensRouteWithChildren
   '/notificacoes': typeof NotificacoesRoute
   '/pedidos': typeof PedidosRouteWithChildren
+  '/politica-de-reembolso': typeof PoliticaDeReembolsoRoute
+  '/privacidade': typeof PrivacidadeRoute
   '/recuperar-senha': typeof RecuperarSenhaRoute
+  '/regras-da-plataforma': typeof RegrasDaPlataformaRoute
+  '/seguranca': typeof SegurancaRoute
   '/taxas': typeof TaxasRoute
+  '/termos': typeof TermosRoute
   '/admin/anuncios': typeof AdminAnunciosRoute
   '/admin/auditoria': typeof AdminAuditoriaRoute
   '/admin/catalogo': typeof AdminCatalogoRoute
@@ -417,19 +497,29 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteWithChildren
   '/afiliados': typeof AfiliadosRoute
+  '/ajuda': typeof AjudaRoute
   '/buscar': typeof BuscarRoute
   '/cadastro': typeof CadastroRoute
   '/carrinho': typeof CarrinhoRoute
   '/carteira': typeof CarteiraRoute
   '/checkout': typeof CheckoutRoute
+  '/como-comprar': typeof ComoComprarRoute
+  '/como-vender': typeof ComoVenderRoute
+  '/contato': typeof ContatoRoute
   '/favoritos': typeof FavoritosRoute
+  '/itens-proibidos': typeof ItensProibidosRoute
   '/lit-points': typeof LitPointsRoute
   '/login': typeof LoginRoute
   '/mensagens': typeof MensagensRouteWithChildren
   '/notificacoes': typeof NotificacoesRoute
   '/pedidos': typeof PedidosRouteWithChildren
+  '/politica-de-reembolso': typeof PoliticaDeReembolsoRoute
+  '/privacidade': typeof PrivacidadeRoute
   '/recuperar-senha': typeof RecuperarSenhaRoute
+  '/regras-da-plataforma': typeof RegrasDaPlataformaRoute
+  '/seguranca': typeof SegurancaRoute
   '/taxas': typeof TaxasRoute
+  '/termos': typeof TermosRoute
   '/vendedor': typeof VendedorRouteWithChildren
   '/admin/anuncios': typeof AdminAnunciosRoute
   '/admin/auditoria': typeof AdminAuditoriaRoute
@@ -471,19 +561,29 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/afiliados'
+    | '/ajuda'
     | '/buscar'
     | '/cadastro'
     | '/carrinho'
     | '/carteira'
     | '/checkout'
+    | '/como-comprar'
+    | '/como-vender'
+    | '/contato'
     | '/favoritos'
+    | '/itens-proibidos'
     | '/lit-points'
     | '/login'
     | '/mensagens'
     | '/notificacoes'
     | '/pedidos'
+    | '/politica-de-reembolso'
+    | '/privacidade'
     | '/recuperar-senha'
+    | '/regras-da-plataforma'
+    | '/seguranca'
     | '/taxas'
+    | '/termos'
     | '/vendedor'
     | '/admin/anuncios'
     | '/admin/auditoria'
@@ -522,19 +622,29 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/afiliados'
+    | '/ajuda'
     | '/buscar'
     | '/cadastro'
     | '/carrinho'
     | '/carteira'
     | '/checkout'
+    | '/como-comprar'
+    | '/como-vender'
+    | '/contato'
     | '/favoritos'
+    | '/itens-proibidos'
     | '/lit-points'
     | '/login'
     | '/mensagens'
     | '/notificacoes'
     | '/pedidos'
+    | '/politica-de-reembolso'
+    | '/privacidade'
     | '/recuperar-senha'
+    | '/regras-da-plataforma'
+    | '/seguranca'
     | '/taxas'
+    | '/termos'
     | '/admin/anuncios'
     | '/admin/auditoria'
     | '/admin/catalogo'
@@ -572,19 +682,29 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/afiliados'
+    | '/ajuda'
     | '/buscar'
     | '/cadastro'
     | '/carrinho'
     | '/carteira'
     | '/checkout'
+    | '/como-comprar'
+    | '/como-vender'
+    | '/contato'
     | '/favoritos'
+    | '/itens-proibidos'
     | '/lit-points'
     | '/login'
     | '/mensagens'
     | '/notificacoes'
     | '/pedidos'
+    | '/politica-de-reembolso'
+    | '/privacidade'
     | '/recuperar-senha'
+    | '/regras-da-plataforma'
+    | '/seguranca'
     | '/taxas'
+    | '/termos'
     | '/vendedor'
     | '/admin/anuncios'
     | '/admin/auditoria'
@@ -625,19 +745,29 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRouteWithChildren
   AfiliadosRoute: typeof AfiliadosRoute
+  AjudaRoute: typeof AjudaRoute
   BuscarRoute: typeof BuscarRoute
   CadastroRoute: typeof CadastroRoute
   CarrinhoRoute: typeof CarrinhoRoute
   CarteiraRoute: typeof CarteiraRoute
   CheckoutRoute: typeof CheckoutRoute
+  ComoComprarRoute: typeof ComoComprarRoute
+  ComoVenderRoute: typeof ComoVenderRoute
+  ContatoRoute: typeof ContatoRoute
   FavoritosRoute: typeof FavoritosRoute
+  ItensProibidosRoute: typeof ItensProibidosRoute
   LitPointsRoute: typeof LitPointsRoute
   LoginRoute: typeof LoginRoute
   MensagensRoute: typeof MensagensRouteWithChildren
   NotificacoesRoute: typeof NotificacoesRoute
   PedidosRoute: typeof PedidosRouteWithChildren
+  PoliticaDeReembolsoRoute: typeof PoliticaDeReembolsoRoute
+  PrivacidadeRoute: typeof PrivacidadeRoute
   RecuperarSenhaRoute: typeof RecuperarSenhaRoute
+  RegrasDaPlataformaRoute: typeof RegrasDaPlataformaRoute
+  SegurancaRoute: typeof SegurancaRoute
   TaxasRoute: typeof TaxasRoute
+  TermosRoute: typeof TermosRoute
   VendedorRoute: typeof VendedorRouteWithChildren
   CategoriaSlugRoute: typeof CategoriaSlugRoute
   LojaSlugRoute: typeof LojaSlugRoute
@@ -656,6 +786,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VendedorRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/termos': {
+      id: '/termos'
+      path: '/termos'
+      fullPath: '/termos'
+      preLoaderRoute: typeof TermosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/taxas': {
       id: '/taxas'
       path: '/taxas'
@@ -663,11 +800,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TaxasRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/seguranca': {
+      id: '/seguranca'
+      path: '/seguranca'
+      fullPath: '/seguranca'
+      preLoaderRoute: typeof SegurancaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/regras-da-plataforma': {
+      id: '/regras-da-plataforma'
+      path: '/regras-da-plataforma'
+      fullPath: '/regras-da-plataforma'
+      preLoaderRoute: typeof RegrasDaPlataformaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/recuperar-senha': {
       id: '/recuperar-senha'
       path: '/recuperar-senha'
       fullPath: '/recuperar-senha'
       preLoaderRoute: typeof RecuperarSenhaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacidade': {
+      id: '/privacidade'
+      path: '/privacidade'
+      fullPath: '/privacidade'
+      preLoaderRoute: typeof PrivacidadeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/politica-de-reembolso': {
+      id: '/politica-de-reembolso'
+      path: '/politica-de-reembolso'
+      fullPath: '/politica-de-reembolso'
+      preLoaderRoute: typeof PoliticaDeReembolsoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/pedidos': {
@@ -705,11 +870,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LitPointsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/itens-proibidos': {
+      id: '/itens-proibidos'
+      path: '/itens-proibidos'
+      fullPath: '/itens-proibidos'
+      preLoaderRoute: typeof ItensProibidosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/favoritos': {
       id: '/favoritos'
       path: '/favoritos'
       fullPath: '/favoritos'
       preLoaderRoute: typeof FavoritosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/contato': {
+      id: '/contato'
+      path: '/contato'
+      fullPath: '/contato'
+      preLoaderRoute: typeof ContatoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/como-vender': {
+      id: '/como-vender'
+      path: '/como-vender'
+      fullPath: '/como-vender'
+      preLoaderRoute: typeof ComoVenderRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/como-comprar': {
+      id: '/como-comprar'
+      path: '/como-comprar'
+      fullPath: '/como-comprar'
+      preLoaderRoute: typeof ComoComprarRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/checkout': {
@@ -745,6 +938,13 @@ declare module '@tanstack/react-router' {
       path: '/buscar'
       fullPath: '/buscar'
       preLoaderRoute: typeof BuscarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ajuda': {
+      id: '/ajuda'
+      path: '/ajuda'
+      fullPath: '/ajuda'
+      preLoaderRoute: typeof AjudaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/afiliados': {
@@ -1116,19 +1316,29 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRouteWithChildren,
   AfiliadosRoute: AfiliadosRoute,
+  AjudaRoute: AjudaRoute,
   BuscarRoute: BuscarRoute,
   CadastroRoute: CadastroRoute,
   CarrinhoRoute: CarrinhoRoute,
   CarteiraRoute: CarteiraRoute,
   CheckoutRoute: CheckoutRoute,
+  ComoComprarRoute: ComoComprarRoute,
+  ComoVenderRoute: ComoVenderRoute,
+  ContatoRoute: ContatoRoute,
   FavoritosRoute: FavoritosRoute,
+  ItensProibidosRoute: ItensProibidosRoute,
   LitPointsRoute: LitPointsRoute,
   LoginRoute: LoginRoute,
   MensagensRoute: MensagensRouteWithChildren,
   NotificacoesRoute: NotificacoesRoute,
   PedidosRoute: PedidosRouteWithChildren,
+  PoliticaDeReembolsoRoute: PoliticaDeReembolsoRoute,
+  PrivacidadeRoute: PrivacidadeRoute,
   RecuperarSenhaRoute: RecuperarSenhaRoute,
+  RegrasDaPlataformaRoute: RegrasDaPlataformaRoute,
+  SegurancaRoute: SegurancaRoute,
   TaxasRoute: TaxasRoute,
+  TermosRoute: TermosRoute,
   VendedorRoute: VendedorRouteWithChildren,
   CategoriaSlugRoute: CategoriaSlugRoute,
   LojaSlugRoute: LojaSlugRoute,
