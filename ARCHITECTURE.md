@@ -277,3 +277,11 @@ são **proteção visual**. Segurança real vai para o backend (ver
 - Integrações leves em `/perfil`, `/carteira`, `/vendedor`, `/admin/relatorios`.
 - Notificações de afiliados: tipo `affiliate` no `notificationService` (mock).
 - Futuro: backend de tracking/atribuição, antifraude, financeiro e admin de afiliados.
+
+## Sprint 18.17 — Camada Institucional
+
+- `src/services/infoService.ts` centraliza FAQs, categorias de ajuda, passos, regras, itens proibidos, política de reembolso, termos, privacidade e canais de contato.
+- `src/components/info/InfoPageLayout.tsx` reúne os primitivos reutilizáveis das páginas institucionais.
+- Rotas: `/ajuda`, `/como-comprar`, `/como-vender`, `/seguranca`, `/regras-da-plataforma`, `/itens-proibidos`, `/politica-de-reembolso`, `/termos`, `/privacidade`, `/contato`.
+- Em produção, o conteúdo institucional poderá migrar para um CMS ou área do admin. Hoje é todo mockado.
+- SEO básico está limitado ao `head()` por rota (título, descrição, og:*). SSR/SEO avançado será tratado em sprint dedicada (18.18).

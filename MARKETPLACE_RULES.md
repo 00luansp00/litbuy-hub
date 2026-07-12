@@ -125,3 +125,11 @@ Regras oficiais de produto da LIT Buy como marketplace intermediador de produtos
 - Pedidos cancelados, reembolsados ou perdidos em disputa cancelam/estornam a comissão vinculada.
 - Uso pago da marca LIT Buy pode exigir autorização.
 - Tudo nesta fase é demonstrativo — não há tracking, atribuição, cálculo ou saque reais.
+
+## Sprint 18.17 — Regras públicas
+
+- Páginas públicas oficiais: `/regras-da-plataforma`, `/itens-proibidos`, `/politica-de-reembolso`, `/seguranca`, `/como-comprar`, `/como-vender`.
+- Comunicação fora da plataforma (WhatsApp/Discord/Telegram/telefone/e-mail) é desencorajada e pode ser denunciada.
+- Penalidades futuras (advertência, bloqueio de anúncio, suspensão, banimento) dependem de backend, RBAC e audit log.
+- Compradores e vendedores compartilham as regras gerais; regras específicas por papel estão listadas em `/regras-da-plataforma`.
+- Regras públicas devem sempre refletir as regras internas do admin e do serviço de mediação.
