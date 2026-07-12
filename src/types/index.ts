@@ -2310,6 +2310,16 @@ export interface AffiliateFaqItem {
   a: string;
 }
 
+export interface AffiliatePayoutPreview {
+  eligibleAmount: number;
+  minimumPayout: number;
+  estimatedProcessingDays: number;
+  requiresKyc: boolean;
+  note: string;
+}
+
+
+
 // ==================================================
 // Info / Institutional pages (Sprint 18.17) — mocked.
 // ==================================================
