@@ -4,34 +4,36 @@ import { Logo } from "@/components/common/Logo";
 
 const columns: { title: string; links: { label: string; to: string }[] }[] = [
   {
+    title: "Navegue",
+    links: [
+      { label: "Categorias", to: "/" },
+      { label: "Buscar", to: "/buscar" },
+      { label: "Como comprar", to: "/como-comprar" },
+      { label: "Como vender", to: "/como-vender" },
+    ],
+  },
+  {
+    title: "Confiança",
+    links: [
+      { label: "Segurança", to: "/seguranca" },
+      { label: "Política de reembolso", to: "/politica-de-reembolso" },
+      { label: "Itens proibidos", to: "/itens-proibidos" },
+      { label: "Regras da plataforma", to: "/regras-da-plataforma" },
+    ],
+  },
+  {
     title: "Institucional",
     links: [
-      { label: "Sobre a LIT Buy", to: "/" },
-      { label: "Tarifas e prazos", to: "/taxas" },
+      { label: "Ajuda", to: "/ajuda" },
+      { label: "Taxas e prazos", to: "/taxas" },
       { label: "LIT Points", to: "/lit-points" },
-      { label: "Carreiras", to: "/" },
-    ],
-  },
-  {
-    title: "Ajuda",
-    links: [
-      { label: "Central de ajuda", to: "/" },
-      { label: "Como comprar", to: "/" },
-      { label: "Como vender", to: "/" },
-      { label: "Segurança", to: "/" },
-    ],
-  },
-  {
-    title: "Legal",
-    links: [
-      { label: "Termos de uso", to: "/" },
-      { label: "Privacidade", to: "/" },
-      { label: "Cookies", to: "/" },
-      { label: "Contato", to: "/" },
+      { label: "Afiliados", to: "/afiliados" },
+      { label: "Termos de uso", to: "/termos" },
+      { label: "Privacidade", to: "/privacidade" },
+      { label: "Contato", to: "/contato" },
     ],
   },
 ];
-
 
 const socials = [
   { icon: Instagram, label: "Instagram" },
