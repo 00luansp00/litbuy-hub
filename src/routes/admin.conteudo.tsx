@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { Eye, History, Pencil, Plus } from "lucide-react";
+import { Eye, History, Pencil, Plus, Send } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { AdminLayout } from "@/components/admin/AdminLayout";
@@ -9,8 +9,10 @@ import { AdminDashboardSection } from "@/components/admin/AdminDashboardSection"
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { EmailTemplatePreview } from "@/components/email/EmailTemplatePreview";
 import { adminAdvancedService } from "@/services/adminAdvancedService";
-import type { AdminContentPage } from "@/types";
+import { transactionalEmailService } from "@/services/transactionalEmailService";
+import type { AdminContentPage, TransactionalEmailTemplate } from "@/types";
 
 export const Route = createFileRoute("/admin/conteudo")({
   component: AdminContentPageRoute,
