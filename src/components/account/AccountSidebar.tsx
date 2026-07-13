@@ -1,6 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { toast } from "sonner";
 import {
+  Bell,
   Heart,
   LayoutDashboard,
   MessageSquare,
