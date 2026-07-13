@@ -86,6 +86,80 @@ function AdminContentPageRoute() {
           CMS real deve viver no backend com controle de versão, agendamento e permissões separadas.
         </p>
       </AdminDashboardSection>
+
+      <AdminDashboardSection title="Templates de e-mail transacional">
+        <EmailTemplatesAdminSection />
+      </AdminDashboardSection>
     </AdminLayout>
+  );
+}
+
+function EmailTemplatesAdminSection() {
+  const [templates, setTemplates] = useState<TransactionalEmailTemplate[]>([]);
+  const [selected, setSelected] = useState<TransactionalEmailTemplate | null>(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    transactionalEmailService.getEmailTemplates().then(setTemplates);
+  }, []);
+
+  const preview = (t: TransactionalEmailTemplate) => {
+    setSelected(t);
+    setOpen(true);
+  };
+
+  const sendTest = async (t: TransactionalEmailTemplate) => {
+    await transactionalEmailService.simulateSendTransactionalEmail(t.key);
+    toast.success("Envio de teste simulado. Nenhum e-mail real foi enviado.");
+  };
+
+  return (
+    <>
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Nome</TableHead>
+              <TableHead>Categoria</TableHead>
+              <TableHead>Assunto</TableHead>
+              <TableHead>Variáveis</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Ações</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {templates.map((t) => (
+              <TableRow key={t.id}>
+                <TableCell>
+                  <div className="font-medium text-foreground">{t.name}</div>
+                  <div className="font-mono text-[11px] text-muted-foreground">{t.key}</div>
+                </TableCell>
+                <TableCell><Badge variant="outline">{t.category}</Badge></TableCell>
+                <TableCell className="max-w-[280px] truncate text-xs text-muted-foreground">{t.subject}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{t.variables.length}</TableCell>
+                <TableCell>
+                  <Badge variant={t.status === "active" ? "default" : "outline"}>{t.status}</Badge>
+                </TableCell>
+                <TableCell className="text-right space-x-1">
+                  <Button size="sm" variant="ghost" onClick={() => preview(t)}>
+                    <Eye className="h-3 w-3" />
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => toast("Editor de template (mock)")}>
+                    <Pencil className="h-3 w-3" />
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => sendTest(t)}>
+                    <Send className="mr-1 h-3 w-3" /> Enviar teste
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      <p className="mt-3 text-[11px] text-muted-foreground">
+        Templates reais precisam de backend + provedor de e-mail (Resend, SendGrid, SES etc.). Nenhum envio real acontece aqui.
+      </p>
+      <EmailTemplatePreview template={selected} open={open} onOpenChange={setOpen} />
+    </>
   );
 }
