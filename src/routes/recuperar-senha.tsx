@@ -68,13 +68,18 @@ function RecuperarSenhaPage() {
             instruções em instantes.
           </p>
           <p className="mt-2 text-xs text-muted-foreground">
-            Verifique também a caixa de spam ou promoções.
+            Modo demonstração: nenhum e-mail real foi enviado. Verifique também spam/promoções em produção.
           </p>
-          <Button asChild variant="outline" className="mt-5 w-full">
-            <Link to="/login">
-              <Mail className="h-4 w-4" /> Voltar para o login
-            </Link>
-          </Button>
+          <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+            <Button onClick={resend} variant="outline" className="flex-1">
+              <RefreshCw className="mr-2 h-4 w-4" /> Reenviar
+            </Button>
+            <Button asChild className="flex-1">
+              <Link to="/login">
+                <Mail className="mr-2 h-4 w-4" /> Voltar para o login
+              </Link>
+            </Button>
+          </div>
         </div>
       ) : (
         <form onSubmit={onSubmit} className="space-y-4" noValidate>
