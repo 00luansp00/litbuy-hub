@@ -55,6 +55,14 @@ export function SellerSaleDetailView({ sale }: Props) {
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [reply, setReply] = useState("");
+  const [problemOpen, setProblemOpen] = useState(false);
+
+  const supportWindow = getSupportWindow({
+    createdAt: sale.createdAt,
+    deliveryMode: sale.deliveryMode,
+    protectionLitActive: sale.protectionLitActive,
+    categoryHint: sale.productTitle,
+  });
 
   useEffect(() => {
     let mounted = true;
