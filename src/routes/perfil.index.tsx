@@ -42,7 +42,6 @@ export const Route = createFileRoute("/perfil/")({
 });
 
 function PerfilPage() {
-function PerfilPage() {
   const { summary, orders, favoriteProducts, messages, wallet, notifications } =
     Route.useLoaderData();
   const { user } = useAuth();
