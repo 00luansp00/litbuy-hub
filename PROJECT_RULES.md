@@ -281,3 +281,14 @@ Documentos relacionados: `ORDER_LIFECYCLE.md`, `DIGITAL_DELIVERY_FLOW.md`, `DISP
   variáveis seguras, sanitização e preview server-side.
 - Nada é persistido no frontend — sem LocalStorage, sem Cookies, sem mocks
   gravados no cliente.
+
+## Sprint 18.20 — Estabilidade e SEO
+- Estados de erro devem ser tratados visualmente (ErrorBoundary,
+  RetryState, EmptyState, OfflineNotice).
+- Services mockados devem retornar fallback seguro (`[]`, `null` tratado,
+  objeto default) — sem `any`.
+- Frontend não substitui validação backend.
+- Analytics atual é 100% mockado (`analyticsService`).
+- SEO atual é limitado por SPA — documentado em ARCHITECTURE.md.
+- Dados sensíveis (cartão, KYC, saque) exibem aviso de demonstração.
+- Não usar LocalStorage/Cookies para tracking.

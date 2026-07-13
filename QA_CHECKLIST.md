@@ -377,3 +377,17 @@ Marque cada item ao rodar a suíte manual em desktop, tablet e mobile.
 - [ ] `MARKETPLACE_RULES.md`, `ORDER_LIFECYCLE.md`, `DIGITAL_DELIVERY_FLOW.md`, `DISPUTE_FLOW.md`, `WALLET_AND_ESCROW_RULES.md`, `LISTING_STATUS_RULES.md`, `REVIEW_RULES.md`, `MESSAGING_RULES.md` presentes.
 - [ ] `SECURITY_NOTES.md` presente e coerente com o modelo mockado.
 - [ ] Nenhum backend, Supabase, WebSocket, pagamento, upload ou permissão real foi implementado no MVP.
+
+## Sprint 18.20 — Checklist final
+- [ ] SEO básico presente em rotas públicas.
+- [ ] ErrorBoundary global captura erro de renderização.
+- [ ] Página 404 amigável.
+- [ ] OfflineNotice aparece ao desligar rede.
+- [ ] RetryState disponível em telas de erro mockadas.
+- [ ] Responsividade em áreas densas sem overflow.
+- [ ] Tabelas com scroll horizontal no mobile.
+- [ ] Navegação por teclado em formulários críticos.
+- [ ] Ícones clicáveis com `aria-label`.
+- [ ] Links críticos (Footer, UserMenu, AdminSidebar) sem quebras.
+- [ ] Nenhum analytics real disparado (apenas console.debug em dev).
+- [ ] Sem persistência (LocalStorage/Cookies) para tracking.

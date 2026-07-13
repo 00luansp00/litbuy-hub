@@ -184,3 +184,12 @@ puramente visuais deve sobreviver ao merge com o backend real.
   críticos não podem ser desativados.
 - Nunca colocar dados sensíveis (senha, código PIX, dados de cartão) no corpo
   do e-mail — apenas metadados e links assinados.
+
+## Sprint 18.20 — Estabilidade
+- ErrorBoundary nunca expõe stack trace para usuário comum
+  (apenas em `import.meta.env.DEV`).
+- Tracking real exigirá consentimento explícito (LGPD/GDPR) — hoje
+  não há cookies nem storage.
+- Erros capturados não devem vazar tokens, dados de pagamento nem PII.
+- Reports de erro para Lovable (`reportLovableError`) enviam apenas
+  metadados de rota e boundary.

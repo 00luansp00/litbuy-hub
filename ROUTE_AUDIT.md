@@ -121,3 +121,16 @@ construção.
 - `/admin/*` — protegida por `AdminGate` (checa `isAdmin` via `admin@litbuy.com`).
 - Todas as rotas dinâmicas usam `Link` com `params={{ ... }}` — nenhum `href` interpolado.
 - Nenhuma rota consome `@/data/*` diretamente — sempre via services.
+
+## Sprint 18.20 — Auditoria leve
+- `/admin/denuncias` é a rota oficial (não existe `/admin/reclamacoes`).
+  Links em Footer, Notificações, ReportDialog e AdminSidebar apontam
+  para `/admin/denuncias`.
+- Rotas de e-mail: `/verificar-email`, `/redefinir-senha`,
+  `/verificacao-login`, `/perfil/preferencias` — sem quebras.
+- Páginas públicas (Sprint 18.17): `/ajuda`, `/como-comprar`,
+  `/como-vender`, `/seguranca`, `/regras-da-plataforma`,
+  `/itens-proibidos`, `/politica-de-reembolso`, `/termos`,
+  `/privacidade`, `/contato` — todas presentes.
+- `/afiliados` acessível via Footer e AccountSidebar.
+- 404 amigável no root (`notFoundComponent`).
