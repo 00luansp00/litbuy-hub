@@ -460,3 +460,25 @@ Docs de suporte atualizados: `DATABASE_SCHEMA.md`, `ENTITY_RELATIONSHIP.md`, `SU
   `navigator.onLine` agora ocorre pós-hidratação).
 - Typecheck limpo.
 - `PRE_HANDOFF_AUDIT.md` criado como base para Sprint 19.
+
+## Sprint 19 — Handoff Técnico Final ✅
+
+- MVP visual finalizado.
+- Pronto para handoff técnico (GitHub / Cursor / desenvolvedor).
+- Backend continua **inexistente** por design.
+- Documentação de entrega completa:
+  - `DEVELOPER_HANDOFF.md`
+  - `ROUTES_MAP.md`
+  - `SERVICES_MAP.md`
+  - `PROVIDERS_MAP.md`
+  - `MOCKS_INVENTORY.md`
+  - `BACKEND_ROADMAP.md`
+  - `API_CONTRACTS_DRAFT.md`
+  - `DATABASE_IMPLEMENTATION_NOTES.md`
+  - `SECURITY_IMPLEMENTATION_PLAN.md`
+  - `PAYMENT_AND_ESCROW_IMPLEMENTATION_PLAN.md`
+  - `TECH_DEBT_AND_RISKS.md`
+  - `HANDOFF_CHECKLIST.md`
+- README profissional atualizado.
+- Typecheck limpo.
+- Próxima fase: backend (ver `BACKEND_ROADMAP.md`).

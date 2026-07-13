@@ -292,3 +292,24 @@ Documentos relacionados: `ORDER_LIFECYCLE.md`, `DIGITAL_DELIVERY_FLOW.md`, `DISP
 - SEO atual é limitado por SPA — documentado em ARCHITECTURE.md.
 - Dados sensíveis (cartão, KYC, saque) exibem aviso de demonstração.
 - Não usar LocalStorage/Cookies para tracking.
+
+## Regras para próxima fase (Sprint 19+)
+
+- Não implementar dinheiro real sem backend seguro (gateway + escrow +
+  auditoria).
+- Não usar frontend como fonte de verdade — RLS + validação server-side
+  obrigatórias.
+- Não usar mocks em produção.
+- Não coletar dados reais em telas mockadas.
+- Revisar todo o código com desenvolvedor experiente antes de
+  produção.
+- Revisar termos, privacidade e política de itens proibidos com
+  jurídico.
+- Implementar LGPD antes de aceitar cadastro real (DPO, política,
+  direitos, consent).
+- Implementar RLS em todas as tabelas.
+- Implementar logs de auditoria append-only para financeiro e admin.
+- Implementar permissões reais (roles em tabela separada + `has_role`).
+- Implementar testes automatizados (unit + integration + e2e).
+- Implementar monitoramento (Sentry / Logtail) antes de launch.
+- Implementar backups + testes de restore antes de aceitar dinheiro.

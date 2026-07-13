@@ -356,3 +356,36 @@ ausência — omitir quando não houver imagem significativa.
 
 ### Edge cases
 Ver `EDGE_CASES.md`.
+
+## Sprint 19 — Documentação de handoff
+
+A partir desta sprint, a arquitetura é complementada pelos documentos
+de handoff:
+
+- **Entrada**: `DEVELOPER_HANDOFF.md`.
+- **Rotas**: `ROUTES_MAP.md`.
+- **Camada de dados mockada**: `SERVICES_MAP.md`, `PROVIDERS_MAP.md`,
+  `MOCKS_INVENTORY.md`.
+- **Roadmap backend**: `BACKEND_ROADMAP.md`, `API_CONTRACTS_DRAFT.md`,
+  `DATABASE_IMPLEMENTATION_NOTES.md`.
+- **Segurança e pagamentos**: `SECURITY_IMPLEMENTATION_PLAN.md`,
+  `PAYMENT_AND_ESCROW_IMPLEMENTATION_PLAN.md`.
+- **Riscos e entrega**: `TECH_DEBT_AND_RISKS.md`,
+  `HANDOFF_CHECKLIST.md`, `PRE_HANDOFF_AUDIT.md`.
+
+### Visão geral final
+
+- **Frontend**: React 19 + TanStack Start (SPA + rotas file-based) +
+  Tailwind v4 + shadcn/ui.
+- **Estado global**: React Context (`AuthProvider`, `CartProvider`,
+  `NotificationProvider`) + TanStack Query para cache.
+- **Serviços**: todos mockados em `src/services/`, prontos para virar
+  clientes de API.
+- **Providers**: mockados; substituição futura em `PROVIDERS_MAP.md`.
+- **Estabilidade**: `ErrorBoundary` global, `OfflineNotice`,
+  `RetryState`, 404 amigável.
+- **SEO**: helper `buildSeoHead` — limitado por SPA, SSR/SSG
+  recomendado para rotas públicas na fase backend.
+- **Analytics**: `analyticsService` como stub `console.debug`.
+- **Backend**: **inexistente**. Roadmap completo em
+  `BACKEND_ROADMAP.md`.
