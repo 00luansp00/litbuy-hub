@@ -296,14 +296,20 @@ export function SellerSaleDetailView({ sale }: Props) {
           )}
         </section>
 
-        {/* Chat com o comprador */}
+        {/* Chat oficial do pedido — visão vendedor */}
         <section className="rounded-2xl border border-border bg-card p-5 shadow-card">
-          <header className="mb-3 flex items-center justify-between gap-2">
+          <header className="mb-3 flex items-start justify-between gap-2">
             <div className="flex items-center gap-2">
               <MessageSquare className="h-5 w-5 text-primary" />
-              <h3 className="text-lg font-bold text-foreground">
-                Chat com o comprador
-              </h3>
+              <div>
+                <h3 className="text-lg font-bold text-foreground">
+                  Chat oficial do pedido
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Se houver problema com o comprador ou com a entrega, use este
+                  canal para solicitar análise da LIT Buy.
+                </p>
+              </div>
             </div>
             {conversation && (
               <Button asChild variant="ghost" size="sm">
@@ -313,6 +319,19 @@ export function SellerSaleDetailView({ sale }: Props) {
               </Button>
             )}
           </header>
+
+          <OrderChatMediationBanner
+            window={supportWindow}
+            perspective="seller"
+            onReport={() => {
+              analyticsService.track("order_problem_clicked_mocked", {
+                saleId: sale.id,
+                perspective: "seller",
+              });
+              setProblemOpen(true);
+            }}
+          />
+
 
           <div className="mb-3 max-h-60 space-y-2 overflow-y-auto rounded-xl border border-border bg-background p-3">
             {messages.length === 0 && (
