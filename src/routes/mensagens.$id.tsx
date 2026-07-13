@@ -90,6 +90,48 @@ function ConversationDetailPage() {
 
           {/* Conversa aberta */}
           <div className="flex flex-col gap-3">
+            {order && mediationWindow && (
+              <div className="rounded-2xl border border-warning/30 bg-warning/5 p-3">
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <Badge className="bg-primary/15 text-primary border-primary/30">
+                      Pedido vinculado
+                    </Badge>
+                    <span className="font-medium text-foreground">
+                      {order.code}
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-muted-foreground">
+                      <Clock className="h-3 w-3" /> Prazo de mediação:{" "}
+                      {new Date(mediationWindow.deadlineDate).toLocaleString(
+                        "pt-BR",
+                        { dateStyle: "short", timeStyle: "short" },
+                      )}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">
+                      · Conversa oficial vinculada ao pedido
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button asChild variant="outline" size="sm">
+                      <Link to="/pedidos/$id" params={{ id: order.id }}>
+                        <Receipt className="h-3.5 w-3.5" /> Ver pedido
+                      </Link>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={mediationWindow.isExpired ? "outline" : "default"}
+                      onClick={() => setProblemOpen(true)}
+                      disabled={mediationWindow.isExpired}
+                    >
+                      <AlertOctagon className="h-3.5 w-3.5" />
+                      {mediationWindow.isExpired
+                        ? "Prazo encerrado"
+                        : "Reportar problema"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="flex min-h-[70vh] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-card">
               <ConversationHeader conversation={conversation} />
               <ConversationContextCard context={conversation.context} />
@@ -100,6 +142,7 @@ function ConversationDetailPage() {
               />
               <MessageComposer onSend={handleSend} />
             </div>
+
             <MessageSecurityNotice />
             <div className="flex flex-wrap justify-end gap-2">
               <ReportButton
