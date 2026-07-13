@@ -26,12 +26,19 @@ function RecuperarSenhaPage() {
       return;
     }
     try {
+      analyticsService.track("password_reset_requested_mocked");
       await requestPasswordReset(email);
       setSent(true);
-      toast.success("Enviamos as instruções para o seu email.");
+      toast.success("Instruções enviadas (mock). Nenhum e-mail real foi enviado.");
     } catch {
       toast.error("Não foi possível enviar as instruções.");
     }
+  };
+
+  const resend = async () => {
+    analyticsService.track("email_resend_clicked_mocked", { eventKey: "auth.password_reset" });
+    await transactionalEmailService.simulateResendEmail("auth.password_reset");
+    toast.success("Reenvio simulado.");
   };
 
   return (
