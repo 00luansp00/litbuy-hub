@@ -81,6 +81,28 @@ function PerfilPage() {
             <VerificationStatusCard status="not_started" compact />
             <WalletSummaryCard wallet={wallet} />
             <AffiliateProfileCard status="active" clicks={1284} commissionAvailable={312.7} />
+            <Link
+              to="/perfil/preferencias"
+              className="group block rounded-2xl border border-border bg-surface/60 p-4 transition hover:border-primary/40"
+            >
+              <div className="flex items-center gap-3">
+                <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary/15 text-primary">
+                  <Mail className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-foreground">Preferências de comunicação</p>
+                  <p className="truncate text-xs text-muted-foreground">{email}</p>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground transition group-hover:translate-x-0.5" />
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Badge variant="secondary" className="gap-1 text-[10px]">
+                  <CheckCircle2 className="h-3 w-3" /> E-mail verificado (mock)
+                </Badge>
+                <Badge variant="outline" className="text-[10px]">Plataforma</Badge>
+                <Badge variant="outline" className="text-[10px]">E-mail</Badge>
+              </div>
+            </Link>
             <AccountNotifications notifications={notifications} />
             <QuickActionsCard />
           </aside>
