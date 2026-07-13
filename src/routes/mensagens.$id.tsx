@@ -50,10 +50,16 @@ export const Route = createFileRoute("/mensagens/$id")({
 });
 
 function ConversationDetailPage() {
-  const { conversation, conversations, messages: initial } =
+  const { conversation, conversations, messages: initial, order } =
     Route.useLoaderData();
   const currentUser = messageService.getCurrentUser();
   const [messages, setMessages] = useState<ConversationMessage[]>(initial);
+  const [problemOpen, setProblemOpen] = useState(false);
+
+  const mediationWindow = useMemo(
+    () => (order ? getMediationDeadline(order as Order) : null),
+    [order],
+  );
 
   const handleSend = async (text: string) => {
     const msg = await messageService.simulateSendMessage(
@@ -71,6 +77,7 @@ function ConversationDetailPage() {
       title="Entre para acessar a conversa"
       description="Você precisa estar logado para ver esta conversa."
     >
+
       <div className="container-lit py-6 md:py-10">
         <div className="grid gap-4 md:grid-cols-[320px_minmax(0,1fr)] md:gap-6">
           {/* Lista à esquerda no desktop */}
