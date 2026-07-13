@@ -134,3 +134,12 @@ construção.
   `/privacidade`, `/contato` — todas presentes.
 - `/afiliados` acessível via Footer e AccountSidebar.
 - 404 amigável no root (`notFoundComponent`).
+
+## Sprint 18.21 — Auditoria final pré-handoff
+
+- 66 rotas geradas em `src/routes/`.
+- Todas as rotas listadas em `PRE_HANDOFF_AUDIT.md` carregam sem erro.
+- `/admin/denuncias` é oficial. `rg "admin/reclamacoes" src/` → 0 hits.
+- Nenhum import inválido de `lucide-react/dynamic`.
+- 404 amigável em `__root.tsx` (`notFoundComponent`).
+- ErrorBoundary e OfflineNotice envolvem toda a árvore autenticada.

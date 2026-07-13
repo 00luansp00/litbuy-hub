@@ -391,3 +391,28 @@ Marque cada item ao rodar a suíte manual em desktop, tablet e mobile.
 - [ ] Links críticos (Footer, UserMenu, AdminSidebar) sem quebras.
 - [ ] Nenhum analytics real disparado (apenas console.debug em dev).
 - [ ] Sem persistência (LocalStorage/Cookies) para tracking.
+
+## Sprint 18.21 — QA Final Pré-Handoff
+
+- [x] Typecheck limpo (`bunx tsgo --noEmit`).
+- [x] Rotas públicas auditadas.
+- [x] Rotas de usuário auditadas.
+- [x] Rotas de vendedor auditadas.
+- [x] Rotas admin auditadas.
+- [x] `/admin/denuncias` confirmado como rota oficial.
+- [x] Fluxo comprador auditado.
+- [x] Fluxo vendedor auditado.
+- [x] Fluxo admin auditado.
+- [x] Chat / mediação / denúncia auditados.
+- [x] Notificações auditadas (sem `lucide-react/dynamic`).
+- [x] E-mails transacionais visuais auditados.
+- [x] Afiliados auditados.
+- [x] Páginas públicas auditadas.
+- [x] KYC / equipe auditados.
+- [x] SEO / analytics / erros auditados.
+- [x] Responsividade crítica revisada.
+- [x] Acessibilidade básica revisada.
+- [x] Dados sensíveis com aviso de demonstração.
+- [x] Services com fallback seguro.
+- [x] `PRE_HANDOFF_AUDIT.md` criado.
+- [x] Nenhum backend, tracking, cookie ou LocalStorage.

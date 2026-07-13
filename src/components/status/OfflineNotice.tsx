@@ -8,10 +8,14 @@ import { cn } from "@/lib/utils";
  * nenhum service worker, nenhuma persistência.
  */
 export function OfflineNotice() {
-  const [online, setOnline] = useState<boolean>(
-    typeof navigator === "undefined" ? true : navigator.onLine,
-  );
+  const [mounted, setMounted] = useState(false);
+  const [online, setOnline] = useState<boolean>(true);
   const [justReconnected, setJustReconnected] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    setOnline(typeof navigator === "undefined" ? true : navigator.onLine);
+  }, []);
 
   useEffect(() => {
     const goOnline = () => {
@@ -32,7 +36,7 @@ export function OfflineNotice() {
     };
   }, []);
 
-  if (online && !justReconnected) return null;
+  if (!mounted || (online && !justReconnected)) return null;
 
   return (
     <div
