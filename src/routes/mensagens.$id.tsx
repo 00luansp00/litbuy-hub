@@ -28,7 +28,12 @@ export const Route = createFileRoute("/mensagens/$id")({
     const messages = await messageService.getConversationMessages(
       conversation.id,
     );
-    return { conversation, conversations, messages };
+    const orderId = conversation.context?.orderId;
+    const order =
+      conversation.type === "order_related" && orderId
+        ? (await orderService.getOrderById(orderId)) ?? null
+        : null;
+    return { conversation, conversations, messages, order };
   },
   component: ConversationDetailPage,
   notFoundComponent: ConversationNotFound,
