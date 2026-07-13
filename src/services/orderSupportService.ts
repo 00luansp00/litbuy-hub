@@ -57,22 +57,21 @@ const CATEGORY_WINDOWS: Record<
   service: { days: 45, hasProtectionExtra: 30, name: "Serviço" },
 };
 
-/** Deriva um "categoryKey" mockado a partir do pedido. */
-function categoryKeyOf(order: Order): keyof typeof CATEGORY_WINDOWS {
-  if (order.deliveryMode === "automatic") return "digital";
-  if (order.items?.[0]?.productTitle?.toLowerCase().includes("serviço"))
-    return "service";
+/** Deriva um "categoryKey" mockado a partir do input. */
+function categoryKeyOf(input: SupportWindowInput): keyof typeof CATEGORY_WINDOWS {
+  if (input.deliveryMode === "automatic") return "digital";
+  if (input.categoryHint?.toLowerCase().includes("serviço")) return "service";
   return "default";
 }
 
-export function getMediationDeadline(order: Order): OrderSupportWindow {
-  const key = categoryKeyOf(order);
+export function getSupportWindow(input: SupportWindowInput): OrderSupportWindow {
+  const key = categoryKeyOf(input);
   const base = CATEGORY_WINDOWS[key]!;
   const hasProtection = Boolean(
-    order.protectionLitActive || order.litProtection?.active,
+    input.protectionLitActive || input.litProtectionActive,
   );
   const days = base.days + (hasProtection ? base.hasProtectionExtra : 0);
-  const created = new Date(order.createdAt).getTime();
+  const created = new Date(input.createdAt).getTime();
   const deadline = new Date(created + days * 24 * 3600_000);
   const isExpired = Date.now() > deadline.getTime();
   const label = hasProtection
@@ -86,6 +85,16 @@ export function getMediationDeadline(order: Order): OrderSupportWindow {
     isExpired,
     categoryName: base.name,
   };
+}
+
+export function getMediationDeadline(order: Order): OrderSupportWindow {
+  return getSupportWindow({
+    createdAt: order.createdAt,
+    deliveryMode: order.deliveryMode,
+    protectionLitActive: order.protectionLitActive,
+    litProtectionActive: order.litProtection?.active,
+    categoryHint: order.items?.[0]?.productTitle,
+  });
 }
 
 export function getOrderSupportWindow(order: Order): OrderSupportWindow {
