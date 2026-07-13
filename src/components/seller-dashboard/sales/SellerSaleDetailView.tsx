@@ -18,10 +18,13 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { formatBRL } from "@/lib/format";
 import { OrderMediationCard } from "@/components/orders/OrderMediationCard";
+import { OrderChatMediationBanner } from "@/components/orders/OrderChatMediationBanner";
+import { OrderProblemDialog } from "@/components/orders/OrderProblemDialog";
 import { ReportButton } from "@/components/report/ReportButton";
 import { sellerSaleService } from "@/services/sellerSaleService";
 import { messageService } from "@/services/messageService";
 import { analyticsService } from "@/services/analyticsService";
+import { getSupportWindow } from "@/services/orderSupportService";
 import type {
   Conversation,
   ConversationMessage,
@@ -52,6 +55,14 @@ export function SellerSaleDetailView({ sale }: Props) {
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [reply, setReply] = useState("");
+  const [problemOpen, setProblemOpen] = useState(false);
+
+  const supportWindow = getSupportWindow({
+    createdAt: sale.createdAt,
+    deliveryMode: sale.deliveryMode,
+    protectionLitActive: sale.protectionLitActive,
+    categoryHint: sale.productTitle,
+  });
 
   useEffect(() => {
     let mounted = true;
@@ -285,14 +296,20 @@ export function SellerSaleDetailView({ sale }: Props) {
           )}
         </section>
 
-        {/* Chat com o comprador */}
+        {/* Chat oficial do pedido — visão vendedor */}
         <section className="rounded-2xl border border-border bg-card p-5 shadow-card">
-          <header className="mb-3 flex items-center justify-between gap-2">
+          <header className="mb-3 flex items-start justify-between gap-2">
             <div className="flex items-center gap-2">
               <MessageSquare className="h-5 w-5 text-primary" />
-              <h3 className="text-lg font-bold text-foreground">
-                Chat com o comprador
-              </h3>
+              <div>
+                <h3 className="text-lg font-bold text-foreground">
+                  Chat oficial do pedido
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Se houver problema com o comprador ou com a entrega, use este
+                  canal para solicitar análise da LIT Buy.
+                </p>
+              </div>
             </div>
             {conversation && (
               <Button asChild variant="ghost" size="sm">
@@ -302,6 +319,19 @@ export function SellerSaleDetailView({ sale }: Props) {
               </Button>
             )}
           </header>
+
+          <OrderChatMediationBanner
+            window={supportWindow}
+            perspective="seller"
+            onReport={() => {
+              analyticsService.track("order_problem_clicked_mocked", {
+                saleId: sale.id,
+                perspective: "seller",
+              });
+              setProblemOpen(true);
+            }}
+          />
+
 
           <div className="mb-3 max-h-60 space-y-2 overflow-y-auto rounded-xl border border-border bg-background p-3">
             {messages.length === 0 && (
@@ -427,10 +457,16 @@ export function SellerSaleDetailView({ sale }: Props) {
               muted
             />
             {sale.financial.blockedInDispute > 0 && (
-              <Row
-                label="Bloqueado em disputa"
-                value={formatBRL(sale.financial.blockedInDispute)}
-              />
+              <>
+                <Row
+                  label="Saldo bloqueado em mediação"
+                  value={formatBRL(sale.financial.blockedInDispute)}
+                />
+                <p className="text-[11px] text-warning">
+                  Motivo: mediação aberta pelo comprador (mock). Nenhum saldo
+                  real é bloqueado nesta demonstração.
+                </p>
+              </>
             )}
             {sale.financial.expectedReleaseAt && (
               <Row
@@ -454,6 +490,13 @@ export function SellerSaleDetailView({ sale }: Props) {
           seguro.
         </div>
       </aside>
+
+      <OrderProblemDialog
+        orderId={sale.orderId}
+        open={problemOpen}
+        onOpenChange={setProblemOpen}
+        perspective="seller"
+      />
     </div>
   );
 }

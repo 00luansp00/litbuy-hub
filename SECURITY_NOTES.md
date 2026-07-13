@@ -165,3 +165,10 @@ puramente visuais deve sobreviver ao merge com o backend real.
 - KYC e documentos referenciados em `/como-vender` e `/seguranca` seguem exigindo backend, storage protegido e fornecedor especializado.
 - Formulário de `/contato` é mock — sem envio real, sem persistência. Suporte real não pode depender só do frontend; exigirá canal dedicado (e-mail, ticketing, chat) com autenticação e auditoria.
 - Cookies de tracking, analytics real e consentimento LGPD serão implementados junto com o backend.
+
+## Sprint 18.18 — Chat oficial e mediação guiada
+- Mediação real exige backend com auditoria, atribuição a moderadores e RBAC — hoje `simulateOpenMediation` é um mock.
+- Prazos reais (categoria, Proteção LIT, exceções) precisam vir do backend. Prazo derivado do frontend é apenas demonstrativo.
+- Saldo real não pode depender do frontend: bloqueio/retenção/liberação exigem serviço financeiro com conciliação, escrow e auditoria.
+- Upload de evidências (prints, vídeos, seleção de mensagens) exige storage seguro, verificação de MIME, tamanho máximo, deduplicação e política LGPD.
+- Sanitização anti-poaching no frontend é apenas visual — moderação real precisa acontecer no servidor antes de persistir/entregar mensagens.

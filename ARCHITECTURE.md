@@ -285,3 +285,11 @@ são **proteção visual**. Segurança real vai para o backend (ver
 - Rotas: `/ajuda`, `/como-comprar`, `/como-vender`, `/seguranca`, `/regras-da-plataforma`, `/itens-proibidos`, `/politica-de-reembolso`, `/termos`, `/privacidade`, `/contato`.
 - Em produção, o conteúdo institucional poderá migrar para um CMS ou área do admin. Hoje é todo mockado.
 - SEO básico está limitado ao `head()` por rota (título, descrição, og:*). SSR/SEO avançado será tratado em sprint dedicada (18.18).
+
+## Sprint 18.18 — Chat Oficial do Pedido + Mediação Guiada
+- `OrderChatCard` evoluído: cabeçalho "Chat oficial do pedido", banner de manual de instruções (link para `/regras-da-plataforma` e `/seguranca`), banner de prazo de mediação (`OrderChatMediationBanner`), botão fixo "Reportar problema", divisores de data (Hoje/Ontem), botão "Última mensagem", mensagens automáticas do sistema derivadas por `orderSupportService.getOrderSystemMessages`, mensagem automática do vendedor (LIT-MAX) com sanitização anti-poaching.
+- `OrderProblemDialog` reescrito como fluxo guiado em 3 passos: motivo → descrição (mínimo 10 caracteres, contador visual) → evidências opcionais (mock). Mostra prazo da categoria e aviso de saldo retido. Motivos "contato externo" e "comprador suspeito" sugerem denúncia paralela.
+- `orderSupportService` centraliza `getMediationDeadline`, `getSupportWindow` (aceita pedido ou venda), `getOrderSystemMessages` e a lista `MEDIATION_REASONS`. Nenhum backend — todos os prazos são derivados de `createdAt`, `deliveryMode` e `protectionLitActive`.
+- Visão do vendedor (`SellerSaleDetailView`) reaproveita `OrderChatMediationBanner` e `OrderProblemDialog` com `perspective="seller"`.
+- `/mensagens/$id`: quando `conversation.type === "order_related"`, exibe chip "Pedido vinculado", prazo de mediação, botão "Ver pedido" e botão "Reportar problema" (abre `OrderProblemDialog`).
+- Financeiro da venda mostra "Saldo bloqueado em mediação" quando `financial.blockedInDispute > 0`. Retenção real depende de backend financeiro.

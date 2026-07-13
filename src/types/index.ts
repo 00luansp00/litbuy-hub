@@ -576,7 +576,12 @@ export type CheckoutAnalyticsEventName =
   | "safety_page_viewed_mocked"
   | "contact_form_submitted_mocked"
   | "policy_page_viewed_mocked"
-  | "prohibited_items_viewed_mocked";
+  | "prohibited_items_viewed_mocked"
+  | "order_problem_clicked_mocked"
+  | "mediation_dialog_opened_mocked"
+  | "mediation_reason_selected_mocked"
+  | "mediation_submitted_mocked"
+  | "order_chat_system_notice_viewed_mocked";
 
 // ==================================================
 // Denúncias / Reports (Sprint 18.15) — 100% mockado.
