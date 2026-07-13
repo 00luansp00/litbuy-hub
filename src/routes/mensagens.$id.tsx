@@ -1,5 +1,6 @@
-import { createFileRoute, notFound } from "@tanstack/react-router";
-import { useState } from "react";
+import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { useMemo, useState } from "react";
+import { AlertOctagon, Clock, Receipt } from "lucide-react";
 import { toast } from "sonner";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { ConversationContextCard } from "@/components/messages/ConversationContextCard";
@@ -8,9 +9,14 @@ import { ConversationsList } from "@/components/messages/ConversationsList";
 import { MessageComposer } from "@/components/messages/MessageComposer";
 import { MessageSecurityNotice } from "@/components/messages/MessageSecurityNotice";
 import { MessagesThread } from "@/components/messages/MessagesThread";
+import { OrderProblemDialog } from "@/components/orders/OrderProblemDialog";
 import { ReportButton } from "@/components/report/ReportButton";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { messageService } from "@/services/messageService";
-import type { ConversationMessage } from "@/types";
+import { orderService } from "@/services/orderService";
+import { getMediationDeadline } from "@/services/orderSupportService";
+import type { ConversationMessage, Order } from "@/types";
 
 export const Route = createFileRoute("/mensagens/$id")({
   loader: async ({ params }) => {
