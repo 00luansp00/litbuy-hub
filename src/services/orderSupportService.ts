@@ -170,6 +170,7 @@ export const MEDIATION_REASONS: MediationReasonOption[] = [
 export const orderSupportService = {
   getMediationDeadline,
   getOrderSupportWindow,
+  getSupportWindow,
   getOrderSystemMessages,
   MEDIATION_REASONS,
 };
