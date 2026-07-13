@@ -444,3 +444,19 @@ Docs de suporte atualizados: `DATABASE_SCHEMA.md`, `ENTITY_RELATIONSHIP.md`, `SU
 - `EDGE_CASES.md` criado.
 - Documentação de limitações SPA/SEO/SSR futuras.
 - Nenhum analytics, tracking ou persistência real.
+
+## Sprint 18.21 — QA Final Pré-Handoff ✅
+
+- Rotas públicas, de usuário, vendedor e admin auditadas (ver `ROUTE_AUDIT.md`).
+- `/admin/denuncias` confirmada como rota oficial; sem referências
+  quebradas para `/admin/reclamacoes`.
+- Fluxos comprador/vendedor/admin validados visualmente ponta a ponta.
+- Chat, mediação e denúncia auditados como fluxos independentes.
+- Notificações, e-mails transacionais visuais, afiliados, KYC e equipe
+  auditados.
+- SEO helper, analytics mockado, ErrorBoundary, OfflineNotice e 404
+  confirmados.
+- Corrigido hydration-mismatch do `OfflineNotice` (leitura de
+  `navigator.onLine` agora ocorre pós-hidratação).
+- Typecheck limpo.
+- `PRE_HANDOFF_AUDIT.md` criado como base para Sprint 19.

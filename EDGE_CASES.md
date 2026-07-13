@@ -77,3 +77,12 @@ deverão ser reforçados por validação real no backend futuramente.
 - Página não encontrada (404 amigável).
 
 Todos os fluxos acima são visuais/mockados. Nenhum dado é persistido.
+
+## Sprint 18.21 — Reforços
+
+- Hydration: componentes que dependem de `navigator`/`window`
+  (ex.: `OfflineNotice`) só devem consultar essas APIs dentro de
+  `useEffect`, retornando `null` até estar montado.
+- 404: qualquer rota inválida cai no `NotFoundComponent` do root.
+- ErrorBoundary: erros de renderização caem no fallback dark premium
+  sem expor stack em produção.

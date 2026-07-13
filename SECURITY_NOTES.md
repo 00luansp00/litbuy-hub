@@ -193,3 +193,12 @@ puramente visuais deve sobreviver ao merge com o backend real.
 - Erros capturados não devem vazar tokens, dados de pagamento nem PII.
 - Reports de erro para Lovable (`reportLovableError`) enviam apenas
   metadados de rota e boundary.
+
+## Sprint 18.21 — QA Final
+- Confirmado: nenhum PII, credencial, cartão, Pix, senha ou documento
+  real deve ser inserido no MVP atual — telas sensíveis exibem aviso
+  de demonstração.
+- ErrorBoundary mantém stack visível apenas em `import.meta.env.DEV`.
+- Sem cookies, sem LocalStorage, sem tracking — LGPD OK para o mock.
+- Backend real deverá reforçar RLS, criptografia em repouso, TLS,
+  rate-limit, auditoria imutável e KYC/AML.
