@@ -1,4 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { Mail, CheckCircle2, ChevronRight } from "lucide-react";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { AccountLayout } from "@/components/account/AccountLayout";
 import { AccountHeader } from "@/components/account/AccountHeader";
@@ -11,6 +12,8 @@ import { RecentOrdersCard } from "@/components/account/RecentOrdersCard";
 import { WalletSummaryCard } from "@/components/account/WalletSummaryCard";
 import { VerificationStatusCard } from "@/components/verification/VerificationStatusCard";
 import { AffiliateProfileCard } from "@/components/affiliate/AffiliateProfileCard";
+import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/providers/AuthProvider";
 import { accountService } from "@/services/accountService";
 import { productService } from "@/services/productService";
 import type { Product } from "@/types";
