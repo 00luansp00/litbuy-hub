@@ -36,7 +36,7 @@ export function OfflineNotice() {
     };
   }, []);
 
-  if (online && !justReconnected) return null;
+  if (!mounted || (online && !justReconnected)) return null;
 
   return (
     <div
