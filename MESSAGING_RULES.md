@@ -89,3 +89,9 @@ Regras futuras de mensagens. **Documentação de planejamento.** Não implementa
 - Mensagem automática do vendedor via LIT-MAX é exibida com badge e passa por `sanitizeExternalContact` antes de renderizar.
 - Contato externo continua sendo motivo prioritário para denúncia e pode sugerir mediação também.
 - Todo o histórico do chat pode ser usado como evidência em mediação (visualmente). Upload/consolidação real exige backend.
+
+## Sprint 18.19 — Ligação com e-mail
+
+- Uma nova mensagem no chat pode disparar um e-mail transacional (futuro).
+- O corpo do e-mail nunca deve conter o texto completo da mensagem sensível;
+  apenas o convite para abrir na LIT Buy.

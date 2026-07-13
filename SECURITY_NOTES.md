@@ -172,3 +172,15 @@ puramente visuais deve sobreviver ao merge com o backend real.
 - Saldo real não pode depender do frontend: bloqueio/retenção/liberação exigem serviço financeiro com conciliação, escrow e auditoria.
 - Upload de evidências (prints, vídeos, seleção de mensagens) exige storage seguro, verificação de MIME, tamanho máximo, deduplicação e política LGPD.
 - Sanitização anti-poaching no frontend é apenas visual — moderação real precisa acontecer no servidor antes de persistir/entregar mensagens.
+
+## Sprint 18.19 — E-mails Transacionais
+
+- O frontend NUNCA envia e-mail nem armazena chaves SMTP/API de provedor.
+- Reset de senha exige token seguro gerado no backend com expiração curta.
+- Verificação de novo dispositivo depende de backend/auditoria de sessão.
+- Links reais de e-mail devem sempre apontar para o domínio oficial LIT Buy
+  e usar HTTPS — proteger contra phishing.
+- E-mails de marketing seguem opt-in explícito (LGPD); e-mails transacionais
+  críticos não podem ser desativados.
+- Nunca colocar dados sensíveis (senha, código PIX, dados de cartão) no corpo
+  do e-mail — apenas metadados e links assinados.

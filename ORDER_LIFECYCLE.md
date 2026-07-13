@@ -107,3 +107,16 @@ atualiza status → cria/atualiza `Order` correspondente → libera entrega.
 - Abertura de problema (Reportar problema) leva ao `OrderProblemDialog` e simula `simulateReportDeliveryProblem` + `simulateOpenMediation`.
 - Enquanto a mediação está aberta, o saldo do vendedor é exibido como "Saldo bloqueado em mediação" no resumo financeiro. Não há bloqueio real.
 - Confirmação da entrega pelo comprador continua liberando visualmente o pedido; liberação real exige backend financeiro.
+
+## Sprint 18.19 — Eventos de pedido que geram e-mail (futuro)
+
+- pedido criado
+- pagamento pendente
+- pagamento aprovado
+- entrega liberada
+- comprador confirmou recebimento
+- mediação aberta
+- pedido concluído
+- avaliação disponível
+
+Todos disparam também notificação na plataforma. Envio real ficará no backend.
