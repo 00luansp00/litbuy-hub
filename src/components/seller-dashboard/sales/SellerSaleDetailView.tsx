@@ -457,10 +457,16 @@ export function SellerSaleDetailView({ sale }: Props) {
               muted
             />
             {sale.financial.blockedInDispute > 0 && (
-              <Row
-                label="Bloqueado em disputa"
-                value={formatBRL(sale.financial.blockedInDispute)}
-              />
+              <>
+                <Row
+                  label="Saldo bloqueado em mediação"
+                  value={formatBRL(sale.financial.blockedInDispute)}
+                />
+                <p className="text-[11px] text-warning">
+                  Motivo: mediação aberta pelo comprador (mock). Nenhum saldo
+                  real é bloqueado nesta demonstração.
+                </p>
+              </>
             )}
             {sale.financial.expectedReleaseAt && (
               <Row
