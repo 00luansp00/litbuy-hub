@@ -22,6 +22,7 @@ type AccountRoute =
   | "/mensagens"
   | "/carteira"
   | "/perfil/verificacao"
+  | "/perfil/preferencias"
   | "/afiliados"
   | "/vendedor";
 
