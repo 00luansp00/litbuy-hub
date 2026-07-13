@@ -179,6 +179,13 @@ function ConversationDetailPage() {
           </div>
         </div>
       </div>
+      {order && (
+        <OrderProblemDialog
+          orderId={order.id}
+          open={problemOpen}
+          onOpenChange={setProblemOpen}
+        />
+      )}
     </AuthGate>
   );
 }
