@@ -2424,3 +2424,107 @@ export interface PolicySection {
 
 
 
+
+// ==================================================
+// Sprint 18.19 — E-mails Transacionais & Preferências
+// Tudo 100% mockado. Envio real será feito no backend.
+// ==================================================
+
+export type TransactionalEmailCategory =
+  | "auth"
+  | "security"
+  | "order"
+  | "payment"
+  | "delivery"
+  | "message"
+  | "mediation"
+  | "report"
+  | "kyc"
+  | "seller"
+  | "affiliate"
+  | "admin"
+  | "marketing";
+
+export type TransactionalEmailStatus =
+  | "mocked"
+  | "sent_mocked"
+  | "pending_mocked"
+  | "failed_mocked"
+  | "disabled";
+
+export type CommunicationChannel =
+  | "platform"
+  | "email"
+  | "browser_future"
+  | "sms_future";
+
+export type EmailDeliveryStatus =
+  | "queued"
+  | "sent"
+  | "delivered"
+  | "bounced"
+  | "failed"
+  | "opened";
+
+export interface EmailTemplateVariable {
+  key: string;
+  label: string;
+  example?: string;
+}
+
+export interface TransactionalEmailEvent {
+  id: string;
+  key: string;
+  category: TransactionalEmailCategory;
+  label: string;
+  description: string;
+  audience: "buyer" | "seller" | "admin" | "all";
+  critical?: boolean;
+  channels: CommunicationChannel[];
+}
+
+export interface TransactionalEmailTemplate {
+  id: string;
+  key: string;
+  name: string;
+  category: TransactionalEmailCategory;
+  subject: string;
+  preview: string;
+  body: string;
+  variables: EmailTemplateVariable[];
+  status: "active" | "inactive" | "draft";
+  updatedAt: string;
+}
+
+export interface CommunicationPreference {
+  eventKey: string;
+  label: string;
+  category: TransactionalEmailCategory;
+  description: string;
+  channels: Partial<Record<CommunicationChannel, boolean>>;
+  critical?: boolean;
+  audience: "buyer" | "seller" | "admin" | "all";
+}
+
+export interface EmailHistoryItem {
+  id: string;
+  subject: string;
+  category: TransactionalEmailCategory;
+  status: TransactionalEmailStatus;
+  deliveryStatus: EmailDeliveryStatus;
+  channel: CommunicationChannel;
+  to: string;
+  sentAt: string;
+  eventKey?: string;
+}
+
+export interface EmailSecurityEvent {
+  id: string;
+  kind: "new_device" | "password_reset" | "verification_code" | "email_change";
+  label: string;
+  description: string;
+  device?: string;
+  location?: string;
+  browser?: string;
+  at: string;
+}
