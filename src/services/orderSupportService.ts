@@ -10,7 +10,15 @@
  * Substituição futura por backend deve preservar as assinaturas.
  */
 
-import type { Order } from "@/types";
+import type { Order, SaleDeliveryMode } from "@/types";
+
+export interface SupportWindowInput {
+  createdAt: string;
+  deliveryMode?: SaleDeliveryMode;
+  protectionLitActive?: boolean;
+  litProtectionActive?: boolean;
+  categoryHint?: string;
+}
 
 export interface OrderSupportWindow {
   /** Dias totais do prazo de mediação. */
