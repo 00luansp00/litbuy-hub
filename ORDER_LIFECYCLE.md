@@ -100,3 +100,10 @@ atualiza status → cria/atualiza `Order` correspondente → libera entrega.
 - Notificações apontam para rotas reais quando existem (`/pedidos/$id`, `/vendedor/vendas/$id`, `/mensagens/$id`, `/admin/*`, `/lit-points`, etc.).
 - **Nada é persistido**: sem LocalStorage, sem Cookies, sem backend. Push, e-mail, SMS, WebSocket e Service Worker **não** são implementados — exigem backend real, opt-in do usuário e infra de mensageria.
 - Dados sensíveis nunca devem aparecer em notificações — títulos e descrições são genéricos e mascarados.
+
+## Sprint 18.18 — Chat oficial e mediação
+- O chat do pedido é o local oficial de negociação e evidência. Todo pedido tem um `OrderChatCard` com prazo de mediação visível.
+- Prazo padrão mockado: 30 dias (produto padrão), 15 dias (digital), 45 dias (serviço). Proteção LIT estende o prazo. Real depende de backend.
+- Abertura de problema (Reportar problema) leva ao `OrderProblemDialog` e simula `simulateReportDeliveryProblem` + `simulateOpenMediation`.
+- Enquanto a mediação está aberta, o saldo do vendedor é exibido como "Saldo bloqueado em mediação" no resumo financeiro. Não há bloqueio real.
+- Confirmação da entrega pelo comprador continua liberando visualmente o pedido; liberação real exige backend financeiro.

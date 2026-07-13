@@ -85,3 +85,9 @@ Regras futuras de saldo, carteira e intermediação. **Documentação de planeja
 - Comissão só pode virar `available` após confirmação do pedido e fim do prazo de disputa.
 - Saque real exigirá backend financeiro, KYC e integração bancária; hoje é apenas botão mockado.
 - Comissão nunca deve se misturar visualmente com Saldo LIT (dinheiro) ou LIT Points (fidelidade).
+
+## Sprint 18.18 — Retenção em mediação
+- Quando um pedido entra em mediação, o resumo financeiro da venda (`SellerSaleDetailView`) exibe **Saldo bloqueado em mediação** com o valor da venda e o motivo.
+- Liberação: só ocorre visualmente após confirmação do comprador ou fim do prazo mockado. Nenhum saldo real é liberado ou bloqueado.
+- Prazo padrão mockado depende da categoria (`orderSupportService.getMediationDeadline`) e é estendido pela Proteção LIT.
+- Retenção real, estorno e liberação parcial exigem backend financeiro com auditoria e conciliação bancária.

@@ -415,3 +415,11 @@ Docs de suporte atualizados: `DATABASE_SCHEMA.md`, `ENTITY_RELATIONSHIP.md`, `SU
 - Footer reorganizado em Navegue / Confiança / Institucional apontando para as novas páginas.
 - Analytics mockados: `help_page_viewed_mocked`, `safety_page_viewed_mocked`, `contact_form_submitted_mocked`, `policy_page_viewed_mocked`, `prohibited_items_viewed_mocked`.
 - Limitações: sem backend, sem CMS, sem envio real, sem persistência, sem cookies, sem tracking real, sem SEO SSR (a Sprint 18.18 cuidará).
+
+## Sprint 18.18 — Chat Oficial do Pedido + Mediação Guiada — concluída
+- Chat oficial do pedido com aviso de manual, banner de prazo, botão fixo "Reportar problema", mensagens automáticas do sistema, mensagem LIT-MAX, divisores de data e botão "última mensagem".
+- `OrderProblemDialog` reescrito como mediação guiada em 3 passos com descrição mínima, motivos de mediação, aviso de saldo retido e sugestão de denúncia paralela quando aplicável.
+- Vendedor em `/vendedor/vendas/$id` recebe a mesma UX (banner + botão + dialog) e vê "Saldo bloqueado em mediação" quando aplicável.
+- `/mensagens/$id` mostra prazo, "Ver pedido" e "Reportar problema" para conversas `order_related`.
+- Analytics mockados: `order_problem_clicked_mocked`, `mediation_dialog_opened_mocked`, `mediation_reason_selected_mocked`, `mediation_submitted_mocked`, `order_chat_system_notice_viewed_mocked`.
+- Limitações: sem backend, sem chat real, sem WebSocket, sem upload real, sem retenção real de saldo, sem persistência, sem LocalStorage, sem cookies.

@@ -82,3 +82,10 @@ Regras futuras de mensagens. **Documentação de planejamento.** Não implementa
 - Tentativa de contato externo é motivo prioritário (`external_contact_attempt` / `external_channels`), severidade alta.
 - Mensagens sanitizadas (ex.: `[CONTATO REMOVIDO PELA MODERAÇÃO]`) devem oferecer ação visível de reportar tentativa de contato externo.
 - Anti-poaching visual continua ativo. Moderação real exige backend.
+
+## Sprint 18.18 — Chat oficial do pedido
+- Conversa vinculada ao pedido é a **conversa oficial** para negociação, suporte e evidência. Renderizada por `OrderChatCard` (comprador) e pela seção equivalente em `SellerSaleDetailView` (vendedor).
+- Mensagens automáticas do sistema (`getOrderSystemMessages`) explicam: responsabilidade do vendedor, saldo retido, anti-poaching, entrega automática e Proteção LIT (quando aplicável).
+- Mensagem automática do vendedor via LIT-MAX é exibida com badge e passa por `sanitizeExternalContact` antes de renderizar.
+- Contato externo continua sendo motivo prioritário para denúncia e pode sugerir mediação também.
+- Todo o histórico do chat pode ser usado como evidência em mediação (visualmente). Upload/consolidação real exige backend.

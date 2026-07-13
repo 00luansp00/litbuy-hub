@@ -259,3 +259,11 @@ Documentos relacionados: `ORDER_LIFECYCLE.md`, `DIGITAL_DELIVERY_FLOW.md`, `DISP
 - Formulário de `/contato` é 100% mockado (`simulateSubmitContactForm` + toast). Nenhum e-mail é enviado. Nada é persistido.
 - Suporte real, CMS, chat de suporte, envio de e-mail e cookies exigem backend.
 - Regras públicas devem ser mantidas alinhadas com `MARKETPLACE_RULES.md`, `SECURITY_NOTES.md` e o painel admin.
+
+## Sprint 18.18 — Chat Oficial do Pedido + Mediação Guiada
+- O chat vinculado ao pedido (`OrderChatCard`) é o **canal oficial de comunicação** e suporte deste pedido na LIT Buy. Comprador e vendedor devem tratar tudo por ali; a plataforma se apoia neste histórico para mediar.
+- "Reportar problema" no chat abre **mediação do pedido** (`OrderProblemDialog`), não denúncia. Mediação ≠ denúncia: mediação resolve o pedido e pode reter saldo; denúncia sinaliza comportamento irregular à moderação.
+- O botão "Reportar problema" possui prazo mockado por categoria (`orderSupportService.getMediationDeadline`) que pode ser estendido com Proteção LIT. Prazo real exige backend.
+- Saldo do vendedor pode ficar **retido** em mediação (visual em `/vendedor/vendas/$id`). Liberação/bloqueio real exige backend financeiro; hoje é apenas rótulo `Saldo bloqueado em mediação`.
+- Mensagens automáticas do sistema, aviso de manual de instruções e aviso anti-poaching aparecem no topo do chat e são derivadas do pedido, não de backend.
+- Chat externo (fora da LIT Buy) reduz proteção do usuário. Mensagens dentro da plataforma podem ser usadas como evidência em mediação.

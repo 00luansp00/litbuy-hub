@@ -64,3 +64,11 @@ Fluxo futuro de disputa. **Documentação de planejamento.** Não implementado.
 - **Denúncia**: aberta quando há comportamento irregular (contato externo, golpe, abuso, anúncio enganoso). Fluxo: `ReportDialog` → `reportService.simulateSubmitReport`.
 - Uma denúncia pode ser encaminhada para mediação a partir de `/admin/denuncias` (ação mockada).
 - Evidências reais (prints, vídeos, mensagens sanitizadas) exigirão storage seguro em produção.
+
+## Sprint 18.18 — Mediação guiada
+- **Reportar problema** no chat/pedido abre `OrderProblemDialog` em 3 passos: motivo → descrição (mínimo 10 caracteres, contador visual) → evidências opcionais (mock: print, vídeo, seleção de mensagens do chat).
+- Motivos de mediação são separados dos motivos de denúncia (`orderSupportService.MEDIATION_REASONS`).
+- Motivos "vendedor pediu contato externo" e "comprador suspeito" mostram sugestão de abrir denúncia paralela.
+- Ao abrir mediação, o dialog exibe: prazo da categoria (`getMediationDeadline`) e aviso de saldo do vendedor retido.
+- Evidências continuam mockadas: upload real exige storage seguro. Ver `SECURITY_NOTES.md`.
+- **Mediação ≠ Denúncia**: mediação resolve o pedido e pode reter saldo; denúncia sinaliza comportamento irregular à moderação.
