@@ -267,3 +267,17 @@ Documentos relacionados: `ORDER_LIFECYCLE.md`, `DIGITAL_DELIVERY_FLOW.md`, `DISP
 - Saldo do vendedor pode ficar **retido** em mediação (visual em `/vendedor/vendas/$id`). Liberação/bloqueio real exige backend financeiro; hoje é apenas rótulo `Saldo bloqueado em mediação`.
 - Mensagens automáticas do sistema, aviso de manual de instruções e aviso anti-poaching aparecem no topo do chat e são derivadas do pedido, não de backend.
 - Chat externo (fora da LIT Buy) reduz proteção do usuário. Mensagens dentro da plataforma podem ser usadas como evidência em mediação.
+
+## Sprint 18.19 — E-mails Transacionais & Preferências de Comunicação
+
+- Envio real de e-mails transacionais é responsabilidade do backend
+  (provedor: Resend, SendGrid, SES, Mailgun ou Supabase Auth) — nunca do frontend.
+- O frontend apenas apresenta telas, estados, templates visuais e preferências.
+- E-mails críticos de segurança (novo dispositivo, verificação, reset de senha,
+  confirmação de reset) NÃO podem ser desativados completamente pelo usuário.
+- Recuperação de senha real exige token seguro emitido pelo backend com expiração curta.
+- Detecção real de novo dispositivo exige backend com sessões/auditoria/fingerprint.
+- Templates reais precisam ser gerenciados por um sistema com versionamento,
+  variáveis seguras, sanitização e preview server-side.
+- Nada é persistido no frontend — sem LocalStorage, sem Cookies, sem mocks
+  gravados no cliente.

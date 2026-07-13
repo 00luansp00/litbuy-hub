@@ -423,3 +423,13 @@ Docs de suporte atualizados: `DATABASE_SCHEMA.md`, `ENTITY_RELATIONSHIP.md`, `SU
 - `/mensagens/$id` mostra prazo, "Ver pedido" e "Reportar problema" para conversas `order_related`.
 - Analytics mockados: `order_problem_clicked_mocked`, `mediation_dialog_opened_mocked`, `mediation_reason_selected_mocked`, `mediation_submitted_mocked`, `order_chat_system_notice_viewed_mocked`.
 - Limitações: sem backend, sem chat real, sem WebSocket, sem upload real, sem retenção real de saldo, sem persistência, sem LocalStorage, sem cookies.
+
+## Sprint 18.19 — Concluída
+
+- Camada visual completa para e-mails transacionais e preferências de comunicação.
+- `transactionalEmailService` mockado com eventos, templates, canais, histórico.
+- Rotas `/verificar-email`, `/redefinir-senha`, `/verificacao-login`,
+  `/perfil/preferencias` publicadas visualmente.
+- Admin ganhou seção de templates em `/admin/conteudo`.
+- Limitações atuais: nenhum envio real; nenhuma persistência; nenhum token real;
+  nenhuma detecção real de dispositivo; nenhum provedor de e-mail integrado.

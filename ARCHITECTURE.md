@@ -293,3 +293,23 @@ são **proteção visual**. Segurança real vai para o backend (ver
 - Visão do vendedor (`SellerSaleDetailView`) reaproveita `OrderChatMediationBanner` e `OrderProblemDialog` com `perspective="seller"`.
 - `/mensagens/$id`: quando `conversation.type === "order_related"`, exibe chip "Pedido vinculado", prazo de mediação, botão "Ver pedido" e botão "Reportar problema" (abre `OrderProblemDialog`).
 - Financeiro da venda mostra "Saldo bloqueado em mediação" quando `financial.blockedInDispute > 0`. Retenção real depende de backend financeiro.
+
+## Sprint 18.19 — Camada visual de e-mails transacionais
+
+- `src/services/transactionalEmailService.ts` — service 100% mockado com
+  eventos transacionais, templates, preferências de comunicação, histórico
+  visual e simulação de envio/reenvio.
+- Rotas visuais:
+  - `/verificar-email` — pós-cadastro / confirmação de e-mail.
+  - `/redefinir-senha` — formulário mockado de nova senha.
+  - `/verificacao-login` — novo dispositivo com código mock.
+  - `/perfil/preferencias` — preferências por canal e histórico.
+- `src/components/email/*` — cards e painéis reutilizáveis (verificação,
+  preferências, histórico, preview de template, panel de login novo, etc.).
+- Integrações leves:
+  - `/perfil` linka para `/perfil/preferencias`.
+  - `AccountSidebar` inclui "Preferências".
+  - `/admin/conteudo` ganhou seção "Templates de e-mail transacional".
+- Integração futura: Supabase Auth para verificação/reset de senha, e um
+  provedor (Resend/SendGrid/SES) para envio real dos templates, protegidos
+  por tokens, políticas RLS e assinatura de webhooks.

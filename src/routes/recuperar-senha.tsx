@@ -1,12 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { CheckCircle2, Loader2, Mail } from "lucide-react";
+import { CheckCircle2, Loader2, Mail, RefreshCw } from "lucide-react";
 import { AuthLayout } from "@/components/auth/AuthLayout";
 import { EmailInput } from "@/components/auth/EmailInput";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/providers/AuthProvider";
+import { analyticsService } from "@/services/analyticsService";
+import { transactionalEmailService } from "@/services/transactionalEmailService";
 
 export const Route = createFileRoute("/recuperar-senha")({
   component: RecuperarSenhaPage,
@@ -24,12 +26,19 @@ function RecuperarSenhaPage() {
       return;
     }
     try {
+      analyticsService.track("password_reset_requested_mocked");
       await requestPasswordReset(email);
       setSent(true);
-      toast.success("Enviamos as instruções para o seu email.");
+      toast.success("Instruções enviadas (mock). Nenhum e-mail real foi enviado.");
     } catch {
       toast.error("Não foi possível enviar as instruções.");
     }
+  };
+
+  const resend = async () => {
+    analyticsService.track("email_resend_clicked_mocked", { eventKey: "auth.password_reset" });
+    await transactionalEmailService.simulateResendEmail("auth.password_reset");
+    toast.success("Reenvio simulado.");
   };
 
   return (
@@ -59,13 +68,18 @@ function RecuperarSenhaPage() {
             instruções em instantes.
           </p>
           <p className="mt-2 text-xs text-muted-foreground">
-            Verifique também a caixa de spam ou promoções.
+            Modo demonstração: nenhum e-mail real foi enviado. Verifique também spam/promoções em produção.
           </p>
-          <Button asChild variant="outline" className="mt-5 w-full">
-            <Link to="/login">
-              <Mail className="h-4 w-4" /> Voltar para o login
-            </Link>
-          </Button>
+          <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+            <Button onClick={resend} variant="outline" className="flex-1">
+              <RefreshCw className="mr-2 h-4 w-4" /> Reenviar
+            </Button>
+            <Button asChild className="flex-1">
+              <Link to="/login">
+                <Mail className="mr-2 h-4 w-4" /> Voltar para o login
+              </Link>
+            </Button>
+          </div>
         </div>
       ) : (
         <form onSubmit={onSubmit} className="space-y-4" noValidate>
