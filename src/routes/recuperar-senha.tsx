@@ -1,12 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { CheckCircle2, Loader2, Mail } from "lucide-react";
+import { CheckCircle2, Loader2, Mail, RefreshCw } from "lucide-react";
 import { AuthLayout } from "@/components/auth/AuthLayout";
 import { EmailInput } from "@/components/auth/EmailInput";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/providers/AuthProvider";
+import { analyticsService } from "@/services/analyticsService";
+import { transactionalEmailService } from "@/services/transactionalEmailService";
 
 export const Route = createFileRoute("/recuperar-senha")({
   component: RecuperarSenhaPage,
