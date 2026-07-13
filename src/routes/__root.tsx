@@ -17,6 +17,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/providers/AuthProvider";
 import { CartProvider } from "@/providers/CartProvider";
 import { NotificationProvider } from "@/providers/NotificationProvider";
+import { ErrorBoundary } from "@/components/error/ErrorBoundary";
+import { OfflineNotice } from "@/components/status/OfflineNotice";
 
 
 
@@ -140,14 +142,17 @@ function RootComponent() {
       <AuthProvider>
         <CartProvider>
           <NotificationProvider>
-            <div className="flex min-h-screen flex-col bg-background text-foreground">
-              <Navbar />
-              <main className="flex-1">
-                {/* Required: nested routes render here. */}
-                <Outlet />
-              </main>
-              <Footer />
-            </div>
+            <ErrorBoundary area="root">
+              <div className="flex min-h-screen flex-col bg-background text-foreground">
+                <OfflineNotice />
+                <Navbar />
+                <main className="flex-1">
+                  {/* Required: nested routes render here. */}
+                  <Outlet />
+                </main>
+                <Footer />
+              </div>
+            </ErrorBoundary>
             <Toaster />
           </NotificationProvider>
         </CartProvider>
