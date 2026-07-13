@@ -18,10 +18,13 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { formatBRL } from "@/lib/format";
 import { OrderMediationCard } from "@/components/orders/OrderMediationCard";
+import { OrderChatMediationBanner } from "@/components/orders/OrderChatMediationBanner";
+import { OrderProblemDialog } from "@/components/orders/OrderProblemDialog";
 import { ReportButton } from "@/components/report/ReportButton";
 import { sellerSaleService } from "@/services/sellerSaleService";
 import { messageService } from "@/services/messageService";
 import { analyticsService } from "@/services/analyticsService";
+import { getSupportWindow } from "@/services/orderSupportService";
 import type {
   Conversation,
   ConversationMessage,
