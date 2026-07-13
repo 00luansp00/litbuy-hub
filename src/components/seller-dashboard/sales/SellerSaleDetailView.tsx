@@ -490,6 +490,13 @@ export function SellerSaleDetailView({ sale }: Props) {
           seguro.
         </div>
       </aside>
+
+      <OrderProblemDialog
+        orderId={sale.orderId}
+        open={problemOpen}
+        onOpenChange={setProblemOpen}
+        perspective="seller"
+      />
     </div>
   );
 }
