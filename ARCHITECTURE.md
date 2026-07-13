@@ -313,3 +313,46 @@ são **proteção visual**. Segurança real vai para o backend (ver
 - Integração futura: Supabase Auth para verificação/reset de senha, e um
   provedor (Resend/SendGrid/SES) para envio real dos templates, protegidos
   por tokens, políticas RLS e assinatura de webhooks.
+
+## Sprint 18.20 — Estabilidade, SEO e estados de erro
+
+### SEO e renderização
+- O projeto atual é uma SPA React/Vite servida via TanStack Start.
+- Rotas usam `head()` para tags de `<title>`, `<meta>` e `<link>`. Um helper
+  documental (`src/components/seo/Seo.tsx` → `buildSeoHead`) padroniza a
+  montagem de metadados para páginas públicas.
+- **Limitações**: SPAs geram tags no client; nem todos os crawlers e
+  previews sociais (WhatsApp, Discord, Telegram, Facebook, X/Twitter)
+  interpretam corretamente sem SSR/SSG.
+- **Páginas prioritárias para indexação**: `/`, `/buscar`,
+  `/categoria/$slug`, `/produto/$id`, `/loja/$slug`, `/como-comprar`,
+  `/como-vender`, `/seguranca`, `/taxas`, `/lit-points`, `/afiliados`,
+  `/ajuda`.
+- **Áreas privadas** (checkout, admin, perfil, pedidos, vendedor) não
+  precisam de SEO — usar `noIndex`.
+- **Recomendação futura**: avaliar SSR/SSG com Next.js, Remix ou
+  prerender das rotas públicas para melhorar SEO e Open Graph.
+
+### Open Graph
+Cada rota pública pode definir `og:title`, `og:description`, `og:image`,
+`og:url`, `twitter:card`. Imagens dinâmicas (produto, loja, categoria)
+devem virar `og:image` no leaf. Placeholder em `og:image` é pior que
+ausência — omitir quando não houver imagem significativa.
+
+### Estabilidade
+- **ErrorBoundary global** — `src/components/error/ErrorBoundary.tsx`
+  envolve a árvore em `__root.tsx`. Fallback dark premium com "Tentar
+  novamente" e "Voltar para a home". Não expõe stack para usuário comum.
+- **OfflineNotice** — `src/components/status/OfflineNotice.tsx` detecta
+  `navigator.onLine` e mostra banner discreto no topo.
+- **RetryState** — `src/components/status/RetryState.tsx` reutilizável em
+  falhas mockadas de service.
+- **EmptyState / Skeleton / Alert** — já disponíveis em `common/` e `ui/`.
+
+### Analytics
+`src/services/analyticsService.ts` centraliza todos os eventos como
+`console.debug` em dev. Nenhum GA4/Pixel/TikTok real. Veja
+`ANALYTICS_EVENTS.md` para o catálogo.
+
+### Edge cases
+Ver `EDGE_CASES.md`.

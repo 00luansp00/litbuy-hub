@@ -433,3 +433,14 @@ Docs de suporte atualizados: `DATABASE_SCHEMA.md`, `ENTITY_RELATIONSHIP.md`, `SU
 - Admin ganhou seção de templates em `/admin/conteudo`.
 - Limitações atuais: nenhum envio real; nenhuma persistência; nenhum token real;
   nenhuma detecção real de dispositivo; nenhum provedor de e-mail integrado.
+
+## Sprint 18.20 — SEO, Analytics, Error Boundaries e Edge Cases ✅
+- ErrorBoundary global integrado em `__root.tsx`.
+- OfflineNotice ativo no topo da aplicação.
+- RetryState reutilizável para falhas mockadas.
+- Helper `buildSeoHead` padroniza tags de rota.
+- 404 amigável em `__root.tsx`.
+- `ANALYTICS_EVENTS.md` atualizado com catálogo consolidado.
+- `EDGE_CASES.md` criado.
+- Documentação de limitações SPA/SEO/SSR futuras.
+- Nenhum analytics, tracking ou persistência real.
