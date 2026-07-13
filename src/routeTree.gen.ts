@@ -9,11 +9,14 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as VerificarEmailRouteImport } from './routes/verificar-email'
+import { Route as VerificacaoLoginRouteImport } from './routes/verificacao-login'
 import { Route as VendedorRouteImport } from './routes/vendedor'
 import { Route as TermosRouteImport } from './routes/termos'
 import { Route as TaxasRouteImport } from './routes/taxas'
 import { Route as SegurancaRouteImport } from './routes/seguranca'
 import { Route as RegrasDaPlataformaRouteImport } from './routes/regras-da-plataforma'
+import { Route as RedefinirSenhaRouteImport } from './routes/redefinir-senha'
 import { Route as RecuperarSenhaRouteImport } from './routes/recuperar-senha'
 import { Route as PrivacidadeRouteImport } from './routes/privacidade'
 import { Route as PoliticaDeReembolsoRouteImport } from './routes/politica-de-reembolso'
@@ -46,6 +49,7 @@ import { Route as VendedorAvaliacoesRouteImport } from './routes/vendedor.avalia
 import { Route as VendedorAnunciosRouteImport } from './routes/vendedor.anuncios'
 import { Route as ProdutoIdRouteImport } from './routes/produto.$id'
 import { Route as PerfilVerificacaoRouteImport } from './routes/perfil.verificacao'
+import { Route as PerfilPreferenciasRouteImport } from './routes/perfil.preferencias'
 import { Route as PedidosIdRouteImport } from './routes/pedidos.$id'
 import { Route as PagamentoIdRouteImport } from './routes/pagamento.$id'
 import { Route as MensagensIdRouteImport } from './routes/mensagens.$id'
@@ -70,6 +74,16 @@ import { Route as VendedorAnunciosIndexRouteImport } from './routes/vendedor.anu
 import { Route as VendedorVendasIdRouteImport } from './routes/vendedor.vendas.$id'
 import { Route as VendedorAnunciosNovoRouteImport } from './routes/vendedor.anuncios.novo'
 
+const VerificarEmailRoute = VerificarEmailRouteImport.update({
+  id: '/verificar-email',
+  path: '/verificar-email',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VerificacaoLoginRoute = VerificacaoLoginRouteImport.update({
+  id: '/verificacao-login',
+  path: '/verificacao-login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const VendedorRoute = VendedorRouteImport.update({
   id: '/vendedor',
   path: '/vendedor',
@@ -93,6 +107,11 @@ const SegurancaRoute = SegurancaRouteImport.update({
 const RegrasDaPlataformaRoute = RegrasDaPlataformaRouteImport.update({
   id: '/regras-da-plataforma',
   path: '/regras-da-plataforma',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RedefinirSenhaRoute = RedefinirSenhaRouteImport.update({
+  id: '/redefinir-senha',
+  path: '/redefinir-senha',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RecuperarSenhaRoute = RecuperarSenhaRouteImport.update({
@@ -255,6 +274,11 @@ const PerfilVerificacaoRoute = PerfilVerificacaoRouteImport.update({
   path: '/perfil/verificacao',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PerfilPreferenciasRoute = PerfilPreferenciasRouteImport.update({
+  id: '/perfil/preferencias',
+  path: '/perfil/preferencias',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PedidosIdRoute = PedidosIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -394,11 +418,14 @@ export interface FileRoutesByFullPath {
   '/politica-de-reembolso': typeof PoliticaDeReembolsoRoute
   '/privacidade': typeof PrivacidadeRoute
   '/recuperar-senha': typeof RecuperarSenhaRoute
+  '/redefinir-senha': typeof RedefinirSenhaRoute
   '/regras-da-plataforma': typeof RegrasDaPlataformaRoute
   '/seguranca': typeof SegurancaRoute
   '/taxas': typeof TaxasRoute
   '/termos': typeof TermosRoute
   '/vendedor': typeof VendedorRouteWithChildren
+  '/verificacao-login': typeof VerificacaoLoginRoute
+  '/verificar-email': typeof VerificarEmailRoute
   '/admin/anuncios': typeof AdminAnunciosRoute
   '/admin/auditoria': typeof AdminAuditoriaRoute
   '/admin/catalogo': typeof AdminCatalogoRoute
@@ -419,6 +446,7 @@ export interface FileRoutesByFullPath {
   '/mensagens/$id': typeof MensagensIdRoute
   '/pagamento/$id': typeof PagamentoIdRoute
   '/pedidos/$id': typeof PedidosIdRoute
+  '/perfil/preferencias': typeof PerfilPreferenciasRoute
   '/perfil/verificacao': typeof PerfilVerificacaoRoute
   '/produto/$id': typeof ProdutoIdRoute
   '/vendedor/anuncios': typeof VendedorAnunciosRouteWithChildren
@@ -455,10 +483,13 @@ export interface FileRoutesByTo {
   '/politica-de-reembolso': typeof PoliticaDeReembolsoRoute
   '/privacidade': typeof PrivacidadeRoute
   '/recuperar-senha': typeof RecuperarSenhaRoute
+  '/redefinir-senha': typeof RedefinirSenhaRoute
   '/regras-da-plataforma': typeof RegrasDaPlataformaRoute
   '/seguranca': typeof SegurancaRoute
   '/taxas': typeof TaxasRoute
   '/termos': typeof TermosRoute
+  '/verificacao-login': typeof VerificacaoLoginRoute
+  '/verificar-email': typeof VerificarEmailRoute
   '/admin/anuncios': typeof AdminAnunciosRoute
   '/admin/auditoria': typeof AdminAuditoriaRoute
   '/admin/catalogo': typeof AdminCatalogoRoute
@@ -479,6 +510,7 @@ export interface FileRoutesByTo {
   '/mensagens/$id': typeof MensagensIdRoute
   '/pagamento/$id': typeof PagamentoIdRoute
   '/pedidos/$id': typeof PedidosIdRoute
+  '/perfil/preferencias': typeof PerfilPreferenciasRoute
   '/perfil/verificacao': typeof PerfilVerificacaoRoute
   '/produto/$id': typeof ProdutoIdRoute
   '/vendedor/avaliacoes': typeof VendedorAvaliacoesRoute
@@ -516,11 +548,14 @@ export interface FileRoutesById {
   '/politica-de-reembolso': typeof PoliticaDeReembolsoRoute
   '/privacidade': typeof PrivacidadeRoute
   '/recuperar-senha': typeof RecuperarSenhaRoute
+  '/redefinir-senha': typeof RedefinirSenhaRoute
   '/regras-da-plataforma': typeof RegrasDaPlataformaRoute
   '/seguranca': typeof SegurancaRoute
   '/taxas': typeof TaxasRoute
   '/termos': typeof TermosRoute
   '/vendedor': typeof VendedorRouteWithChildren
+  '/verificacao-login': typeof VerificacaoLoginRoute
+  '/verificar-email': typeof VerificarEmailRoute
   '/admin/anuncios': typeof AdminAnunciosRoute
   '/admin/auditoria': typeof AdminAuditoriaRoute
   '/admin/catalogo': typeof AdminCatalogoRoute
@@ -541,6 +576,7 @@ export interface FileRoutesById {
   '/mensagens/$id': typeof MensagensIdRoute
   '/pagamento/$id': typeof PagamentoIdRoute
   '/pedidos/$id': typeof PedidosIdRoute
+  '/perfil/preferencias': typeof PerfilPreferenciasRoute
   '/perfil/verificacao': typeof PerfilVerificacaoRoute
   '/produto/$id': typeof ProdutoIdRoute
   '/vendedor/anuncios': typeof VendedorAnunciosRouteWithChildren
@@ -580,11 +616,14 @@ export interface FileRouteTypes {
     | '/politica-de-reembolso'
     | '/privacidade'
     | '/recuperar-senha'
+    | '/redefinir-senha'
     | '/regras-da-plataforma'
     | '/seguranca'
     | '/taxas'
     | '/termos'
     | '/vendedor'
+    | '/verificacao-login'
+    | '/verificar-email'
     | '/admin/anuncios'
     | '/admin/auditoria'
     | '/admin/catalogo'
@@ -605,6 +644,7 @@ export interface FileRouteTypes {
     | '/mensagens/$id'
     | '/pagamento/$id'
     | '/pedidos/$id'
+    | '/perfil/preferencias'
     | '/perfil/verificacao'
     | '/produto/$id'
     | '/vendedor/anuncios'
@@ -641,10 +681,13 @@ export interface FileRouteTypes {
     | '/politica-de-reembolso'
     | '/privacidade'
     | '/recuperar-senha'
+    | '/redefinir-senha'
     | '/regras-da-plataforma'
     | '/seguranca'
     | '/taxas'
     | '/termos'
+    | '/verificacao-login'
+    | '/verificar-email'
     | '/admin/anuncios'
     | '/admin/auditoria'
     | '/admin/catalogo'
@@ -665,6 +708,7 @@ export interface FileRouteTypes {
     | '/mensagens/$id'
     | '/pagamento/$id'
     | '/pedidos/$id'
+    | '/perfil/preferencias'
     | '/perfil/verificacao'
     | '/produto/$id'
     | '/vendedor/avaliacoes'
@@ -701,11 +745,14 @@ export interface FileRouteTypes {
     | '/politica-de-reembolso'
     | '/privacidade'
     | '/recuperar-senha'
+    | '/redefinir-senha'
     | '/regras-da-plataforma'
     | '/seguranca'
     | '/taxas'
     | '/termos'
     | '/vendedor'
+    | '/verificacao-login'
+    | '/verificar-email'
     | '/admin/anuncios'
     | '/admin/auditoria'
     | '/admin/catalogo'
@@ -726,6 +773,7 @@ export interface FileRouteTypes {
     | '/mensagens/$id'
     | '/pagamento/$id'
     | '/pedidos/$id'
+    | '/perfil/preferencias'
     | '/perfil/verificacao'
     | '/produto/$id'
     | '/vendedor/anuncios'
@@ -764,14 +812,18 @@ export interface RootRouteChildren {
   PoliticaDeReembolsoRoute: typeof PoliticaDeReembolsoRoute
   PrivacidadeRoute: typeof PrivacidadeRoute
   RecuperarSenhaRoute: typeof RecuperarSenhaRoute
+  RedefinirSenhaRoute: typeof RedefinirSenhaRoute
   RegrasDaPlataformaRoute: typeof RegrasDaPlataformaRoute
   SegurancaRoute: typeof SegurancaRoute
   TaxasRoute: typeof TaxasRoute
   TermosRoute: typeof TermosRoute
   VendedorRoute: typeof VendedorRouteWithChildren
+  VerificacaoLoginRoute: typeof VerificacaoLoginRoute
+  VerificarEmailRoute: typeof VerificarEmailRoute
   CategoriaSlugRoute: typeof CategoriaSlugRoute
   LojaSlugRoute: typeof LojaSlugRoute
   PagamentoIdRoute: typeof PagamentoIdRoute
+  PerfilPreferenciasRoute: typeof PerfilPreferenciasRoute
   PerfilVerificacaoRoute: typeof PerfilVerificacaoRoute
   ProdutoIdRoute: typeof ProdutoIdRoute
   PerfilIndexRoute: typeof PerfilIndexRoute
@@ -779,6 +831,20 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/verificar-email': {
+      id: '/verificar-email'
+      path: '/verificar-email'
+      fullPath: '/verificar-email'
+      preLoaderRoute: typeof VerificarEmailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/verificacao-login': {
+      id: '/verificacao-login'
+      path: '/verificacao-login'
+      fullPath: '/verificacao-login'
+      preLoaderRoute: typeof VerificacaoLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/vendedor': {
       id: '/vendedor'
       path: '/vendedor'
@@ -812,6 +878,13 @@ declare module '@tanstack/react-router' {
       path: '/regras-da-plataforma'
       fullPath: '/regras-da-plataforma'
       preLoaderRoute: typeof RegrasDaPlataformaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/redefinir-senha': {
+      id: '/redefinir-senha'
+      path: '/redefinir-senha'
+      fullPath: '/redefinir-senha'
+      preLoaderRoute: typeof RedefinirSenhaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/recuperar-senha': {
@@ -1036,6 +1109,13 @@ declare module '@tanstack/react-router' {
       path: '/perfil/verificacao'
       fullPath: '/perfil/verificacao'
       preLoaderRoute: typeof PerfilVerificacaoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/perfil/preferencias': {
+      id: '/perfil/preferencias'
+      path: '/perfil/preferencias'
+      fullPath: '/perfil/preferencias'
+      preLoaderRoute: typeof PerfilPreferenciasRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/pedidos/$id': {
@@ -1335,14 +1415,18 @@ const rootRouteChildren: RootRouteChildren = {
   PoliticaDeReembolsoRoute: PoliticaDeReembolsoRoute,
   PrivacidadeRoute: PrivacidadeRoute,
   RecuperarSenhaRoute: RecuperarSenhaRoute,
+  RedefinirSenhaRoute: RedefinirSenhaRoute,
   RegrasDaPlataformaRoute: RegrasDaPlataformaRoute,
   SegurancaRoute: SegurancaRoute,
   TaxasRoute: TaxasRoute,
   TermosRoute: TermosRoute,
   VendedorRoute: VendedorRouteWithChildren,
+  VerificacaoLoginRoute: VerificacaoLoginRoute,
+  VerificarEmailRoute: VerificarEmailRoute,
   CategoriaSlugRoute: CategoriaSlugRoute,
   LojaSlugRoute: LojaSlugRoute,
   PagamentoIdRoute: PagamentoIdRoute,
+  PerfilPreferenciasRoute: PerfilPreferenciasRoute,
   PerfilVerificacaoRoute: PerfilVerificacaoRoute,
   ProdutoIdRoute: ProdutoIdRoute,
   PerfilIndexRoute: PerfilIndexRoute,
