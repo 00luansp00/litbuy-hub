@@ -42,8 +42,11 @@ export const Route = createFileRoute("/perfil/")({
 });
 
 function PerfilPage() {
+function PerfilPage() {
   const { summary, orders, favoriteProducts, messages, wallet, notifications } =
     Route.useLoaderData();
+  const { user } = useAuth();
+  const email = user?.email ?? "voce@exemplo.com";
 
   return (
     <AuthGate>
