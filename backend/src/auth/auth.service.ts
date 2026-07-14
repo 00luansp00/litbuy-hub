@@ -143,21 +143,33 @@ export class AuthService {
     return hmacToken(value, this.authConfig().ipPepper).slice(0, 32);
   }
 
-  private async event(input: EventInput, tx?: Prisma.TransactionClient): Promise<void> {
+  private securityEventData(input: EventInput): Prisma.SecurityEventUncheckedCreateInput {
+    return {
+      userId: input.userId ?? undefined,
+      sessionId: input.sessionId ?? undefined,
+      deviceId: input.deviceId ?? undefined,
+      eventType: input.eventType,
+      outcome: input.outcome ?? 'SUCCESS',
+      metadata: sanitizeMetadata(input.metadata) as Prisma.InputJsonValue,
+      ipHash: input.req ? this.ipHash(input.req) : undefined,
+      userAgent: sanitizeUserAgent(input.req?.headers['user-agent']),
+    };
+  }
+
+  private async persistCriticalSecurityEvent(
+    input: EventInput,
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    await tx.securityEvent.create({ data: this.securityEventData(input) });
+  }
+
+  private async persistBestEffortSecurityEvent(
+    input: EventInput,
+    tx?: Prisma.TransactionClient,
+  ): Promise<void> {
     const client = tx ?? this.prisma;
     try {
-      await client.securityEvent.create({
-        data: {
-          userId: input.userId ?? undefined,
-          sessionId: input.sessionId ?? undefined,
-          deviceId: input.deviceId ?? undefined,
-          eventType: input.eventType,
-          outcome: input.outcome ?? 'SUCCESS',
-          metadata: sanitizeMetadata(input.metadata) as Prisma.InputJsonValue,
-          ipHash: input.req ? this.ipHash(input.req) : undefined,
-          userAgent: sanitizeUserAgent(input.req?.headers['user-agent']),
-        },
-      });
+      await client.securityEvent.create({ data: this.securityEventData(input) });
     } catch (error) {
       this.logger.warn('Failed to persist sanitized security event', {
         eventType: input.eventType,
@@ -288,8 +300,12 @@ export class AuthService {
         c.emailVerificationTtlMinutes,
       );
       this.mailer.send(email, 'EMAIL_VERIFICATION', token);
-      await this.event({ userId: user.id, eventType: 'REGISTERED', req });
-      await this.event({ userId: user.id, eventType: 'EMAIL_VERIFICATION_REQUESTED', req });
+      await this.persistBestEffortSecurityEvent({ userId: user.id, eventType: 'REGISTERED', req });
+      await this.persistBestEffortSecurityEvent({
+        userId: user.id,
+        eventType: 'EMAIL_VERIFICATION_REQUESTED',
+        req,
+      });
     }
     return { message: 'Se os dados forem válidos, enviaremos as instruções por e-mail.' };
   }
@@ -306,7 +322,10 @@ export class AuthService {
         where: { id: challenge.id },
         data: { consumedAt: new Date(), attempts: { increment: 1 } },
       });
-      await this.event({ userId: challenge.userId, eventType: 'EMAIL_VERIFIED', req }, tx);
+      await this.persistBestEffortSecurityEvent(
+        { userId: challenge.userId, eventType: 'EMAIL_VERIFIED', req },
+        tx,
+      );
     });
     return { message: 'E-mail confirmado.' };
   }
@@ -322,7 +341,11 @@ export class AuthService {
         this.authConfig().emailVerificationTtlMinutes,
       );
       this.mailer.send(email, 'EMAIL_VERIFICATION', token);
-      await this.event({ userId: user.id, eventType: 'EMAIL_VERIFICATION_REQUESTED', req });
+      await this.persistBestEffortSecurityEvent({
+        userId: user.id,
+        eventType: 'EMAIL_VERIFICATION_REQUESTED',
+        req,
+      });
     }
     return { message: 'Se a conta existir, enviaremos as instruções por e-mail.' };
   }
@@ -339,7 +362,7 @@ export class AuthService {
           lockedUntil: locked ? new Date(Date.now() + c.loginLockMinutes * 60_000) : undefined,
         },
       });
-      await this.event({
+      await this.persistBestEffortSecurityEvent({
         userId: user.id,
         eventType: locked ? 'LOGIN_LOCKED' : 'LOGIN_FAILED',
         outcome: locked ? 'BLOCKED' : 'FAILURE',
@@ -398,7 +421,12 @@ export class AuthService {
     });
     if (!user || !user.passwordCredential) return this.loginFailure(null, req);
     if (user.passwordCredential.lockedUntil && user.passwordCredential.lockedUntil > new Date()) {
-      await this.event({ userId: user.id, eventType: 'LOGIN_LOCKED', outcome: 'BLOCKED', req });
+      await this.persistBestEffortSecurityEvent({
+        userId: user.id,
+        eventType: 'LOGIN_LOCKED',
+        outcome: 'BLOCKED',
+        req,
+      });
       throw new UnauthorizedException({ code: 'INVALID_CREDENTIALS' });
     }
     if (!(await verifyPassword(user.passwordCredential.passwordHash, dto.password)))
@@ -414,14 +442,14 @@ export class AuthService {
         device.id,
       );
       this.mailer.send(user.email, 'DEVICE_APPROVAL', token);
-      await this.event({
+      await this.persistBestEffortSecurityEvent({
         userId: user.id,
         deviceId: device.id,
         eventType: 'DEVICE_APPROVAL_REQUIRED',
         outcome: 'PENDING',
         req,
       });
-      await this.event({
+      await this.persistBestEffortSecurityEvent({
         userId: user.id,
         deviceId: device.id,
         eventType: 'DEVICE_APPROVAL_REQUESTED',
@@ -434,7 +462,12 @@ export class AuthService {
       where: { userId: user.id },
       data: { failedLoginAttempts: 0, lockedUntil: null },
     });
-    await this.event({ userId: user.id, deviceId: device.id, eventType: 'LOGIN_SUCCEEDED', req });
+    await this.persistBestEffortSecurityEvent({
+      userId: user.id,
+      deviceId: device.id,
+      eventType: 'LOGIN_SUCCEEDED',
+      req,
+    });
     return this.createSession(user, device, res, req);
   }
 
@@ -468,7 +501,7 @@ export class AuthService {
           expiresAt,
         },
       });
-      await this.event(
+      await this.persistBestEffortSecurityEvent(
         {
           userId: user.id,
           sessionId: created.id,
@@ -512,7 +545,7 @@ export class AuthService {
         where: { id: challenge.id },
         data: { consumedAt: new Date(), attempts: { increment: 1 } },
       });
-      await this.event(
+      await this.persistBestEffortSecurityEvent(
         {
           userId: challenge.userId,
           deviceId: challenge.deviceId,
@@ -543,7 +576,7 @@ export class AuthService {
           device.id,
         );
         this.mailer.send(email, 'DEVICE_APPROVAL', token);
-        await this.event({
+        await this.persistBestEffortSecurityEvent({
           userId: user.id,
           deviceId: device.id,
           eventType: 'DEVICE_APPROVAL_REQUESTED',
@@ -568,7 +601,7 @@ export class AuthService {
         where: { familyId: token.familyId, revokedAt: null },
         data: { revokedAt: new Date() },
       });
-      await this.event(
+      await this.persistCriticalSecurityEvent(
         {
           userId: session.userId,
           sessionId: session.id,
@@ -579,7 +612,7 @@ export class AuthService {
         },
         tx,
       );
-      await this.event(
+      await this.persistCriticalSecurityEvent(
         {
           userId: session.userId,
           sessionId: session.id,
@@ -625,7 +658,13 @@ export class AuthService {
     const refresh = randomToken();
     const newCsrf = randomToken();
     const newHash = hmacToken(refresh, c.refreshPepper);
-    await this.prisma.$transaction(async (tx) => {
+    const acquired = await this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+      const claim = await tx.sessionRefreshToken.updateMany({
+        where: { id: tokenRecord.id, usedAt: null, revokedAt: null },
+        data: { usedAt: now },
+      });
+      if (claim.count !== 1) return false;
       const next = await tx.sessionRefreshToken.create({
         data: {
           sessionId: sess.id,
@@ -636,17 +675,17 @@ export class AuthService {
       });
       await tx.sessionRefreshToken.update({
         where: { id: tokenRecord.id },
-        data: { usedAt: new Date(), replacedByTokenId: next.id },
+        data: { replacedByTokenId: next.id },
       });
       await tx.session.update({
         where: { id: sess.id },
         data: {
           refreshTokenHash: newHash,
           csrfTokenHash: hmacToken(newCsrf, c.csrfPepper),
-          lastUsedAt: new Date(),
+          lastUsedAt: now,
         },
       });
-      await this.event(
+      await this.persistBestEffortSecurityEvent(
         {
           userId: sess.userId,
           sessionId: sess.id,
@@ -656,7 +695,12 @@ export class AuthService {
         },
         tx,
       );
+      return true;
     });
+    if (!acquired) {
+      await this.revokeFamilyForReuse(tokenRecord, req, res);
+      throw new UnauthorizedException({ code: 'INVALID_SESSION' });
+    }
     this.setRefreshAndCsrfCookies(res, refresh, newCsrf);
     return {
       accessToken: await this.jwt.signAsync(
@@ -692,7 +736,7 @@ export class AuthService {
           where: { sessionId: session.id, revokedAt: null },
           data: { revokedAt: new Date() },
         });
-        await this.event(
+        await this.persistBestEffortSecurityEvent(
           {
             userId: session.userId,
             sessionId: session.id,
@@ -702,7 +746,7 @@ export class AuthService {
           },
           tx,
         );
-        await this.event(
+        await this.persistBestEffortSecurityEvent(
           {
             userId: session.userId,
             sessionId: session.id,
