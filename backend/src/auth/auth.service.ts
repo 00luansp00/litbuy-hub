@@ -1251,12 +1251,22 @@ export class AuthService {
   ): Promise<void> {
     const now = new Date();
     const next = new Date(now.getTime() + this.authConfig().sensitiveChangeHoldHours * 3600_000);
-    await tx.$executeRaw`
+    const affected = await tx.$executeRaw`
       UPDATE "User"
-      SET "sensitiveActionHoldUntil" = GREATEST(COALESCE("sensitiveActionHoldUntil", ${next}), ${next}),
-          "lastSensitiveChangeAt" = ${now}
-      WHERE "id" = ${userId}
+      SET "sensitiveActionHoldUntil" = GREATEST(
+            COALESCE("sensitiveActionHoldUntil", CAST(${next} AS timestamp(3))),
+            CAST(${next} AS timestamp(3))
+          ),
+          "lastSensitiveChangeAt" = CAST(${now} AS timestamp(3))
+      WHERE "id" = CAST(${userId} AS uuid)
     `;
+    if (affected !== 1) {
+      throw new AppError(
+        'SENSITIVE_HOLD_UPDATE_FAILED',
+        'Não foi possível iniciar o bloqueio temporário de segurança.',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
     await this.persistCriticalSecurityEvent(
       { userId, eventType: 'SENSITIVE_ACTION_HOLD_STARTED', req },
       tx,

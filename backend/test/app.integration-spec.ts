@@ -808,4 +808,60 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
       }),
     ).resolves.toBe(1);
   });
+
+  it('preserves a larger sensitive hold with real PostgreSQL during password change', async () => {
+    const payload = {
+      email: 'integration-hold-preserve@example.com',
+      password: 'integration password 123',
+      birthDate: '2000-01-01',
+      termsAccepted: true,
+      privacyAccepted: true,
+      termsVersion: process.env.CURRENT_TERMS_VERSION,
+      privacyVersion: process.env.CURRENT_PRIVACY_VERSION,
+    };
+    const otherPayload = { ...payload, email: 'integration-hold-other@example.com' };
+    const register = await request(app.getHttpServer())
+      .post('/api/v1/auth/register')
+      .send(payload)
+      .expect(HttpStatus.CREATED);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/verify')
+      .send({
+        token: mailer.sent.find((message) => message.purpose === 'EMAIL_VERIFICATION')?.token,
+      })
+      .expect(HttpStatus.OK);
+    const login = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', register.headers['set-cookie'] as unknown as string[])
+      .send({ email: payload.email, password: payload.password })
+      .expect(HttpStatus.OK);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/register')
+      .send(otherPayload)
+      .expect(HttpStatus.CREATED);
+    const user = await prisma.user.findUniqueOrThrow({ where: { email: payload.email } });
+    const other = await prisma.user.findUniqueOrThrow({ where: { email: otherPayload.email } });
+    const largerHold = new Date('2030-01-01T00:00:00.000Z');
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { sensitiveActionHoldUntil: largerHold, lastSensitiveChangeAt: null },
+    });
+
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/password/change')
+      .set('Authorization', `Bearer ${login.body.accessToken}`)
+      .send({ currentPassword: payload.password, newPassword: 'integration password 456' })
+      .expect(HttpStatus.OK);
+
+    const updated = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+    const untouched = await prisma.user.findUniqueOrThrow({ where: { id: other.id } });
+    expect(updated.sensitiveActionHoldUntil?.toISOString()).toBe(largerHold.toISOString());
+    expect(updated.lastSensitiveChangeAt).toEqual(expect.any(Date));
+    expect(untouched.sensitiveActionHoldUntil).toBeNull();
+    await expect(
+      prisma.securityEvent.count({
+        where: { userId: user.id, eventType: 'SENSITIVE_ACTION_HOLD_STARTED' },
+      }),
+    ).resolves.toBe(1);
+  });
 });
