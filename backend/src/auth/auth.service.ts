@@ -12,7 +12,8 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import type { Device, Prisma, SecurityEventOutcome, SecurityEventType, User } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import type { Device, SecurityEventOutcome, SecurityEventType, User } from '@prisma/client';
 import type { CookieOptions, Request, Response } from 'express';
 import { AppLogger } from '../common/logging/app-logger.service';
 import { PrismaService } from '../database/prisma.service';
@@ -1163,6 +1164,41 @@ export class AuthService {
     return { message: 'Logout realizado.' };
   }
 
+  private async advisoryTransactionLock(tx: Prisma.TransactionClient, key: string): Promise<void> {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${key}))`;
+  }
+
+  private async enforceSmsCooldown(parts: string[]): Promise<void> {
+    const key = `sms-cooldown:${parts.map((part) => this.opaquePart(part)).join(':')}`;
+    try {
+      const r = await this.redis.getClient();
+      const ok = await r.set(key, '1', 'EX', this.authConfig().phoneResendCooldownSeconds, 'NX');
+      if (ok !== 'OK') {
+        throw new HttpException({ code: 'PHONE_RESEND_COOLDOWN' }, HttpStatus.TOO_MANY_REQUESTS);
+      }
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      this.logger.warn('Redis SMS cooldown unavailable; failing open', {
+        errorName: error instanceof Error ? error.name : 'UnknownError',
+      });
+    }
+  }
+
+  private notifySecurity(
+    to: string | null | undefined,
+    purpose: Parameters<AuthMailer['send']>[1],
+  ): void {
+    if (!to) return;
+    try {
+      this.mailer.send(to, purpose);
+    } catch (error) {
+      this.logger.warn('Security notification delivery failed', {
+        purpose,
+        errorName: error instanceof Error ? error.name : 'UnknownError',
+      });
+    }
+  }
+
   private async assertCurrentPassword(userId: string, password: string): Promise<void> {
     const credential = await this.prisma.passwordCredential.findUnique({ where: { userId } });
     if (!credential || !(await verifyPassword(credential.passwordHash, password))) {
@@ -1203,58 +1239,68 @@ export class AuthService {
     if (!phone) throw new BadRequestException({ code: 'INVALID_PHONE' });
     await this.rate(['phone-request', req.ip ?? 'unknown', auth.userId, phone], 5, 300);
     await this.assertCurrentPassword(auth.userId, dto.currentPassword);
-    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: auth.userId } });
-    if (user.phoneE164 === phone && user.phoneVerifiedAt)
-      throw new BadRequestException({ code: 'PHONE_ALREADY_VERIFIED' });
-    if (await this.prisma.user.findFirst({ where: { phoneE164: phone, id: { not: auth.userId } } }))
-      throw new BadRequestException({ code: 'PHONE_UNAVAILABLE' });
+
     const c = this.authConfig();
     const code = generateSmsCode();
+    const challengeId = crypto.randomUUID();
     const expiresAt = new Date(Date.now() + c.phoneVerificationTtlMinutes * 60_000);
-    const challenge = await this.prisma.verificationChallenge.create({
-      data: {
-        userId: auth.userId,
-        deviceId: auth.deviceId,
-        purpose: 'PHONE_VERIFICATION',
-        tokenHash: 'pending',
-        targetHash: targetHash('phone', phone, c.verificationPepper),
-        maxAttempts: 5,
-        expiresAt,
+    const phoneHash = targetHash('phone', phone, c.verificationPepper);
+
+    const challenge = await this.prisma.$transaction(
+      async (tx) => {
+        await this.advisoryTransactionLock(tx, `phone-request:${auth.userId}`);
+        await this.enforceSmsCooldown(['phone-request', auth.userId, phone]);
+        const user = await tx.user.findUniqueOrThrow({ where: { id: auth.userId } });
+        if (user.phoneE164 === phone && user.phoneVerifiedAt) {
+          throw new BadRequestException({ code: 'PHONE_ALREADY_VERIFIED' });
+        }
+        if (await tx.user.findFirst({ where: { phoneE164: phone, id: { not: auth.userId } } })) {
+          throw new BadRequestException({ code: 'PHONE_UNAVAILABLE' });
+        }
+        await tx.verificationChallenge.updateMany({
+          where: { userId: auth.userId, purpose: 'PHONE_VERIFICATION', consumedAt: null },
+          data: { consumedAt: new Date() },
+        });
+        const created = await tx.verificationChallenge.create({
+          data: {
+            id: challengeId,
+            userId: auth.userId,
+            deviceId: auth.deviceId,
+            purpose: 'PHONE_VERIFICATION',
+            tokenHash: challengeSecretHash(challengeId, code, c.verificationPepper),
+            targetHash: phoneHash,
+            maxAttempts: 5,
+            expiresAt,
+          },
+        });
+        await this.persistCriticalSecurityEvent(
+          {
+            userId: auth.userId,
+            sessionId: auth.sessionId,
+            deviceId: auth.deviceId,
+            eventType: 'PHONE_VERIFICATION_REQUESTED',
+            outcome: 'PENDING',
+            req,
+          },
+          tx,
+        );
+        return created;
       },
-    });
-    await this.prisma.verificationChallenge.update({
-      where: { id: challenge.id },
-      data: { tokenHash: challengeSecretHash(challenge.id, code, c.verificationPepper) },
-    });
-    await this.prisma.verificationChallenge.updateMany({
-      where: {
-        userId: auth.userId,
-        purpose: 'PHONE_VERIFICATION',
-        consumedAt: null,
-        id: { not: challenge.id },
-      },
-      data: { consumedAt: new Date() },
-    });
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+
     try {
       this.sms.send(phone, 'PHONE_VERIFICATION', code);
-    } catch (e) {
+    } catch (error) {
       await this.prisma.verificationChallenge.update({
         where: { id: challenge.id },
         data: { consumedAt: new Date() },
       });
-      throw e;
+      throw error;
     }
-    await this.persistBestEffortSecurityEvent({
-      userId: auth.userId,
-      sessionId: auth.sessionId,
-      deviceId: auth.deviceId,
-      eventType: 'PHONE_VERIFICATION_REQUESTED',
-      outcome: 'PENDING',
-      req,
-    });
     return {
       challengeId: challenge.id,
-      expiresAt,
+      expiresAt: challenge.expiresAt,
       message: 'Se os dados forem válidos, enviaremos um código por SMS.',
     };
   }
@@ -1268,46 +1314,67 @@ export class AuthService {
     const phone = normalizeBrazilianMobilePhone(dto.phone);
     if (!phone) throw new BadRequestException({ code: 'INVALID_PHONE' });
     await this.rate(['phone-verify', req.ip ?? 'unknown', auth.userId, dto.challengeId], 10, 300);
-    const expectedTarget = targetHash('phone', phone, this.authConfig().verificationPepper);
-    const ch = await this.prisma.verificationChallenge.findUnique({
+    const now = new Date();
+    const phoneHash = targetHash('phone', phone, this.authConfig().verificationPepper);
+    const challenge = await this.prisma.verificationChallenge.findUnique({
       where: { id: dto.challengeId },
     });
     if (
-      !ch ||
-      ch.userId !== auth.userId ||
-      ch.purpose !== 'PHONE_VERIFICATION' ||
-      ch.targetHash !== expectedTarget ||
-      ch.consumedAt ||
-      ch.expiresAt < new Date()
-    )
-      throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_CODE' });
-    if (ch.attempts >= ch.maxAttempts) throw new BadRequestException({ code: 'CHALLENGE_LOCKED' });
-    if (
-      !safeEqual(
-        challengeSecretHash(ch.id, dto.code, this.authConfig().verificationPepper),
-        ch.tokenHash,
-      )
+      !challenge ||
+      challenge.userId !== auth.userId ||
+      challenge.purpose !== 'PHONE_VERIFICATION' ||
+      challenge.targetHash !== phoneHash ||
+      challenge.consumedAt ||
+      challenge.expiresAt <= now
     ) {
-      await this.prisma.verificationChallenge.update({
-        where: { id: ch.id },
-        data: { attempts: { increment: 1 } },
-      });
       throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_CODE' });
     }
+    if (challenge.attempts >= challenge.maxAttempts) {
+      throw new BadRequestException({ code: 'CHALLENGE_LOCKED' });
+    }
+    const expected = challengeSecretHash(
+      challenge.id,
+      dto.code,
+      this.authConfig().verificationPepper,
+    );
+    if (!safeEqual(expected, challenge.tokenHash)) {
+      const wrong = await this.prisma.verificationChallenge.updateMany({
+        where: {
+          id: challenge.id,
+          userId: auth.userId,
+          purpose: 'PHONE_VERIFICATION',
+          targetHash: phoneHash,
+          consumedAt: null,
+          expiresAt: { gt: new Date() },
+          attempts: { lt: challenge.maxAttempts },
+        },
+        data: { attempts: { increment: 1 } },
+      });
+      if (wrong.count !== 1) throw new BadRequestException({ code: 'CHALLENGE_LOCKED' });
+      throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_CODE' });
+    }
+
+    let noticeEmail: string | null = null;
     await this.prisma.$transaction(async (tx) => {
       const claim = await tx.verificationChallenge.updateMany({
         where: {
-          id: ch.id,
+          id: challenge.id,
+          userId: auth.userId,
+          purpose: 'PHONE_VERIFICATION',
+          targetHash: phoneHash,
+          tokenHash: expected,
           consumedAt: null,
-          attempts: { lt: ch.maxAttempts },
+          attempts: { lt: challenge.maxAttempts },
           expiresAt: { gt: new Date() },
         },
         data: { consumedAt: new Date(), attempts: { increment: 1 } },
       });
       if (claim.count !== 1) throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_CODE' });
-      if (await tx.user.findFirst({ where: { phoneE164: phone, id: { not: auth.userId } } }))
+      if (await tx.user.findFirst({ where: { phoneE164: phone, id: { not: auth.userId } } })) {
         throw new BadRequestException({ code: 'PHONE_UNAVAILABLE' });
+      }
       const before = await tx.user.findUniqueOrThrow({ where: { id: auth.userId } });
+      noticeEmail = before.email;
       await tx.user.update({
         where: { id: auth.userId },
         data: { phoneE164: phone, phoneVerifiedAt: new Date() },
@@ -1328,9 +1395,8 @@ export class AuthService {
         deviceId: auth.deviceId,
       });
     });
-    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: auth.userId } });
-    this.mailer.send(user.email, 'PHONE_CHANGED_NOTICE');
     this.clearAuth(res);
+    this.notifySecurity(noticeEmail, 'PHONE_CHANGED_NOTICE');
     return { message: 'Telefone confirmado. Faça login novamente.' };
   }
 
@@ -1343,24 +1409,20 @@ export class AuthService {
     expiresAt: Date,
   ): Promise<string> {
     const secret = randomToken();
-    const row = await tx.verificationChallenge.create({
+    const challengeId = crypto.randomUUID();
+    await tx.verificationChallenge.create({
       data: {
+        id: challengeId,
         userId,
         purpose,
         contextId,
         targetHash: emailHash,
-        tokenHash: 'pending',
+        tokenHash: challengeSecretHash(challengeId, secret, this.authConfig().verificationPepper),
         maxAttempts: this.authConfig().maxAttempts,
         expiresAt,
       },
     });
-    await tx.verificationChallenge.update({
-      where: { id: row.id },
-      data: {
-        tokenHash: challengeSecretHash(row.id, secret, this.authConfig().verificationPepper),
-      },
-    });
-    return buildChallengeToken(row.id, secret);
+    return buildChallengeToken(challengeId, secret);
   }
 
   async requestEmailChange(
@@ -1371,53 +1433,68 @@ export class AuthService {
     const newEmail = normalizeEmail(dto.newEmail);
     await this.rate(['email-change-request', req.ip ?? 'unknown', auth.userId, newEmail], 5, 300);
     await this.assertCurrentPassword(auth.userId, dto.currentPassword);
-    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: auth.userId } });
-    if (newEmail === user.email) throw new BadRequestException({ code: 'EMAIL_UNCHANGED' });
-    if (await this.prisma.user.findUnique({ where: { email: newEmail } }))
-      throw new BadRequestException({ code: 'EMAIL_UNAVAILABLE' });
     const expiresAt = new Date(Date.now() + this.authConfig().emailChangeTtlMinutes * 60_000);
     const emailHash = targetHash('email', newEmail, this.authConfig().verificationPepper);
     let requestId = '';
     let currentToken = '';
     let newToken = '';
-    await this.prisma.$transaction(async (tx) => {
-      await tx.emailChangeRequest.updateMany({
-        where: { userId: auth.userId, completedAt: null, cancelledAt: null },
-        data: { cancelledAt: new Date() },
-      });
-      const change = await tx.emailChangeRequest.create({
-        data: { userId: auth.userId, newEmailHash: emailHash, expiresAt },
-      });
-      requestId = change.id;
-      currentToken = await this.createEmailChallenge(
-        tx,
-        auth.userId,
-        'EMAIL_CHANGE_CURRENT',
-        change.id,
-        emailHash,
-        expiresAt,
-      );
-      newToken = await this.createEmailChallenge(
-        tx,
-        auth.userId,
-        'EMAIL_CHANGE_NEW',
-        change.id,
-        emailHash,
-        expiresAt,
-      );
-      await this.persistCriticalSecurityEvent(
-        {
-          userId: auth.userId,
-          sessionId: auth.sessionId,
-          deviceId: auth.deviceId,
-          eventType: 'EMAIL_CHANGE_REQUESTED',
-          outcome: 'PENDING',
-          req,
-        },
-        tx,
-      );
-    });
-    this.mailer.send(user.email, 'EMAIL_CHANGE_CONFIRM_CURRENT', currentToken);
+    let oldEmail = '';
+    await this.prisma.$transaction(
+      async (tx) => {
+        await this.advisoryTransactionLock(tx, `email-change-request:${auth.userId}`);
+        const user = await tx.user.findUniqueOrThrow({ where: { id: auth.userId } });
+        oldEmail = user.email;
+        if (newEmail === user.email) throw new BadRequestException({ code: 'EMAIL_UNCHANGED' });
+        if (await tx.user.findUnique({ where: { email: newEmail } })) {
+          throw new BadRequestException({ code: 'EMAIL_UNAVAILABLE' });
+        }
+        await tx.emailChangeRequest.updateMany({
+          where: { userId: auth.userId, completedAt: null, cancelledAt: null },
+          data: { cancelledAt: new Date() },
+        });
+        await tx.verificationChallenge.updateMany({
+          where: {
+            userId: auth.userId,
+            purpose: { in: ['EMAIL_CHANGE_CURRENT', 'EMAIL_CHANGE_NEW'] },
+            consumedAt: null,
+          },
+          data: { consumedAt: new Date() },
+        });
+        const change = await tx.emailChangeRequest.create({
+          data: { userId: auth.userId, newEmailHash: emailHash, expiresAt },
+        });
+        requestId = change.id;
+        currentToken = await this.createEmailChallenge(
+          tx,
+          auth.userId,
+          'EMAIL_CHANGE_CURRENT',
+          change.id,
+          emailHash,
+          expiresAt,
+        );
+        newToken = await this.createEmailChallenge(
+          tx,
+          auth.userId,
+          'EMAIL_CHANGE_NEW',
+          change.id,
+          emailHash,
+          expiresAt,
+        );
+        await this.persistCriticalSecurityEvent(
+          {
+            userId: auth.userId,
+            sessionId: auth.sessionId,
+            deviceId: auth.deviceId,
+            eventType: 'EMAIL_CHANGE_REQUESTED',
+            outcome: 'PENDING',
+            req,
+          },
+          tx,
+        );
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+    this.mailer.send(oldEmail, 'EMAIL_CHANGE_CONFIRM_CURRENT', currentToken);
     this.mailer.send(newEmail, 'EMAIL_CHANGE_CONFIRM_NEW', newToken);
     return { message: 'Enviamos confirmações para os dois e-mails.', requestId, expiresAt };
   }
@@ -1432,95 +1509,135 @@ export class AuthService {
     const parts = splitChallengeToken(dto.token);
     if (!parts) throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_TOKEN' });
     const emailHash = targetHash('email', newEmail, this.authConfig().verificationPepper);
-    const ch = await this.prisma.verificationChallenge.findUnique({
+    const challenge = await this.prisma.verificationChallenge.findUnique({
       where: { id: parts.challengeId },
     });
     if (
-      !ch ||
-      (ch.purpose !== 'EMAIL_CHANGE_CURRENT' && ch.purpose !== 'EMAIL_CHANGE_NEW') ||
-      ch.targetHash !== emailHash ||
-      !ch.contextId ||
-      ch.consumedAt ||
-      ch.expiresAt < new Date()
-    )
-      throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_TOKEN' });
-    if (
-      !safeEqual(
-        challengeSecretHash(ch.id, parts.secret, this.authConfig().verificationPepper),
-        ch.tokenHash,
-      )
+      !challenge ||
+      (challenge.purpose !== 'EMAIL_CHANGE_CURRENT' && challenge.purpose !== 'EMAIL_CHANGE_NEW') ||
+      !challenge.contextId ||
+      challenge.targetHash !== emailHash ||
+      challenge.consumedAt ||
+      challenge.expiresAt <= new Date()
     ) {
-      await this.prisma.verificationChallenge.update({
-        where: { id: ch.id },
-        data: { attempts: { increment: 1 } },
-      });
       throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_TOKEN' });
     }
+    if (challenge.attempts >= challenge.maxAttempts) {
+      throw new BadRequestException({ code: 'CHALLENGE_LOCKED' });
+    }
+    const expected = challengeSecretHash(
+      challenge.id,
+      parts.secret,
+      this.authConfig().verificationPepper,
+    );
+    if (!safeEqual(expected, challenge.tokenHash)) {
+      const wrong = await this.prisma.verificationChallenge.updateMany({
+        where: {
+          id: challenge.id,
+          userId: challenge.userId,
+          purpose: challenge.purpose,
+          contextId: challenge.contextId,
+          targetHash: emailHash,
+          consumedAt: null,
+          expiresAt: { gt: new Date() },
+          attempts: { lt: challenge.maxAttempts },
+        },
+        data: { attempts: { increment: 1 } },
+      });
+      if (wrong.count !== 1) throw new BadRequestException({ code: 'CHALLENGE_LOCKED' });
+      throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_TOKEN' });
+    }
+
+    let oldEmail: string | null = null;
+    let completed = false;
     const result = await this.prisma.$transaction(async (tx) => {
+      await this.advisoryTransactionLock(tx, `email-change:${challenge.contextId}`);
+      const change = await tx.emailChangeRequest.findUnique({
+        where: { id: challenge.contextId! },
+      });
+      if (
+        !change ||
+        change.userId !== challenge.userId ||
+        change.cancelledAt ||
+        change.completedAt ||
+        change.expiresAt <= new Date() ||
+        change.newEmailHash !== emailHash
+      ) {
+        throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_TOKEN' });
+      }
       const claim = await tx.verificationChallenge.updateMany({
-        where: { id: ch.id, consumedAt: null },
+        where: {
+          id: challenge.id,
+          userId: challenge.userId,
+          purpose: challenge.purpose,
+          contextId: change.id,
+          targetHash: emailHash,
+          tokenHash: expected,
+          consumedAt: null,
+          expiresAt: { gt: new Date() },
+          attempts: { lt: challenge.maxAttempts },
+        },
         data: { consumedAt: new Date(), attempts: { increment: 1 } },
       });
       if (claim.count !== 1) throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_TOKEN' });
-      const change = await tx.emailChangeRequest.findUnique({ where: { id: ch.contextId! } });
-      if (
-        !change ||
-        change.cancelledAt ||
-        change.completedAt ||
-        change.expiresAt < new Date() ||
-        change.newEmailHash !== emailHash
-      )
-        throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_TOKEN' });
       const field =
-        ch.purpose === 'EMAIL_CHANGE_CURRENT' ? 'currentEmailConfirmedAt' : 'newEmailConfirmedAt';
+        challenge.purpose === 'EMAIL_CHANGE_CURRENT'
+          ? 'currentEmailConfirmedAt'
+          : 'newEmailConfirmedAt';
       const updated = await tx.emailChangeRequest.update({
         where: { id: change.id },
         data: { [field]: new Date() },
       });
       await this.persistCriticalSecurityEvent(
         {
-          userId: ch.userId,
+          userId: challenge.userId,
           eventType:
-            ch.purpose === 'EMAIL_CHANGE_CURRENT'
+            challenge.purpose === 'EMAIL_CHANGE_CURRENT'
               ? 'EMAIL_CHANGE_CURRENT_CONFIRMED'
               : 'EMAIL_CHANGE_NEW_CONFIRMED',
           req,
         },
         tx,
       );
-      if (!updated.currentEmailConfirmedAt || !updated.newEmailConfirmedAt)
-        return { status: 'PENDING' as const, oldEmail: null };
+      if (!updated.currentEmailConfirmedAt || !updated.newEmailConfirmedAt) {
+        return { status: 'PENDING' as const };
+      }
       const finalClaim = await tx.emailChangeRequest.updateMany({
         where: { id: change.id, completedAt: null, cancelledAt: null },
         data: { completedAt: new Date() },
       });
-      if (finalClaim.count !== 1) return { status: 'COMPLETED' as const, oldEmail: null };
-      if (await tx.user.findUnique({ where: { email: newEmail } }))
+      if (finalClaim.count !== 1)
+        throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_TOKEN' });
+      if (await tx.user.findUnique({ where: { email: newEmail } })) {
         throw new BadRequestException({ code: 'EMAIL_UNAVAILABLE' });
-      const user = await tx.user.findUniqueOrThrow({ where: { id: ch.userId } });
+      }
+      const user = await tx.user.findUniqueOrThrow({ where: { id: challenge.userId } });
+      oldEmail = user.email;
       await tx.user.update({
-        where: { id: ch.userId },
+        where: { id: challenge.userId },
         data: { email: newEmail, emailVerifiedAt: new Date(), status: 'ACTIVE' },
       });
       await tx.verificationChallenge.updateMany({
         where: { contextId: change.id, consumedAt: null },
         data: { consumedAt: new Date() },
       });
-      await this.startSensitiveHold(tx, ch.userId, req);
-      const sessions = await tx.session.findMany({ where: { userId: ch.userId } });
+      await this.startSensitiveHold(tx, challenge.userId, req);
+      const sessions = await tx.session.findMany({ where: { userId: challenge.userId } });
       await this.revokeSessions(tx, {
-        userId: ch.userId,
+        userId: challenge.userId,
         sessions,
         reason: 'EMAIL_CHANGED',
         eventType: 'EMAIL_CHANGED',
         req,
       });
-      return { status: 'COMPLETED' as const, oldEmail: user.email };
+      completed = true;
+      return { status: 'COMPLETED' as const };
     });
-    if (result.status === 'COMPLETED') {
-      if (result.oldEmail) this.mailer.send(result.oldEmail, 'EMAIL_CHANGED_NOTICE');
-      this.mailer.send(newEmail, 'EMAIL_CHANGED_NOTICE');
+
+    if (result.status === 'COMPLETED' || completed) {
       this.clearAuth(res);
+      this.notifySecurity(oldEmail, 'EMAIL_CHANGED_NOTICE');
+      this.notifySecurity(newEmail, 'EMAIL_CHANGED_NOTICE');
       return { status: 'COMPLETED', message: 'E-mail alterado. Faça login novamente.' };
     }
     return { status: 'PENDING', message: 'Confirmação registrada. Aguarde a outra confirmação.' };

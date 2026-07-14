@@ -31,3 +31,5 @@ CREATE INDEX "EmailChangeRequest_userId_idx" ON "EmailChangeRequest"("userId");
 CREATE INDEX "EmailChangeRequest_newEmailHash_idx" ON "EmailChangeRequest"("newEmailHash");
 CREATE INDEX "EmailChangeRequest_completedAt_cancelledAt_expiresAt_idx" ON "EmailChangeRequest"("completedAt", "cancelledAt", "expiresAt");
 ALTER TABLE "EmailChangeRequest" ADD CONSTRAINT "EmailChangeRequest_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+CREATE UNIQUE INDEX "VerificationChallenge_one_active_phone_per_user" ON "VerificationChallenge"("userId", "purpose") WHERE "purpose" = 'PHONE_VERIFICATION' AND "consumedAt" IS NULL;
+CREATE UNIQUE INDEX "EmailChangeRequest_one_pending_per_user" ON "EmailChangeRequest"("userId") WHERE "completedAt" IS NULL AND "cancelledAt" IS NULL;

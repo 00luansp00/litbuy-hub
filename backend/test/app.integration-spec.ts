@@ -10,6 +10,7 @@ import { PrismaService } from '../src/database/prisma.service';
 import { RedisService } from '../src/redis/redis.service';
 import type { AppConfig } from '../src/config/app.config';
 import { AuthMailer } from '../src/auth/auth.service';
+import type { AuthSmsPort } from '../src/auth/auth.service';
 
 function sessionIdFromAccessToken(accessToken: string): string {
   const payload = JSON.parse(Buffer.from(accessToken.split('.')[1], 'base64url').toString()) as {
@@ -23,6 +24,7 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
   let prisma: PrismaService;
   let redis: RedisService;
   let mailer: AuthMailer;
+  let sms: AuthSmsPort;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -48,6 +50,7 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
     prisma = app.get(PrismaService);
     redis = app.get(RedisService);
     mailer = app.get(AuthMailer);
+    sms = app.get('AuthSmsPort');
   });
 
   beforeEach(async () => {
@@ -55,10 +58,12 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
     await prisma.sessionRefreshToken.deleteMany();
     await prisma.session.deleteMany();
     await prisma.verificationChallenge.deleteMany();
+    await prisma.emailChangeRequest.deleteMany();
     await prisma.device.deleteMany();
     await prisma.passwordCredential.deleteMany();
     await prisma.user.deleteMany();
     mailer.sent.splice(0);
+    sms.sent.splice(0);
   });
 
   afterAll(async () => {
@@ -601,6 +606,206 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
     await expect(
       prisma.securityEvent.count({
         where: { user: { email: payload.email }, eventType: 'PASSWORD_RESET_COMPLETED' },
+      }),
+    ).resolves.toBe(1);
+  });
+
+  it('executes real Sprint 2B2 phone and email change flow with PostgreSQL and Redis', async () => {
+    const payload = {
+      email: 'integration-sprint-2b2@example.com',
+      password: 'integration password 123',
+      birthDate: '2000-01-01',
+      termsAccepted: true,
+      privacyAccepted: true,
+      termsVersion: process.env.CURRENT_TERMS_VERSION,
+      privacyVersion: process.env.CURRENT_PRIVACY_VERSION,
+    };
+    const register = await request(app.getHttpServer())
+      .post('/api/v1/auth/register')
+      .send(payload)
+      .expect(HttpStatus.CREATED);
+    const emailToken = mailer.sent.find(
+      (message) => message.purpose === 'EMAIL_VERIFICATION',
+    )?.token;
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/verify')
+      .send({ token: emailToken })
+      .expect(HttpStatus.OK);
+    const firstLogin = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', register.headers['set-cookie'] as unknown as string[])
+      .send({ email: payload.email, password: payload.password })
+      .expect(HttpStatus.OK);
+
+    const phoneRequest = await request(app.getHttpServer())
+      .post('/api/v1/auth/phone/request')
+      .set('Authorization', `Bearer ${firstLogin.body.accessToken}`)
+      .send({ phone: '(17) 99999-4321', currentPassword: payload.password })
+      .expect(HttpStatus.OK);
+    const code = sms.sent.find((message) => message.purpose === 'PHONE_VERIFICATION')?.code;
+    expect(code).toMatch(/^\d{6}$/);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/phone/verify')
+      .set('Authorization', `Bearer ${firstLogin.body.accessToken}`)
+      .send({ challengeId: phoneRequest.body.challengeId, code, phone: '+55 17 99999-4321' })
+      .expect(HttpStatus.OK);
+    const userAfterPhone = await prisma.user.findUniqueOrThrow({ where: { email: payload.email } });
+    expect(userAfterPhone.phoneE164).toBe('+5517999994321');
+    expect(userAfterPhone.sensitiveActionHoldUntil).toEqual(expect.any(Date));
+    await expect(
+      prisma.session.count({ where: { userId: userAfterPhone.id, revokedAt: null } }),
+    ).resolves.toBe(0);
+    await expect(
+      prisma.sessionRefreshToken.count({
+        where: { revokedAt: null, session: { userId: userAfterPhone.id } },
+      }),
+    ).resolves.toBe(0);
+    expect(
+      JSON.stringify(
+        await prisma.verificationChallenge.findMany({ where: { userId: userAfterPhone.id } }),
+      ),
+    ).not.toContain(code);
+
+    const loginAfterPhone = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', register.headers['set-cookie'] as unknown as string[])
+      .send({ email: payload.email, password: payload.password })
+      .expect(HttpStatus.OK);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/change/request')
+      .set('Authorization', `Bearer ${loginAfterPhone.body.accessToken}`)
+      .send({
+        newEmail: 'integration-sprint-2b2-new@example.com',
+        currentPassword: payload.password,
+      })
+      .expect(HttpStatus.OK);
+    const currentToken = mailer.sent.find(
+      (message) => message.purpose === 'EMAIL_CHANGE_CONFIRM_CURRENT',
+    )?.token;
+    const newToken = mailer.sent.find(
+      (message) => message.purpose === 'EMAIL_CHANGE_CONFIRM_NEW',
+    )?.token;
+    expect(currentToken).toEqual(expect.any(String));
+    expect(newToken).toEqual(expect.any(String));
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/change/confirm')
+      .send({ token: currentToken, newEmail: 'integration-sprint-2b2-new@example.com' })
+      .expect(HttpStatus.OK)
+      .expect(({ body }) => expect(body.status).toBe('PENDING'));
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/change/confirm')
+      .send({ token: newToken, newEmail: 'integration-sprint-2b2-new@example.com' })
+      .expect(HttpStatus.OK)
+      .expect(({ body }) => expect(body.status).toBe('COMPLETED'));
+    await expect(prisma.user.findUnique({ where: { email: payload.email } })).resolves.toBeNull();
+    const userAfterEmail = await prisma.user.findUniqueOrThrow({
+      where: { email: 'integration-sprint-2b2-new@example.com' },
+    });
+    expect(userAfterEmail.emailVerifiedAt).toEqual(expect.any(Date));
+    await expect(
+      prisma.securityEvent.count({
+        where: { userId: userAfterEmail.id, eventType: 'EMAIL_CHANGED' },
+      }),
+    ).resolves.toBe(1);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', register.headers['set-cookie'] as unknown as string[])
+      .send({ email: payload.email, password: payload.password })
+      .expect(HttpStatus.UNAUTHORIZED);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', register.headers['set-cookie'] as unknown as string[])
+      .send({ email: 'integration-sprint-2b2-new@example.com', password: payload.password })
+      .expect(HttpStatus.OK);
+    const serializedChallenges = JSON.stringify(
+      await prisma.verificationChallenge.findMany({ where: { userId: userAfterEmail.id } }),
+    );
+    expect(serializedChallenges).not.toContain(currentToken?.split('.')[1]);
+    expect(serializedChallenges).not.toContain(newToken?.split('.')[1]);
+  });
+
+  it('serializes real Sprint 2B2 concurrent phone and email operations', async () => {
+    const payload = {
+      email: 'integration-sprint-2b2-concurrency@example.com',
+      password: 'integration password 123',
+      birthDate: '2000-01-01',
+      termsAccepted: true,
+      privacyAccepted: true,
+      termsVersion: process.env.CURRENT_TERMS_VERSION,
+      privacyVersion: process.env.CURRENT_PRIVACY_VERSION,
+    };
+    const register = await request(app.getHttpServer())
+      .post('/api/v1/auth/register')
+      .send(payload)
+      .expect(HttpStatus.CREATED);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/verify')
+      .send({
+        token: mailer.sent.find((message) => message.purpose === 'EMAIL_VERIFICATION')?.token,
+      })
+      .expect(HttpStatus.OK);
+    const login = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', register.headers['set-cookie'] as unknown as string[])
+      .send({ email: payload.email, password: payload.password })
+      .expect(HttpStatus.OK);
+    const auth = `Bearer ${login.body.accessToken}`;
+    const [first, second] = await Promise.all([
+      request(app.getHttpServer())
+        .post('/api/v1/auth/phone/request')
+        .set('Authorization', auth)
+        .send({ phone: '(17) 98888-1111', currentPassword: payload.password }),
+      request(app.getHttpServer())
+        .post('/api/v1/auth/phone/request')
+        .set('Authorization', auth)
+        .send({ phone: '(17) 98888-1111', currentPassword: payload.password }),
+    ]);
+    expect([first.status, second.status].sort()).toEqual([200, 429]);
+    const user = await prisma.user.findUniqueOrThrow({ where: { email: payload.email } });
+    await expect(
+      prisma.verificationChallenge.count({
+        where: { userId: user.id, purpose: 'PHONE_VERIFICATION', consumedAt: null },
+      }),
+    ).resolves.toBe(1);
+    const accepted = first.status === 200 ? first : second;
+    const code = sms.sent.at(-1)?.code;
+    const [verifyA, verifyB] = await Promise.all([
+      request(app.getHttpServer())
+        .post('/api/v1/auth/phone/verify')
+        .set('Authorization', auth)
+        .send({ challengeId: accepted.body.challengeId, code, phone: '(17) 98888-1111' }),
+      request(app.getHttpServer())
+        .post('/api/v1/auth/phone/verify')
+        .set('Authorization', auth)
+        .send({ challengeId: accepted.body.challengeId, code, phone: '(17) 98888-1111' }),
+    ]);
+    expect([verifyA.status, verifyB.status].sort()).toEqual([200, 400]);
+
+    const relogin = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', register.headers['set-cookie'] as unknown as string[])
+      .send({ email: payload.email, password: payload.password })
+      .expect(HttpStatus.OK);
+    const [emailReqA, emailReqB] = await Promise.all([
+      request(app.getHttpServer())
+        .post('/api/v1/auth/email/change/request')
+        .set('Authorization', `Bearer ${relogin.body.accessToken}`)
+        .send({
+          newEmail: 'integration-sprint-2b2-concurrency-new@example.com',
+          currentPassword: payload.password,
+        }),
+      request(app.getHttpServer())
+        .post('/api/v1/auth/email/change/request')
+        .set('Authorization', `Bearer ${relogin.body.accessToken}`)
+        .send({
+          newEmail: 'integration-sprint-2b2-concurrency-new@example.com',
+          currentPassword: payload.password,
+        }),
+    ]);
+    expect(emailReqA.status === 200 || emailReqB.status === 200).toBe(true);
+    await expect(
+      prisma.emailChangeRequest.count({
+        where: { userId: user.id, completedAt: null, cancelledAt: null },
       }),
     ).resolves.toBe(1);
   });

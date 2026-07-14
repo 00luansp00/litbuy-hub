@@ -86,6 +86,7 @@ class Delegate<T extends Row> {
       if (v && typeof v === 'object' && !(v instanceof Date)) {
         const condition = v as Row;
         if ('not' in condition && r[k] === condition.not) return false;
+        if ('in' in condition && !(condition.in as unknown[]).includes(r[k])) return false;
         if ('lt' in condition && !((r[k] as Date | number) < (condition.lt as Date | number)))
           return false;
         if ('gt' in condition && !((r[k] as Date | number) > (condition.gt as Date | number)))
@@ -114,6 +115,7 @@ class FakePrisma {
   refreshTokens: Row[] = [];
   challenges: Row[] = [];
   events: Row[] = [];
+  emailChanges: Row[] = [];
   user = {
     create: async (a: { data: Row }) => {
       await Promise.resolve();
@@ -131,6 +133,8 @@ class FakePrisma {
         createdAt: now(),
         updatedAt: now(),
         deletedAt: null,
+        sensitiveActionHoldUntil: null,
+        lastSensitiveChangeAt: null,
       };
       this.users.push(u);
       const pc = (a.data.passwordCredential as Row).create as Row;
@@ -174,11 +178,23 @@ class FakePrisma {
       await Promise.resolve();
       return this.users.find((u) => u.id === a.where.id)!;
     },
+    findFirst: async (a: { where: Row }) => {
+      await Promise.resolve();
+      return (
+        this.users.find((u) =>
+          Object.entries(a.where).every(([k, v]) => {
+            if (v && typeof v === 'object' && 'not' in v) return u[k] !== (v as Row).not;
+            return u[k] === v;
+          }),
+        ) ?? null
+      );
+    },
   };
   passwordCredential = new Delegate(this.credentials);
   device = new Delegate(this.devices);
   verificationChallenge = new Delegate(this.challenges);
   securityEvent = new Delegate(this.events);
+  emailChangeRequest = new Delegate(this.emailChanges);
   private refreshDelegate = new Delegate(this.refreshTokens);
   sessionRefreshToken = {
     create: (a: { data: Row }) => this.refreshDelegate.create(a),
@@ -235,6 +251,10 @@ class FakePrisma {
     await Promise.resolve();
     return fn(this);
   }
+  async $executeRaw() {
+    await Promise.resolve();
+    return 1;
+  }
   async isHealthy() {
     await Promise.resolve();
     return true;
@@ -255,6 +275,12 @@ class FakeRedis {
         await Promise.resolve();
         return 1;
       },
+      set: async (k: string) => {
+        await Promise.resolve();
+        if (this.counts.has(`set:${k}`)) return null;
+        this.counts.set(`set:${k}`, 1);
+        return 'OK';
+      },
       ping: async () => {
         await Promise.resolve();
         return 'PONG';
@@ -271,6 +297,7 @@ describe('Auth HTTP e2e flows', () => {
   let app: INestApplication;
   let prisma: FakePrisma;
   let mailer: AuthMailer;
+  let sms: { sent: { to: string; purpose: string; code?: string }[] };
   let jwt: JwtService;
   let authSecret: string;
   const base = {
@@ -300,6 +327,8 @@ describe('Auth HTTP e2e flows', () => {
     app.useGlobalFilters(new GlobalExceptionFilter());
     await app.init();
     mailer = app.get(AuthMailer);
+    sms = app.get('AuthSmsPort');
+    sms.sent.splice(0);
     jwt = app.get(JwtService);
     authSecret = app.get(ConfigService).getOrThrow<AuthRuntimeConfig>('auth').accessSecret;
   });
@@ -830,6 +859,177 @@ describe('Auth HTTP e2e flows', () => {
     expect(prisma.events.map((e) => e.eventType)).toEqual(
       expect.arrayContaining(['DEVICE_REVOKED']),
     );
+  });
+
+  async function verifiedLogin(email = base.email) {
+    const registration = await register(email).expect(HttpStatus.CREATED);
+    await verifyLatest().expect(200);
+    return request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', registration.headers['set-cookie'])
+      .send({ email, password: base.password })
+      .expect(200);
+  }
+
+  it('executes Sprint 2B2 phone verification HTTP scenarios', async () => {
+    const login = await verifiedLogin('phone-user@example.com');
+    const auth = `Bearer ${login.body.accessToken}`;
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/phone/request')
+      .set('Authorization', auth)
+      .send({ phone: '+1 415 555 2671', currentPassword: base.password })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/phone/request')
+      .set('Authorization', auth)
+      .send({ phone: '(17) 3333-1234', currentPassword: base.password })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/phone/request')
+      .set('Authorization', auth)
+      .send({ phone: '(17) 99999-1234', currentPassword: 'wrong' })
+      .expect(401);
+    const requested = await request(app.getHttpServer())
+      .post('/api/v1/auth/phone/request')
+      .set('Authorization', auth)
+      .send({ phone: '(17) 99999-1234', currentPassword: base.password })
+      .expect(200);
+    expect(requested.body).toMatchObject({ challengeId: expect.any(String) });
+    expect(JSON.stringify(requested.body)).not.toMatch(/99999|tokenHash|123456|pepper/);
+    expect(sms.sent.at(-1)?.code).toMatch(/^\d{6}$/);
+    expect(
+      prisma.challenges.filter(
+        (c) =>
+          c.userId === prisma.users[0].id && c.purpose === 'PHONE_VERIFICATION' && !c.consumedAt,
+      ),
+    ).toHaveLength(1);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/phone/request')
+      .set('Authorization', auth)
+      .send({ phone: '(17) 99999-1234', currentPassword: base.password })
+      .expect(429);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/phone/verify')
+      .set('Authorization', auth)
+      .send({ challengeId: 'not-a-uuid', code: '123456', phone: '(17) 99999-1234' })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/phone/verify')
+      .set('Authorization', auth)
+      .send({
+        challengeId: requested.body.challengeId,
+        code: '１２３４５６',
+        phone: '(17) 99999-1234',
+      })
+      .expect(400);
+    for (let i = 0; i < 5; i++)
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/phone/verify')
+        .set('Authorization', auth)
+        .send({ challengeId: requested.body.challengeId, code: '000000', phone: '(17) 99999-1234' })
+        .expect(400);
+    expect(prisma.challenges.find((c) => c.id === requested.body.challengeId)?.attempts).toBe(5);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/phone/verify')
+      .set('Authorization', auth)
+      .send({
+        challengeId: requested.body.challengeId,
+        code: sms.sent.at(-1)?.code,
+        phone: '(17) 99999-1234',
+      })
+      .expect(400);
+    const login2 = await verifiedLogin('phone-user-2@example.com');
+    const auth2 = `Bearer ${login2.body.accessToken}`;
+    const ok = await request(app.getHttpServer())
+      .post('/api/v1/auth/phone/request')
+      .set('Authorization', auth2)
+      .send({ phone: '17 98888-1234', currentPassword: base.password })
+      .expect(200);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/phone/verify')
+      .set('Authorization', auth2)
+      .send({
+        challengeId: ok.body.challengeId,
+        code: sms.sent.at(-1)?.code,
+        phone: '+55 17 98888-1234',
+      })
+      .expect(200)
+      .expect((r) => {
+        const cookies = String(r.headers['set-cookie']);
+        expect(cookies).toContain('litbuy_refresh=;');
+        expect(cookies).toContain('litbuy_csrf=;');
+        expect(cookies).not.toContain('litbuy_device=;');
+      });
+    const user = prisma.users.find((u) => u.email === 'phone-user-2@example.com')!;
+    expect(user.phoneE164).toBe('+5517988881234');
+    expect(user.sensitiveActionHoldUntil).toBeInstanceOf(Date);
+    expect(prisma.sessions.filter((ss) => ss.userId === user.id).every((ss) => ss.revokedAt)).toBe(
+      true,
+    );
+    expect(mailer.sent.some((m) => m.purpose === 'PHONE_CHANGED_NOTICE')).toBe(true);
+  });
+
+  it('executes Sprint 2B2 email change HTTP scenarios', async () => {
+    const login = await verifiedLogin('email-change@example.com');
+    const auth = `Bearer ${login.body.accessToken}`;
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/change/request')
+      .set('Authorization', auth)
+      .send({ newEmail: 'new-email@example.com', currentPassword: 'wrong' })
+      .expect(401);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/change/request')
+      .set('Authorization', auth)
+      .send({ newEmail: 'email-change@example.com', currentPassword: base.password })
+      .expect(400);
+    const requested = await request(app.getHttpServer())
+      .post('/api/v1/auth/email/change/request')
+      .set('Authorization', auth)
+      .send({ newEmail: 'new-email@example.com', currentPassword: base.password })
+      .expect(200);
+    expect(requested.body).toMatchObject({ requestId: expect.any(String) });
+    const currentToken = mailer.sent.find(
+      (m) => m.purpose === 'EMAIL_CHANGE_CONFIRM_CURRENT',
+    )!.token!;
+    const newToken = mailer.sent.find((m) => m.purpose === 'EMAIL_CHANGE_CONFIRM_NEW')!.token!;
+    expect(currentToken).not.toBe(newToken);
+    expect(JSON.stringify(prisma.emailChanges)).not.toContain('new-email@example.com');
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/change/confirm')
+      .send({
+        token: `${currentToken.split('.')[0]}.${randomToken()}`,
+        newEmail: 'new-email@example.com',
+      })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/change/confirm')
+      .send({ token: currentToken, newEmail: 'other-target@example.com' })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/change/confirm')
+      .send({ token: currentToken, newEmail: 'new-email@example.com' })
+      .expect(200)
+      .expect((r) => expect(r.body.status).toBe('PENDING'));
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/change/confirm')
+      .send({ token: currentToken, newEmail: 'new-email@example.com' })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/change/confirm')
+      .send({ token: newToken, newEmail: 'new-email@example.com' })
+      .expect(200)
+      .expect((r) => {
+        expect(r.body.status).toBe('COMPLETED');
+        expect(String(r.headers['set-cookie'])).toContain('litbuy_refresh=;');
+      });
+    const user = prisma.users.find((u) => u.email === 'new-email@example.com')!;
+    expect(user).toBeDefined();
+    expect(user.sensitiveActionHoldUntil).toBeInstanceOf(Date);
+    expect(prisma.events.filter((e) => e.eventType === 'EMAIL_CHANGED')).toHaveLength(1);
+    expect(prisma.sessions.filter((ss) => ss.userId === user.id).every((ss) => ss.revokedAt)).toBe(
+      true,
+    );
+    expect(JSON.stringify(prisma.challenges)).not.toContain(newToken.split('.')[1]);
   });
 
   it('executes rate limiting and event assertions through HTTP', async () => {
