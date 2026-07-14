@@ -4,11 +4,16 @@ import { DatabaseModule } from '../database/database.module';
 import { RedisModule } from '../redis/redis.module';
 import { AppLogger } from '../common/logging/app-logger.service';
 import { AuthController } from './auth.controller';
-import { AuthMailer, AuthService } from './auth.service';
+import { AuthMailer, AuthService, MemoryAuthSmsPort } from './auth.service';
 @Module({
   imports: [DatabaseModule, RedisModule, JwtModule.register({})],
   controllers: [AuthController],
-  providers: [AuthService, AuthMailer, AppLogger],
-  exports: [AuthMailer],
+  providers: [
+    AuthService,
+    AuthMailer,
+    { provide: 'AuthSmsPort', useClass: MemoryAuthSmsPort },
+    AppLogger,
+  ],
+  exports: [AuthMailer, 'AuthSmsPort'],
 })
 export class AuthModule {}

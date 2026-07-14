@@ -16,6 +16,10 @@ import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import {
   ChangePasswordDto,
+  EmailChangeConfirmDto,
+  EmailChangeRequestDto,
+  PhoneRequestDto,
+  PhoneVerifyDto,
   EmailDto,
   LoginDto,
   RegisterDto,
@@ -146,6 +150,59 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     return this.auth.revokeDevice(deviceId, user, req, res);
+  }
+
+  @Post('email/change/request')
+  @HttpCode(200)
+  @UseGuards(AccessTokenGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Solicita alteração segura de e-mail com confirmação dupla' })
+  requestEmailChange(
+    @Body() dto: EmailChangeRequestDto,
+    @CurrentUser() user: { userId: string; sessionId: string; deviceId: string },
+    @Req() req: Request,
+  ) {
+    return this.auth.requestEmailChange(dto, user, req);
+  }
+
+  @Post('email/change/confirm')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Confirma um dos lados da alteração de e-mail sem exigir autenticação' })
+  confirmEmailChange(
+    @Body() dto: EmailChangeConfirmDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return this.auth.confirmEmailChange(dto, req, res);
+  }
+
+  @Post('phone/request')
+  @HttpCode(200)
+  @UseGuards(AccessTokenGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Solicita verificação ou alteração de telefone por SMS com senha atual',
+  })
+  requestPhone(
+    @Body() dto: PhoneRequestDto,
+    @CurrentUser() user: { userId: string; sessionId: string; deviceId: string },
+    @Req() req: Request,
+  ) {
+    return this.auth.requestPhone(dto, user, req);
+  }
+
+  @Post('phone/verify')
+  @HttpCode(200)
+  @UseGuards(AccessTokenGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Confirma telefone por SMS, revoga sessões e inicia hold de segurança' })
+  verifyPhone(
+    @Body() dto: PhoneVerifyDto,
+    @CurrentUser() user: { userId: string; sessionId: string; deviceId: string },
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return this.auth.verifyPhone(dto, user, req, res);
   }
 
   @Post('refresh') @HttpCode(200) @ApiCookieAuth() refresh(

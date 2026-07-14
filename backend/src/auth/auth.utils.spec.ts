@@ -7,6 +7,12 @@ import {
   sanitizeMetadata,
   validatePasswordPolicy,
   verifyPassword,
+  normalizeBrazilianMobilePhone,
+  maskBrazilianPhone,
+  generateSmsCode,
+  challengeSecretHash,
+  targetHash,
+  applySensitiveHold,
 } from './auth.utils';
 import { AUTH_DUMMY_PASSWORD_HASH } from './auth.service';
 describe('auth utils', () => {
@@ -46,6 +52,28 @@ describe('auth utils', () => {
     expect(Buffer.from(t, 'base64url').length).toBe(32);
     expect(hmacToken(t, 'pepper')).toHaveLength(64);
     expect(sanitizeMetadata({ token: 'x', safe: 'y' })).toEqual({ safe: 'y' });
+  });
+  it('normalizes and masks Brazilian mobile phones', () => {
+    expect(normalizeBrazilianMobilePhone('(17) 99999-1234')).toBe('+5517999991234');
+    expect(normalizeBrazilianMobilePhone('+1 415 555 2671')).toBeNull();
+    expect(normalizeBrazilianMobilePhone('(17) 3333-1234')).toBeNull();
+    expect(maskBrazilianPhone('+5517999991234')).toBe('+55 17 *****-1234');
+  });
+  it('generates SMS code and challenge-bound hashes', () => {
+    expect(generateSmsCode()).toMatch(/^\d{6}$/);
+    expect(challengeSecretHash('a', '123456', 'pepper')).not.toBe(
+      challengeSecretHash('b', '123456', 'pepper'),
+    );
+    expect(targetHash('phone', '+5517999991234', 'pepper')).not.toBe(
+      targetHash('email', '+5517999991234', 'pepper'),
+    );
+  });
+  it('applies sensitive holds without reducing existing longer hold', () => {
+    const now = new Date('2026-07-14T00:00:00Z');
+    const next = applySensitiveHold(null, now, 48);
+    expect(next.toISOString()).toBe('2026-07-16T00:00:00.000Z');
+    const later = new Date('2026-07-20T00:00:00Z');
+    expect(applySensitiveHold(later, now, 48)).toBe(later);
   });
   it('validates password policy', () => {
     expect(validatePasswordPolicy(' '.repeat(12))).toBe(false);

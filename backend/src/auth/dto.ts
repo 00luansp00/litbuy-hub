@@ -30,3 +30,20 @@ export class ChangePasswordDto {
   @ApiProperty() @IsString() currentPassword!: string;
   @ApiProperty() @IsString() @MinLength(12) @MaxLength(128) newPassword!: string;
 }
+export class PhoneRequestDto {
+  @ApiProperty() @IsString() phone!: string;
+  @ApiProperty() @IsString() currentPassword!: string;
+}
+export class PhoneVerifyDto {
+  @ApiProperty() @IsString() challengeId!: string;
+  @ApiProperty() @IsString() @MinLength(6) @MaxLength(6) code!: string;
+  @ApiProperty() @IsString() phone!: string;
+}
+export class EmailChangeRequestDto {
+  @ApiProperty() @IsEmail() newEmail!: string;
+  @ApiProperty() @IsString() currentPassword!: string;
+}
+export class EmailChangeConfirmDto {
+  @ApiProperty() @IsString() @MinLength(20) token!: string;
+  @ApiProperty() @IsEmail() newEmail!: string;
+}

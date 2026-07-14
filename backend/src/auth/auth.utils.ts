@@ -51,3 +51,43 @@ export function sanitizeMetadata(v: Record<string, unknown> = {}): Record<string
       out[k] = typeof val === 'string' ? val.slice(0, 200) : val;
   return out;
 }
+import { randomInt } from 'node:crypto';
+import { parsePhoneNumberFromString } from 'libphonenumber-js';
+
+export function normalizeBrazilianMobilePhone(input: string): string | null {
+  const phone = parsePhoneNumberFromString(input, 'BR');
+  if (!phone?.isValid() || phone.country !== 'BR') return null;
+  const e164 = phone.number;
+  const national = phone.nationalNumber;
+  if (!e164.startsWith('+55') || national.length !== 11 || national[2] !== '9') return null;
+  return e164;
+}
+
+export function maskBrazilianPhone(e164?: string | null): string | null {
+  if (!e164) return null;
+  const phone = parsePhoneNumberFromString(e164, 'BR');
+  const n = phone?.nationalNumber;
+  if (!n || n.length < 10) return null;
+  return `+55 ${n.slice(0, 2)} *****-${n.slice(-4)}`;
+}
+
+export function generateSmsCode(): string {
+  return String(randomInt(0, 1_000_000)).padStart(6, '0');
+}
+
+export function challengeSecretHash(challengeId: string, secret: string, pepper: string): string {
+  return hmacToken(`${challengeId}:${secret}`, pepper);
+}
+
+export function targetHash(domain: 'phone' | 'email', value: string, pepper: string): string {
+  return hmacToken(`${domain}:${value}`, pepper);
+}
+
+export function applySensitiveHold(
+  current: Date | null | undefined,
+  now: Date,
+  holdHours: number,
+): Date {
+  const next = new Date(now.getTime() + holdHours * 3600_000);
+  return current && current > next ? current : next;
+}

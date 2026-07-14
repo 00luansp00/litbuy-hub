@@ -25,6 +25,9 @@ enum VerificationPurpose {
   EMAIL_VERIFICATION
   DEVICE_APPROVAL
   PASSWORD_RESET
+  PHONE_VERIFICATION
+  EMAIL_CHANGE_CURRENT
+  EMAIL_CHANGE_NEW
 }
 
 enum SecurityEventType {
@@ -47,6 +50,14 @@ enum SecurityEventType {
   PASSWORD_CHANGED
   LOGOUT_ALL
   DEVICE_REVOKED
+  PHONE_VERIFICATION_REQUESTED
+  PHONE_VERIFIED
+  PHONE_CHANGED
+  EMAIL_CHANGE_REQUESTED
+  EMAIL_CHANGE_CURRENT_CONFIRMED
+  EMAIL_CHANGE_NEW_CONFIRMED
+  EMAIL_CHANGED
+  SENSITIVE_ACTION_HOLD_STARTED
 }
 
 enum SecurityEventOutcome {
@@ -58,26 +69,30 @@ enum SecurityEventOutcome {
 }
 
 model User {
-  id                     String                  @id @default(uuid()) @db.Uuid
-  email                  String                  @unique
-  phoneE164              String?
-  phoneVerifiedAt        DateTime?
-  birthDate              DateTime                @db.Date
-  status                 UserStatus              @default(PENDING_EMAIL)
-  emailVerifiedAt        DateTime?
-  termsVersion           String
-  termsAcceptedAt        DateTime
-  privacyVersion         String
-  privacyAcceptedAt      DateTime
-  createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @updatedAt
-  deletedAt              DateTime?
-  passwordCredential     PasswordCredential?
-  devices                Device[]
-  sessions               Session[]
-  verificationChallenges VerificationChallenge[]
-  securityEvents         SecurityEvent[]
+  id                       String                  @id @default(uuid()) @db.Uuid
+  email                    String                  @unique
+  phoneE164                String?
+  phoneVerifiedAt          DateTime?
+  birthDate                DateTime                @db.Date
+  status                   UserStatus              @default(PENDING_EMAIL)
+  emailVerifiedAt          DateTime?
+  termsVersion             String
+  termsAcceptedAt          DateTime
+  privacyVersion           String
+  privacyAcceptedAt        DateTime
+  createdAt                DateTime                @default(now())
+  updatedAt                DateTime                @updatedAt
+  deletedAt                DateTime?
+  sensitiveActionHoldUntil DateTime?
+  lastSensitiveChangeAt    DateTime?
+  passwordCredential       PasswordCredential?
+  devices                  Device[]
+  sessions                 Session[]
+  verificationChallenges   VerificationChallenge[]
+  securityEvents           SecurityEvent[]
+  emailChangeRequests      EmailChangeRequest[]
 
+  @@unique([phoneE164])
   @@index([email])
   @@index([status])
 }
@@ -150,6 +165,8 @@ model VerificationChallenge {
   device      Device?             @relation(fields: [deviceId], references: [id], onDelete: Restrict)
   purpose     VerificationPurpose
   tokenHash   String              @unique
+  targetHash  String?
+  contextId   String?             @db.Uuid
   attempts    Int                 @default(0)
   maxAttempts Int
   expiresAt   DateTime
@@ -159,7 +176,27 @@ model VerificationChallenge {
   @@index([userId])
   @@index([deviceId])
   @@index([purpose])
+  @@index([targetHash])
+  @@index([contextId])
   @@index([purpose, consumedAt, expiresAt])
+}
+
+model EmailChangeRequest {
+  id                      String    @id @default(uuid()) @db.Uuid
+  userId                  String    @db.Uuid
+  user                    User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  newEmailHash            String
+  expiresAt               DateTime
+  currentEmailConfirmedAt DateTime?
+  newEmailConfirmedAt     DateTime?
+  completedAt             DateTime?
+  cancelledAt             DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([newEmailHash])
+  @@index([completedAt, cancelledAt, expiresAt])
 }
 
 model SecurityEvent {
