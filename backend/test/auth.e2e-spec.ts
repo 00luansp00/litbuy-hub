@@ -251,8 +251,19 @@ class FakePrisma {
     await Promise.resolve();
     return fn(this);
   }
-  async $executeRaw() {
+  async $executeRaw(strings?: TemplateStringsArray, ...values: unknown[]) {
     await Promise.resolve();
+    if (String(strings?.[0] ?? '').includes('UPDATE "User"')) {
+      const next = values[0] as Date;
+      const changedAt = values[2] as Date;
+      const userId = values[3] as string;
+      const user = this.users.find((u) => u.id === userId);
+      if (user) {
+        const current = user.sensitiveActionHoldUntil as Date | null | undefined;
+        user.sensitiveActionHoldUntil = current && current > next ? current : next;
+        user.lastSensitiveChangeAt = changedAt;
+      }
+    }
     return 1;
   }
   async isHealthy() {
@@ -280,6 +291,11 @@ class FakeRedis {
         if (this.counts.has(`set:${k}`)) return null;
         this.counts.set(`set:${k}`, 1);
         return 'OK';
+      },
+      eval: async (_script: string, _keys: number, key: string) => {
+        await Promise.resolve();
+        this.counts.delete(`set:${key}`);
+        return 1;
       },
       ping: async () => {
         await Promise.resolve();
@@ -1030,6 +1046,60 @@ describe('Auth HTTP e2e flows', () => {
       true,
     );
     expect(JSON.stringify(prisma.challenges)).not.toContain(newToken.split('.')[1]);
+  });
+
+  it('invalidates phone challenge and releases cooldown when SMS delivery fails', async () => {
+    const login = await verifiedLogin('sms-failure@example.com');
+    const auth = `Bearer ${login.body.accessToken}`;
+    const originalSend = (sms as { send?: (...args: unknown[]) => void }).send;
+    (sms as { send?: (...args: unknown[]) => void }).send = () => {
+      throw new Error('simulated sms outage');
+    };
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/phone/request')
+      .set('Authorization', auth)
+      .send({ phone: '(17) 97777-1234', currentPassword: base.password })
+      .expect(503)
+      .expect((r) => expect(r.body.code).toBe('SMS_DELIVERY_UNAVAILABLE'));
+    expect(
+      prisma.challenges.filter((c) => c.purpose === 'PHONE_VERIFICATION' && !c.consumedAt),
+    ).toHaveLength(0);
+    (sms as { send?: (...args: unknown[]) => void }).send = originalSend;
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/phone/request')
+      .set('Authorization', auth)
+      .send({ phone: '(17) 97777-1234', currentPassword: base.password })
+      .expect(200);
+  });
+
+  it('cancels email change and invalidates delivered token when essential email delivery fails', async () => {
+    const login = await verifiedLogin('email-delivery-failure@example.com');
+    const auth = `Bearer ${login.body.accessToken}`;
+    const originalSend = mailer.send.bind(mailer);
+    let sends = 0;
+    const failingSend: AuthMailer['send'] = (to, purpose, token) => {
+      sends += 1;
+      if (purpose === 'EMAIL_CHANGE_CONFIRM_NEW') throw new Error('simulated email outage');
+      originalSend(to, purpose, token);
+    };
+    mailer.send = failingSend;
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/change/request')
+      .set('Authorization', auth)
+      .send({ newEmail: 'email-delivery-new@example.com', currentPassword: base.password })
+      .expect(503)
+      .expect((r) => expect(r.body.code).toBe('EMAIL_DELIVERY_UNAVAILABLE'));
+    expect(sends).toBeGreaterThanOrEqual(2);
+    const deliveredToken = mailer.sent.find(
+      (m) => m.purpose === 'EMAIL_CHANGE_CONFIRM_CURRENT',
+    )!.token!;
+    expect(prisma.emailChanges.filter((change) => !change.cancelledAt)).toHaveLength(0);
+    expect(prisma.challenges.filter((challenge) => !challenge.consumedAt)).toHaveLength(0);
+    mailer.send = originalSend;
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/change/confirm')
+      .send({ token: deliveredToken, newEmail: 'email-delivery-new@example.com' })
+      .expect(400);
   });
 
   it('executes rate limiting and event assertions through HTTP', async () => {

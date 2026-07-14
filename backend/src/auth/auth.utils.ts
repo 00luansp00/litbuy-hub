@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { Prisma } from '@prisma/client';
 import argon2 from 'argon2';
 
 export const normalizeEmail = (email: string): string => email.trim().toLowerCase();
@@ -90,4 +91,8 @@ export function applySensitiveHold(
 ): Date {
   const next = new Date(now.getTime() + holdHours * 3600_000);
   return current && current > next ? current : next;
+}
+
+export function isUniqueConstraintError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
 }

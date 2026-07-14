@@ -9,8 +9,7 @@ import { GlobalExceptionFilter } from '../src/common/filters/global-exception.fi
 import { PrismaService } from '../src/database/prisma.service';
 import { RedisService } from '../src/redis/redis.service';
 import type { AppConfig } from '../src/config/app.config';
-import { AuthMailer } from '../src/auth/auth.service';
-import type { AuthSmsPort } from '../src/auth/auth.service';
+import { AuthMailer, MemoryAuthSmsPort } from '../src/auth/auth.service';
 
 function sessionIdFromAccessToken(accessToken: string): string {
   const payload = JSON.parse(Buffer.from(accessToken.split('.')[1], 'base64url').toString()) as {
@@ -24,7 +23,7 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
   let prisma: PrismaService;
   let redis: RedisService;
   let mailer: AuthMailer;
-  let sms: AuthSmsPort;
+  let sms: MemoryAuthSmsPort;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -50,7 +49,7 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
     prisma = app.get(PrismaService);
     redis = app.get(RedisService);
     mailer = app.get(AuthMailer);
-    sms = app.get('AuthSmsPort');
+    sms = app.get(MemoryAuthSmsPort);
   });
 
   beforeEach(async () => {

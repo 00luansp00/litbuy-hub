@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import {
   hmacToken,
   hashPassword,
@@ -13,6 +14,7 @@ import {
   challengeSecretHash,
   targetHash,
   applySensitiveHold,
+  isUniqueConstraintError,
 } from './auth.utils';
 import { AUTH_DUMMY_PASSWORD_HASH } from './auth.service';
 describe('auth utils', () => {
@@ -75,6 +77,21 @@ describe('auth utils', () => {
     const later = new Date('2026-07-20T00:00:00Z');
     expect(applySensitiveHold(later, now, 48)).toBe(later);
   });
+
+  it('recognizes only Prisma P2002 unique constraint errors', () => {
+    const p2002 = new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+      code: 'P2002',
+      clientVersion: 'test',
+    });
+    const p2003 = new Prisma.PrismaClientKnownRequestError('Foreign key failed', {
+      code: 'P2003',
+      clientVersion: 'test',
+    });
+    expect(isUniqueConstraintError(p2002)).toBe(true);
+    expect(isUniqueConstraintError(p2003)).toBe(false);
+    expect(isUniqueConstraintError(new Error('P2002'))).toBe(false);
+  });
+
   it('validates password policy', () => {
     expect(validatePasswordPolicy(' '.repeat(12))).toBe(false);
     expect(validatePasswordPolicy('a'.repeat(12))).toBe(true);
