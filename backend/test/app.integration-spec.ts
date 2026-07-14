@@ -79,6 +79,10 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
       });
 
     await request(app.getHttpServer()).get('/api/v1/v1/health/live').expect(HttpStatus.NOT_FOUND);
+    await request(app.getHttpServer())
+      .post('/api/v1/v1/auth/register')
+      .send({})
+      .expect(HttpStatus.NOT_FOUND);
   });
 
   it('returns ready with real PostgreSQL and Redis marked up and no secrets', async () => {
@@ -110,7 +114,7 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
       privacyVersion: process.env.CURRENT_PRIVACY_VERSION,
     };
     const register = await request(app.getHttpServer())
-      .post('/api/v1/v1/auth/register')
+      .post('/api/v1/auth/register')
       .send(payload)
       .expect(HttpStatus.CREATED);
     expect(register.body).not.toHaveProperty('token');
@@ -120,17 +124,17 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
     )?.token;
     expect(emailToken).toEqual(expect.any(String));
     await request(app.getHttpServer())
-      .post('/api/v1/v1/auth/email/verify')
+      .post('/api/v1/auth/email/verify')
       .send({ token: emailToken })
       .expect(HttpStatus.OK);
     const login = await request(app.getHttpServer())
-      .post('/api/v1/v1/auth/login')
+      .post('/api/v1/auth/login')
       .set('Cookie', deviceCookie)
       .send({ email: payload.email, password: payload.password })
       .expect(HttpStatus.OK);
     expect(login.body.accessToken).toEqual(expect.any(String));
     await request(app.getHttpServer())
-      .get('/api/v1/v1/auth/me')
+      .get('/api/v1/auth/me')
       .set('Authorization', `Bearer ${login.body.accessToken}`)
       .expect(HttpStatus.OK);
     const authCookies = login.headers['set-cookie'] as unknown as string[];
@@ -141,12 +145,12 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
       authCookies.find((cookie) => cookie.startsWith('litbuy_refresh')),
     );
     await request(app.getHttpServer())
-      .post('/api/v1/v1/auth/refresh')
+      .post('/api/v1/auth/refresh')
       .set('Cookie', authCookies)
       .set('X-CSRF-Token', csrf)
       .expect(HttpStatus.OK);
     await request(app.getHttpServer())
-      .post('/api/v1/v1/auth/refresh')
+      .post('/api/v1/auth/refresh')
       .set('Cookie', [oldRefreshCookie, `litbuy_csrf=${csrf}`])
       .set('X-CSRF-Token', csrf)
       .expect(HttpStatus.UNAUTHORIZED);
@@ -155,11 +159,11 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
     });
     expect(session.revokedAt).toBeTruthy();
     await request(app.getHttpServer())
-      .get('/api/v1/v1/auth/me')
+      .get('/api/v1/auth/me')
       .set('Authorization', `Bearer ${login.body.accessToken}`)
       .expect(HttpStatus.UNAUTHORIZED);
     const secondLogin = await request(app.getHttpServer())
-      .post('/api/v1/v1/auth/login')
+      .post('/api/v1/auth/login')
       .set('Cookie', deviceCookie)
       .send({ email: payload.email, password: payload.password })
       .expect(HttpStatus.OK);
@@ -168,12 +172,12 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
       .split(';')[0]
       .split('=')[1];
     await request(app.getHttpServer())
-      .post('/api/v1/v1/auth/logout')
+      .post('/api/v1/auth/logout')
       .set('Cookie', secondCookies)
       .set('X-CSRF-Token', secondCsrf)
       .expect(HttpStatus.OK);
     await request(app.getHttpServer())
-      .post('/api/v1/v1/auth/refresh')
+      .post('/api/v1/auth/refresh')
       .set('Cookie', secondCookies)
       .set('X-CSRF-Token', secondCsrf)
       .expect(HttpStatus.UNAUTHORIZED);
@@ -191,5 +195,60 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
     });
     expect(serialized).not.toContain(emailToken);
     expect(serialized).not.toContain(oldRefreshCookie);
+  });
+
+  it('handles concurrent refresh attempts for the same token safely with real PostgreSQL and Redis', async () => {
+    const payload = {
+      email: 'integration-concurrent@example.com',
+      password: 'integration password 123',
+      birthDate: '2000-01-01',
+      termsAccepted: true,
+      privacyAccepted: true,
+      termsVersion: process.env.CURRENT_TERMS_VERSION,
+      privacyVersion: process.env.CURRENT_PRIVACY_VERSION,
+    };
+    const register = await request(app.getHttpServer())
+      .post('/api/v1/auth/register')
+      .send(payload)
+      .expect(HttpStatus.CREATED);
+    const deviceCookie = register.headers['set-cookie'] as unknown as string[];
+    const token = mailer.sent.find((message) => message.purpose === 'EMAIL_VERIFICATION')?.token;
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/verify')
+      .send({ token })
+      .expect(HttpStatus.OK);
+    const login = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', deviceCookie)
+      .send({ email: payload.email, password: payload.password })
+      .expect(HttpStatus.OK);
+    const cookies = login.headers['set-cookie'] as unknown as string[];
+    const csrf = String(cookies.find((cookie) => cookie.startsWith('litbuy_csrf')))
+      .split(';')[0]
+      .split('=')[1];
+    const [first, second] = await Promise.allSettled([
+      request(app.getHttpServer())
+        .post('/api/v1/auth/refresh')
+        .set('Cookie', cookies)
+        .set('X-CSRF-Token', csrf),
+      request(app.getHttpServer())
+        .post('/api/v1/auth/refresh')
+        .set('Cookie', cookies)
+        .set('X-CSRF-Token', csrf),
+    ]);
+    const statuses = [first, second].map((result) =>
+      result.status === 'fulfilled' ? result.value.status : 500,
+    );
+    expect(statuses.filter((status) => status === 200)).toHaveLength(1);
+    expect(statuses.filter((status) => status === 401)).toHaveLength(1);
+    const session = await prisma.session.findFirstOrThrow({
+      where: { user: { email: payload.email } },
+    });
+    const family = await prisma.sessionRefreshToken.findMany({
+      where: { familyId: session.refreshTokenFamilyId },
+    });
+    expect(family.filter((row) => row.replacedByTokenId !== null)).toHaveLength(1);
+    expect(family.filter((row) => row.revokedAt === null && row.usedAt === null)).toHaveLength(0);
+    expect(session.revokedAt).toBeTruthy();
   });
 });

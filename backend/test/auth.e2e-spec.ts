@@ -7,12 +7,23 @@ import { AppModule } from '../src/app.module';
 import { GlobalExceptionFilter } from '../src/common/filters/global-exception.filter';
 import { PrismaService } from '../src/database/prisma.service';
 import { RedisService } from '../src/redis/redis.service';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { AuthMailer } from '../src/auth/auth.service';
-import { hmacToken, randomToken } from '../src/auth/auth.utils';
+import type { AuthRuntimeConfig } from '../src/auth/auth.types';
+import { randomToken } from '../src/auth/auth.utils';
 
 type Row = Record<string, unknown>;
 const id = () => crypto.randomUUID();
 const now = () => new Date();
+
+function isoDateYearsAgo(years: number, dayOffset = 0): string {
+  const today = new Date();
+  const utc = new Date(
+    Date.UTC(today.getUTCFullYear() - years, today.getUTCMonth(), today.getUTCDate() + dayOffset),
+  );
+  return utc.toISOString().slice(0, 10);
+}
 class Delegate<T extends Row> {
   constructor(private rows: T[]) {}
   async create(args: { data: Row; include?: Row }) {
@@ -226,10 +237,12 @@ describe('Auth HTTP e2e flows', () => {
   let app: INestApplication;
   let prisma: FakePrisma;
   let mailer: AuthMailer;
+  let jwt: JwtService;
+  let authSecret: string;
   const base = {
     email: 'user@example.com',
     password: 'valid password 123',
-    birthDate: '2000-01-01',
+    birthDate: isoDateYearsAgo(25),
     termsAccepted: true,
     privacyAccepted: true,
     termsVersion: '2026-test',
@@ -253,18 +266,21 @@ describe('Auth HTTP e2e flows', () => {
     app.useGlobalFilters(new GlobalExceptionFilter());
     await app.init();
     mailer = app.get(AuthMailer);
+    jwt = app.get(JwtService);
+    authSecret = app.get(ConfigService).getOrThrow<AuthRuntimeConfig>('auth').accessSecret;
   });
   afterEach(async () => app.close());
   function register(email = base.email) {
     return request(app.getHttpServer())
-      .post('/api/v1/v1/auth/register')
+      .post('/api/v1/auth/register')
       .send({ ...base, email });
   }
   function verifyLatest() {
     const token = mailer.sent.at(-1)!.token;
-    return request(app.getHttpServer()).post('/api/v1/v1/auth/email/verify').send({ token });
+    return request(app.getHttpServer()).post('/api/v1/auth/email/verify').send({ token });
   }
   it('executes registration validation scenarios through HTTP', async () => {
+    await request(app.getHttpServer()).post('/api/v1/v1/auth/register').send(base).expect(404);
     await register()
       .expect(HttpStatus.CREATED)
       .expect((r: request.Response) => {
@@ -272,27 +288,27 @@ describe('Auth HTTP e2e flows', () => {
         expect(r.headers['set-cookie']).toBeDefined();
       });
     await request(app.getHttpServer())
-      .post('/api/v1/v1/auth/register')
-      .send({ ...base, email: 'minor@example.com', birthDate: '2010-01-01' })
+      .post('/api/v1/auth/register')
+      .send({ ...base, email: 'minor@example.com', birthDate: isoDateYearsAgo(17) })
       .expect(400);
     await request(app.getHttpServer())
-      .post('/api/v1/v1/auth/register')
-      .send({ ...base, email: 'exact@example.com', birthDate: '2008-07-14' })
+      .post('/api/v1/auth/register')
+      .send({ ...base, email: 'exact@example.com', birthDate: isoDateYearsAgo(18) })
       .expect(HttpStatus.CREATED);
     await request(app.getHttpServer())
-      .post('/api/v1/v1/auth/register')
-      .send({ ...base, email: 'before@example.com', birthDate: '2008-07-15' })
+      .post('/api/v1/auth/register')
+      .send({ ...base, email: 'before@example.com', birthDate: isoDateYearsAgo(18, 1) })
       .expect(400);
     await request(app.getHttpServer())
-      .post('/api/v1/v1/auth/register')
-      .send({ ...base, email: 'future@example.com', birthDate: '2030-01-01' })
+      .post('/api/v1/auth/register')
+      .send({ ...base, email: 'future@example.com', birthDate: isoDateYearsAgo(-1) })
       .expect(400);
     await request(app.getHttpServer())
-      .post('/api/v1/v1/auth/register')
+      .post('/api/v1/auth/register')
       .send({ ...base, email: 'terms@example.com', termsVersion: 'old' })
       .expect(400);
     await request(app.getHttpServer())
-      .post('/api/v1/v1/auth/register')
+      .post('/api/v1/auth/register')
       .send({ ...base, email: 'privacy@example.com', privacyVersion: 'old' })
       .expect(400);
     await register()
@@ -303,25 +319,25 @@ describe('Auth HTTP e2e flows', () => {
     await register();
     const challenge = prisma.challenges[0];
     await request(app.getHttpServer())
-      .post('/api/v1/v1/auth/email/verify')
+      .post('/api/v1/auth/email/verify')
       .send({ token: `${String(challenge.id)}.${randomToken()}` })
       .expect(400);
     expect(challenge.attempts).toBe(1);
     challenge.attempts = 5;
     await request(app.getHttpServer())
-      .post('/api/v1/v1/auth/email/verify')
+      .post('/api/v1/auth/email/verify')
       .send({ token: `${String(challenge.id)}.${randomToken()}` })
       .expect(400);
     challenge.attempts = 0;
     challenge.expiresAt = new Date(Date.now() - 1000);
     await request(app.getHttpServer())
-      .post('/api/v1/v1/auth/email/verify')
+      .post('/api/v1/auth/email/verify')
       .send({ token: mailer.sent[0].token })
       .expect(400);
     challenge.expiresAt = new Date(Date.now() + 100000);
     await verifyLatest().expect(200);
     await request(app.getHttpServer())
-      .post('/api/v1/v1/auth/email/verify')
+      .post('/api/v1/auth/email/verify')
       .send({ token: mailer.sent[0].token })
       .expect(400);
   });
@@ -329,77 +345,109 @@ describe('Auth HTTP e2e flows', () => {
     const reg = await register();
     const deviceCookie = reg.headers['set-cookie'];
     await request(app.getHttpServer())
-      .post('/api/v1/v1/auth/login')
+      .post('/api/v1/auth/login')
       .set('Cookie', deviceCookie)
       .send({ email: base.email, password: base.password })
       .expect(403);
     await verifyLatest();
     await request(app.getHttpServer())
-      .post('/api/v1/v1/auth/login')
+      .post('/api/v1/auth/login')
       .set('Cookie', deviceCookie)
       .send({ email: base.email, password: 'wrong password' })
       .expect(401);
     for (let i = 0; i < 5; i++)
       await request(app.getHttpServer())
-        .post('/api/v1/v1/auth/login')
+        .post('/api/v1/auth/login')
         .set('Cookie', deviceCookie)
         .send({ email: base.email, password: 'wrong password' });
     await request(app.getHttpServer())
-      .post('/api/v1/v1/auth/login')
+      .post('/api/v1/auth/login')
       .set('Cookie', deviceCookie)
       .send({ email: base.email, password: base.password })
       .expect(401);
+    expect(prisma.events.some((e) => e.eventType === 'LOGIN_FAILED')).toBe(true);
+    expect(prisma.events.some((e) => e.eventType === 'LOGIN_LOCKED')).toBe(true);
     prisma.credentials[0].lockedUntil = new Date(Date.now() - 1000);
     const login = await request(app.getHttpServer())
-      .post('/api/v1/v1/auth/login')
+      .post('/api/v1/auth/login')
       .set('Cookie', deviceCookie)
       .send({ email: base.email, password: base.password })
       .expect(200);
     expect(login.body.accessToken).toEqual(expect.any(String));
+    expect(prisma.events.some((e) => e.eventType === 'LOGIN_SUCCEEDED' && e.userId)).toBe(true);
     await request(app.getHttpServer())
-      .get('/api/v1/v1/auth/me')
+      .get('/api/v1/auth/me')
       .set('Authorization', `Bearer ${login.body.accessToken}`)
       .expect(200)
       .expect((r) =>
         expect(JSON.stringify(r.body)).not.toMatch(/passwordHash|tokenHash|csrfTokenHash|pepper/),
       );
     await request(app.getHttpServer())
-      .get('/api/v1/v1/auth/me')
+      .get('/api/v1/auth/me')
       .set('Authorization', 'Bearer invalid')
+      .expect(401);
+    const expired = await jwt.signAsync(
+      { sub: prisma.users[0].id, sid: prisma.sessions[0].id, type: 'access' },
+      { secret: authSecret, expiresIn: -1 },
+    );
+    await request(app.getHttpServer())
+      .get('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${expired}`)
       .expect(401);
     const authCookies = login.headers['set-cookie'] as unknown as string[];
     await request(app.getHttpServer())
-      .post('/api/v1/v1/auth/refresh')
+      .post('/api/v1/auth/refresh')
       .set('Cookie', authCookies)
       .expect(401);
     const csrf = String(authCookies.find((c: string) => c.startsWith('litbuy_csrf')))
       .split(';')[0]
       .split('=')[1];
     const refreshed = await request(app.getHttpServer())
-      .post('/api/v1/v1/auth/refresh')
+      .post('/api/v1/auth/refresh')
       .set('Cookie', authCookies)
       .set('X-CSRF-Token', csrf)
       .expect(200);
     expect(refreshed.body.accessToken).toEqual(expect.any(String));
     await request(app.getHttpServer())
-      .post('/api/v1/v1/auth/refresh')
+      .post('/api/v1/auth/refresh')
       .set('Cookie', authCookies)
       .set('X-CSRF-Token', csrf)
       .expect(401);
     await request(app.getHttpServer())
-      .get('/api/v1/v1/auth/me')
+      .get('/api/v1/auth/me')
       .set('Authorization', `Bearer ${login.body.accessToken}`)
       .expect(401);
+    expect(
+      prisma.events.some(
+        (e) => e.eventType === 'REFRESH_TOKEN_REUSE_DETECTED' && e.sessionId && e.deviceId,
+      ),
+    ).toBe(true);
+    expect(prisma.events.some((e) => e.eventType === 'SESSION_REVOKED' && e.sessionId)).toBe(true);
   });
   it('executes unknown/shared/pending device and logout csrf scenarios through HTTP', async () => {
     const a = await register('a@example.com');
     await verifyLatest();
     await register('b@example.com');
     await verifyLatest();
+    const firstUserDeviceUserId = prisma.devices[0].userId;
     const sharedCookie = a.headers['set-cookie'];
-    await request(app.getHttpServer())
-      .post('/api/v1/v1/auth/login')
+    const firstUnknown = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
       .set('Cookie', sharedCookie)
+      .send({ email: 'b@example.com', password: base.password })
+      .expect(202);
+    const pendingCookie = firstUnknown.headers['set-cookie'] as unknown as string[];
+    expect(prisma.devices[0].userId).toBe(firstUserDeviceUserId);
+    expect(
+      prisma.devices.filter(
+        (d) =>
+          d.userId === prisma.users.find((u) => u.email === 'b@example.com')!.id &&
+          d.status === 'PENDING',
+      ),
+    ).toHaveLength(1);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', pendingCookie)
       .send({ email: 'b@example.com', password: base.password })
       .expect(202);
     expect(
@@ -409,40 +457,32 @@ describe('Auth HTTP e2e flows', () => {
           d.status === 'PENDING',
       ),
     ).toHaveLength(1);
-    await request(app.getHttpServer())
-      .post('/api/v1/v1/auth/login')
-      .set('Cookie', sharedCookie)
-      .send({ email: 'b@example.com', password: base.password })
-      .expect(202);
     const approve = mailer.sent.at(-1)!.token;
     await request(app.getHttpServer())
-      .post('/api/v1/v1/auth/device/approve')
+      .post('/api/v1/auth/device/approve')
       .send({ token: approve })
       .expect(200);
-    const bCookie = prisma.devices.at(-1)!;
-    const raw = randomToken();
-    bCookie.tokenHash = hmacToken(raw, process.env.AUTH_DEVICE_TOKEN_PEPPER!);
     const login = await request(app.getHttpServer())
-      .post('/api/v1/v1/auth/login')
-      .set('Cookie', `litbuy_device=${raw}`)
+      .post('/api/v1/auth/login')
+      .set('Cookie', pendingCookie)
       .send({ email: 'b@example.com', password: base.password })
       .expect(200);
     const cookies = login.headers['set-cookie'] as unknown as string[];
     await request(app.getHttpServer())
-      .post('/api/v1/v1/auth/logout')
+      .post('/api/v1/auth/logout')
       .set('Cookie', cookies)
       .expect(401);
-    await request(app.getHttpServer()).post('/api/v1/v1/auth/logout').expect(200);
+    await request(app.getHttpServer()).post('/api/v1/auth/logout').expect(200);
     const csrf = String(cookies.find((c: string) => c.startsWith('litbuy_csrf')))
       .split(';')[0]
       .split('=')[1];
     await request(app.getHttpServer())
-      .post('/api/v1/v1/auth/logout')
+      .post('/api/v1/auth/logout')
       .set('Cookie', cookies)
       .set('X-CSRF-Token', 'bad')
       .expect(401);
     await request(app.getHttpServer())
-      .post('/api/v1/v1/auth/logout')
+      .post('/api/v1/auth/logout')
       .set('Cookie', cookies)
       .set('X-CSRF-Token', csrf)
       .expect(200);
@@ -452,10 +492,10 @@ describe('Auth HTTP e2e flows', () => {
   it('executes rate limiting and event assertions through HTTP', async () => {
     for (let i = 0; i < 10; i++)
       await request(app.getHttpServer())
-        .post('/api/v1/v1/auth/register')
+        .post('/api/v1/auth/register')
         .send({ ...base, email: `rl${i}@example.com` });
     await request(app.getHttpServer())
-      .post('/api/v1/v1/auth/register')
+      .post('/api/v1/auth/register')
       .send({ ...base, email: 'limited@example.com' })
       .expect(429);
     expect(

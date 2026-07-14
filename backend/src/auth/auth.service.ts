@@ -70,6 +70,9 @@ export class AuthMailer implements AuthEmailPort, OnModuleInit {
   }
 }
 
+export const AUTH_DUMMY_PASSWORD_HASH =
+  '$argon2id$v=19$m=65536,t=3,p=4$4UqJVYzZ6DnMEgyl7Ymlaw$jjSuCWmH9Jrt8sAFwAXseW3spqOkXLNtVIhzALWEA/U';
+
 interface EventInput {
   userId?: string | null;
   sessionId?: string | null;
@@ -419,7 +422,10 @@ export class AuthService {
       where: { email },
       include: { passwordCredential: true },
     });
-    if (!user || !user.passwordCredential) return this.loginFailure(null, req);
+    if (!user || !user.passwordCredential) {
+      await verifyPassword(AUTH_DUMMY_PASSWORD_HASH, dto.password);
+      return this.loginFailure(null, req);
+    }
     if (user.passwordCredential.lockedUntil && user.passwordCredential.lockedUntil > new Date()) {
       await this.persistBestEffortSecurityEvent({
         userId: user.id,

@@ -6,7 +6,7 @@ import { EmailDto, LoginDto, RegisterDto, TokenDto } from './dto';
 import { AccessTokenGuard } from './access-token.guard';
 import { CurrentUser } from './current-user.decorator';
 @ApiTags('auth')
-@Controller({ path: 'auth', version: '1' })
+@Controller('auth')
 export class AuthController {
   constructor(private auth: AuthService) {}
   @Post('register')
