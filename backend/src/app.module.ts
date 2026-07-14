@@ -5,9 +5,10 @@ import { HealthModule } from './health/health.module';
 import { RedisModule } from './redis/redis.module';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 import { AppLogger } from './common/logging/app-logger.service';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
-  imports: [ConfigModule, DatabaseModule, RedisModule, HealthModule],
+  imports: [ConfigModule, DatabaseModule, RedisModule, HealthModule, AuthModule],
   providers: [AppLogger],
 })
 export class AppModule implements NestModule {

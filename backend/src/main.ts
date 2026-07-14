@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import compression from 'compression';
+import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -25,6 +26,7 @@ export async function bootstrap(): Promise<void> {
   app.enableShutdownHooks();
   app.use(helmet());
   app.use(compression());
+  app.use(cookieParser());
   app.enableCors({
     origin: appConfig.corsOrigins.length > 0 ? appConfig.corsOrigins : false,
     credentials: true,
@@ -46,6 +48,8 @@ export async function bootstrap(): Promise<void> {
       .setTitle('LIT Buy API')
       .setDescription('API REST do marketplace LIT Buy. Fundação técnica sem domínios comerciais.')
       .setVersion('0.1.0')
+      .addBearerAuth()
+      .addCookieAuth(appConfig.apiPrefix ? 'litbuy_refresh' : 'litbuy_refresh')
       .build();
     const document = SwaggerModule.createDocument(app, documentConfig);
     SwaggerModule.setup('docs', app, document);

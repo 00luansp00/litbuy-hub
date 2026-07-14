@@ -1,0 +1,55 @@
+import {
+  hmacToken,
+  hashPassword,
+  isAtLeast18,
+  normalizeEmail,
+  randomToken,
+  sanitizeMetadata,
+  validatePasswordPolicy,
+  verifyPassword,
+} from './auth.utils';
+import { AUTH_DUMMY_PASSWORD_HASH } from './auth.service';
+describe('auth utils', () => {
+  it('normalizes email', () => expect(normalizeEmail(' Test@Email.COM ')).toBe('test@email.com'));
+  it('validates age boundaries', () => {
+    const now = new Date();
+    const exactly18 = new Date(
+      Date.UTC(now.getUTCFullYear() - 18, now.getUTCMonth(), now.getUTCDate()),
+    )
+      .toISOString()
+      .slice(0, 10);
+    const oneDayBefore18 = new Date(
+      Date.UTC(now.getUTCFullYear() - 18, now.getUTCMonth(), now.getUTCDate() + 1),
+    )
+      .toISOString()
+      .slice(0, 10);
+    const future = new Date(Date.UTC(now.getUTCFullYear() + 1, now.getUTCMonth(), now.getUTCDate()))
+      .toISOString()
+      .slice(0, 10);
+    expect(isAtLeast18(exactly18, now)).toBe(true);
+    expect(isAtLeast18(oneDayBefore18, now)).toBe(false);
+    expect(isAtLeast18(future, now)).toBe(false);
+    expect(isAtLeast18('bad', now)).toBe(false);
+  });
+  it('uses a reusable dummy Argon2id verification hash for nonexistent login mitigation', async () => {
+    expect(AUTH_DUMMY_PASSWORD_HASH).toContain('argon2id');
+    expect(await verifyPassword(AUTH_DUMMY_PASSWORD_HASH, 'wrong password')).toBe(false);
+  });
+
+  it('hashes and verifies argon2id passwords', async () => {
+    const h = await hashPassword('long password ok');
+    expect(h).toContain('argon2id');
+    expect(await verifyPassword(h, 'long password ok')).toBe(true);
+  });
+  it('generates hmac token hashes and strips sensitive metadata', () => {
+    const t = randomToken();
+    expect(Buffer.from(t, 'base64url').length).toBe(32);
+    expect(hmacToken(t, 'pepper')).toHaveLength(64);
+    expect(sanitizeMetadata({ token: 'x', safe: 'y' })).toEqual({ safe: 'y' });
+  });
+  it('validates password policy', () => {
+    expect(validatePasswordPolicy(' '.repeat(12))).toBe(false);
+    expect(validatePasswordPolicy('a'.repeat(12))).toBe(true);
+    expect(validatePasswordPolicy('a'.repeat(129))).toBe(false);
+  });
+});
