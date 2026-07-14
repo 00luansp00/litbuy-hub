@@ -6,9 +6,6 @@ import { AppModule } from '../src/app.module';
 import { GlobalExceptionFilter } from '../src/common/filters/global-exception.filter';
 import { PrismaService } from '../src/database/prisma.service';
 import { RedisService } from '../src/redis/redis.service';
-import { applyTestEnv } from './test-env';
-
-applyTestEnv();
 
 describe('Readiness unavailable (e2e)', () => {
   let app: INestApplication;

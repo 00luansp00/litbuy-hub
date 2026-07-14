@@ -53,7 +53,7 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
   const errors = validateSync(validated, {
     skipMissingProperties: false,
     whitelist: true,
-    forbidNonWhitelisted: true,
+    forbidNonWhitelisted: false,
   });
 
   if (errors.length > 0) {

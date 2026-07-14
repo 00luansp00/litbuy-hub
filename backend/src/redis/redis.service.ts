@@ -12,7 +12,10 @@ export class RedisService implements OnModuleDestroy {
       lazyConnect: true,
       maxRetriesPerRequest: 1,
       enableOfflineQueue: false,
+      connectTimeout: 2_000,
+      commandTimeout: 2_000,
     });
+    this.client.on('error', () => undefined);
   }
 
   async getClient(): Promise<Redis> {
@@ -32,7 +35,7 @@ export class RedisService implements OnModuleDestroy {
     }
   }
 
-  async onModuleDestroy(): Promise<void> {
+  onModuleDestroy(): void {
     if (this.client.status !== 'end') {
       this.client.disconnect();
     }

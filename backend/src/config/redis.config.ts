@@ -4,9 +4,6 @@ export interface RedisConfig {
   url: string;
 }
 
-export default registerAs(
-  'redis',
-  (): RedisConfig => ({
-    url: process.env.REDIS_URL ?? '',
-  }),
-);
+export default registerAs('redis', (): RedisConfig => ({
+  url: process.env.REDIS_URL ?? '',
+}));

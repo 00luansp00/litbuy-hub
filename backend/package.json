@@ -16,8 +16,8 @@
     "test": "jest --runInBand",
     "test:watch": "jest --watch",
     "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
-    "prisma:validate": "prisma validate",
-    "prisma:generate": "prisma generate",
+    "prisma:validate": "DATABASE_URL=${DATABASE_URL:-postgresql://litbuy:litbuy_dev_password@localhost:5432/litbuy_dev?schema=public} prisma validate",
+    "prisma:generate": "DATABASE_URL=${DATABASE_URL:-postgresql://litbuy:litbuy_dev_password@localhost:5432/litbuy_dev?schema=public} prisma generate",
     "prisma:migrate": "prisma migrate dev"
   },
   "dependencies": {
