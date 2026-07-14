@@ -1,0 +1,146 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend-validation:
+    name: Frontend validation
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.23
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck frontend
+        run: bunx tsc --noEmit
+
+      - name: Build frontend
+        run: bun run build
+
+  backend-validation:
+    name: Backend validation
+    runs-on: ubuntu-24.04
+    env:
+      NODE_ENV: test
+      PORT: "3001"
+      API_PREFIX: api/v1
+      DATABASE_URL: postgresql://litbuy:litbuy_local_validation@localhost:5432/litbuy_validation?schema=public
+      REDIS_URL: redis://localhost:6379
+      CORS_ORIGINS: http://localhost:3000
+      LOG_LEVEL: silent
+      SWAGGER_ENABLED: "false"
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.23
+
+      - name: Install backend dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Lint backend
+        run: bun run lint
+
+      - name: Check backend formatting
+        run: bun run format:check
+
+      - name: Typecheck backend
+        run: bun run typecheck
+
+      - name: Run backend unit tests
+        run: bun run test
+
+      - name: Run backend e2e tests
+        run: bun run test:e2e
+
+      - name: Validate Prisma schema
+        run: bun run prisma:validate
+
+      - name: Generate Prisma client
+        run: bun run prisma:generate
+
+      - name: Build backend
+        run: bun run build
+
+  backend-integration:
+    name: Backend integration
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16.6-alpine
+        env:
+          POSTGRES_DB: litbuy_test
+          POSTGRES_USER: litbuy
+          POSTGRES_PASSWORD: litbuy_ci_integration_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U litbuy -d litbuy_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7.4.2-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      NODE_ENV: test
+      PORT: "3001"
+      API_PREFIX: api/v1
+      DATABASE_URL: postgresql://litbuy:litbuy_ci_integration_password@localhost:5432/litbuy_test?schema=public
+      REDIS_URL: redis://localhost:6379
+      CORS_ORIGINS: http://localhost:3000
+      LOG_LEVEL: silent
+      SWAGGER_ENABLED: "false"
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.2.23
+
+      - name: Install backend dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: bun run prisma:generate
+
+      - name: Run real infrastructure integration tests
+        run: bun run test:integration
