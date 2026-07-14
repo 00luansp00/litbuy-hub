@@ -11,6 +11,13 @@ import { RedisService } from '../src/redis/redis.service';
 import type { AppConfig } from '../src/config/app.config';
 import { AuthMailer } from '../src/auth/auth.service';
 
+function sessionIdFromAccessToken(accessToken: string): string {
+  const payload = JSON.parse(Buffer.from(accessToken.split('.')[1], 'base64url').toString()) as {
+    sid: string;
+  };
+  return payload.sid;
+}
+
 describe('App foundation with real PostgreSQL and Redis (integration)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
@@ -352,32 +359,57 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
       where: { user: { email: secondAccount.email } },
     });
 
-    const loginAfterReset = await request(app.getHttpServer())
+    const sessionRevocationLogin = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
       .set('Cookie', firstDeviceCookie)
       .send({ email: payload.email, password: 'integration new password 123' })
       .expect(HttpStatus.OK);
+    const sessionToRevokeId = sessionIdFromAccessToken(
+      sessionRevocationLogin.body.accessToken as string,
+    );
+    const currentLogin = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', firstDeviceCookie)
+      .send({ email: payload.email, password: 'integration new password 123' })
+      .expect(HttpStatus.OK);
+    const currentSessionId = sessionIdFromAccessToken(currentLogin.body.accessToken as string);
+    expect(currentSessionId).not.toBe(sessionToRevokeId);
     await request(app.getHttpServer())
       .delete(`/api/v1/auth/sessions/${otherSession.id}`)
-      .set('Authorization', `Bearer ${loginAfterReset.body.accessToken}`)
+      .set('Authorization', `Bearer ${currentLogin.body.accessToken}`)
       .expect(HttpStatus.OK);
     await expect(
       prisma.session.findUniqueOrThrow({ where: { id: otherSession.id } }),
     ).resolves.toMatchObject({
       revokedAt: null,
     });
-    const sessionToRevoke = await prisma.session.findFirstOrThrow({
-      where: { user: { email: payload.email }, revokedAt: null },
-    });
     await request(app.getHttpServer())
-      .delete(`/api/v1/auth/sessions/${sessionToRevoke.id}`)
-      .set('Authorization', `Bearer ${loginAfterReset.body.accessToken}`)
+      .delete(`/api/v1/auth/sessions/${sessionToRevokeId}`)
+      .set('Authorization', `Bearer ${currentLogin.body.accessToken}`)
       .expect(HttpStatus.OK);
     await expect(
-      prisma.session.findUniqueOrThrow({ where: { id: sessionToRevoke.id } }),
+      prisma.session.findUniqueOrThrow({ where: { id: sessionToRevokeId } }),
     ).resolves.toMatchObject({
       revokedAt: expect.any(Date),
     });
+    const revokedRefreshTokens = await prisma.sessionRefreshToken.findMany({
+      where: { sessionId: sessionToRevokeId },
+    });
+    expect(revokedRefreshTokens.length).toBeGreaterThan(0);
+    expect(revokedRefreshTokens.every((token) => token.revokedAt)).toBe(true);
+    await expect(
+      prisma.session.findUniqueOrThrow({ where: { id: currentSessionId } }),
+    ).resolves.toMatchObject({
+      revokedAt: null,
+    });
+    await request(app.getHttpServer())
+      .get('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${currentLogin.body.accessToken}`)
+      .expect(HttpStatus.OK);
+    await request(app.getHttpServer())
+      .get('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${sessionRevocationLogin.body.accessToken}`)
+      .expect(HttpStatus.UNAUTHORIZED);
 
     const deviceToRevoke = await prisma.device.findFirstOrThrow({
       where: { user: { email: payload.email }, status: 'APPROVED' },
@@ -387,7 +419,7 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
     });
     await request(app.getHttpServer())
       .delete(`/api/v1/auth/devices/${deviceToRevoke.id}`)
-      .set('Authorization', `Bearer ${loginAfterReset.body.accessToken}`)
+      .set('Authorization', `Bearer ${currentLogin.body.accessToken}`)
       .expect(HttpStatus.OK);
     await request(app.getHttpServer())
       .post('/api/v1/auth/login')
@@ -462,6 +494,50 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
     expect(serialized).not.toContain(resetToken);
     expect(serialized).not.toContain(payload.password);
     expect(serialized).not.toContain('integration new password 123');
+  });
+
+  it('revokes the current real session, clears auth cookies, preserves device cookie, and rejects its access token', async () => {
+    const payload = {
+      email: 'integration-current-session@example.com',
+      password: 'integration password 123',
+      birthDate: '2000-01-01',
+      termsAccepted: true,
+      privacyAccepted: true,
+      termsVersion: process.env.CURRENT_TERMS_VERSION,
+      privacyVersion: process.env.CURRENT_PRIVACY_VERSION,
+    };
+    const register = await request(app.getHttpServer())
+      .post('/api/v1/auth/register')
+      .send(payload)
+      .expect(HttpStatus.CREATED);
+    const deviceCookie = register.headers['set-cookie'] as unknown as string[];
+    const emailToken = mailer.sent.find(
+      (message) => message.purpose === 'EMAIL_VERIFICATION',
+    )?.token;
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/verify')
+      .send({ token: emailToken })
+      .expect(HttpStatus.OK);
+    const login = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', deviceCookie)
+      .send({ email: payload.email, password: payload.password })
+      .expect(HttpStatus.OK);
+    const currentSessionId = sessionIdFromAccessToken(login.body.accessToken as string);
+    await request(app.getHttpServer())
+      .delete(`/api/v1/auth/sessions/${currentSessionId}`)
+      .set('Authorization', `Bearer ${login.body.accessToken}`)
+      .expect(HttpStatus.OK)
+      .expect((response) => {
+        const cookies = String(response.headers['set-cookie']);
+        expect(cookies).toContain('litbuy_refresh=;');
+        expect(cookies).toContain('litbuy_csrf=;');
+        expect(cookies).not.toContain('litbuy_device=;');
+      });
+    await request(app.getHttpServer())
+      .get('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${login.body.accessToken}`)
+      .expect(HttpStatus.UNAUTHORIZED);
   });
 
   it('allows only one concurrent real password reset request to consume a token', async () => {
