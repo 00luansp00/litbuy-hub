@@ -6,3 +6,170 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+enum UserStatus {
+  PENDING_EMAIL
+  ACTIVE
+  SUSPENDED
+  DELETION_PENDING
+  DELETED
+}
+
+enum DeviceStatus {
+  PENDING
+  APPROVED
+  REVOKED
+}
+
+enum VerificationPurpose {
+  EMAIL_VERIFICATION
+  DEVICE_APPROVAL
+}
+
+enum SecurityEventType {
+  REGISTERED
+  EMAIL_VERIFICATION_REQUESTED
+  EMAIL_VERIFIED
+  LOGIN_SUCCEEDED
+  LOGIN_FAILED
+  LOGIN_LOCKED
+  DEVICE_APPROVAL_REQUIRED
+  DEVICE_APPROVAL_REQUESTED
+  DEVICE_APPROVED
+  SESSION_CREATED
+  SESSION_REFRESHED
+  REFRESH_TOKEN_REUSE_DETECTED
+  SESSION_REVOKED
+  LOGOUT
+}
+
+enum SecurityEventOutcome {
+  SUCCESS
+  FAILURE
+  BLOCKED
+  PENDING
+  CRITICAL
+}
+
+model User {
+  id                     String                  @id @default(uuid()) @db.Uuid
+  email                  String                  @unique
+  phoneE164              String?
+  phoneVerifiedAt        DateTime?
+  birthDate              DateTime                @db.Date
+  status                 UserStatus              @default(PENDING_EMAIL)
+  emailVerifiedAt        DateTime?
+  termsVersion           String
+  termsAcceptedAt        DateTime
+  privacyVersion         String
+  privacyAcceptedAt      DateTime
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  deletedAt              DateTime?
+  passwordCredential     PasswordCredential?
+  devices                Device[]
+  sessions               Session[]
+  verificationChallenges VerificationChallenge[]
+  securityEvents         SecurityEvent[]
+
+  @@index([email])
+  @@index([status])
+}
+
+model PasswordCredential {
+  userId              String    @id @db.Uuid
+  user                User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  passwordHash        String
+  passwordChangedAt   DateTime  @default(now())
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+}
+
+model Device {
+  id                     String                  @id @default(uuid()) @db.Uuid
+  userId                 String                  @db.Uuid
+  user                   User                    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  tokenHash              String                  @unique
+  displayName            String?
+  userAgent              String?
+  status                 DeviceStatus            @default(PENDING)
+  isInitialDevice        Boolean                 @default(false)
+  approvedAt             DateTime?
+  firstSeenAt            DateTime                @default(now())
+  lastSeenAt             DateTime                @default(now())
+  revokedAt              DateTime?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  sessions               Session[]
+  verificationChallenges VerificationChallenge[]
+  securityEvents         SecurityEvent[]
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@index([userId, status])
+}
+
+model Session {
+  id                   String          @id @default(uuid()) @db.Uuid
+  userId               String          @db.Uuid
+  deviceId             String          @db.Uuid
+  user                 User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  device               Device          @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  refreshTokenHash     String          @unique
+  refreshTokenFamilyId String          @db.Uuid
+  csrfTokenHash        String
+  expiresAt            DateTime
+  lastUsedAt           DateTime        @default(now())
+  revokedAt            DateTime?
+  revocationReason     String?
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+  securityEvents       SecurityEvent[]
+
+  @@index([userId])
+  @@index([deviceId])
+  @@index([refreshTokenHash])
+  @@index([refreshTokenFamilyId])
+  @@index([revokedAt, expiresAt])
+}
+
+model VerificationChallenge {
+  id          String              @id @default(uuid()) @db.Uuid
+  userId      String              @db.Uuid
+  deviceId    String?             @db.Uuid
+  user        User                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  device      Device?             @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  purpose     VerificationPurpose
+  tokenHash   String              @unique
+  attempts    Int                 @default(0)
+  maxAttempts Int
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime            @default(now())
+
+  @@index([userId])
+  @@index([deviceId])
+  @@index([purpose])
+  @@index([purpose, consumedAt, expiresAt])
+}
+
+model SecurityEvent {
+  id        String               @id @default(uuid()) @db.Uuid
+  userId    String?              @db.Uuid
+  sessionId String?              @db.Uuid
+  deviceId  String?              @db.Uuid
+  user      User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
+  session   Session?             @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  device    Device?              @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  eventType SecurityEventType
+  outcome   SecurityEventOutcome
+  metadata  Json                 @default("{}")
+  ipHash    String?
+  userAgent String?
+  createdAt DateTime             @default(now())
+
+  @@index([userId, createdAt])
+  @@index([eventType, createdAt])
+}

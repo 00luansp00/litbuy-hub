@@ -1,0 +1,25 @@
+import { registerAs } from '@nestjs/config';
+export const authConfig = registerAs('auth', () => ({
+  accessSecret: process.env.AUTH_ACCESS_TOKEN_SECRET!,
+  accessTtlSeconds: Number(process.env.AUTH_ACCESS_TOKEN_TTL_SECONDS ?? 600),
+  refreshTtlDays: Number(process.env.AUTH_REFRESH_TOKEN_TTL_DAYS ?? 30),
+  refreshPepper: process.env.AUTH_REFRESH_TOKEN_PEPPER!,
+  verificationPepper: process.env.AUTH_VERIFICATION_TOKEN_PEPPER!,
+  devicePepper: process.env.AUTH_DEVICE_TOKEN_PEPPER!,
+  csrfPepper: process.env.AUTH_CSRF_TOKEN_PEPPER!,
+  ipPepper: process.env.AUTH_IP_HASH_PEPPER!,
+  emailVerificationTtlMinutes: Number(process.env.AUTH_EMAIL_VERIFICATION_TTL_MINUTES ?? 30),
+  deviceApprovalTtlMinutes: Number(process.env.AUTH_DEVICE_APPROVAL_TTL_MINUTES ?? 30),
+  maxAttempts: Number(process.env.AUTH_MAX_ATTEMPTS ?? 5),
+  loginLockMinutes: Number(process.env.AUTH_LOGIN_LOCK_MINUTES ?? 15),
+  refreshCookieName: process.env.AUTH_REFRESH_COOKIE_NAME ?? 'litbuy_refresh',
+  deviceCookieName: process.env.AUTH_DEVICE_COOKIE_NAME ?? 'litbuy_device',
+  csrfCookieName: process.env.AUTH_CSRF_COOKIE_NAME ?? 'litbuy_csrf',
+  cookieSecure: String(process.env.AUTH_COOKIE_SECURE) === 'true',
+  cookieSameSite: (process.env.AUTH_COOKIE_SAME_SITE ?? 'lax') as 'lax' | 'strict' | 'none',
+  cookieDomain: process.env.AUTH_COOKIE_DOMAIN || undefined,
+  emailDeliveryMode: process.env.AUTH_EMAIL_DELIVERY_MODE ?? 'memory',
+  currentTermsVersion: process.env.CURRENT_TERMS_VERSION ?? '2026-07-14',
+  currentPrivacyVersion: process.env.CURRENT_PRIVACY_VERSION ?? '2026-07-14',
+}));
+export type AuthConfig = ReturnType<typeof authConfig>;
