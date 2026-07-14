@@ -24,15 +24,27 @@ export class AccessTokenGuard implements CanActivate {
       });
       if (payload.type !== 'access' || !payload.sub || !payload.sid)
         throw new Error('invalid payload');
-      const session = await this.prisma.session.findUnique({ where: { id: payload.sid } });
+      const session = await this.prisma.session.findUnique({
+        where: { id: payload.sid },
+        include: { device: true },
+      });
       if (
         !session ||
         session.userId !== payload.sub ||
         session.revokedAt ||
-        session.expiresAt < new Date()
+        session.expiresAt < new Date() ||
+        session.device.status !== 'APPROVED'
       )
         throw new Error('inactive session');
-      req.auth = { userId: payload.sub, sessionId: payload.sid };
+      req.auth = { userId: payload.sub, sessionId: payload.sid, deviceId: session.deviceId };
+      const lastUsedAt =
+        session.lastUsedAt instanceof Date ? session.lastUsedAt : session.createdAt;
+      if (Date.now() - lastUsedAt.getTime() > 5 * 60_000) {
+        await this.prisma.session.update({
+          where: { id: session.id },
+          data: { lastUsedAt: new Date() },
+        });
+      }
       return true;
     } catch {
       throw new UnauthorizedException({ code: 'INVALID_ACCESS_TOKEN' });

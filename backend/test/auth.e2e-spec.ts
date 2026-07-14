@@ -41,6 +41,17 @@ class Delegate<T extends Row> {
     if (!r) throw new Error('not found');
     return r;
   }
+  async findFirst(args: { where: Row }) {
+    await Promise.resolve();
+    return this.rows.find((r) => this.matches(r, args.where)) ?? null;
+  }
+  async findMany(args: { where?: Row; include?: Row; orderBy?: Row; take?: number } = {}) {
+    await Promise.resolve();
+    const rows = args.where
+      ? this.rows.filter((r) => this.matches(r, args.where!))
+      : [...this.rows];
+    return args.take ? rows.slice(0, args.take) : rows;
+  }
   async update(args: { where: Row; data: Row }) {
     const r = await this.findUnique({ where: args.where });
     if (!r) throw new Error('not found');
@@ -182,6 +193,13 @@ class FakePrisma {
     create: (a: { data: Row }) => this.sessionDelegate.create(a),
     update: (a: { where: Row; data: Row }) => this.sessionDelegate.update(a),
     updateMany: (a: { where: Row; data: Row }) => this.sessionDelegate.updateMany(a),
+    findFirst: (a: { where: Row }) => this.sessionDelegate.findFirst(a),
+    findMany: async (a: { where?: Row; include?: Row; orderBy?: Row; take?: number } = {}) => {
+      const rows = await this.sessionDelegate.findMany(a);
+      return a.include
+        ? rows.map((ss) => ({ ...ss, device: this.devices.find((d) => d.id === ss.deviceId) }))
+        : rows;
+    },
     findUnique: async (a: { where: Row; include?: Row }) => {
       await Promise.resolve();
       const s = this.sessions.find(
@@ -489,6 +507,68 @@ describe('Auth HTTP e2e flows', () => {
     expect(prisma.events.some((e) => e.eventType === 'LOGOUT')).toBe(true);
     expect(prisma.events.some((e) => e.eventType === 'SESSION_REVOKED')).toBe(true);
   });
+
+  it('handles Sprint 2B1 password, sessions and devices endpoints safely', async () => {
+    const registration = await register().expect(HttpStatus.CREATED);
+    await verifyLatest().expect(200);
+    const login = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', registration.headers['set-cookie'])
+      .send({ email: base.email, password: base.password })
+      .expect(200);
+    const bearer = `Bearer ${login.body.accessToken}`;
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/password/forgot')
+      .send({ email: base.email })
+      .expect(200);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/password/forgot')
+      .send({ email: 'missing@example.com' })
+      .expect(200);
+    const resetMail = mailer.sent.find((m) => m.purpose === 'PASSWORD_RESET')!;
+    expect(resetMail.token).toBeTruthy();
+    await request(app.getHttpServer())
+      .get('/api/v1/auth/sessions')
+      .set('Authorization', bearer)
+      .expect(200)
+      .expect((r) =>
+        expect(JSON.stringify(r.body)).not.toMatch(
+          /refreshTokenHash|csrfTokenHash|tokenHash|pepper/,
+        ),
+      );
+    await request(app.getHttpServer())
+      .get('/api/v1/auth/devices')
+      .set('Authorization', bearer)
+      .expect(200)
+      .expect((r) => expect(JSON.stringify(r.body)).not.toMatch(/tokenHash|pepper/));
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/password/reset')
+      .send({ token: resetMail.token, newPassword: base.password })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/password/reset')
+      .send({ token: resetMail.token, newPassword: 'new valid password 123' })
+      .expect(200);
+    expect(prisma.sessions.every((sess) => sess.revokedAt)).toBe(true);
+    const changedLogin = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', registration.headers['set-cookie'])
+      .send({ email: base.email, password: 'new valid password 123' })
+      .expect(200);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/password/change')
+      .set('Authorization', `Bearer ${changedLogin.body.accessToken}`)
+      .send({ currentPassword: 'new valid password 123', newPassword: 'second valid password 123' })
+      .expect(200);
+    expect(prisma.events.map((e) => e.eventType)).toEqual(
+      expect.arrayContaining([
+        'PASSWORD_RESET_REQUESTED',
+        'PASSWORD_RESET_COMPLETED',
+        'PASSWORD_CHANGED',
+      ]),
+    );
+  });
+
   it('executes rate limiting and event assertions through HTTP', async () => {
     for (let i = 0; i < 10; i++)
       await request(app.getHttpServer())

@@ -22,7 +22,14 @@ import type {
   SessionWithUserDevice,
   UserWithCredential,
 } from './auth.types';
-import { EmailDto, LoginDto, RegisterDto, TokenDto } from './dto';
+import {
+  ChangePasswordDto,
+  EmailDto,
+  LoginDto,
+  RegisterDto,
+  ResetPasswordDto,
+  TokenDto,
+} from './dto';
 import {
   buildChallengeToken,
   hmacToken,
@@ -40,15 +47,21 @@ import {
 } from './auth.utils';
 
 export interface AuthEmailPort {
-  send(to: string, purpose: 'EMAIL_VERIFICATION' | 'DEVICE_APPROVAL', token: string): void;
+  send(
+    to: string,
+    purpose:
+      'EMAIL_VERIFICATION' | 'DEVICE_APPROVAL' | 'PASSWORD_RESET' | 'PASSWORD_CHANGED_NOTICE',
+    token?: string,
+  ): void;
 }
 
 @Injectable()
 export class AuthMailer implements AuthEmailPort, OnModuleInit {
   readonly sent: {
     to: string;
-    purpose: 'EMAIL_VERIFICATION' | 'DEVICE_APPROVAL';
-    token: string;
+    purpose:
+      'EMAIL_VERIFICATION' | 'DEVICE_APPROVAL' | 'PASSWORD_RESET' | 'PASSWORD_CHANGED_NOTICE';
+    token?: string;
   }[] = [];
 
   onModuleInit(): void {
@@ -60,7 +73,12 @@ export class AuthMailer implements AuthEmailPort, OnModuleInit {
     }
   }
 
-  send(to: string, purpose: 'EMAIL_VERIFICATION' | 'DEVICE_APPROVAL', token: string): void {
+  send(
+    to: string,
+    purpose:
+      'EMAIL_VERIFICATION' | 'DEVICE_APPROVAL' | 'PASSWORD_RESET' | 'PASSWORD_CHANGED_NOTICE',
+    token?: string,
+  ): void {
     if (process.env.NODE_ENV === 'production') {
       throw new ServiceUnavailableException('Auth email provider unavailable');
     }
@@ -199,7 +217,7 @@ export class AuthService {
 
   private async challenge(
     userId: string,
-    purpose: 'EMAIL_VERIFICATION' | 'DEVICE_APPROVAL',
+    purpose: 'EMAIL_VERIFICATION' | 'DEVICE_APPROVAL' | 'PASSWORD_RESET',
     minutes: number,
     deviceId?: string,
   ): Promise<string> {
@@ -224,7 +242,7 @@ export class AuthService {
 
   private async validateChallenge(
     token: string,
-    purpose: 'EMAIL_VERIFICATION' | 'DEVICE_APPROVAL',
+    purpose: 'EMAIL_VERIFICATION' | 'DEVICE_APPROVAL' | 'PASSWORD_RESET',
   ): Promise<{ id: string; userId: string; deviceId: string | null }> {
     const parts = splitChallengeToken(token);
     if (!parts) throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_TOKEN' });
@@ -440,6 +458,7 @@ export class AuthService {
     if (user.status !== 'ACTIVE' || !user.emailVerifiedAt)
       throw new ForbiddenException({ code: 'EMAIL_NOT_VERIFIED' });
     const device = await this.resolveLoginDevice(user, dto, req, res);
+    if (device.status === 'REVOKED') throw new ForbiddenException({ code: 'DEVICE_REVOKED' });
     if (device.status !== 'APPROVED') {
       const token = await this.challenge(
         user.id,
@@ -468,6 +487,7 @@ export class AuthService {
       where: { userId: user.id },
       data: { failedLoginAttempts: 0, lockedUntil: null },
     });
+    await this.prisma.device.update({ where: { id: device.id }, data: { lastSeenAt: new Date() } });
     await this.persistBestEffortSecurityEvent({
       userId: user.id,
       deviceId: device.id,
@@ -714,6 +734,259 @@ export class AuthService {
         { secret: c.accessSecret, expiresIn: c.accessTtlSeconds },
       ),
     };
+  }
+
+  private async revokeSessions(
+    tx: Prisma.TransactionClient,
+    sessions: { id: string; userId: string; deviceId: string; revokedAt: Date | null }[],
+    reason: string,
+    eventType: SecurityEventType,
+    req: Request,
+  ): Promise<void> {
+    const now = new Date();
+    for (const session of sessions) {
+      if (!session.revokedAt) {
+        await tx.session.update({
+          where: { id: session.id },
+          data: { revokedAt: now, revocationReason: reason },
+        });
+        await tx.sessionRefreshToken.updateMany({
+          where: { sessionId: session.id, revokedAt: null },
+          data: { revokedAt: now },
+        });
+        await this.persistCriticalSecurityEvent(
+          {
+            userId: session.userId,
+            sessionId: session.id,
+            deviceId: session.deviceId,
+            eventType: 'SESSION_REVOKED',
+            req,
+          },
+          tx,
+        );
+      }
+    }
+    if (eventType !== 'SESSION_REVOKED' && sessions[0]) {
+      await this.persistCriticalSecurityEvent({ userId: sessions[0].userId, eventType, req }, tx);
+    }
+  }
+
+  async forgotPassword(dto: EmailDto, req: Request): Promise<{ message: string }> {
+    const email = normalizeEmail(dto.email);
+    await this.rate(['password-forgot', req.ip ?? 'unknown', email], 5, 300);
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (user?.emailVerifiedAt && user.status === 'ACTIVE') {
+      const token = await this.challenge(
+        user.id,
+        'PASSWORD_RESET',
+        this.authConfig().emailVerificationTtlMinutes,
+      );
+      this.mailer.send(email, 'PASSWORD_RESET', token);
+      await this.persistBestEffortSecurityEvent({
+        userId: user.id,
+        eventType: 'PASSWORD_RESET_REQUESTED',
+        outcome: 'PENDING',
+        req,
+      });
+    }
+    return { message: 'Se a conta existir, enviaremos as instruções por e-mail.' };
+  }
+
+  async resetPassword(dto: ResetPasswordDto, req: Request): Promise<{ message: string }> {
+    await this.rate(['password-reset', req.ip ?? 'unknown'], 10, 300);
+    if (!validatePasswordPolicy(dto.newPassword))
+      throw new BadRequestException({ code: 'WEAK_PASSWORD' });
+    const challenge = await this.validateChallenge(dto.token, 'PASSWORD_RESET');
+    const user = await this.prisma.user.findUnique({
+      where: { id: challenge.userId },
+      include: { passwordCredential: true },
+    });
+    if (!user?.passwordCredential)
+      throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_TOKEN' });
+    if (await verifyPassword(user.passwordCredential.passwordHash, dto.newPassword))
+      throw new BadRequestException({ code: 'PASSWORD_REUSE_NOT_ALLOWED' });
+    const passwordHash = await hashPassword(dto.newPassword);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.passwordCredential.update({
+        where: { userId: user.id },
+        data: {
+          passwordHash,
+          passwordChangedAt: new Date(),
+          failedLoginAttempts: 0,
+          lockedUntil: null,
+        },
+      });
+      await tx.verificationChallenge.update({
+        where: { id: challenge.id },
+        data: { consumedAt: new Date(), attempts: { increment: 1 } },
+      });
+      await tx.verificationChallenge.updateMany({
+        where: {
+          userId: user.id,
+          purpose: 'PASSWORD_RESET',
+          consumedAt: null,
+          id: { not: challenge.id },
+        },
+        data: { consumedAt: new Date() },
+      });
+      const sessions = await tx.session.findMany({ where: { userId: user.id } });
+      await this.revokeSessions(tx, sessions, 'PASSWORD_RESET', 'PASSWORD_RESET_COMPLETED', req);
+    });
+    return { message: 'Senha redefinida. Faça login novamente.' };
+  }
+
+  async changePassword(
+    dto: ChangePasswordDto,
+    auth: { userId: string; sessionId: string; deviceId: string },
+    req: Request,
+    res: Response,
+  ): Promise<{ message: string }> {
+    await this.rate(['password-change', req.ip ?? 'unknown', auth.userId], 10, 300);
+    if (!validatePasswordPolicy(dto.newPassword))
+      throw new BadRequestException({ code: 'WEAK_PASSWORD' });
+    const credential = await this.prisma.passwordCredential.findUnique({
+      where: { userId: auth.userId },
+    });
+    if (!credential || !(await verifyPassword(credential.passwordHash, dto.currentPassword)))
+      throw new UnauthorizedException({ code: 'INVALID_CREDENTIALS' });
+    if (await verifyPassword(credential.passwordHash, dto.newPassword))
+      throw new BadRequestException({ code: 'PASSWORD_REUSE_NOT_ALLOWED' });
+    const passwordHash = await hashPassword(dto.newPassword);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.passwordCredential.update({
+        where: { userId: auth.userId },
+        data: {
+          passwordHash,
+          passwordChangedAt: new Date(),
+          failedLoginAttempts: 0,
+          lockedUntil: null,
+        },
+      });
+      const sessions = await tx.session.findMany({ where: { userId: auth.userId } });
+      await this.revokeSessions(tx, sessions, 'PASSWORD_CHANGED', 'PASSWORD_CHANGED', req);
+    });
+    this.clearAuth(res);
+    return { message: 'Senha alterada. Faça login novamente.' };
+  }
+
+  private safeSession(
+    session: Prisma.SessionGetPayload<{ include: { device: true } }>,
+    currentId: string,
+  ) {
+    return {
+      id: session.id,
+      deviceId: session.deviceId,
+      deviceName: session.device.displayName,
+      userAgent: sanitizeUserAgent(session.device.userAgent ?? undefined),
+      createdAt: session.createdAt,
+      lastUsedAt: session.lastUsedAt,
+      expiresAt: session.expiresAt,
+      current: session.id === currentId,
+      revoked: !!session.revokedAt,
+      revokedAt: session.revokedAt,
+      revocationReason: session.revocationReason,
+    };
+  }
+
+  async listSessions(auth: {
+    userId: string;
+    sessionId: string;
+  }): Promise<{ sessions: unknown[] }> {
+    const sessions = await this.prisma.session.findMany({
+      where: { userId: auth.userId },
+      include: { device: true },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+    return { sessions: sessions.map((s) => this.safeSession(s, auth.sessionId)) };
+  }
+
+  async revokeSession(
+    sessionId: string,
+    auth: { userId: string; sessionId: string },
+    req: Request,
+    res: Response,
+  ): Promise<{ message: string }> {
+    await this.rate(['session-revoke', req.ip ?? 'unknown', auth.userId, sessionId], 20, 300);
+    const session = await this.prisma.session.findFirst({
+      where: { id: sessionId, userId: auth.userId },
+    });
+    if (session)
+      await this.prisma.$transaction(async (tx) =>
+        this.revokeSessions(tx, [session], 'USER_REVOKED', 'SESSION_REVOKED', req),
+      );
+    if (sessionId === auth.sessionId) this.clearAuth(res);
+    return { message: 'Sessão revogada.' };
+  }
+
+  async logoutAll(
+    auth: { userId: string },
+    req: Request,
+    res: Response,
+  ): Promise<{ message: string }> {
+    await this.rate(['logout-all', req.ip ?? 'unknown', auth.userId], 10, 300);
+    await this.prisma.$transaction(async (tx) => {
+      const sessions = await tx.session.findMany({ where: { userId: auth.userId } });
+      await this.revokeSessions(tx, sessions, 'LOGOUT_ALL', 'LOGOUT_ALL', req);
+    });
+    this.clearAuth(res);
+    return { message: 'Logout realizado em todos os dispositivos.' };
+  }
+
+  async listDevices(auth: { userId: string; deviceId: string }): Promise<{ devices: unknown[] }> {
+    const devices = await this.prisma.device.findMany({
+      where: { userId: auth.userId },
+      orderBy: { firstSeenAt: 'desc' },
+      take: 50,
+    });
+    return {
+      devices: devices.map((d) => ({
+        id: d.id,
+        displayName: d.displayName,
+        userAgent: sanitizeUserAgent(d.userAgent ?? undefined),
+        status: d.status,
+        isInitialDevice: d.isInitialDevice,
+        approvedAt: d.approvedAt,
+        firstSeenAt: d.firstSeenAt,
+        lastSeenAt: d.lastSeenAt,
+        revokedAt: d.revokedAt,
+        current: d.id === auth.deviceId,
+      })),
+    };
+  }
+
+  async revokeDevice(
+    deviceId: string,
+    auth: { userId: string; deviceId: string },
+    req: Request,
+    res: Response,
+  ): Promise<{ message: string }> {
+    await this.rate(['device-revoke', req.ip ?? 'unknown', auth.userId, deviceId], 20, 300);
+    const device = await this.prisma.device.findFirst({
+      where: { id: deviceId, userId: auth.userId },
+    });
+    if (device)
+      await this.prisma.$transaction(async (tx) => {
+        const now = new Date();
+        if (device.status !== 'REVOKED')
+          await tx.device.update({
+            where: { id: device.id },
+            data: { status: 'REVOKED', revokedAt: now },
+          });
+        await tx.verificationChallenge.updateMany({
+          where: { deviceId: device.id, purpose: 'DEVICE_APPROVAL', consumedAt: null },
+          data: { consumedAt: now },
+        });
+        const sessions = await tx.session.findMany({
+          where: { userId: auth.userId, deviceId: device.id },
+        });
+        await this.revokeSessions(tx, sessions, 'DEVICE_REVOKED', 'DEVICE_REVOKED', req);
+      });
+    if (deviceId === auth.deviceId) {
+      this.clearAuth(res);
+      res.clearCookie(this.authConfig().deviceCookieName, this.clearCookieOptions());
+    }
+    return { message: 'Dispositivo revogado.' };
   }
 
   async logout(req: Request, res: Response): Promise<{ message: string }> {

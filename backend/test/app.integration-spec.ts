@@ -251,4 +251,108 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
     expect(family.filter((row) => row.revokedAt === null && row.usedAt === null)).toHaveLength(0);
     expect(session.revokedAt).toBeTruthy();
   });
+
+  it('executes real Sprint 2B1 password recovery, session listing, device revocation and logout-all flow', async () => {
+    const payload = {
+      email: 'integration-sprint-2b1@example.com',
+      password: 'integration password 123',
+      birthDate: '2000-01-01',
+      termsAccepted: true,
+      privacyAccepted: true,
+      termsVersion: process.env.CURRENT_TERMS_VERSION,
+      privacyVersion: process.env.CURRENT_PRIVACY_VERSION,
+    };
+    const register = await request(app.getHttpServer())
+      .post('/api/v1/auth/register')
+      .send(payload)
+      .expect(HttpStatus.CREATED);
+    const firstDeviceCookie = register.headers['set-cookie'] as unknown as string[];
+    const emailToken = mailer.sent.find(
+      (message) => message.purpose === 'EMAIL_VERIFICATION',
+    )?.token;
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/verify')
+      .send({ token: emailToken })
+      .expect(HttpStatus.OK);
+    const firstLogin = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', firstDeviceCookie)
+      .send({ email: payload.email, password: payload.password })
+      .expect(HttpStatus.OK);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/password/forgot')
+      .send({ email: payload.email })
+      .expect(HttpStatus.OK);
+    const resetToken = mailer.sent.find((message) => message.purpose === 'PASSWORD_RESET')?.token;
+    expect(resetToken).toEqual(expect.any(String));
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/password/reset')
+      .send({ token: resetToken, newPassword: 'integration new password 123' })
+      .expect(HttpStatus.OK);
+    await request(app.getHttpServer())
+      .get('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${firstLogin.body.accessToken}`)
+      .expect(HttpStatus.UNAUTHORIZED);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', firstDeviceCookie)
+      .send({ email: payload.email, password: payload.password })
+      .expect(HttpStatus.UNAUTHORIZED);
+    const secondLogin = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', firstDeviceCookie)
+      .send({ email: payload.email, password: 'integration new password 123' })
+      .expect(HttpStatus.OK);
+    await request(app.getHttpServer())
+      .get('/api/v1/auth/sessions')
+      .set('Authorization', `Bearer ${secondLogin.body.accessToken}`)
+      .expect(HttpStatus.OK);
+    const sessions = await prisma.session.findMany({ where: { user: { email: payload.email } } });
+    const devices = await prisma.device.findMany({ where: { user: { email: payload.email } } });
+    await request(app.getHttpServer())
+      .delete(`/api/v1/auth/devices/${devices[0].id}`)
+      .set('Authorization', `Bearer ${secondLogin.body.accessToken}`)
+      .expect(HttpStatus.OK);
+    const thirdLogin = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', firstDeviceCookie)
+      .send({ email: payload.email, password: 'integration new password 123' })
+      .expect(HttpStatus.ACCEPTED);
+    expect(thirdLogin.body).toMatchObject({ code: 'DEVICE_APPROVAL_REQUIRED' });
+    const deviceApproval = [...mailer.sent]
+      .reverse()
+      .find((message) => message.purpose === 'DEVICE_APPROVAL')?.token;
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/device/approve')
+      .send({ token: deviceApproval })
+      .expect(HttpStatus.OK);
+    const approvedLogin = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', thirdLogin.headers['set-cookie'] as unknown as string[])
+      .send({ email: payload.email, password: 'integration new password 123' })
+      .expect(HttpStatus.OK);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/sessions/logout-all')
+      .set('Authorization', `Bearer ${approvedLogin.body.accessToken}`)
+      .expect(HttpStatus.OK);
+    expect(sessions.length).toBeGreaterThanOrEqual(1);
+    const events = await prisma.securityEvent.findMany({
+      where: { user: { email: payload.email } },
+    });
+    expect(events.map((event) => event.eventType)).toEqual(
+      expect.arrayContaining([
+        'PASSWORD_RESET_REQUESTED',
+        'PASSWORD_RESET_COMPLETED',
+        'DEVICE_REVOKED',
+        'LOGOUT_ALL',
+      ]),
+    );
+    const serialized = JSON.stringify({
+      challenges: await prisma.verificationChallenge.findMany(),
+      sessions: await prisma.session.findMany(),
+    });
+    expect(serialized).not.toContain(resetToken);
+    expect(serialized).not.toContain(payload.password);
+    expect(serialized).not.toContain('integration new password 123');
+  });
 });

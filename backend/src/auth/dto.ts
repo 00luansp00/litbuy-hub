@@ -21,3 +21,12 @@ export class LoginDto {
   @ApiProperty() @IsString() password!: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(80) deviceName?: string;
 }
+
+export class ResetPasswordDto {
+  @ApiProperty() @IsString() @MinLength(20) token!: string;
+  @ApiProperty() @IsString() @MinLength(12) @MaxLength(128) newPassword!: string;
+}
+export class ChangePasswordDto {
+  @ApiProperty() @IsString() currentPassword!: string;
+  @ApiProperty() @IsString() @MinLength(12) @MaxLength(128) newPassword!: string;
+}
