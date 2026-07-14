@@ -18,7 +18,8 @@
     "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
     "prisma:validate": "DATABASE_URL=${DATABASE_URL:-postgresql://litbuy:litbuy_dev_password@localhost:5432/litbuy_dev?schema=public} prisma validate",
     "prisma:generate": "DATABASE_URL=${DATABASE_URL:-postgresql://litbuy:litbuy_dev_password@localhost:5432/litbuy_dev?schema=public} prisma generate",
-    "prisma:migrate": "prisma migrate dev"
+    "prisma:migrate": "prisma migrate dev",
+    "test:integration": "jest --config ./test/jest-integration.json --runInBand --detectOpenHandles"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.9",
