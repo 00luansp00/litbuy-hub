@@ -9,3 +9,5 @@ export function applyTestEnv(overrides: Partial<NodeJS.ProcessEnv> = {}): void {
   process.env.LOG_LEVEL = overrides.LOG_LEVEL ?? 'silent';
   process.env.SWAGGER_ENABLED = overrides.SWAGGER_ENABLED ?? 'false';
 }
+
+applyTestEnv();

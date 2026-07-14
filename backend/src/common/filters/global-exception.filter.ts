@@ -57,7 +57,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
       return {
         statusCode,
-        code: statusCode === HttpStatus.BAD_REQUEST ? 'VALIDATION_ERROR' : 'HTTP_ERROR',
+        code: statusCode === Number(HttpStatus.BAD_REQUEST) ? 'VALIDATION_ERROR' : 'HTTP_ERROR',
         message,
         details,
         requestId,
@@ -77,9 +77,13 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     };
   }
 
+  private hasMessage(payload: unknown): payload is { message: unknown } {
+    return typeof payload === 'object' && payload !== null && 'message' in payload;
+  }
+
   private extractMessage(payload: unknown, fallback: string): string {
-    if (typeof payload === 'object' && payload !== null && 'message' in payload) {
-      const message = (payload as { message: unknown }).message;
+    if (this.hasMessage(payload)) {
+      const { message } = payload;
       if (typeof message === 'string') {
         return message;
       }
@@ -89,8 +93,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
   }
 
   private extractDetails(payload: unknown): unknown[] {
-    if (typeof payload === 'object' && payload !== null && 'message' in payload) {
-      const message = (payload as { message: unknown }).message;
+    if (this.hasMessage(payload)) {
+      const { message } = payload;
       return Array.isArray(message) ? message : [];
     }
 
