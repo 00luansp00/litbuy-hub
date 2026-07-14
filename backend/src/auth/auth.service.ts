@@ -243,7 +243,7 @@ export class AuthService {
   private async validateChallenge(
     token: string,
     purpose: 'EMAIL_VERIFICATION' | 'DEVICE_APPROVAL' | 'PASSWORD_RESET',
-  ): Promise<{ id: string; userId: string; deviceId: string | null }> {
+  ): Promise<{ id: string; userId: string; deviceId: string | null; maxAttempts: number }> {
     const parts = splitChallengeToken(token);
     if (!parts) throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_TOKEN' });
     const challenge = await this.prisma.verificationChallenge.findUnique({
@@ -268,7 +268,12 @@ export class AuthService {
       });
       throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_TOKEN' });
     }
-    return { id: challenge.id, userId: challenge.userId, deviceId: challenge.deviceId };
+    return {
+      id: challenge.id,
+      userId: challenge.userId,
+      deviceId: challenge.deviceId,
+      maxAttempts: challenge.maxAttempts,
+    };
   }
 
   async register(dto: RegisterDto, req: Request, res: Response): Promise<{ message: string }> {
@@ -359,7 +364,7 @@ export class AuthService {
       const token = await this.challenge(
         user.id,
         'EMAIL_VERIFICATION',
-        this.authConfig().emailVerificationTtlMinutes,
+        this.authConfig().passwordResetTtlMinutes,
       );
       this.mailer.send(email, 'EMAIL_VERIFICATION', token);
       await this.persistBestEffortSecurityEvent({
@@ -738,17 +743,22 @@ export class AuthService {
 
   private async revokeSessions(
     tx: Prisma.TransactionClient,
-    sessions: { id: string; userId: string; deviceId: string; revokedAt: Date | null }[],
-    reason: string,
-    eventType: SecurityEventType,
-    req: Request,
+    input: {
+      userId: string;
+      sessions: { id: string; userId: string; deviceId: string; revokedAt: Date | null }[];
+      reason: string;
+      eventType?: SecurityEventType;
+      req: Request;
+      deviceId?: string | null;
+      sessionId?: string | null;
+    },
   ): Promise<void> {
     const now = new Date();
-    for (const session of sessions) {
+    for (const session of input.sessions) {
       if (!session.revokedAt) {
         await tx.session.update({
           where: { id: session.id },
-          data: { revokedAt: now, revocationReason: reason },
+          data: { revokedAt: now, revocationReason: input.reason },
         });
         await tx.sessionRefreshToken.updateMany({
           where: { sessionId: session.id, revokedAt: null },
@@ -760,14 +770,23 @@ export class AuthService {
             sessionId: session.id,
             deviceId: session.deviceId,
             eventType: 'SESSION_REVOKED',
-            req,
+            req: input.req,
           },
           tx,
         );
       }
     }
-    if (eventType !== 'SESSION_REVOKED' && sessions[0]) {
-      await this.persistCriticalSecurityEvent({ userId: sessions[0].userId, eventType, req }, tx);
+    if (input.eventType) {
+      await this.persistCriticalSecurityEvent(
+        {
+          userId: input.userId,
+          sessionId: input.sessionId,
+          deviceId: input.deviceId,
+          eventType: input.eventType,
+          req: input.req,
+        },
+        tx,
+      );
     }
   }
 
@@ -779,7 +798,7 @@ export class AuthService {
       const token = await this.challenge(
         user.id,
         'PASSWORD_RESET',
-        this.authConfig().emailVerificationTtlMinutes,
+        this.authConfig().passwordResetTtlMinutes,
       );
       this.mailer.send(email, 'PASSWORD_RESET', token);
       await this.persistBestEffortSecurityEvent({
@@ -807,18 +826,28 @@ export class AuthService {
       throw new BadRequestException({ code: 'PASSWORD_REUSE_NOT_ALLOWED' });
     const passwordHash = await hashPassword(dto.newPassword);
     await this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+      const acquired = await tx.verificationChallenge.updateMany({
+        where: {
+          id: challenge.id,
+          purpose: 'PASSWORD_RESET',
+          consumedAt: null,
+          expiresAt: { gt: now },
+          attempts: { lt: challenge.maxAttempts },
+        },
+        data: { consumedAt: now, attempts: { increment: 1 } },
+      });
+      if (acquired.count !== 1) {
+        throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_TOKEN' });
+      }
       await tx.passwordCredential.update({
         where: { userId: user.id },
         data: {
           passwordHash,
-          passwordChangedAt: new Date(),
+          passwordChangedAt: now,
           failedLoginAttempts: 0,
           lockedUntil: null,
         },
-      });
-      await tx.verificationChallenge.update({
-        where: { id: challenge.id },
-        data: { consumedAt: new Date(), attempts: { increment: 1 } },
       });
       await tx.verificationChallenge.updateMany({
         where: {
@@ -827,10 +856,16 @@ export class AuthService {
           consumedAt: null,
           id: { not: challenge.id },
         },
-        data: { consumedAt: new Date() },
+        data: { consumedAt: now },
       });
       const sessions = await tx.session.findMany({ where: { userId: user.id } });
-      await this.revokeSessions(tx, sessions, 'PASSWORD_RESET', 'PASSWORD_RESET_COMPLETED', req);
+      await this.revokeSessions(tx, {
+        userId: user.id,
+        sessions,
+        reason: 'PASSWORD_RESET',
+        eventType: 'PASSWORD_RESET_COMPLETED',
+        req,
+      });
     });
     return { message: 'Senha redefinida. Faça login novamente.' };
   }
@@ -863,7 +898,13 @@ export class AuthService {
         },
       });
       const sessions = await tx.session.findMany({ where: { userId: auth.userId } });
-      await this.revokeSessions(tx, sessions, 'PASSWORD_CHANGED', 'PASSWORD_CHANGED', req);
+      await this.revokeSessions(tx, {
+        userId: auth.userId,
+        sessions,
+        reason: 'PASSWORD_CHANGED',
+        eventType: 'PASSWORD_CHANGED',
+        req,
+      });
     });
     this.clearAuth(res);
     return { message: 'Senha alterada. Faça login novamente.' };
@@ -913,7 +954,12 @@ export class AuthService {
     });
     if (session)
       await this.prisma.$transaction(async (tx) =>
-        this.revokeSessions(tx, [session], 'USER_REVOKED', 'SESSION_REVOKED', req),
+        this.revokeSessions(tx, {
+          userId: auth.userId,
+          sessions: [session],
+          reason: 'USER_REVOKED',
+          req,
+        }),
       );
     if (sessionId === auth.sessionId) this.clearAuth(res);
     return { message: 'Sessão revogada.' };
@@ -927,7 +973,13 @@ export class AuthService {
     await this.rate(['logout-all', req.ip ?? 'unknown', auth.userId], 10, 300);
     await this.prisma.$transaction(async (tx) => {
       const sessions = await tx.session.findMany({ where: { userId: auth.userId } });
-      await this.revokeSessions(tx, sessions, 'LOGOUT_ALL', 'LOGOUT_ALL', req);
+      await this.revokeSessions(tx, {
+        userId: auth.userId,
+        sessions,
+        reason: 'LOGOUT_ALL',
+        eventType: 'LOGOUT_ALL',
+        req,
+      });
     });
     this.clearAuth(res);
     return { message: 'Logout realizado em todos os dispositivos.' };
@@ -980,7 +1032,14 @@ export class AuthService {
         const sessions = await tx.session.findMany({
           where: { userId: auth.userId, deviceId: device.id },
         });
-        await this.revokeSessions(tx, sessions, 'DEVICE_REVOKED', 'DEVICE_REVOKED', req);
+        await this.revokeSessions(tx, {
+          userId: auth.userId,
+          sessions,
+          reason: 'DEVICE_REVOKED',
+          eventType: 'DEVICE_REVOKED',
+          deviceId: device.id,
+          req,
+        });
       });
     if (deviceId === auth.deviceId) {
       this.clearAuth(res);

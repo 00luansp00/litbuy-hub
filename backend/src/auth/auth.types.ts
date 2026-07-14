@@ -12,6 +12,7 @@ export interface AuthRuntimeConfig {
   ipPepper: string;
   emailVerificationTtlMinutes: number;
   deviceApprovalTtlMinutes: number;
+  passwordResetTtlMinutes: number;
   maxAttempts: number;
   loginLockMinutes: number;
   refreshCookieName: string;

@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   Param,
+  ParseUUIDPipe,
   Post,
   Req,
   Res,
@@ -104,7 +105,7 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Revoga uma sessão própria de forma idempotente e segura contra IDOR' })
   revokeSession(
-    @Param('sessionId') sessionId: string,
+    @Param('sessionId', new ParseUUIDPipe({ version: '4' })) sessionId: string,
     @CurrentUser() user: { userId: string; sessionId: string },
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
@@ -139,7 +140,7 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Revoga um dispositivo próprio, suas sessões e desafios pendentes' })
   revokeDevice(
-    @Param('deviceId') deviceId: string,
+    @Param('deviceId', new ParseUUIDPipe({ version: '4' })) deviceId: string,
     @CurrentUser() user: { userId: string; deviceId: string },
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,

@@ -252,7 +252,7 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
     expect(session.revokedAt).toBeTruthy();
   });
 
-  it('executes real Sprint 2B1 password recovery, session listing, device revocation and logout-all flow', async () => {
+  it('executes real Sprint 2B1 password recovery, sessions, IDOR, device replacement and logout-all flow', async () => {
     const payload = {
       email: 'integration-sprint-2b1@example.com',
       password: 'integration password 123',
@@ -274,11 +274,26 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
       .post('/api/v1/auth/email/verify')
       .send({ token: emailToken })
       .expect(HttpStatus.OK);
+
     const firstLogin = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
       .set('Cookie', firstDeviceCookie)
       .send({ email: payload.email, password: payload.password })
       .expect(HttpStatus.OK);
+    const firstAuthCookies = firstLogin.headers['set-cookie'] as unknown as string[];
+    const firstCsrf = String(firstAuthCookies.find((cookie) => cookie.startsWith('litbuy_csrf')))
+      .split(';')[0]
+      .split('=')[1];
+    const secondLoginBeforeReset = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', firstDeviceCookie)
+      .send({ email: payload.email, password: payload.password })
+      .expect(HttpStatus.OK);
+    const sessionsBeforeReset = await prisma.session.findMany({
+      where: { user: { email: payload.email }, revokedAt: null },
+    });
+    expect(sessionsBeforeReset).toHaveLength(2);
+
     await request(app.getHttpServer())
       .post('/api/v1/auth/password/forgot')
       .send({ email: payload.email })
@@ -289,36 +304,105 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
       .post('/api/v1/auth/password/reset')
       .send({ token: resetToken, newPassword: 'integration new password 123' })
       .expect(HttpStatus.OK);
+    const sessionsAfterReset = await prisma.session.findMany({
+      where: { user: { email: payload.email } },
+    });
+    expect(sessionsAfterReset.every((session) => session.revokedAt)).toBe(true);
     await request(app.getHttpServer())
       .get('/api/v1/auth/me')
       .set('Authorization', `Bearer ${firstLogin.body.accessToken}`)
+      .expect(HttpStatus.UNAUTHORIZED);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/refresh')
+      .set('Cookie', firstAuthCookies)
+      .set('X-CSRF-Token', firstCsrf)
+      .expect(HttpStatus.UNAUTHORIZED);
+    await request(app.getHttpServer())
+      .get('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${secondLoginBeforeReset.body.accessToken}`)
       .expect(HttpStatus.UNAUTHORIZED);
     await request(app.getHttpServer())
       .post('/api/v1/auth/login')
       .set('Cookie', firstDeviceCookie)
       .send({ email: payload.email, password: payload.password })
       .expect(HttpStatus.UNAUTHORIZED);
-    const secondLogin = await request(app.getHttpServer())
+
+    const secondAccount = {
+      ...payload,
+      email: 'integration-sprint-2b1-other@example.com',
+      password: 'integration other password 123',
+    };
+    const otherRegister = await request(app.getHttpServer())
+      .post('/api/v1/auth/register')
+      .send(secondAccount)
+      .expect(HttpStatus.CREATED);
+    const otherEmailToken = [...mailer.sent]
+      .reverse()
+      .find((message) => message.purpose === 'EMAIL_VERIFICATION')?.token;
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/verify')
+      .send({ token: otherEmailToken })
+      .expect(HttpStatus.OK);
+    const otherLogin = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', otherRegister.headers['set-cookie'] as unknown as string[])
+      .send({ email: secondAccount.email, password: secondAccount.password })
+      .expect(HttpStatus.OK);
+    const otherSession = await prisma.session.findFirstOrThrow({
+      where: { user: { email: secondAccount.email } },
+    });
+
+    const loginAfterReset = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
       .set('Cookie', firstDeviceCookie)
       .send({ email: payload.email, password: 'integration new password 123' })
       .expect(HttpStatus.OK);
     await request(app.getHttpServer())
-      .get('/api/v1/auth/sessions')
-      .set('Authorization', `Bearer ${secondLogin.body.accessToken}`)
+      .delete(`/api/v1/auth/sessions/${otherSession.id}`)
+      .set('Authorization', `Bearer ${loginAfterReset.body.accessToken}`)
       .expect(HttpStatus.OK);
-    const sessions = await prisma.session.findMany({ where: { user: { email: payload.email } } });
-    const devices = await prisma.device.findMany({ where: { user: { email: payload.email } } });
+    await expect(
+      prisma.session.findUniqueOrThrow({ where: { id: otherSession.id } }),
+    ).resolves.toMatchObject({
+      revokedAt: null,
+    });
+    const sessionToRevoke = await prisma.session.findFirstOrThrow({
+      where: { user: { email: payload.email }, revokedAt: null },
+    });
     await request(app.getHttpServer())
-      .delete(`/api/v1/auth/devices/${devices[0].id}`)
-      .set('Authorization', `Bearer ${secondLogin.body.accessToken}`)
+      .delete(`/api/v1/auth/sessions/${sessionToRevoke.id}`)
+      .set('Authorization', `Bearer ${loginAfterReset.body.accessToken}`)
       .expect(HttpStatus.OK);
-    const thirdLogin = await request(app.getHttpServer())
+    await expect(
+      prisma.session.findUniqueOrThrow({ where: { id: sessionToRevoke.id } }),
+    ).resolves.toMatchObject({
+      revokedAt: expect.any(Date),
+    });
+
+    const deviceToRevoke = await prisma.device.findFirstOrThrow({
+      where: { user: { email: payload.email }, status: 'APPROVED' },
+    });
+    const oldDeviceSessionCountBefore = await prisma.session.count({
+      where: { deviceId: deviceToRevoke.id },
+    });
+    await request(app.getHttpServer())
+      .delete(`/api/v1/auth/devices/${deviceToRevoke.id}`)
+      .set('Authorization', `Bearer ${loginAfterReset.body.accessToken}`)
+      .expect(HttpStatus.OK);
+    await request(app.getHttpServer())
       .post('/api/v1/auth/login')
       .set('Cookie', firstDeviceCookie)
+      .send({ email: payload.email, password: 'integration new password 123' })
+      .expect(HttpStatus.FORBIDDEN);
+    const pendingLogin = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
       .send({ email: payload.email, password: 'integration new password 123' })
       .expect(HttpStatus.ACCEPTED);
-    expect(thirdLogin.body).toMatchObject({ code: 'DEVICE_APPROVAL_REQUIRED' });
+    const pendingDeviceCookie = pendingLogin.headers['set-cookie'] as unknown as string[];
+    const pendingDevice = await prisma.device.findFirstOrThrow({
+      where: { user: { email: payload.email }, status: 'PENDING' },
+    });
+    expect(pendingDevice.id).not.toBe(deviceToRevoke.id);
     const deviceApproval = [...mailer.sent]
       .reverse()
       .find((message) => message.purpose === 'DEVICE_APPROVAL')?.token;
@@ -326,16 +410,38 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
       .post('/api/v1/auth/device/approve')
       .send({ token: deviceApproval })
       .expect(HttpStatus.OK);
-    const approvedLogin = await request(app.getHttpServer())
+    await expect(
+      prisma.device.findUniqueOrThrow({ where: { id: deviceToRevoke.id } }),
+    ).resolves.toMatchObject({
+      status: 'REVOKED',
+    });
+    await expect(
+      prisma.device.findUniqueOrThrow({ where: { id: pendingDevice.id } }),
+    ).resolves.toMatchObject({
+      status: 'APPROVED',
+    });
+    await expect(prisma.session.count({ where: { deviceId: deviceToRevoke.id } })).resolves.toBe(
+      oldDeviceSessionCountBefore,
+    );
+    const finalLogin = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
-      .set('Cookie', thirdLogin.headers['set-cookie'] as unknown as string[])
+      .set('Cookie', pendingDeviceCookie)
       .send({ email: payload.email, password: 'integration new password 123' })
       .expect(HttpStatus.OK);
+    const finalSession = await prisma.session.findFirstOrThrow({
+      where: { user: { email: payload.email }, revokedAt: null },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(finalSession.deviceId).toBe(pendingDevice.id);
     await request(app.getHttpServer())
       .post('/api/v1/auth/sessions/logout-all')
-      .set('Authorization', `Bearer ${approvedLogin.body.accessToken}`)
+      .set('Authorization', `Bearer ${finalLogin.body.accessToken}`)
       .expect(HttpStatus.OK);
-    expect(sessions.length).toBeGreaterThanOrEqual(1);
+    await request(app.getHttpServer())
+      .get('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${otherLogin.body.accessToken}`)
+      .expect(HttpStatus.OK);
+
     const events = await prisma.securityEvent.findMany({
       where: { user: { email: payload.email } },
     });
@@ -343,6 +449,7 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
       expect.arrayContaining([
         'PASSWORD_RESET_REQUESTED',
         'PASSWORD_RESET_COMPLETED',
+        'SESSION_REVOKED',
         'DEVICE_REVOKED',
         'LOGOUT_ALL',
       ]),
@@ -350,9 +457,75 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
     const serialized = JSON.stringify({
       challenges: await prisma.verificationChallenge.findMany(),
       sessions: await prisma.session.findMany(),
+      refresh: await prisma.sessionRefreshToken.findMany(),
     });
     expect(serialized).not.toContain(resetToken);
     expect(serialized).not.toContain(payload.password);
     expect(serialized).not.toContain('integration new password 123');
+  });
+
+  it('allows only one concurrent real password reset request to consume a token', async () => {
+    const payload = {
+      email: 'integration-sprint-2b1-concurrent@example.com',
+      password: 'integration password 123',
+      birthDate: '2000-01-01',
+      termsAccepted: true,
+      privacyAccepted: true,
+      termsVersion: process.env.CURRENT_TERMS_VERSION,
+      privacyVersion: process.env.CURRENT_PRIVACY_VERSION,
+    };
+    const register = await request(app.getHttpServer())
+      .post('/api/v1/auth/register')
+      .send(payload)
+      .expect(HttpStatus.CREATED);
+    const emailToken = mailer.sent.find(
+      (message) => message.purpose === 'EMAIL_VERIFICATION',
+    )?.token;
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/verify')
+      .send({ token: emailToken })
+      .expect(HttpStatus.OK);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', register.headers['set-cookie'] as unknown as string[])
+      .send({ email: payload.email, password: payload.password })
+      .expect(HttpStatus.OK);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/password/forgot')
+      .send({ email: payload.email })
+      .expect(HttpStatus.OK);
+    const resetToken = mailer.sent.find((message) => message.purpose === 'PASSWORD_RESET')?.token;
+    const [first, second] = await Promise.all([
+      request(app.getHttpServer())
+        .post('/api/v1/auth/password/reset')
+        .send({ token: resetToken, newPassword: 'concurrent password one 123' }),
+      request(app.getHttpServer())
+        .post('/api/v1/auth/password/reset')
+        .send({ token: resetToken, newPassword: 'concurrent password two 123' }),
+    ]);
+    expect([first.status, second.status].sort()).toEqual([200, 400]);
+    const acceptedPassword =
+      first.status === 200 ? 'concurrent password one 123' : 'concurrent password two 123';
+    const rejectedPassword =
+      first.status === 200 ? 'concurrent password two 123' : 'concurrent password one 123';
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', register.headers['set-cookie'] as unknown as string[])
+      .send({ email: payload.email, password: acceptedPassword })
+      .expect(HttpStatus.OK);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', register.headers['set-cookie'] as unknown as string[])
+      .send({ email: payload.email, password: rejectedPassword })
+      .expect(HttpStatus.UNAUTHORIZED);
+    const challenge = await prisma.verificationChallenge.findFirstOrThrow({
+      where: { purpose: 'PASSWORD_RESET', user: { email: payload.email } },
+    });
+    expect(challenge.consumedAt).toEqual(expect.any(Date));
+    await expect(
+      prisma.securityEvent.count({
+        where: { user: { email: payload.email }, eventType: 'PASSWORD_RESET_COMPLETED' },
+      }),
+    ).resolves.toBe(1);
   });
 });

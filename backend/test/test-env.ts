@@ -17,6 +17,7 @@ type ManagedEnvKey =
   | 'AUTH_IP_HASH_PEPPER'
   | 'AUTH_EMAIL_VERIFICATION_TTL_MINUTES'
   | 'AUTH_DEVICE_APPROVAL_TTL_MINUTES'
+  | 'AUTH_PASSWORD_RESET_TTL_MINUTES'
   | 'AUTH_MAX_ATTEMPTS'
   | 'AUTH_LOGIN_LOCK_MINUTES'
   | 'AUTH_REFRESH_COOKIE_NAME'
@@ -48,6 +49,7 @@ const defaultTestEnv: Record<ManagedEnvKey, string> = {
   AUTH_IP_HASH_PEPPER: 'test_auth_ip_hash_pepper',
   AUTH_EMAIL_VERIFICATION_TTL_MINUTES: '30',
   AUTH_DEVICE_APPROVAL_TTL_MINUTES: '30',
+  AUTH_PASSWORD_RESET_TTL_MINUTES: '30',
   AUTH_MAX_ATTEMPTS: '5',
   AUTH_LOGIN_LOCK_MINUTES: '15',
   AUTH_REFRESH_COOKIE_NAME: 'litbuy_refresh',
@@ -100,6 +102,10 @@ export function applyTestEnv(overrides: Partial<NodeJS.ProcessEnv> = {}): void {
   );
   process.env.AUTH_DEVICE_APPROVAL_TTL_MINUTES = resolveTestEnvValue(
     'AUTH_DEVICE_APPROVAL_TTL_MINUTES',
+    overrides,
+  );
+  process.env.AUTH_PASSWORD_RESET_TTL_MINUTES = resolveTestEnvValue(
+    'AUTH_PASSWORD_RESET_TTL_MINUTES',
     overrides,
   );
   process.env.AUTH_MAX_ATTEMPTS = resolveTestEnvValue('AUTH_MAX_ATTEMPTS', overrides);
