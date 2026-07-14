@@ -1,8 +1,27 @@
-import { Body, Controller, Get, HttpCode, Post, Req, Res, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Req,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiCookieAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
-import { EmailDto, LoginDto, RegisterDto, TokenDto } from './dto';
+import {
+  ChangePasswordDto,
+  EmailDto,
+  LoginDto,
+  RegisterDto,
+  ResetPasswordDto,
+  TokenDto,
+} from './dto';
 import { AccessTokenGuard } from './access-token.guard';
 import { CurrentUser } from './current-user.decorator';
 @ApiTags('auth')
@@ -39,6 +58,96 @@ export class AuthController {
   @Post('device/resend') @HttpCode(200) resendDevice(@Body() dto: EmailDto, @Req() req: Request) {
     return this.auth.resendDevice(dto, req);
   }
+
+  @Post('password/forgot')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Solicita recuperação de senha com resposta genérica sem revelar existência da conta',
+  })
+  forgotPassword(@Body() dto: EmailDto, @Req() req: Request) {
+    return this.auth.forgotPassword(dto, req);
+  }
+
+  @Post('password/reset')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Redefine senha com token de recuperação e revoga sessões existentes' })
+  resetPassword(@Body() dto: ResetPasswordDto, @Req() req: Request) {
+    return this.auth.resetPassword(dto, req);
+  }
+
+  @Post('password/change')
+  @HttpCode(200)
+  @UseGuards(AccessTokenGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Altera senha autenticada exigindo senha atual e revoga todas as sessões',
+  })
+  changePassword(
+    @Body() dto: ChangePasswordDto,
+    @CurrentUser() user: { userId: string; sessionId: string; deviceId: string },
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return this.auth.changePassword(dto, user, req, res);
+  }
+
+  @Get('sessions')
+  @UseGuards(AccessTokenGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Lista sessões do usuário autenticado sem hashes, IPs ou segredos' })
+  sessions(@CurrentUser() user: { userId: string; sessionId: string }) {
+    return this.auth.listSessions(user);
+  }
+
+  @Delete('sessions/:sessionId')
+  @HttpCode(200)
+  @UseGuards(AccessTokenGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Revoga uma sessão própria de forma idempotente e segura contra IDOR' })
+  revokeSession(
+    @Param('sessionId', new ParseUUIDPipe({ version: '4' })) sessionId: string,
+    @CurrentUser() user: { userId: string; sessionId: string },
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return this.auth.revokeSession(sessionId, user, req, res);
+  }
+
+  @Post('sessions/logout-all')
+  @HttpCode(200)
+  @UseGuards(AccessTokenGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Revoga todas as sessões do usuário e limpa cookies de refresh/CSRF' })
+  logoutAll(
+    @CurrentUser() user: { userId: string },
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return this.auth.logoutAll(user, req, res);
+  }
+
+  @Get('devices')
+  @UseGuards(AccessTokenGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Lista dispositivos do usuário autenticado sem tokenHash' })
+  devices(@CurrentUser() user: { userId: string; deviceId: string }) {
+    return this.auth.listDevices(user);
+  }
+
+  @Delete('devices/:deviceId')
+  @HttpCode(200)
+  @UseGuards(AccessTokenGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Revoga um dispositivo próprio, suas sessões e desafios pendentes' })
+  revokeDevice(
+    @Param('deviceId', new ParseUUIDPipe({ version: '4' })) deviceId: string,
+    @CurrentUser() user: { userId: string; deviceId: string },
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return this.auth.revokeDevice(deviceId, user, req, res);
+  }
+
   @Post('refresh') @HttpCode(200) @ApiCookieAuth() refresh(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,

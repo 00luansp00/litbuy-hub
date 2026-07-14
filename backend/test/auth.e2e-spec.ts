@@ -28,7 +28,15 @@ class Delegate<T extends Row> {
   constructor(private rows: T[]) {}
   async create(args: { data: Row; include?: Row }) {
     await Promise.resolve();
-    const row = { id: id(), createdAt: now(), updatedAt: now(), ...args.data } as unknown as T;
+    const row = {
+      id: id(),
+      createdAt: now(),
+      updatedAt: now(),
+      attempts: 0,
+      consumedAt: null,
+      revokedAt: null,
+      ...args.data,
+    } as unknown as T;
     this.rows.push(row);
     return row;
   }
@@ -40,6 +48,17 @@ class Delegate<T extends Row> {
     const r = await this.findUnique(args);
     if (!r) throw new Error('not found');
     return r;
+  }
+  async findFirst(args: { where: Row }) {
+    await Promise.resolve();
+    return this.rows.find((r) => this.matches(r, args.where)) ?? null;
+  }
+  async findMany(args: { where?: Row; include?: Row; orderBy?: Row; take?: number } = {}) {
+    await Promise.resolve();
+    const rows = args.where
+      ? this.rows.filter((r) => this.matches(r, args.where!))
+      : [...this.rows];
+    return args.take ? rows.slice(0, args.take) : rows;
   }
   async update(args: { where: Row; data: Row }) {
     const r = await this.findUnique({ where: args.where });
@@ -64,7 +83,15 @@ class Delegate<T extends Row> {
   }
   private matches(r: Row, where: Row): boolean {
     return Object.entries(where).every(([k, v]) => {
-      if (v && typeof v === 'object' && 'not' in v) return r[k] !== (v as Row).not;
+      if (v && typeof v === 'object' && !(v instanceof Date)) {
+        const condition = v as Row;
+        if ('not' in condition && r[k] === condition.not) return false;
+        if ('lt' in condition && !((r[k] as Date | number) < (condition.lt as Date | number)))
+          return false;
+        if ('gt' in condition && !((r[k] as Date | number) > (condition.gt as Date | number)))
+          return false;
+        return true;
+      }
       if (v === null) return r[k] == null;
       return r[k] === v;
     });
@@ -182,6 +209,13 @@ class FakePrisma {
     create: (a: { data: Row }) => this.sessionDelegate.create(a),
     update: (a: { where: Row; data: Row }) => this.sessionDelegate.update(a),
     updateMany: (a: { where: Row; data: Row }) => this.sessionDelegate.updateMany(a),
+    findFirst: (a: { where: Row }) => this.sessionDelegate.findFirst(a),
+    findMany: async (a: { where?: Row; include?: Row; orderBy?: Row; take?: number } = {}) => {
+      const rows = await this.sessionDelegate.findMany(a);
+      return a.include
+        ? rows.map((ss) => ({ ...ss, device: this.devices.find((d) => d.id === ss.deviceId) }))
+        : rows;
+    },
     findUnique: async (a: { where: Row; include?: Row }) => {
       await Promise.resolve();
       const s = this.sessions.find(
@@ -489,6 +523,315 @@ describe('Auth HTTP e2e flows', () => {
     expect(prisma.events.some((e) => e.eventType === 'LOGOUT')).toBe(true);
     expect(prisma.events.some((e) => e.eventType === 'SESSION_REVOKED')).toBe(true);
   });
+
+  it('handles Sprint 2B1 password, sessions and devices endpoints safely', async () => {
+    const registration = await register().expect(HttpStatus.CREATED);
+    await verifyLatest().expect(200);
+    const login = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', registration.headers['set-cookie'])
+      .send({ email: base.email, password: base.password })
+      .expect(200);
+    const bearer = `Bearer ${login.body.accessToken}`;
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/password/forgot')
+      .send({ email: base.email })
+      .expect(200);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/password/forgot')
+      .send({ email: 'missing@example.com' })
+      .expect(200);
+    const resetMail = mailer.sent.find((m) => m.purpose === 'PASSWORD_RESET')!;
+    expect(resetMail.token).toBeTruthy();
+    await request(app.getHttpServer())
+      .get('/api/v1/auth/sessions')
+      .set('Authorization', bearer)
+      .expect(200)
+      .expect((r) =>
+        expect(JSON.stringify(r.body)).not.toMatch(
+          /refreshTokenHash|csrfTokenHash|tokenHash|pepper/,
+        ),
+      );
+    await request(app.getHttpServer())
+      .get('/api/v1/auth/devices')
+      .set('Authorization', bearer)
+      .expect(200)
+      .expect((r) => expect(JSON.stringify(r.body)).not.toMatch(/tokenHash|pepper/));
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/password/reset')
+      .send({ token: resetMail.token, newPassword: base.password })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/password/reset')
+      .send({ token: resetMail.token, newPassword: 'new valid password 123' })
+      .expect(200);
+    expect(prisma.sessions.every((sess) => sess.revokedAt)).toBe(true);
+    const changedLogin = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', registration.headers['set-cookie'])
+      .send({ email: base.email, password: 'new valid password 123' })
+      .expect(200);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/password/change')
+      .set('Authorization', `Bearer ${changedLogin.body.accessToken}`)
+      .send({ currentPassword: 'new valid password 123', newPassword: 'second valid password 123' })
+      .expect(200);
+    expect(prisma.events.map((e) => e.eventType)).toEqual(
+      expect.arrayContaining([
+        'PASSWORD_RESET_REQUESTED',
+        'PASSWORD_RESET_COMPLETED',
+        'PASSWORD_CHANGED',
+      ]),
+    );
+  });
+
+  it('covers password forgot public parity, rate limiting and reset token error cases', async () => {
+    const registration = await register().expect(HttpStatus.CREATED);
+    await verifyLatest().expect(200);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/password/forgot')
+      .send({ email: base.email })
+      .expect(200)
+      .expect((r) =>
+        expect(r.body.message).toBe('Se a conta existir, enviaremos as instruções por e-mail.'),
+      );
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/password/forgot')
+      .send({ email: 'nobody@example.com' })
+      .expect(200)
+      .expect((r) =>
+        expect(r.body.message).toBe('Se a conta existir, enviaremos as instruções por e-mail.'),
+      );
+    for (let i = 0; i < 4; i++) {
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/password/forgot')
+        .send({ email: base.email });
+    }
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/password/forgot')
+      .send({ email: base.email })
+      .expect(429);
+
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/password/reset')
+      .send({ token: 'invalid.invalid', newPassword: 'valid new password 123' })
+      .expect(400);
+    const resetToken = mailer.sent.find((m) => m.purpose === 'PASSWORD_RESET')!.token!;
+    prisma.challenges.find((c) => c.purpose === 'PASSWORD_RESET')!.expiresAt = new Date(
+      Date.now() - 1000,
+    );
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/password/reset')
+      .send({ token: resetToken, newPassword: 'valid new password 123' })
+      .expect(400);
+
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/password/forgot')
+      .send({ email: 'other@example.com' });
+    const userChallenge = prisma.challenges.find(
+      (c) => c.purpose === 'PASSWORD_RESET' && c.userId === prisma.users[0].id && !c.consumedAt,
+    );
+    if (userChallenge) userChallenge.attempts = userChallenge.maxAttempts;
+    if (userChallenge) {
+      const lockedMail = mailer.sent.at(-1)!.token!;
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/password/reset')
+        .send({ token: lockedMail, newPassword: 'valid new password 123' })
+        .expect(400);
+    }
+    expect(registration.headers['set-cookie']).toBeDefined();
+  });
+
+  it('covers valid reset, consumed token, old access/refresh rejection and new password login', async () => {
+    const registration = await register().expect(HttpStatus.CREATED);
+    await verifyLatest().expect(200);
+    const firstLogin = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', registration.headers['set-cookie'])
+      .send({ email: base.email, password: base.password })
+      .expect(200);
+    const cookies = firstLogin.headers['set-cookie'] as unknown as string[];
+    const csrf = String(cookies.find((c: string) => c.startsWith('litbuy_csrf')))
+      .split(';')[0]
+      .split('=')[1];
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/password/forgot')
+      .send({ email: base.email })
+      .expect(200);
+    const resetToken = mailer.sent.find((m) => m.purpose === 'PASSWORD_RESET')!.token!;
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/password/reset')
+      .send({ token: resetToken, newPassword: base.password })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/password/reset')
+      .send({ token: resetToken, newPassword: 'valid reset password 123' })
+      .expect(200);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/password/reset')
+      .send({ token: resetToken, newPassword: 'another valid password 123' })
+      .expect(400);
+    await request(app.getHttpServer())
+      .get('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${firstLogin.body.accessToken}`)
+      .expect(401);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/refresh')
+      .set('Cookie', cookies)
+      .set('X-CSRF-Token', csrf)
+      .expect(401);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', registration.headers['set-cookie'])
+      .send({ email: base.email, password: base.password })
+      .expect(401);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', registration.headers['set-cookie'])
+      .send({ email: base.email, password: 'valid reset password 123' })
+      .expect(200);
+    expect(prisma.events.filter((e) => e.eventType === 'PASSWORD_RESET_COMPLETED')).toHaveLength(1);
+  });
+
+  it('covers authenticated password change failures and session-current revocation', async () => {
+    const registration = await register().expect(HttpStatus.CREATED);
+    await verifyLatest().expect(200);
+    const login = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', registration.headers['set-cookie'])
+      .send({ email: base.email, password: base.password })
+      .expect(200);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/password/change')
+      .set('Authorization', `Bearer ${login.body.accessToken}`)
+      .send({ currentPassword: 'wrong password', newPassword: 'valid changed password 123' })
+      .expect(401);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/password/change')
+      .set('Authorization', `Bearer ${login.body.accessToken}`)
+      .send({ currentPassword: base.password, newPassword: base.password })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/password/change')
+      .set('Authorization', `Bearer ${login.body.accessToken}`)
+      .send({ currentPassword: base.password, newPassword: 'valid changed password 123' })
+      .expect(200)
+      .expect((r) => expect(String(r.headers['set-cookie'])).toContain('litbuy_refresh=;'));
+    await request(app.getHttpServer())
+      .get('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${login.body.accessToken}`)
+      .expect(401);
+  });
+
+  it('covers sessions IDOR, idempotency, current-session cookie cleanup and malformed UUIDs', async () => {
+    const registration = await register().expect(HttpStatus.CREATED);
+    await verifyLatest().expect(200);
+    const login = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', registration.headers['set-cookie'])
+      .send({ email: base.email, password: base.password })
+      .expect(200);
+    const otherRegistration = await register('session-owner-2@example.com').expect(
+      HttpStatus.CREATED,
+    );
+    await verifyLatest().expect(200);
+    const otherLogin = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', otherRegistration.headers['set-cookie'])
+      .send({ email: 'session-owner-2@example.com', password: base.password })
+      .expect(200);
+    await request(app.getHttpServer())
+      .get('/api/v1/auth/sessions')
+      .set('Authorization', `Bearer ${login.body.accessToken}`)
+      .expect(200)
+      .expect((r) => expect(JSON.stringify(r.body)).not.toContain('session-owner-2@example.com'));
+    await request(app.getHttpServer())
+      .delete('/api/v1/auth/sessions/not-a-uuid')
+      .set('Authorization', `Bearer ${login.body.accessToken}`)
+      .expect(400);
+    const otherSession = prisma.sessions.find(
+      (s) => s.userId === prisma.users.find((u) => u.email === 'session-owner-2@example.com')!.id,
+    )!;
+    await request(app.getHttpServer())
+      .delete(`/api/v1/auth/sessions/${String(otherSession.id)}`)
+      .set('Authorization', `Bearer ${login.body.accessToken}`)
+      .expect(200);
+    expect(otherSession.revokedAt ?? null).toBeNull();
+    const ownSession = prisma.sessions.find((s) => s.id !== otherSession.id)!;
+    await request(app.getHttpServer())
+      .delete(`/api/v1/auth/sessions/${String(ownSession.id)}`)
+      .set('Authorization', `Bearer ${login.body.accessToken}`)
+      .expect(200)
+      .expect((r) => expect(String(r.headers['set-cookie'])).toContain('litbuy_refresh=;'));
+    await request(app.getHttpServer())
+      .delete(`/api/v1/auth/sessions/${String(ownSession.id)}`)
+      .set('Authorization', `Bearer ${otherLogin.body.accessToken}`)
+      .expect(200);
+  });
+
+  it('covers device listing, revocation, IDOR, malformed UUIDs and revoked-cookie replacement flow', async () => {
+    const registration = await register().expect(HttpStatus.CREATED);
+    await verifyLatest().expect(200);
+    const login = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', registration.headers['set-cookie'])
+      .send({ email: base.email, password: base.password })
+      .expect(200);
+    await request(app.getHttpServer())
+      .get('/api/v1/auth/devices')
+      .set('Authorization', `Bearer ${login.body.accessToken}`)
+      .expect(200)
+      .expect((r) =>
+        expect(JSON.stringify(r.body)).not.toMatch(/tokenHash|pepper|refreshTokenHash/),
+      );
+    await request(app.getHttpServer())
+      .delete('/api/v1/auth/devices/not-a-uuid')
+      .set('Authorization', `Bearer ${login.body.accessToken}`)
+      .expect(400);
+    await register('device-owner-2@example.com').expect(HttpStatus.CREATED);
+    await verifyLatest().expect(200);
+    const otherDevice = prisma.devices.find(
+      (d) => d.userId === prisma.users.find((u) => u.email === 'device-owner-2@example.com')!.id,
+    )!;
+    await request(app.getHttpServer())
+      .delete(`/api/v1/auth/devices/${String(otherDevice.id)}`)
+      .set('Authorization', `Bearer ${login.body.accessToken}`)
+      .expect(200);
+    expect(otherDevice.status).toBe('APPROVED');
+    const currentDevice = prisma.devices.find((d) => d.userId === prisma.users[0].id)!;
+    await request(app.getHttpServer())
+      .delete(`/api/v1/auth/devices/${String(currentDevice.id)}`)
+      .set('Authorization', `Bearer ${login.body.accessToken}`)
+      .expect(200)
+      .expect((r) => expect(String(r.headers['set-cookie'])).toContain('litbuy_device=;'));
+    await request(app.getHttpServer())
+      .delete(`/api/v1/auth/devices/${String(currentDevice.id)}`)
+      .set('Authorization', `Bearer ${login.body.accessToken}`)
+      .expect(401);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', registration.headers['set-cookie'])
+      .send({ email: base.email, password: base.password })
+      .expect(403);
+    const pending = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({ email: base.email, password: base.password })
+      .expect(202);
+    const approval = mailer.sent.at(-1)!.token;
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/device/approve')
+      .send({ token: approval })
+      .expect(200);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', pending.headers['set-cookie'] as unknown as string[])
+      .send({ email: base.email, password: base.password })
+      .expect(200);
+    expect(prisma.events.map((e) => e.eventType)).toEqual(
+      expect.arrayContaining(['DEVICE_REVOKED']),
+    );
+  });
+
   it('executes rate limiting and event assertions through HTTP', async () => {
     for (let i = 0; i < 10; i++)
       await request(app.getHttpServer())

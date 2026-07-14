@@ -12,6 +12,7 @@ export interface AuthRuntimeConfig {
   ipPepper: string;
   emailVerificationTtlMinutes: number;
   deviceApprovalTtlMinutes: number;
+  passwordResetTtlMinutes: number;
   maxAttempts: number;
   loginLockMinutes: number;
   refreshCookieName: string;
@@ -34,7 +35,7 @@ export interface AccessTokenPayload {
 }
 
 export interface AuthenticatedRequest extends Request {
-  auth?: { userId: string; sessionId: string };
+  auth?: { userId: string; sessionId: string; deviceId: string };
 }
 
 export type SafeMetadata = Record<string, string | number | boolean | null>;

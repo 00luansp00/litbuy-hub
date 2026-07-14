@@ -24,6 +24,7 @@ enum DeviceStatus {
 enum VerificationPurpose {
   EMAIL_VERIFICATION
   DEVICE_APPROVAL
+  PASSWORD_RESET
 }
 
 enum SecurityEventType {
@@ -41,6 +42,11 @@ enum SecurityEventType {
   REFRESH_TOKEN_REUSE_DETECTED
   SESSION_REVOKED
   LOGOUT
+  PASSWORD_RESET_REQUESTED
+  PASSWORD_RESET_COMPLETED
+  PASSWORD_CHANGED
+  LOGOUT_ALL
+  DEVICE_REVOKED
 }
 
 enum SecurityEventOutcome {

@@ -69,6 +69,10 @@ export class EnvironmentVariables {
   @IsInt()
   @Min(1)
   AUTH_DEVICE_APPROVAL_TTL_MINUTES!: number;
+  @Transform(({ value }) => Number(value ?? 30))
+  @IsInt()
+  @Min(1)
+  AUTH_PASSWORD_RESET_TTL_MINUTES!: number;
   @Transform(({ value }) => Number(value ?? 5)) @IsInt() @Min(1) AUTH_MAX_ATTEMPTS!: number;
   @Transform(({ value }) => Number(value ?? 15)) @IsInt() @Min(1) AUTH_LOGIN_LOCK_MINUTES!: number;
   @IsString() @IsNotEmpty() AUTH_REFRESH_COOKIE_NAME!: string;

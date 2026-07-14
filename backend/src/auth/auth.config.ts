@@ -10,6 +10,7 @@ export const authConfig = registerAs('auth', () => ({
   ipPepper: process.env.AUTH_IP_HASH_PEPPER!,
   emailVerificationTtlMinutes: Number(process.env.AUTH_EMAIL_VERIFICATION_TTL_MINUTES ?? 30),
   deviceApprovalTtlMinutes: Number(process.env.AUTH_DEVICE_APPROVAL_TTL_MINUTES ?? 30),
+  passwordResetTtlMinutes: Number(process.env.AUTH_PASSWORD_RESET_TTL_MINUTES ?? 30),
   maxAttempts: Number(process.env.AUTH_MAX_ATTEMPTS ?? 5),
   loginLockMinutes: Number(process.env.AUTH_LOGIN_LOCK_MINUTES ?? 15),
   refreshCookieName: process.env.AUTH_REFRESH_COOKIE_NAME ?? 'litbuy_refresh',
