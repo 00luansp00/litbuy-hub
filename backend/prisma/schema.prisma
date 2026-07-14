@@ -112,21 +112,22 @@ model Device {
 }
 
 model Session {
-  id                   String          @id @default(uuid()) @db.Uuid
-  userId               String          @db.Uuid
-  deviceId             String          @db.Uuid
-  user                 User            @relation(fields: [userId], references: [id], onDelete: Restrict)
-  device               Device          @relation(fields: [deviceId], references: [id], onDelete: Restrict)
-  refreshTokenHash     String          @unique
-  refreshTokenFamilyId String          @db.Uuid
+  id                   String                @id @default(uuid()) @db.Uuid
+  userId               String                @db.Uuid
+  deviceId             String                @db.Uuid
+  user                 User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  device               Device                @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+  refreshTokenHash     String                @unique
+  refreshTokenFamilyId String                @db.Uuid
   csrfTokenHash        String
   expiresAt            DateTime
-  lastUsedAt           DateTime        @default(now())
+  lastUsedAt           DateTime              @default(now())
   revokedAt            DateTime?
   revocationReason     String?
-  createdAt            DateTime        @default(now())
-  updatedAt            DateTime        @updatedAt
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
   securityEvents       SecurityEvent[]
+  refreshTokens        SessionRefreshToken[]
 
   @@index([userId])
   @@index([deviceId])
@@ -172,4 +173,25 @@ model SecurityEvent {
 
   @@index([userId, createdAt])
   @@index([eventType, createdAt])
+}
+
+model SessionRefreshToken {
+  id                String                @id @default(uuid()) @db.Uuid
+  sessionId         String                @db.Uuid
+  familyId          String                @db.Uuid
+  session           Session               @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  tokenHash         String                @unique
+  expiresAt         DateTime
+  issuedAt          DateTime              @default(now())
+  usedAt            DateTime?
+  revokedAt         DateTime?
+  replacedByTokenId String?               @db.Uuid
+  replacedByToken   SessionRefreshToken?  @relation("RefreshReplacement", fields: [replacedByTokenId], references: [id], onDelete: SetNull)
+  replaces          SessionRefreshToken[] @relation("RefreshReplacement")
+  createdAt         DateTime              @default(now())
+
+  @@index([sessionId])
+  @@index([familyId])
+  @@index([tokenHash])
+  @@index([familyId, revokedAt, expiresAt])
 }

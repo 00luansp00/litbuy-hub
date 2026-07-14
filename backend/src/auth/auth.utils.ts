@@ -10,8 +10,18 @@ export const hmacToken = (token: string, pepper: string): string =>
 export const safeEqual = (a: string, b: string): boolean => {
   const ab = Buffer.from(a);
   const bb = Buffer.from(b);
-  return ab.length === bb.length && timingSafeEqual(ab, bb);
+  if (ab.length !== bb.length) {
+    return false;
+  }
+  return timingSafeEqual(ab, bb);
 };
+export const buildChallengeToken = (challengeId: string, secret: string): string =>
+  `${challengeId}.${secret}`;
+export function splitChallengeToken(token: string): { challengeId: string; secret: string } | null {
+  const [challengeId, secret, extra] = token.split('.');
+  if (!challengeId || !secret || extra !== undefined) return null;
+  return { challengeId, secret };
+}
 export const hashPassword = (password: string) => argon2.hash(password, { type: argon2.argon2id });
 export const verifyPassword = (hash: string, password: string) => argon2.verify(hash, password);
 export function parseBirthDate(input: string): Date | null {

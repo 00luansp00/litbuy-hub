@@ -1,5 +1,7 @@
-/* eslint-disable */
-import { createParamDecorator, ExecutionContext } from '@nestjs/common';
-export const CurrentUser = createParamDecorator(
-  (_data: unknown, ctx: ExecutionContext) => ctx.switchToHttp().getRequest().auth,
-);
+import { createParamDecorator, type ExecutionContext } from '@nestjs/common';
+import type { AuthenticatedRequest } from './auth.types';
+
+export const CurrentUser = createParamDecorator((_data: unknown, ctx: ExecutionContext) => {
+  const request = ctx.switchToHttp().getRequest<AuthenticatedRequest>();
+  return request.auth;
+});

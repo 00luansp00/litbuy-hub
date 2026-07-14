@@ -1,29 +1,38 @@
-/* eslint-disable */
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../database/prisma.service';
+import type { AccessTokenPayload, AuthRuntimeConfig, AuthenticatedRequest } from './auth.types';
+
 @Injectable()
 export class AccessTokenGuard implements CanActivate {
   constructor(
-    private jwt: JwtService,
-    private config: ConfigService,
-    private prisma: PrismaService,
+    private readonly jwt: JwtService,
+    private readonly config: ConfigService,
+    private readonly prisma: PrismaService,
   ) {}
-  async canActivate(ctx: ExecutionContext) {
-    const req = ctx.switchToHttp().getRequest();
-    const h = req.headers.authorization;
-    if (!h?.startsWith('Bearer '))
+
+  async canActivate(ctx: ExecutionContext): Promise<boolean> {
+    const req = ctx.switchToHttp().getRequest<AuthenticatedRequest>();
+    const header = req.headers.authorization;
+    if (!header?.startsWith('Bearer '))
       throw new UnauthorizedException({ code: 'ACCESS_TOKEN_REQUIRED' });
     try {
-      const p = await this.jwt.verifyAsync(h.slice(7), {
-        secret: this.config.getOrThrow<any>('auth').accessSecret,
+      const auth = this.config.getOrThrow<AuthRuntimeConfig>('auth');
+      const payload = await this.jwt.verifyAsync<AccessTokenPayload>(header.slice(7), {
+        secret: auth.accessSecret,
       });
-      if (p.type !== 'access' || !p.sub || !p.sid) throw new Error('bad');
-      const s = await this.prisma.session.findUnique({ where: { id: p.sid } });
-      if (!s || s.userId !== p.sub || s.revokedAt || s.expiresAt < new Date())
-        throw new Error('revoked');
-      req.auth = { userId: p.sub, sessionId: p.sid };
+      if (payload.type !== 'access' || !payload.sub || !payload.sid)
+        throw new Error('invalid payload');
+      const session = await this.prisma.session.findUnique({ where: { id: payload.sid } });
+      if (
+        !session ||
+        session.userId !== payload.sub ||
+        session.revokedAt ||
+        session.expiresAt < new Date()
+      )
+        throw new Error('inactive session');
+      req.auth = { userId: payload.sub, sessionId: payload.sid };
       return true;
     } catch {
       throw new UnauthorizedException({ code: 'INVALID_ACCESS_TOKEN' });
