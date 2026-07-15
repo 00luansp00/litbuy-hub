@@ -27,6 +27,11 @@ type ManagedEnvKey =
   | 'AUTH_COOKIE_SAME_SITE'
   | 'AUTH_COOKIE_DOMAIN'
   | 'AUTH_EMAIL_DELIVERY_MODE'
+  | 'AUTH_SMS_DELIVERY_MODE'
+  | 'AUTH_PHONE_VERIFICATION_TTL_MINUTES'
+  | 'AUTH_PHONE_RESEND_COOLDOWN_SECONDS'
+  | 'AUTH_EMAIL_CHANGE_TTL_MINUTES'
+  | 'AUTH_SENSITIVE_CHANGE_HOLD_HOURS'
   | 'CURRENT_TERMS_VERSION'
   | 'CURRENT_PRIVACY_VERSION';
 
@@ -59,6 +64,11 @@ const defaultTestEnv: Record<ManagedEnvKey, string> = {
   AUTH_COOKIE_SAME_SITE: 'lax',
   AUTH_COOKIE_DOMAIN: '',
   AUTH_EMAIL_DELIVERY_MODE: 'memory',
+  AUTH_SMS_DELIVERY_MODE: 'memory',
+  AUTH_PHONE_VERIFICATION_TTL_MINUTES: '10',
+  AUTH_PHONE_RESEND_COOLDOWN_SECONDS: '60',
+  AUTH_EMAIL_CHANGE_TTL_MINUTES: '30',
+  AUTH_SENSITIVE_CHANGE_HOLD_HOURS: '48',
   CURRENT_TERMS_VERSION: '2026-test',
   CURRENT_PRIVACY_VERSION: '2026-test',
 };
@@ -117,6 +127,23 @@ export function applyTestEnv(overrides: Partial<NodeJS.ProcessEnv> = {}): void {
   process.env.AUTH_COOKIE_SAME_SITE = resolveTestEnvValue('AUTH_COOKIE_SAME_SITE', overrides);
   process.env.AUTH_COOKIE_DOMAIN = resolveTestEnvValue('AUTH_COOKIE_DOMAIN', overrides);
   process.env.AUTH_EMAIL_DELIVERY_MODE = resolveTestEnvValue('AUTH_EMAIL_DELIVERY_MODE', overrides);
+  process.env.AUTH_SMS_DELIVERY_MODE = resolveTestEnvValue('AUTH_SMS_DELIVERY_MODE', overrides);
+  process.env.AUTH_PHONE_VERIFICATION_TTL_MINUTES = resolveTestEnvValue(
+    'AUTH_PHONE_VERIFICATION_TTL_MINUTES',
+    overrides,
+  );
+  process.env.AUTH_PHONE_RESEND_COOLDOWN_SECONDS = resolveTestEnvValue(
+    'AUTH_PHONE_RESEND_COOLDOWN_SECONDS',
+    overrides,
+  );
+  process.env.AUTH_EMAIL_CHANGE_TTL_MINUTES = resolveTestEnvValue(
+    'AUTH_EMAIL_CHANGE_TTL_MINUTES',
+    overrides,
+  );
+  process.env.AUTH_SENSITIVE_CHANGE_HOLD_HOURS = resolveTestEnvValue(
+    'AUTH_SENSITIVE_CHANGE_HOLD_HOURS',
+    overrides,
+  );
   process.env.CURRENT_TERMS_VERSION = resolveTestEnvValue('CURRENT_TERMS_VERSION', overrides);
   process.env.CURRENT_PRIVACY_VERSION = resolveTestEnvValue('CURRENT_PRIVACY_VERSION', overrides);
 }

@@ -20,6 +20,11 @@ export const authConfig = registerAs('auth', () => ({
   cookieSameSite: (process.env.AUTH_COOKIE_SAME_SITE ?? 'lax') as 'lax' | 'strict' | 'none',
   cookieDomain: process.env.AUTH_COOKIE_DOMAIN || undefined,
   emailDeliveryMode: process.env.AUTH_EMAIL_DELIVERY_MODE ?? 'memory',
+  smsDeliveryMode: process.env.AUTH_SMS_DELIVERY_MODE ?? 'disabled',
+  phoneVerificationTtlMinutes: Number(process.env.AUTH_PHONE_VERIFICATION_TTL_MINUTES ?? 10),
+  phoneResendCooldownSeconds: Number(process.env.AUTH_PHONE_RESEND_COOLDOWN_SECONDS ?? 60),
+  emailChangeTtlMinutes: Number(process.env.AUTH_EMAIL_CHANGE_TTL_MINUTES ?? 30),
+  sensitiveChangeHoldHours: Number(process.env.AUTH_SENSITIVE_CHANGE_HOLD_HOURS ?? 48),
   currentTermsVersion: process.env.CURRENT_TERMS_VERSION ?? '2026-07-14',
   currentPrivacyVersion: process.env.CURRENT_PRIVACY_VERSION ?? '2026-07-14',
 }));

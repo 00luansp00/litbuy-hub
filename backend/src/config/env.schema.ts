@@ -14,6 +14,7 @@ import {
 const nodeEnvironments = ['development', 'test', 'production'] as const;
 const sameSites = ['lax', 'strict', 'none'] as const;
 const emailModes = ['memory', 'console', 'disabled'] as const;
+const smsModes = ['memory', 'disabled'] as const;
 const logLevels = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const;
 
 export class EnvironmentVariables {
@@ -84,6 +85,23 @@ export class EnvironmentVariables {
   @IsIn(sameSites) AUTH_COOKIE_SAME_SITE!: (typeof sameSites)[number];
   @IsString() AUTH_COOKIE_DOMAIN!: string;
   @IsIn(emailModes) AUTH_EMAIL_DELIVERY_MODE!: (typeof emailModes)[number];
+  @IsIn(smsModes) AUTH_SMS_DELIVERY_MODE!: (typeof smsModes)[number];
+  @Transform(({ value }) => Number(value ?? 10))
+  @IsInt()
+  @Min(1)
+  AUTH_PHONE_VERIFICATION_TTL_MINUTES!: number;
+  @Transform(({ value }) => Number(value ?? 60))
+  @IsInt()
+  @Min(1)
+  AUTH_PHONE_RESEND_COOLDOWN_SECONDS!: number;
+  @Transform(({ value }) => Number(value ?? 30))
+  @IsInt()
+  @Min(1)
+  AUTH_EMAIL_CHANGE_TTL_MINUTES!: number;
+  @Transform(({ value }) => Number(value ?? 48))
+  @IsInt()
+  @Min(1)
+  AUTH_SENSITIVE_CHANGE_HOLD_HOURS!: number;
   @IsString() @IsNotEmpty() CURRENT_TERMS_VERSION!: string;
   @IsString() @IsNotEmpty() CURRENT_PRIVACY_VERSION!: string;
 }

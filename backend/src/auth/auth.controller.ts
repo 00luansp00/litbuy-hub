@@ -16,6 +16,10 @@ import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import {
   ChangePasswordDto,
+  EmailChangeConfirmDto,
+  EmailChangeRequestDto,
+  PhoneRequestDto,
+  PhoneVerifyDto,
   EmailDto,
   LoginDto,
   RegisterDto,
@@ -146,6 +150,102 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     return this.auth.revokeDevice(deviceId, user, req, res);
+  }
+
+  @Post('email/change/request')
+  @HttpCode(200)
+  @UseGuards(AccessTokenGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Solicita alteração segura de e-mail com confirmação dupla, TTL, maxAttempts e sem expor tokens',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Confirmações essenciais enviadas para e-mail atual e novo.',
+  })
+  @ApiResponse({
+    status: 503,
+    description: 'EMAIL_DELIVERY_UNAVAILABLE quando um e-mail essencial não é entregue.',
+  })
+  requestEmailChange(
+    @Body() dto: EmailChangeRequestDto,
+    @CurrentUser() user: { userId: string; sessionId: string; deviceId: string },
+    @Req() req: Request,
+  ) {
+    return this.auth.requestEmailChange(dto, user, req);
+  }
+
+  @Post('email/change/confirm')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Confirma um dos lados da alteração de e-mail; conclui apenas após dupla confirmação, revoga sessões e inicia hold',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'PENDING ou COMPLETED; respostas não expõem tokens, hashes ou peppers.',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Token inválido, expirado, consumido, EMAIL_UNAVAILABLE ou maxAttempts excedido.',
+  })
+  confirmEmailChange(
+    @Body() dto: EmailChangeConfirmDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return this.auth.confirmEmailChange(dto, req, res);
+  }
+
+  @Post('phone/request')
+  @HttpCode(200)
+  @UseGuards(AccessTokenGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Solicita verificação ou alteração de telefone por SMS com senha atual, cooldown e rate limit',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Retorna challengeId e expiresAt sem retornar código SMS.',
+  })
+  @ApiResponse({ status: 429, description: 'RATE_LIMITED ou PHONE_RESEND_COOLDOWN.' })
+  @ApiResponse({
+    status: 503,
+    description: 'SMS_DELIVERY_UNAVAILABLE quando SMS estiver desabilitado ou falhar.',
+  })
+  requestPhone(
+    @Body() dto: PhoneRequestDto,
+    @CurrentUser() user: { userId: string; sessionId: string; deviceId: string },
+    @Req() req: Request,
+  ) {
+    return this.auth.requestPhone(dto, user, req);
+  }
+
+  @Post('phone/verify')
+  @HttpCode(200)
+  @UseGuards(AccessTokenGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Confirma telefone por SMS, aplica maxAttempts, revoga sessões, limpa refresh/CSRF e inicia hold de segurança',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Telefone persistido em E.164; resposta sem telefone completo, código ou hash.',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Código inválido/expirado/bloqueado, target incompatível ou PHONE_UNAVAILABLE.',
+  })
+  verifyPhone(
+    @Body() dto: PhoneVerifyDto,
+    @CurrentUser() user: { userId: string; sessionId: string; deviceId: string },
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return this.auth.verifyPhone(dto, user, req, res);
   }
 
   @Post('refresh') @HttpCode(200) @ApiCookieAuth() refresh(
