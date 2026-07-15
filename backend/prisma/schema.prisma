@@ -31,6 +31,8 @@ enum VerificationPurpose {
   TWO_FACTOR_ENROLLMENT
   TWO_FACTOR_LOGIN
   TWO_FACTOR_DISABLE
+  TWO_FACTOR_STEP_UP
+  TWO_FACTOR_METHOD_CHANGE
 }
 
 enum TwoFactorMethod {
@@ -74,6 +76,23 @@ enum SecurityEventType {
   TWO_FACTOR_RECOVERY_CODE_USED
   TWO_FACTOR_DISABLE_REQUESTED
   TWO_FACTOR_DISABLED
+  STEP_UP_REQUESTED
+  STEP_UP_SUCCEEDED
+  STEP_UP_FAILED
+  STEP_UP_GRANT_CONSUMED
+  TWO_FACTOR_METHOD_CHANGE_REQUESTED
+  TWO_FACTOR_METHOD_CHANGED
+  TWO_FACTOR_RECOVERY_CODES_REGENERATED
+}
+
+enum StepUpScope {
+  TWO_FACTOR_METHOD_CHANGE
+  TWO_FACTOR_RECOVERY_REGENERATE
+}
+
+enum StepUpAssurance {
+  TWO_FACTOR
+  RECOVERY_CODE
 }
 
 enum SecurityEventOutcome {
@@ -109,6 +128,7 @@ model User {
   emailChangeRequests      EmailChangeRequest[]
   twoFactorSettings        TwoFactorSettings?
   twoFactorRecoveryCodes   TwoFactorRecoveryCode[]
+  stepUpGrants             StepUpGrant[]
 
   @@unique([phoneE164])
   @@index([email])
@@ -144,6 +164,7 @@ model Device {
   sessions               Session[]
   verificationChallenges VerificationChallenge[]
   securityEvents         SecurityEvent[]
+  stepUpGrants           StepUpGrant[]
 
   @@index([userId])
   @@index([tokenHash])
@@ -167,6 +188,7 @@ model Session {
   updatedAt            DateTime              @updatedAt
   securityEvents       SecurityEvent[]
   refreshTokens        SessionRefreshToken[]
+  stepUpGrants         StepUpGrant[]
 
   @@index([userId])
   @@index([deviceId])
@@ -278,4 +300,27 @@ model TwoFactorRecoveryCode {
   createdAt DateTime  @default(now())
 
   @@index([userId, usedAt])
+}
+
+model StepUpGrant {
+  id         String          @id @default(uuid()) @db.Uuid
+  userId     String          @db.Uuid
+  sessionId  String          @db.Uuid
+  deviceId   String          @db.Uuid
+  scope      StepUpScope
+  assurance  StepUpAssurance
+  tokenHash  String          @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime        @default(now())
+  user       User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  session    Session         @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  device     Device          @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([sessionId, scope])
+  @@index([deviceId])
+  @@index([tokenHash])
+  @@index([expiresAt, consumedAt, revokedAt])
 }

@@ -85,3 +85,32 @@ export class TwoFactorChallengeDto {
 export class TwoFactorDisableRequestDto {
   @ApiProperty() @IsString() currentPassword!: string;
 }
+
+export class StepUpRequestDto {
+  @ApiProperty({ enum: ['TWO_FACTOR_METHOD_CHANGE', 'TWO_FACTOR_RECOVERY_REGENERATE'] })
+  @IsIn(['TWO_FACTOR_METHOD_CHANGE', 'TWO_FACTOR_RECOVERY_REGENERATE'])
+  scope!: 'TWO_FACTOR_METHOD_CHANGE' | 'TWO_FACTOR_RECOVERY_REGENERATE';
+  @ApiProperty() @IsString() currentPassword!: string;
+}
+export class StepUpVerifyDto {
+  @ApiProperty() @IsUUID('4') challengeId!: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @Matches(/^[0-9]{6}$/) code?: string;
+  @ApiPropertyOptional({ example: 'ABCDE-12345-FGHIJ' })
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim().toUpperCase() : value,
+  )
+  @IsString()
+  @Matches(/^[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}$/)
+  recoveryCode?: string;
+}
+export class StepUpResendDto {
+  @ApiProperty() @IsUUID('4') challengeId!: string;
+}
+export class TwoFactorMethodChangeRequestDto {
+  @ApiProperty({ enum: ['EMAIL', 'SMS'] }) @IsIn(['EMAIL', 'SMS']) newMethod!: 'EMAIL' | 'SMS';
+}
+export class TwoFactorMethodChangeConfirmDto {
+  @ApiProperty() @IsUUID('4') challengeId!: string;
+  @ApiProperty() @IsString() @Matches(/^[0-9]{6}$/) code!: string;
+}

@@ -93,12 +93,13 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
     mailer.send = AuthMailer.prototype.send.bind(mailer);
     sms.send = MemoryAuthSmsPort.prototype.send.bind(sms);
     await prisma.securityEvent.deleteMany();
+    await prisma.stepUpGrant.deleteMany();
     await prisma.sessionRefreshToken.deleteMany();
-    await prisma.session.deleteMany();
     await prisma.verificationChallenge.deleteMany();
     await prisma.twoFactorRecoveryCode.deleteMany();
     await prisma.twoFactorSettings.deleteMany();
     await prisma.emailChangeRequest.deleteMany();
+    await prisma.session.deleteMany();
     await prisma.device.deleteMany();
     await prisma.passwordCredential.deleteMany();
     await prisma.user.deleteMany();
@@ -140,7 +141,11 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
     return { email, password, register, login, user };
   }
 
-  async function loginOnNewApprovedDevice(email: string, password: string) {
+  async function loginOnNewApprovedDevice(
+    email: string,
+    password: string,
+    options: { completeTwoFactor?: boolean } = {},
+  ) {
     const pending = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
       .send({ email, password })
@@ -154,12 +159,29 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
       .send({ token: approval })
       .expect(HttpStatus.OK);
     const cookies = pending.headers['set-cookie'] as unknown as string[];
-    const login = await request(app.getHttpServer())
+    const approvedLogin = request(app.getHttpServer())
       .post('/api/v1/auth/login')
       .set('Cookie', cookies)
-      .send({ email, password })
+      .send({ email, password });
+    if (!options.completeTwoFactor) {
+      const login = await approvedLogin.expect(HttpStatus.OK);
+      return { login, cookies };
+    }
+    const challenge = await approvedLogin.expect(HttpStatus.ACCEPTED);
+    expect(challenge.body).toMatchObject({
+      code: 'TWO_FACTOR_REQUIRED',
+      challengeId: expect.any(String),
+    });
+    expect(challenge.body.accessToken).toBeUndefined();
+    const code = [...mailer.sent]
+      .reverse()
+      .find((message) => message.purpose === 'TWO_FACTOR_CODE')!.token!;
+    const login = await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/login/verify')
+      .set('Cookie', cookies)
+      .send({ challengeId: challenge.body.challengeId, code })
       .expect(HttpStatus.OK);
-    return { login, cookies };
+    return { login, cookies, challenge };
   }
 
   async function activateEmailTwoFactor(
@@ -385,7 +407,9 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
     expect(
       [winner.status, loser.status].filter((status) => status >= 400 && status < 500),
     ).toHaveLength(1);
-    expect([winner.status, loser.status]).not.toContain(Number(HttpStatus.INTERNAL_SERVER_ERROR));
+    expect([winner.status, loser.status]).not.toContain(
+      Number(Number(HttpStatus.INTERNAL_SERVER_ERROR)),
+    );
     const recoveryCodes = (winner.status === Number(HttpStatus.OK) ? winner.body : loser.body)
       .recoveryCodes as string[];
     expect(recoveryCodes).toHaveLength(10);
@@ -446,7 +470,7 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
       [loginWinner.status, loginLoser.status].filter((status) => status >= 400 && status < 500),
     ).toHaveLength(1);
     expect([loginWinner.status, loginLoser.status]).not.toContain(
-      Number(HttpStatus.INTERNAL_SERVER_ERROR),
+      Number(Number(HttpStatus.INTERNAL_SERVER_ERROR)),
     );
     await expect(prisma.session.count({ where: { userId: account.user.id } })).resolves.toBe(
       beforeSessions + 1,
@@ -565,7 +589,7 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
         .send({ method: 'EMAIL', currentPassword: concurrent.password }),
     ]);
     const statuses = [requestA.status, requestB.status];
-    expect(statuses).not.toContain(Number(HttpStatus.INTERNAL_SERVER_ERROR));
+    expect(statuses).not.toContain(Number(Number(HttpStatus.INTERNAL_SERVER_ERROR)));
     expect(statuses.every((status) => [HttpStatus.OK, HttpStatus.CONFLICT].includes(status))).toBe(
       true,
     );
@@ -662,7 +686,7 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
         .send({ currentPassword: concurrent.password }),
     ]);
     const statuses = [requestA.status, requestB.status];
-    expect(statuses).not.toContain(Number(HttpStatus.INTERNAL_SERVER_ERROR));
+    expect(statuses).not.toContain(Number(Number(HttpStatus.INTERNAL_SERVER_ERROR)));
     expect(statuses.every((status) => [HttpStatus.OK, HttpStatus.CONFLICT].includes(status))).toBe(
       true,
     );
@@ -804,7 +828,7 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
       expect(statuses.filter((status) => status === Number(HttpStatus.UNAUTHORIZED))).toHaveLength(
         1,
       );
-      expect(statuses).not.toContain(HttpStatus.INTERNAL_SERVER_ERROR);
+      expect(statuses).not.toContain(Number(HttpStatus.INTERNAL_SERVER_ERROR));
 
       const okResponse = responses.find((response) => response.status === Number(HttpStatus.OK))!;
       await request(app.getHttpServer())
@@ -1381,7 +1405,7 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
     ]);
     const emailStatuses = [emailReqA.status, emailReqB.status];
     expect(emailStatuses).toContain(HttpStatus.OK);
-    expect(emailStatuses).not.toContain(HttpStatus.INTERNAL_SERVER_ERROR);
+    expect(emailStatuses).not.toContain(Number(HttpStatus.INTERNAL_SERVER_ERROR));
     for (const response of [emailReqA, emailReqB]) {
       if (response.status !== Number(HttpStatus.OK)) {
         expect([
@@ -1748,7 +1772,7 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
     expect(currentResult.status).toBe(Number(HttpStatus.OK));
     expect(newResult.status).toBe(Number(HttpStatus.OK));
     expect([currentResult.status, newResult.status]).not.toContain(
-      Number(HttpStatus.INTERNAL_SERVER_ERROR),
+      Number(Number(HttpStatus.INTERNAL_SERVER_ERROR)),
     );
     await expect(prisma.user.count({ where: { email: simultaneousNewEmail } })).resolves.toBe(1);
     await expect(prisma.user.count({ where: { id: simultaneousUser.user.id } })).resolves.toBe(1);
@@ -1804,6 +1828,194 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
       .post('/api/v1/auth/email/change/confirm')
       .send({ token: simultaneousTokens.newToken, newEmail: simultaneousNewEmail })
       .expect(HttpStatus.BAD_REQUEST);
+  });
+
+  it('handles concurrent step-up verify with one grant and one success', async () => {
+    const account = await registerVerifiedAndLogin(
+      'integration-step-up-verify-concurrent@example.com',
+    );
+    const auth = `Bearer ${account.login.body.accessToken}`;
+    await activateEmailTwoFactor(account.email, account.password, auth);
+    const stepUp = await request(app.getHttpServer())
+      .post('/api/v1/auth/step-up/request')
+      .set('Authorization', auth)
+      .send({ scope: 'TWO_FACTOR_METHOD_CHANGE', currentPassword: account.password })
+      .expect(HttpStatus.ACCEPTED);
+    const code = [...mailer.sent]
+      .reverse()
+      .find((message) => message.purpose === 'TWO_FACTOR_CODE')!.token!;
+    const [first, second] = await Promise.all([
+      request(app.getHttpServer())
+        .post('/api/v1/auth/step-up/verify')
+        .set('Authorization', auth)
+        .send({ challengeId: stepUp.body.challengeId, code }),
+      request(app.getHttpServer())
+        .post('/api/v1/auth/step-up/verify')
+        .set('Authorization', auth)
+        .send({ challengeId: stepUp.body.challengeId, code }),
+    ]);
+    const statuses = [first.status, second.status];
+    expect(statuses.filter((status) => status === Number(HttpStatus.OK))).toHaveLength(1);
+    expect(statuses.filter((status) => status >= 400 && status < 500)).toHaveLength(1);
+    expect(statuses).not.toContain(Number(HttpStatus.INTERNAL_SERVER_ERROR));
+    await expect(prisma.stepUpGrant.count({ where: { userId: account.user.id } })).resolves.toBe(1);
+    await expect(
+      prisma.securityEvent.count({
+        where: { userId: account.user.id, eventType: 'STEP_UP_SUCCEEDED' },
+      }),
+    ).resolves.toBe(1);
+    await expect(
+      prisma.verificationChallenge.count({
+        where: { id: stepUp.body.challengeId, consumedAt: { not: null } },
+      }),
+    ).resolves.toBe(1);
+  });
+
+  it('handles concurrent method change confirmation with one mutation and revocation set', async () => {
+    const account = await registerVerifiedAndLogin(
+      'integration-method-change-concurrent@example.com',
+    );
+    const auth = `Bearer ${account.login.body.accessToken}`;
+    const currentSessionId = sessionIdFromAccessToken(account.login.body.accessToken as string);
+    await activateEmailTwoFactor(account.email, account.password, auth);
+    const secondary = await loginOnNewApprovedDevice(account.email, account.password, {
+      completeTwoFactor: true,
+    });
+    const secondarySessionId = sessionIdFromAccessToken(secondary.login.body.accessToken as string);
+    expect(secondarySessionId).not.toBe(currentSessionId);
+    const [currentSessionBefore, secondarySessionBefore] = await Promise.all([
+      prisma.session.findUniqueOrThrow({ where: { id: currentSessionId } }),
+      prisma.session.findUniqueOrThrow({ where: { id: secondarySessionId } }),
+    ]);
+    expect(currentSessionBefore.revokedAt).toBeNull();
+    expect(secondarySessionBefore.revokedAt).toBeNull();
+    expect(secondarySessionBefore.deviceId).not.toBe(currentSessionBefore.deviceId);
+    await expect(
+      prisma.sessionRefreshToken.count({
+        where: { sessionId: secondarySessionId, revokedAt: null },
+      }),
+    ).resolves.toBe(1);
+    await expect(
+      prisma.session.count({ where: { userId: account.user.id, revokedAt: null } }),
+    ).resolves.toBe(2);
+    await prisma.user.update({
+      where: { id: account.user.id },
+      data: { phoneE164: '+5517999991234', phoneVerifiedAt: new Date() },
+    });
+    const stepUp = await request(app.getHttpServer())
+      .post('/api/v1/auth/step-up/request')
+      .set('Authorization', auth)
+      .send({ scope: 'TWO_FACTOR_METHOD_CHANGE', currentPassword: account.password })
+      .expect(HttpStatus.ACCEPTED);
+    const stepUpCode = [...mailer.sent]
+      .reverse()
+      .find((message) => message.purpose === 'TWO_FACTOR_CODE')!.token!;
+    const grant = await request(app.getHttpServer())
+      .post('/api/v1/auth/step-up/verify')
+      .set('Authorization', auth)
+      .send({ challengeId: stepUp.body.challengeId, code: stepUpCode })
+      .expect(HttpStatus.OK);
+    const methodChange = await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/method/change/request')
+      .set('Authorization', auth)
+      .set('X-Step-Up-Token', grant.body.stepUpToken)
+      .send({ newMethod: 'SMS' })
+      .expect(HttpStatus.OK);
+    const smsCode = [...sms.sent]
+      .reverse()
+      .find((message) => message.purpose === 'TWO_FACTOR_CODE')!.code!;
+    const [first, second] = await Promise.all([
+      request(app.getHttpServer())
+        .post('/api/v1/auth/2fa/method/change/confirm')
+        .set('Authorization', auth)
+        .set('X-Step-Up-Token', grant.body.stepUpToken)
+        .send({ challengeId: methodChange.body.challengeId, code: smsCode }),
+      request(app.getHttpServer())
+        .post('/api/v1/auth/2fa/method/change/confirm')
+        .set('Authorization', auth)
+        .set('X-Step-Up-Token', grant.body.stepUpToken)
+        .send({ challengeId: methodChange.body.challengeId, code: smsCode }),
+    ]);
+    const statuses = [first.status, second.status];
+    expect(statuses.filter((status) => status === Number(HttpStatus.OK))).toHaveLength(1);
+    expect(statuses.filter((status) => status >= 400 && status < 500)).toHaveLength(1);
+    expect(statuses).not.toContain(Number(HttpStatus.INTERNAL_SERVER_ERROR));
+    await expect(
+      prisma.twoFactorSettings.findUniqueOrThrow({ where: { userId: account.user.id } }),
+    ).resolves.toMatchObject({ method: 'SMS' });
+    await expect(
+      prisma.securityEvent.count({
+        where: { userId: account.user.id, eventType: 'TWO_FACTOR_METHOD_CHANGED' },
+      }),
+    ).resolves.toBe(1);
+    await expect(
+      prisma.session.findUniqueOrThrow({ where: { id: currentSessionId } }),
+    ).resolves.toMatchObject({ revokedAt: null });
+    await expect(
+      prisma.session.findUniqueOrThrow({ where: { id: secondarySessionId } }),
+    ).resolves.toMatchObject({ revokedAt: expect.any(Date) });
+    await expect(
+      prisma.sessionRefreshToken.count({ where: { sessionId: currentSessionId, revokedAt: null } }),
+    ).resolves.toBe(1);
+    await expect(
+      prisma.sessionRefreshToken.count({
+        where: { sessionId: secondarySessionId, revokedAt: { not: null } },
+      }),
+    ).resolves.toBe(1);
+    await expect(
+      prisma.securityEvent.count({
+        where: { userId: account.user.id, eventType: 'SESSION_REVOKED' },
+      }),
+    ).resolves.toBe(1);
+  });
+
+  it('handles concurrent recovery regeneration with one final active hash set', async () => {
+    const account = await registerVerifiedAndLogin('integration-recovery-concurrent@example.com');
+    const auth = `Bearer ${account.login.body.accessToken}`;
+    const oldCodes = await activateEmailTwoFactor(account.email, account.password, auth);
+    const stepUp = await request(app.getHttpServer())
+      .post('/api/v1/auth/step-up/request')
+      .set('Authorization', auth)
+      .send({ scope: 'TWO_FACTOR_RECOVERY_REGENERATE', currentPassword: account.password })
+      .expect(HttpStatus.ACCEPTED);
+    const code = [...mailer.sent]
+      .reverse()
+      .find((message) => message.purpose === 'TWO_FACTOR_CODE')!.token!;
+    const grant = await request(app.getHttpServer())
+      .post('/api/v1/auth/step-up/verify')
+      .set('Authorization', auth)
+      .send({ challengeId: stepUp.body.challengeId, code })
+      .expect(HttpStatus.OK);
+    const [first, second] = await Promise.all([
+      request(app.getHttpServer())
+        .post('/api/v1/auth/2fa/recovery/regenerate')
+        .set('Authorization', auth)
+        .set('X-Step-Up-Token', grant.body.stepUpToken),
+      request(app.getHttpServer())
+        .post('/api/v1/auth/2fa/recovery/regenerate')
+        .set('Authorization', auth)
+        .set('X-Step-Up-Token', grant.body.stepUpToken),
+    ]);
+    const statuses = [first.status, second.status];
+    expect(statuses.filter((status) => status === Number(HttpStatus.OK))).toHaveLength(1);
+    expect(statuses.filter((status) => status >= 400 && status < 500)).toHaveLength(1);
+    expect(statuses).not.toContain(Number(HttpStatus.INTERNAL_SERVER_ERROR));
+    const success = first.status === Number(HttpStatus.OK) ? first : second;
+    expect(success.body.recoveryCodes).toHaveLength(10);
+    await expect(
+      prisma.twoFactorRecoveryCode.count({ where: { userId: account.user.id, usedAt: null } }),
+    ).resolves.toBe(10);
+    await expect(
+      prisma.securityEvent.count({
+        where: { userId: account.user.id, eventType: 'TWO_FACTOR_RECOVERY_CODES_REGENERATED' },
+      }),
+    ).resolves.toBe(1);
+    const stored = await prisma.twoFactorRecoveryCode.findMany({
+      where: { userId: account.user.id },
+    });
+    for (const plaintext of [...oldCodes, ...success.body.recoveryCodes]) {
+      expect(stored.some((row) => row.codeHash === plaintext)).toBe(false);
+    }
   });
 
   it('compensates real delivery failures without reusable challenges or side effects', async () => {
@@ -1954,5 +2166,140 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
       }),
     ).resolves.toBe(0);
     mailer.send = originalMailSend;
+  });
+
+  it('executes real Sprint 2C2A step-up hardening and management coverage', async () => {
+    const account = await registerVerifiedAndLogin('integration-step-up-2c2a@example.com');
+    const auth = `Bearer ${account.login.body.accessToken}`;
+    const sessionId = sessionIdFromAccessToken(account.login.body.accessToken as string);
+    const recoveryCodes = await activateEmailTwoFactor(account.email, account.password, auth);
+
+    const methodStepUp = await request(app.getHttpServer())
+      .post('/api/v1/auth/step-up/request')
+      .set('Authorization', auth)
+      .send({ scope: 'TWO_FACTOR_METHOD_CHANGE', currentPassword: account.password })
+      .expect(HttpStatus.ACCEPTED);
+    const recoveryStepUp = await request(app.getHttpServer())
+      .post('/api/v1/auth/step-up/request')
+      .set('Authorization', auth)
+      .send({ scope: 'TWO_FACTOR_RECOVERY_REGENERATE', currentPassword: account.password })
+      .expect(HttpStatus.ACCEPTED);
+    expect(methodStepUp.body.challengeId).not.toBe(recoveryStepUp.body.challengeId);
+    await expect(
+      prisma.verificationChallenge.count({
+        where: { userId: account.user.id, purpose: 'TWO_FACTOR_STEP_UP', consumedAt: null },
+      }),
+    ).resolves.toBe(2);
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/step-up/verify')
+        .set('Authorization', auth)
+        .send({ challengeId: methodStepUp.body.challengeId, code: '000000' })
+        .expect(HttpStatus.BAD_REQUEST);
+    }
+    const locked = await prisma.verificationChallenge.findUniqueOrThrow({
+      where: { id: methodStepUp.body.challengeId },
+    });
+    expect(locked.attempts).toBe(5);
+    await expect(
+      prisma.securityEvent.count({
+        where: { userId: account.user.id, eventType: 'STEP_UP_FAILED' },
+      }),
+    ).resolves.toBeGreaterThanOrEqual(1);
+
+    const freshMethod = await request(app.getHttpServer())
+      .post('/api/v1/auth/step-up/request')
+      .set('Authorization', auth)
+      .send({ scope: 'TWO_FACTOR_METHOD_CHANGE', currentPassword: account.password })
+      .expect(HttpStatus.ACCEPTED);
+    const methodCode = [...mailer.sent]
+      .reverse()
+      .find((message) => message.purpose === 'TWO_FACTOR_CODE')!.token!;
+    const methodGrant = await request(app.getHttpServer())
+      .post('/api/v1/auth/step-up/verify')
+      .set('Authorization', auth)
+      .send({ challengeId: freshMethod.body.challengeId, code: methodCode })
+      .expect(HttpStatus.OK);
+    await expect(prisma.stepUpGrant.count({ where: { userId: account.user.id } })).resolves.toBe(1);
+    const storedGrant = await prisma.stepUpGrant.findFirstOrThrow({
+      where: { userId: account.user.id },
+    });
+    expect(storedGrant.tokenHash).not.toContain(methodGrant.body.stepUpToken);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/recovery/regenerate')
+      .set('Authorization', auth)
+      .set('X-Step-Up-Token', methodGrant.body.stepUpToken)
+      .expect(HttpStatus.BAD_REQUEST)
+      .expect(({ body }) => expect(body.code).toBe('STEP_UP_SCOPE_MISMATCH'));
+
+    await prisma.user.update({
+      where: { id: account.user.id },
+      data: { phoneE164: '+5517999991234', phoneVerifiedAt: new Date() },
+    });
+    const methodChange = await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/method/change/request')
+      .set('Authorization', auth)
+      .set('X-Step-Up-Token', methodGrant.body.stepUpToken)
+      .send({ newMethod: 'SMS' })
+      .expect(HttpStatus.OK);
+    const smsCode = [...sms.sent]
+      .reverse()
+      .find((message) => message.purpose === 'TWO_FACTOR_CODE')!.code!;
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/method/change/confirm')
+      .set('Authorization', auth)
+      .set('X-Step-Up-Token', methodGrant.body.stepUpToken)
+      .send({ challengeId: methodChange.body.challengeId, code: smsCode })
+      .expect(HttpStatus.OK);
+    await expect(
+      prisma.twoFactorSettings.findUniqueOrThrow({ where: { userId: account.user.id } }),
+    ).resolves.toMatchObject({ method: 'SMS' });
+    expect(
+      mailer.sent.some((message) => message.purpose === 'TWO_FACTOR_METHOD_CHANGED_NOTICE'),
+    ).toBe(true);
+    await expect(
+      prisma.session.findUniqueOrThrow({ where: { id: sessionId } }),
+    ).resolves.toMatchObject({
+      revokedAt: null,
+    });
+
+    const recoveryRequest = await request(app.getHttpServer())
+      .post('/api/v1/auth/step-up/request')
+      .set('Authorization', auth)
+      .send({ scope: 'TWO_FACTOR_RECOVERY_REGENERATE', currentPassword: account.password })
+      .expect(HttpStatus.ACCEPTED);
+    const recoveryCode = [...sms.sent]
+      .reverse()
+      .find((message) => message.purpose === 'TWO_FACTOR_CODE')!.code!;
+    const recoveryGrant = await request(app.getHttpServer())
+      .post('/api/v1/auth/step-up/verify')
+      .set('Authorization', auth)
+      .send({ challengeId: recoveryRequest.body.challengeId, code: recoveryCode })
+      .expect(HttpStatus.OK);
+    const regenerated = await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/recovery/regenerate')
+      .set('Authorization', auth)
+      .set('X-Step-Up-Token', recoveryGrant.body.stepUpToken)
+      .expect(HttpStatus.OK);
+    expect(regenerated.body.recoveryCodes).toHaveLength(10);
+    await expect(
+      prisma.twoFactorRecoveryCode.count({ where: { userId: account.user.id, usedAt: null } }),
+    ).resolves.toBe(10);
+    const serialized = JSON.stringify(
+      await prisma.twoFactorRecoveryCode.findMany({ where: { userId: account.user.id } }),
+    );
+    expect(serialized).not.toContain(regenerated.body.recoveryCodes[0]);
+    expect(serialized).not.toContain(recoveryCodes[0]);
+    expect(
+      mailer.sent.some(
+        (message) => message.purpose === 'TWO_FACTOR_RECOVERY_CODES_REGENERATED_NOTICE',
+      ),
+    ).toBe(true);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/recovery/regenerate')
+      .set('Authorization', auth)
+      .set('X-Step-Up-Token', recoveryGrant.body.stepUpToken)
+      .expect(HttpStatus.BAD_REQUEST);
   });
 });

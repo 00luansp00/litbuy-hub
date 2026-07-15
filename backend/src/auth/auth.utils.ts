@@ -119,3 +119,63 @@ export function generateRecoveryCode(): string {
 export function recoveryCodeHash(code: string, pepper: string): string {
   return hmacToken(`litbuy:2fa:recovery:${code.trim().toUpperCase()}`, pepper);
 }
+
+export type StepUpScopeValue = 'TWO_FACTOR_METHOD_CHANGE' | 'TWO_FACTOR_RECOVERY_REGENERATE';
+export type TwoFactorMethodValue = 'EMAIL' | 'SMS';
+
+export function stepUpTokenHash(raw: string, pepper: string): string {
+  return hmacToken(`litbuy:step-up:token:${raw}`, pepper);
+}
+
+export function stepUpScopeHash(scope: StepUpScopeValue, pepper: string): string {
+  return hmacToken(`litbuy:step-up:scope:${scope}`, pepper);
+}
+
+export function resolveStepUpScopeFromHash(
+  targetHashValue: string | null | undefined,
+  pepper: string,
+): StepUpScopeValue | null {
+  if (!targetHashValue) return null;
+  const scopes: StepUpScopeValue[] = ['TWO_FACTOR_METHOD_CHANGE', 'TWO_FACTOR_RECOVERY_REGENERATE'];
+  return scopes.find((scope) => safeEqual(targetHashValue, stepUpScopeHash(scope, pepper))) ?? null;
+}
+
+export function twoFactorMethodChangeTargetHash(
+  method: TwoFactorMethodValue,
+  pepper: string,
+): string {
+  return hmacToken(`litbuy:2fa-method-change:${method}`, pepper);
+}
+
+export function resolveTwoFactorMethodFromHash(
+  targetHashValue: string | null | undefined,
+  pepper: string,
+): TwoFactorMethodValue | null {
+  if (!targetHashValue) return null;
+  const methods: TwoFactorMethodValue[] = ['EMAIL', 'SMS'];
+  return (
+    methods.find((method) =>
+      safeEqual(targetHashValue, twoFactorMethodChangeTargetHash(method, pepper)),
+    ) ?? null
+  );
+}
+
+export function stepUpTtlExpiresAt(now: Date, ttlMinutes: number): Date {
+  return new Date(now.getTime() + ttlMinutes * 60_000);
+}
+
+export function stepUpChallengeLockKey(
+  sessionId: string,
+  deviceId: string,
+  scope: StepUpScopeValue,
+): string {
+  return `step-up-challenge:${sessionId}:${deviceId}:${scope}`;
+}
+
+export function sanitizeStepUpFailureMetadata(
+  scope: StepUpScopeValue | 'UNKNOWN' | null | undefined,
+  reason: string,
+  outcome: 'FAILURE' | 'BLOCKED',
+): { scope: string; reason: string; outcome: 'FAILURE' | 'BLOCKED' } {
+  return { scope: scope ?? 'UNKNOWN', reason, outcome };
+}
