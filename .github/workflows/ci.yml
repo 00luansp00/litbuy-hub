@@ -32,8 +32,14 @@ jobs:
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
 
+      - name: Lint frontend
+        run: bun run lint
+
+      - name: Test frontend
+        run: bun run test
+
       - name: Typecheck frontend
-        run: bunx tsc --noEmit
+        run: bun run typecheck
 
       - name: Build frontend
         run: bun run build

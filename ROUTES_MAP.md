@@ -100,3 +100,11 @@ Legenda:
 - 404 amigável servido pelo `notFoundComponent` do root.
 - SEO base: `buildSeoHead` em `src/components/seo/Seo.tsx`
   (limitações SPA documentadas em `ARCHITECTURE.md`).
+
+## Sprint 2C2B1 — rotas de autenticação reais
+
+- `/cadastro`: envia `RegisterDto` real (`email`, `password`, `birthDate`, aceites e versões de termos/privacidade, `deviceName` opcional) e redireciona para verificação sem autenticar automaticamente.
+- `/verificar-email`: processa token de URL, limpa a URL e permite reenvio genérico.
+- `/login`: trata sucesso 200, `DEVICE_APPROVAL_REQUIRED` e `TWO_FACTOR_REQUIRED` (202) sem autenticar antes do challenge.
+- `/verificacao-login`: aprova dispositivo por token, reenvia aprovação e conclui login 2FA por código ou recovery code.
+- `/recuperar-senha` e `/redefinir-senha`: chamam endpoints reais de password forgot/reset com mensagens seguras.

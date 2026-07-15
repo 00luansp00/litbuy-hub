@@ -54,3 +54,7 @@ renderização e mostra fallback dark premium.
 Todos os providers mockados devem ser **substituídos ou complementados**
 por chamadas reais ao backend. O frontend nunca deve ser fonte de
 verdade para dinheiro, permissão, KYC ou notificação de segurança.
+
+## Sprint 2C2B1 — AuthProvider real
+
+`src/providers/AuthProvider.tsx` não depende mais de `authMock`. Ele inicializa de forma segura no cliente, tenta `/auth/refresh`, carrega `/auth/me`, mantém access token em memória via `src/lib/api/client.ts` e expõe estados `initializing`, `anonymous`, `authenticated`, `emailVerificationRequired`, `deviceApprovalRequired` e `twoFactorRequired`. Papéis comprador/vendedor seguem apenas como contexto visual; `VITE_ENABLE_DEMO_ROLES=false` por padrão e não concede autorização real.

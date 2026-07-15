@@ -131,3 +131,11 @@ Ordem sugerida:
 - `HANDOFF_CHECKLIST.md`
 - `PRE_HANDOFF_AUDIT.md`
 - `ARCHITECTURE.md`, `PROJECT_RULES.md`, `MVP_STATUS.md`
+
+## Sprint 2C2B1 — autenticação central do frontend (2026-07-15, PR #9)
+
+- O frontend passa a chamar exclusivamente a API NestJS em `VITE_API_BASE_URL` para cadastro, verificação de e-mail, login, aprovação de dispositivo, login 2FA, recuperação/redefinição de senha, refresh, logout e `/auth/me`.
+- Access tokens ficam apenas em memória; refresh token, device cookie e CSRF cookie continuam sob controle do backend. O frontend lê somente `litbuy_csrf` e envia `X-CSRF-Token` em mutações.
+- Perfil, CPF, vendedor real, RBAC, gestão de sessões/dispositivos, alteração autenticada de senha e 2FA de gerenciamento permanecem para Sprint 2C2B2+.
+- Supabase não é arquitetura obrigatória para autenticação; a fonte de verdade é a API NestJS `/api/v1`.
+- Para desenvolvimento local: subir PostgreSQL e Redis do backend, `cd backend && bun install && bun run prisma:migrate:deploy && bun run dev`; em outro terminal, na raiz, `bun install && bun run dev`.

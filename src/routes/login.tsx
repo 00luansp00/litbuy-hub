@@ -6,21 +6,15 @@ import { AuthLayout } from "@/components/auth/AuthLayout";
 import { EmailInput } from "@/components/auth/EmailInput";
 import { PasswordInput } from "@/components/auth/PasswordInput";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/providers/AuthProvider";
-
-export const Route = createFileRoute("/login")({
-  component: LoginPage,
-});
-
+import { friendlyAuthError } from "@/services/auth";
+export const Route = createFileRoute("/login")({ component: LoginPage });
 function LoginPage() {
   const { login, loading } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [remember, setRemember] = useState(true);
-
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!email || !password) {
@@ -28,23 +22,30 @@ function LoginPage() {
       return;
     }
     try {
-      const u = await login(email, password);
-      toast.success(`Bem-vindo(a) de volta, ${u.name.split(" ")[0]}!`);
-      navigate({ to: "/" });
-    } catch {
-      toast.error("Não foi possível entrar. Tente novamente.");
+      const r = await login(email, password);
+      if (r.status === "authenticated") {
+        toast.success(`Bem-vindo(a), ${r.user.displayName}!`);
+        navigate({ to: "/" });
+      } else if (r.status === "deviceApprovalRequired") {
+        toast.info("Aprove este dispositivo pelo link enviado ao seu e-mail.");
+        navigate({ to: "/verificacao-login", search: { email, mode: "device" } as never });
+      } else if (r.status === "twoFactorRequired") {
+        toast.info("Informe seu código de verificação para concluir o login.");
+        navigate({ to: "/verificacao-login", search: { mode: "2fa" } as never });
+      }
+    } catch (err) {
+      toast.error(friendlyAuthError(err).message);
     }
   };
-
   return (
     <AuthLayout
       eyebrow="Acesso"
       title="Entrar na LIT Buy"
-      subtitle="Continue de onde parou — sua carteira, pedidos e favoritos esperam."
+      subtitle="Use sua conta real conectada à API LIT Buy."
       footer={
         <>
           Ainda não tem conta?{" "}
-          <Link to="/cadastro" className="font-medium text-foreground hover:text-primary transition-colors">
+          <Link to="/cadastro" className="font-medium text-foreground hover:text-primary">
             Criar conta
           </Link>
         </>
@@ -61,13 +62,12 @@ function LoginPage() {
             required
           />
         </div>
-
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <Label htmlFor="password">Senha</Label>
             <Link
               to="/recuperar-senha"
-              className="text-xs font-medium text-muted-foreground hover:text-primary transition-colors"
+              className="text-xs font-medium text-muted-foreground hover:text-primary"
             >
               Esqueceu sua senha?
             </Link>
@@ -80,33 +80,21 @@ function LoginPage() {
             required
           />
         </div>
-
-        <label className="flex items-center gap-2 text-sm text-muted-foreground select-none cursor-pointer">
-          <Checkbox
-            checked={remember}
-            onCheckedChange={(v) => setRemember(v === true)}
-            aria-label="Lembrar-me"
-          />
-          Lembrar-me neste dispositivo
-        </label>
-
         <Button type="submit" className="w-full" disabled={loading}>
           {loading ? (
-            <><Loader2 className="h-4 w-4 animate-spin" /> Entrando...</>
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" /> Entrando...
+            </>
           ) : (
-            <>Entrar <ArrowRight className="h-4 w-4" /></>
+            <>
+              Entrar <ArrowRight className="h-4 w-4" />
+            </>
           )}
         </Button>
-
-        <Button asChild type="button" variant="outline" className="w-full">
-          <Link to="/cadastro">Criar conta gratuita</Link>
-        </Button>
-
-        <p className="text-center text-xs text-muted-foreground">
-          Demo admin: <span className="font-mono text-foreground">admin@litbuy.com</span>
+        <p aria-live="polite" className="text-center text-xs text-muted-foreground">
+          O access token fica somente em memória; cookies seguros são controlados pela API.
         </p>
       </form>
-
     </AuthLayout>
   );
 }
