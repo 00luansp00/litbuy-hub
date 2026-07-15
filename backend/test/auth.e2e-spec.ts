@@ -368,6 +368,10 @@ class FakeRedis {
         await Promise.resolve();
         return 1;
       },
+      del: async (k: string) => {
+        await Promise.resolve();
+        return this.counts.delete(k) ? 1 : 0;
+      },
       set: async (k: string) => {
         await Promise.resolve();
         if (this.counts.has(`set:${k}`)) return null;
@@ -972,6 +976,47 @@ describe('Auth HTTP e2e flows', () => {
       'set-cookie'
     ] as unknown as string[];
     return login;
+  }
+
+  async function verifiedLoginWithUser(email: string) {
+    const login = await verifiedLogin(email);
+    const user = prisma.users.find((candidate) => candidate.email === email)!;
+    return { login, user, auth: `Bearer ${login.body.accessToken as string}` };
+  }
+
+  async function enableEmailTwoFactor(auth: string) {
+    const enrollment = await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/enroll/request')
+      .set('Authorization', auth)
+      .send({ method: 'EMAIL', currentPassword: base.password })
+      .expect(HttpStatus.OK);
+    const code = mailer.sent
+      .filter((message) => message.purpose === 'TWO_FACTOR_CODE')
+      .at(-1)!.token!;
+    const confirmed = await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/enroll/confirm')
+      .set('Authorization', auth)
+      .send({ challengeId: enrollment.body.challengeId, code })
+      .expect(HttpStatus.OK);
+    return confirmed.body.recoveryCodes as string[];
+  }
+
+  async function requestStepUpChallenge(auth: string, scope = 'TWO_FACTOR_METHOD_CHANGE') {
+    return request(app.getHttpServer())
+      .post('/api/v1/auth/step-up/request')
+      .set('Authorization', auth)
+      .send({ scope, currentPassword: base.password })
+      .expect(HttpStatus.ACCEPTED);
+  }
+
+  async function verifyStepUpChallenge(auth: string, challengeId: string, code?: string) {
+    const stepUpCode =
+      code ?? mailer.sent.filter((message) => message.purpose === 'TWO_FACTOR_CODE').at(-1)!.token!;
+    return request(app.getHttpServer())
+      .post('/api/v1/auth/step-up/verify')
+      .set('Authorization', auth)
+      .send({ challengeId, code: stepUpCode })
+      .expect(HttpStatus.OK);
   }
 
   it('executes Sprint 2B2 phone verification HTTP scenarios', async () => {
@@ -1619,12 +1664,8 @@ describe('Auth HTTP e2e flows', () => {
       .post('/api/v1/auth/step-up/resend')
       .set('Authorization', auth)
       .send({ challengeId: usableMethodStepUp.body.challengeId })
-      .expect((response) =>
-        expect([HttpStatus.BAD_REQUEST, HttpStatus.TOO_MANY_REQUESTS]).toContain(response.status),
-      )
-      .expect((response) =>
-        expect(['INVALID_OR_EXPIRED_STEP_UP_CODE', 'RATE_LIMITED']).toContain(response.body.code),
-      );
+      .expect(HttpStatus.BAD_REQUEST)
+      .expect((response) => expect(response.body.code).toBe('INVALID_OR_EXPIRED_STEP_UP_CODE'));
     const methodCode = mailer.sent
       .filter((message) => message.purpose === 'TWO_FACTOR_CODE')
       .at(-1)!.token!;
@@ -1709,6 +1750,315 @@ describe('Auth HTTP e2e flows', () => {
       .set('Authorization', auth)
       .send({ challengeId: freshRecoveryStepUp.body.challengeId, recoveryCode: oldRecoveryCode })
       .expect(HttpStatus.BAD_REQUEST);
+  });
+
+  describe('Sprint 2C2A split step-up coverage', () => {
+    it('step-up request keeps two scopes active and replaces only the same scope', async () => {
+      const { auth } = await verifiedLoginWithUser('step-up-request-split@example.com');
+      await enableEmailTwoFactor(auth);
+      const method = await requestStepUpChallenge(auth, 'TWO_FACTOR_METHOD_CHANGE');
+      const recovery = await requestStepUpChallenge(auth, 'TWO_FACTOR_RECOVERY_REGENERATE');
+      expect(method.body.challengeId).not.toBe(recovery.body.challengeId);
+      const active = prisma.challenges.filter(
+        (challenge) => challenge.purpose === 'TWO_FACTOR_STEP_UP' && !challenge.consumedAt,
+      );
+      expect(active).toHaveLength(2);
+      expect(new Set(active.map((challenge) => challenge.targetHash))).toHaveProperty('size', 2);
+      const replacement = await requestStepUpChallenge(auth, 'TWO_FACTOR_METHOD_CHANGE');
+      expect(replacement.body.challengeId).not.toBe(method.body.challengeId);
+      expect(
+        prisma.challenges.find((challenge) => challenge.id === method.body.challengeId),
+      ).toMatchObject({
+        consumedAt: expect.any(Date),
+      });
+      expect(
+        prisma.challenges.filter(
+          (challenge) => challenge.purpose === 'TWO_FACTOR_STEP_UP' && !challenge.consumedAt,
+        ),
+      ).toHaveLength(2);
+    });
+
+    it('step-up verify persists exact attempts and locks on the fifth failure', async () => {
+      const { auth } = await verifiedLoginWithUser('step-up-attempts-split@example.com');
+      const recoveryCodes = await enableEmailTwoFactor(auth);
+      const challenge = await requestStepUpChallenge(auth, 'TWO_FACTOR_METHOD_CHANGE');
+      const failedBefore = prisma.events.filter(
+        (event) => event.eventType === 'STEP_UP_FAILED',
+      ).length;
+      prisma.challenges.find((row) => row.id === challenge.body.challengeId)!.maxAttempts = 5;
+      for (let attempt = 1; attempt <= 5; attempt += 1) {
+        const response = await request(app.getHttpServer())
+          .post('/api/v1/auth/step-up/verify')
+          .set('Authorization', auth)
+          .send({ challengeId: challenge.body.challengeId, code: '000000' })
+          .expect(HttpStatus.BAD_REQUEST);
+        const persistedAttempts = Number(
+          prisma.challenges.find((row) => row.id === challenge.body.challengeId)?.attempts,
+        );
+        expect(persistedAttempts).toBe(attempt);
+        expect(response.body.code).toBe(
+          persistedAttempts === 5 ? 'STEP_UP_CHALLENGE_LOCKED' : 'INVALID_OR_EXPIRED_STEP_UP_CODE',
+        );
+      }
+      const correct = mailer.sent
+        .filter((message) => message.purpose === 'TWO_FACTOR_CODE')
+        .at(-1)!.token!;
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/step-up/verify')
+        .set('Authorization', auth)
+        .send({ challengeId: challenge.body.challengeId, code: correct })
+        .expect(HttpStatus.BAD_REQUEST)
+        .expect((response) => expect(response.body.code).toBe('STEP_UP_CHALLENGE_LOCKED'));
+      expect(prisma.stepUpGrantRows).toHaveLength(0);
+      expect(prisma.twoFactorRecoveryCodeRows.some((row) => row.usedAt)).toBe(false);
+      const failures = prisma.events
+        .filter((event) => event.eventType === 'STEP_UP_FAILED')
+        .slice(failedBefore);
+      expect(failures).toHaveLength(6);
+      expect(
+        failures.slice(0, 5).map((event) => (event.metadata as { reason: string }).reason),
+      ).toEqual(['INVALID_CODE', 'INVALID_CODE', 'INVALID_CODE', 'INVALID_CODE', 'LOCKED']);
+      expect(Object.keys(failures[0].metadata as Record<string, unknown>).sort()).toEqual([
+        'outcome',
+        'reason',
+        'scope',
+      ]);
+      expect(JSON.stringify(failures)).not.toMatch(
+        /000000|"code"|recoveryCode|stepUpToken|tokenHash|email|phone|pepper|cookie|SQL|constraint|Prisma/i,
+      );
+      expect(recoveryCodes).toHaveLength(10);
+    });
+
+    it('step-up resend is deterministic for replaced, rate-limited, expired, locked and delivery-failure challenges', async () => {
+      const { auth } = await verifiedLoginWithUser('step-up-resend-split@example.com');
+      await enableEmailTwoFactor(auth);
+      const original = await requestStepUpChallenge(auth);
+      const activeBefore = prisma.challenges.filter(
+        (challenge) => challenge.purpose === 'TWO_FACTOR_STEP_UP' && !challenge.consumedAt,
+      ).length;
+      const resent = await request(app.getHttpServer())
+        .post('/api/v1/auth/step-up/resend')
+        .set('Authorization', auth)
+        .send({ challengeId: original.body.challengeId })
+        .expect(HttpStatus.OK);
+      expect(
+        prisma.challenges.find((challenge) => challenge.id === original.body.challengeId),
+      ).toMatchObject({
+        consumedAt: expect.any(Date),
+      });
+      expect(
+        prisma.challenges.find((challenge) => challenge.id === resent.body.challengeId),
+      ).toMatchObject({
+        consumedAt: null,
+        targetHash: prisma.challenges.find(
+          (challenge) => challenge.id === original.body.challengeId,
+        )?.targetHash,
+      });
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/step-up/resend')
+        .set('Authorization', auth)
+        .send({ challengeId: original.body.challengeId })
+        .expect(HttpStatus.BAD_REQUEST)
+        .expect((response) => expect(response.body.code).toBe('INVALID_OR_EXPIRED_STEP_UP_CODE'));
+      expect(
+        prisma.challenges.filter(
+          (challenge) => challenge.purpose === 'TWO_FACTOR_STEP_UP' && !challenge.consumedAt,
+        ),
+      ).toHaveLength(activeBefore);
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/step-up/resend')
+        .set('Authorization', auth)
+        .send({ challengeId: resent.body.challengeId })
+        .expect(HttpStatus.TOO_MANY_REQUESTS)
+        .expect((response) => expect(response.body.code).toBe('RATE_LIMITED'));
+
+      const expired = await requestStepUpChallenge(auth, 'TWO_FACTOR_RECOVERY_REGENERATE');
+      Object.assign(
+        prisma.challenges.find((challenge) => challenge.id === expired.body.challengeId)!,
+        {
+          expiresAt: new Date(Date.now() - 1_000),
+        },
+      );
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/step-up/resend')
+        .set('Authorization', auth)
+        .send({ challengeId: expired.body.challengeId })
+        .expect(HttpStatus.BAD_REQUEST)
+        .expect((response) => expect(response.body.code).toBe('INVALID_OR_EXPIRED_STEP_UP_CODE'));
+
+      const locked = await requestStepUpChallenge(auth, 'TWO_FACTOR_RECOVERY_REGENERATE');
+      Object.assign(
+        prisma.challenges.find((challenge) => challenge.id === locked.body.challengeId)!,
+        {
+          attempts: 5,
+        },
+      );
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/step-up/resend')
+        .set('Authorization', auth)
+        .send({ challengeId: locked.body.challengeId })
+        .expect(HttpStatus.BAD_REQUEST)
+        .expect((response) => expect(response.body.code).toBe('INVALID_OR_EXPIRED_STEP_UP_CODE'));
+
+      const deliver = await requestStepUpChallenge(auth, 'TWO_FACTOR_RECOVERY_REGENERATE');
+      const originalSend = mailer.send.bind(mailer);
+      mailer.send = () => {
+        throw new Error('simulated step-up resend delivery failure');
+      };
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/step-up/resend')
+        .set('Authorization', auth)
+        .send({ challengeId: deliver.body.challengeId })
+        .expect(HttpStatus.SERVICE_UNAVAILABLE)
+        .expect((response) => expect(response.body.code).toBe('STEP_UP_DELIVERY_UNAVAILABLE'));
+      mailer.send = originalSend;
+      expect(
+        prisma.challenges.find((challenge) => challenge.id === deliver.body.challengeId)
+          ?.consumedAt,
+      ).toEqual(expect.any(Date));
+      expect(prisma.stepUpGrantRows).toHaveLength(0);
+    });
+
+    it('method change validates grant/challenge binding and exact attempts before success', async () => {
+      const { auth, user } = await verifiedLoginWithUser('method-change-binding-split@example.com');
+      user.phoneE164 = '+5517999991234';
+      user.phoneVerifiedAt = new Date();
+      await enableEmailTwoFactor(auth);
+      const grantAChallenge = await requestStepUpChallenge(auth);
+      const grantA = await verifyStepUpChallenge(auth, grantAChallenge.body.challengeId);
+      const grantBChallenge = await requestStepUpChallenge(auth, 'TWO_FACTOR_RECOVERY_REGENERATE');
+      const grantB = await verifyStepUpChallenge(auth, grantBChallenge.body.challengeId);
+      const methodChange = await request(app.getHttpServer())
+        .post('/api/v1/auth/2fa/method/change/request')
+        .set('Authorization', auth)
+        .set('X-Step-Up-Token', grantA.body.stepUpToken)
+        .send({ newMethod: 'SMS' })
+        .expect(HttpStatus.OK);
+      const beforeEvents = prisma.events.filter(
+        (event) => event.eventType === 'TWO_FACTOR_METHOD_CHANGED',
+      ).length;
+      const holdBeforeBindingFailure = prisma.users.find(
+        (candidate) => candidate.id === user.id,
+      )?.sensitiveActionHoldUntil;
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/2fa/method/change/confirm')
+        .set('Authorization', auth)
+        .set('X-Step-Up-Token', grantB.body.stepUpToken)
+        .send({ challengeId: methodChange.body.challengeId, code: sms.sent.at(-1)!.code })
+        .expect(HttpStatus.BAD_REQUEST)
+        .expect((response) => expect(response.body.code).toBe('TWO_FACTOR_METHOD_CHANGE_CONFLICT'));
+      expect(prisma.stepUpGrantRows.every((grant) => !grant.consumedAt)).toBe(true);
+      expect(
+        prisma.challenges.find((challenge) => challenge.id === methodChange.body.challengeId)
+          ?.consumedAt,
+      ).toBeNull();
+      expect(
+        prisma.twoFactorSettingsRows.find((settings) => settings.userId === user.id)?.method,
+      ).toBe('EMAIL');
+      expect(
+        prisma.users.find((candidate) => candidate.id === user.id)?.sensitiveActionHoldUntil,
+      ).toBe(holdBeforeBindingFailure);
+      expect(
+        prisma.events.filter((event) => event.eventType === 'TWO_FACTOR_METHOD_CHANGED'),
+      ).toHaveLength(beforeEvents);
+      prisma.challenges.find(
+        (challenge) => challenge.id === methodChange.body.challengeId,
+      )!.maxAttempts = 5;
+      for (let attempt = 1; attempt <= 5; attempt += 1) {
+        await request(app.getHttpServer())
+          .post('/api/v1/auth/2fa/method/change/confirm')
+          .set('Authorization', auth)
+          .set('X-Step-Up-Token', grantA.body.stepUpToken)
+          .send({ challengeId: methodChange.body.challengeId, code: '000000' })
+          .expect(HttpStatus.BAD_REQUEST);
+        expect(
+          prisma.challenges.find((challenge) => challenge.id === methodChange.body.challengeId)
+            ?.attempts,
+        ).toBe(attempt);
+      }
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/2fa/method/change/confirm')
+        .set('Authorization', auth)
+        .set('X-Step-Up-Token', grantA.body.stepUpToken)
+        .send({ challengeId: methodChange.body.challengeId, code: sms.sent.at(-1)!.code })
+        .expect(HttpStatus.BAD_REQUEST)
+        .expect((response) => expect(response.body.code).toBe('STEP_UP_CHALLENGE_LOCKED'));
+      expect(prisma.stepUpGrantRows.every((grant) => !grant.consumedAt)).toBe(true);
+      expect(
+        prisma.twoFactorSettingsRows.find((settings) => settings.userId === user.id)?.method,
+      ).toBe('EMAIL');
+    });
+
+    it('delivery and notification failures stay controlled and post-commit best-effort', async () => {
+      const { auth, user } = await verifiedLoginWithUser('delivery-notification-split@example.com');
+      user.phoneE164 = '+5517999991234';
+      user.phoneVerifiedAt = new Date();
+      await enableEmailTwoFactor(auth);
+      const holdAfterEnrollment = prisma.users.find(
+        (candidate) => candidate.id === user.id,
+      )?.sensitiveActionHoldUntil;
+      const originalMailSend = mailer.send.bind(mailer);
+      mailer.send = () => {
+        throw new Error('simulated step-up email failure');
+      };
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/step-up/request')
+        .set('Authorization', auth)
+        .send({ scope: 'TWO_FACTOR_METHOD_CHANGE', currentPassword: base.password })
+        .expect(HttpStatus.SERVICE_UNAVAILABLE)
+        .expect((response) => expect(response.body.code).toBe('STEP_UP_DELIVERY_UNAVAILABLE'));
+      expect(prisma.stepUpGrantRows).toHaveLength(0);
+      mailer.send = originalMailSend;
+
+      const grantChallenge = await requestStepUpChallenge(auth);
+      const grant = await verifyStepUpChallenge(auth, grantChallenge.body.challengeId);
+      const smsPort = sms as typeof sms & { send: (...args: unknown[]) => void };
+      const originalSmsSend = smsPort.send.bind(smsPort);
+      smsPort.send = () => {
+        throw new Error('simulated method change sms failure');
+      };
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/2fa/method/change/request')
+        .set('Authorization', auth)
+        .set('X-Step-Up-Token', grant.body.stepUpToken)
+        .send({ newMethod: 'SMS' })
+        .expect(HttpStatus.SERVICE_UNAVAILABLE)
+        .expect((response) => expect(response.body.code).toBe('STEP_UP_DELIVERY_UNAVAILABLE'));
+      smsPort.send = originalSmsSend;
+      expect(
+        prisma.twoFactorSettingsRows.find((settings) => settings.userId === user.id)?.method,
+      ).toBe('EMAIL');
+      expect(
+        prisma.users.find((candidate) => candidate.id === user.id)?.sensitiveActionHoldUntil,
+      ).toBe(holdAfterEnrollment);
+
+      const notificationGrantChallenge = await requestStepUpChallenge(auth);
+      const notificationGrant = await verifyStepUpChallenge(
+        auth,
+        notificationGrantChallenge.body.challengeId,
+      );
+      const methodChange = await request(app.getHttpServer())
+        .post('/api/v1/auth/2fa/method/change/request')
+        .set('Authorization', auth)
+        .set('X-Step-Up-Token', notificationGrant.body.stepUpToken)
+        .send({ newMethod: 'SMS' })
+        .expect(HttpStatus.OK);
+      mailer.send = (_to, purpose) => {
+        if (purpose === 'TWO_FACTOR_METHOD_CHANGED_NOTICE')
+          throw new Error('simulated notice failure');
+        originalMailSend(_to, purpose);
+      };
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/2fa/method/change/confirm')
+        .set('Authorization', auth)
+        .set('X-Step-Up-Token', notificationGrant.body.stepUpToken)
+        .send({ challengeId: methodChange.body.challengeId, code: sms.sent.at(-1)!.code })
+        .expect(HttpStatus.OK);
+      mailer.send = originalMailSend;
+      expect(
+        prisma.twoFactorSettingsRows.find((settings) => settings.userId === user.id)?.method,
+      ).toBe('SMS');
+    });
   });
 
   it('executes rate limiting and event assertions through HTTP', async () => {

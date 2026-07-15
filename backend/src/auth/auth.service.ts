@@ -382,8 +382,24 @@ export class AuthService {
     }
   }
 
+  private rateKey(parts: string[]): string {
+    return `rl:${parts.map((part) => this.opaquePart(part)).join(':')}`;
+  }
+
+  private async clearRate(parts: string[]): Promise<void> {
+    try {
+      const r = await this.redis.getClient();
+      const client = r as unknown as { del?: (key: string) => Promise<number> | number };
+      if (typeof client.del === 'function') await client.del(this.rateKey(parts));
+    } catch (error) {
+      this.logger.warn('Redis rate limit release failed', {
+        errorName: error instanceof Error ? error.name : 'UnknownError',
+      });
+    }
+  }
+
   private async rate(parts: string[], limit: number, ttl: number): Promise<void> {
-    const key = `rl:${parts.map((part) => this.opaquePart(part)).join(':')}`;
+    const key = this.rateKey(parts);
     try {
       const r = await this.redis.getClient();
       const n = await r.incr(key);
@@ -1710,6 +1726,7 @@ export class AuthService {
         where: { id: ch.challengeId, consumedAt: null },
         data: { consumedAt: new Date() },
       });
+      await this.clearRate(['step-up-request', req.ip ?? 'unknown', auth.userId, dto.scope]);
       throw new AppError(
         'STEP_UP_DELIVERY_UNAVAILABLE',
         'Entrega indisponível.',
@@ -1770,7 +1787,8 @@ export class AuthService {
         await this.persistStepUpFailedTx(tx, auth, scope, 'EXPIRED', 'FAILURE', req);
         return { status: 'EXPIRED', scope };
       }
-      if (ch.attempts >= ch.maxAttempts) {
+      const maxAttempts = Math.max(ch.maxAttempts, this.authConfig().stepUpMaxAttempts, 5);
+      if (ch.attempts >= maxAttempts) {
         await this.persistStepUpFailedTx(tx, auth, scope, 'LOCKED', 'BLOCKED', req);
         return { status: 'LOCKED', scope };
       }
@@ -1783,12 +1801,13 @@ export class AuthService {
           ch.tokenHash,
         );
         if (!ok) {
+          const previousAttempts = ch.attempts;
           const updated = await tx.verificationChallenge.updateMany({
-            where: { id: ch.id, consumedAt: null, attempts: { lt: ch.maxAttempts } },
+            where: { id: ch.id, consumedAt: null, attempts: { lt: maxAttempts } },
             data: { attempts: { increment: 1 } },
           });
-          const nextAttempts = ch.attempts + (updated.count === 1 ? 1 : 0);
-          const locked = nextAttempts >= ch.maxAttempts;
+          const nextAttempts = previousAttempts + (updated.count === 1 ? 1 : 0);
+          const locked = nextAttempts >= maxAttempts;
           await this.persistStepUpFailedTx(
             tx,
             auth,
@@ -1813,12 +1832,13 @@ export class AuthService {
           data: { usedAt: new Date() },
         });
         if (used.count !== 1) {
+          const previousAttempts = ch.attempts;
           const updated = await tx.verificationChallenge.updateMany({
-            where: { id: ch.id, consumedAt: null, attempts: { lt: ch.maxAttempts } },
+            where: { id: ch.id, consumedAt: null, attempts: { lt: maxAttempts } },
             data: { attempts: { increment: 1 } },
           });
-          const nextAttempts = ch.attempts + (updated.count === 1 ? 1 : 0);
-          const locked = nextAttempts >= ch.maxAttempts;
+          const nextAttempts = previousAttempts + (updated.count === 1 ? 1 : 0);
+          const locked = nextAttempts >= maxAttempts;
           await this.persistStepUpFailedTx(
             tx,
             auth,
@@ -1838,7 +1858,7 @@ export class AuthService {
           purpose: 'TWO_FACTOR_STEP_UP',
           consumedAt: null,
           expiresAt: { gt: new Date() },
-          attempts: { lt: ch.maxAttempts },
+          attempts: { lt: maxAttempts },
         },
         data: { consumedAt: new Date(), attempts: { increment: 1 } },
       });
@@ -1890,13 +1910,20 @@ export class AuthService {
       where: { id: dto.challengeId },
     });
     const scope = this.resolveStepUpScopeFromHash(oldProbe?.targetHash);
-    if (!oldProbe || oldProbe.purpose !== 'TWO_FACTOR_STEP_UP' || !scope)
+    if (
+      !oldProbe ||
+      oldProbe.purpose !== 'TWO_FACTOR_STEP_UP' ||
+      !scope ||
+      oldProbe.userId !== auth.userId ||
+      oldProbe.deviceId !== auth.deviceId ||
+      oldProbe.contextId !== auth.sessionId ||
+      oldProbe.consumedAt ||
+      oldProbe.expiresAt <= new Date() ||
+      oldProbe.attempts >= oldProbe.maxAttempts
+    )
       throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_STEP_UP_CODE' });
-    await this.rate(
-      ['step-up-resend', req.ip ?? 'unknown', auth.userId, scope],
-      1,
-      this.authConfig().stepUpResendCooldownSeconds,
-    );
+    const resendRateParts = ['step-up-resend', req.ip ?? 'unknown', auth.userId, scope];
+    await this.rate(resendRateParts, 1, this.authConfig().stepUpResendCooldownSeconds);
     const [user, settings] = await Promise.all([
       this.prisma.user.findUniqueOrThrow({ where: { id: auth.userId } }),
       this.prisma.twoFactorSettings.findUnique({ where: { userId: auth.userId } }),
@@ -1964,6 +1991,7 @@ export class AuthService {
         where: { id: created.challengeId, consumedAt: null },
         data: { consumedAt: new Date() },
       });
+      await this.clearRate(resendRateParts);
       throw new AppError(
         'STEP_UP_DELIVERY_UNAVAILABLE',
         'Entrega indisponível.',
@@ -2051,6 +2079,7 @@ export class AuthService {
           where: { id: result.challengeId, consumedAt: null },
           data: { consumedAt: new Date() },
         });
+        await this.clearRate(['2fa-method-change-cooldown', auth.userId]);
         throw new AppError(
           'STEP_UP_DELIVERY_UNAVAILABLE',
           'Entrega indisponível.',
@@ -2110,6 +2139,10 @@ export class AuthService {
         return { status: 'CONFLICT' };
       const newMethod = this.resolveTwoFactorMethodChangeHash(ch.targetHash);
       if (!newMethod) return { status: 'CONFLICT' };
+      if (settings.method === newMethod) return { status: 'CONFLICT' };
+      if (newMethod === 'EMAIL' && !user.emailVerifiedAt) return { status: 'CONFLICT' };
+      if (newMethod === 'SMS' && (!user.phoneE164 || !user.phoneVerifiedAt))
+        return { status: 'CONFLICT' };
       if (ch.attempts >= ch.maxAttempts) {
         await this.persistStepUpFailedTx(
           tx,
@@ -2126,11 +2159,12 @@ export class AuthService {
         ch.tokenHash,
       );
       if (!ok) {
+        const previousAttempts = ch.attempts;
         const updated = await tx.verificationChallenge.updateMany({
           where: { id: ch.id, consumedAt: null, attempts: { lt: ch.maxAttempts } },
           data: { attempts: { increment: 1 } },
         });
-        const locked = ch.attempts + (updated.count === 1 ? 1 : 0) >= ch.maxAttempts;
+        const locked = previousAttempts + (updated.count === 1 ? 1 : 0) >= ch.maxAttempts;
         await this.persistStepUpFailedTx(
           tx,
           auth,
@@ -2152,6 +2186,15 @@ export class AuthService {
         data: { consumedAt: new Date() },
       });
       if (grantConsumed.count !== 1) return { status: 'CONFLICT' };
+      await tx.stepUpGrant.updateMany({
+        where: {
+          userId: auth.userId,
+          id: { not: grant.id },
+          consumedAt: null,
+          revokedAt: null,
+        },
+        data: { revokedAt: new Date() },
+      });
       await this.persistCriticalSecurityEvent(
         {
           userId: auth.userId,
@@ -2246,7 +2289,22 @@ export class AuthService {
       const settings = await tx.twoFactorSettings.findUnique({ where: { userId: auth.userId } });
       if (!settings || settings.disabledAt)
         throw new BadRequestException({ code: 'STEP_UP_NOT_AVAILABLE' });
-      await this.consumeStepUpGrantTx(tx, token, 'TWO_FACTOR_RECOVERY_REGENERATE', auth, req);
+      const consumedGrant = await this.consumeStepUpGrantTx(
+        tx,
+        token,
+        'TWO_FACTOR_RECOVERY_REGENERATE',
+        auth,
+        req,
+      );
+      await tx.stepUpGrant.updateMany({
+        where: {
+          userId: auth.userId,
+          id: { not: consumedGrant.id },
+          consumedAt: null,
+          revokedAt: null,
+        },
+        data: { revokedAt: new Date() },
+      });
       await tx.twoFactorRecoveryCode.updateMany({
         where: { userId: auth.userId, usedAt: null },
         data: { usedAt: new Date() },
