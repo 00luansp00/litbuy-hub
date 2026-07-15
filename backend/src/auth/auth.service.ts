@@ -1234,7 +1234,7 @@ export class AuthService {
     if (!settings || settings.disabledAt)
       throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_2FA_CODE' });
     await this.rate(
-      ['2fa-login-resend', req.ip ?? 'unknown', dto.challengeId],
+      ['2fa-login-resend', req.ip ?? 'unknown', old.userId, old.deviceId],
       1,
       this.authConfig().twoFactorResendCooldownSeconds,
     );

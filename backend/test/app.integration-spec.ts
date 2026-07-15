@@ -18,13 +18,47 @@ function sessionIdFromAccessToken(accessToken: string): string {
   return payload.sid;
 }
 
+const SENSITIVE_RESPONSE_PROPERTY_NAMES = new Set([
+  'codeHash',
+  'tokenHash',
+  'targetHash',
+  'passwordHash',
+  'csrfTokenHash',
+  'refreshTokenHash',
+  'pepper',
+  'phoneE164',
+  'email',
+  'recoveryCode',
+  'recoveryCodes',
+  'token',
+  'code',
+]);
+
+function sensitiveResponsePropertyPaths(value: unknown, path = 'body'): string[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((entry, index) =>
+      sensitiveResponsePropertyPaths(entry, `${path}[${index}]`),
+    );
+  }
+  if (!value || typeof value !== 'object') return [];
+  return Object.entries(value as Record<string, unknown>).flatMap(([key, entry]) => {
+    const nextPath = `${path}.${key}`;
+    const current = SENSITIVE_RESPONSE_PROPERTY_NAMES.has(key) ? [nextPath] : [];
+    return current.concat(sensitiveResponsePropertyPaths(entry, nextPath));
+  });
+}
+
+async function redisKeys(redis: RedisService): Promise<string[]> {
+  const client = await redis.getClient();
+  return client.keys('*');
+}
+
 describe('App foundation with real PostgreSQL and Redis (integration)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
   let redis: RedisService;
   let mailer: AuthMailer;
   let sms: MemoryAuthSmsPort;
-  let redisIsolationProbeHit = false;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -148,6 +182,7 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
   });
 
   it('can hit a real Redis-backed registration rate limit inside one integration test', async () => {
+    await expect(redisKeys(redis)).resolves.toHaveLength(0);
     for (let i = 0; i < 10; i += 1) {
       await request(app.getHttpServer())
         .post('/api/v1/auth/register')
@@ -174,16 +209,21 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
         privacyVersion: process.env.CURRENT_PRIVACY_VERSION,
       })
       .expect(HttpStatus.TOO_MANY_REQUESTS)
-      .expect(({ body }) => expect(body.code).toBe('HTTP_ERROR'));
-    redisIsolationProbeHit = true;
+      .expect(({ body }) => {
+        expect(body.code).toBe('RATE_LIMITED');
+        expect(JSON.stringify(body)).not.toMatch(
+          /integration-redis-limit|redis|rate-limit|127\.0\.0\.1|::1|SELECT|INSERT|UPDATE|DELETE|Prisma|SQL/i,
+        );
+      });
+    await expect(redisKeys(redis)).resolves.not.toHaveLength(0);
   });
 
-  it('starts the next integration test with Redis state flushed by beforeEach', async () => {
-    expect(redisIsolationProbeHit).toBe(true);
+  it('starts each integration test with clean Redis state', async () => {
+    await expect(redisKeys(redis)).resolves.toHaveLength(0);
     await request(app.getHttpServer())
       .post('/api/v1/auth/register')
       .send({
-        email: 'integration-redis-isolation-after-limit@example.com',
+        email: 'integration-redis-isolation-clean@example.com',
         password: 'integration password 123',
         birthDate: '2000-01-01',
         termsAccepted: true,
@@ -192,6 +232,33 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
         privacyVersion: process.env.CURRENT_PRIVACY_VERSION,
       })
       .expect(HttpStatus.CREATED);
+    for (let i = 0; i < 9; i += 1) {
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/register')
+        .send({
+          email: `integration-redis-isolation-limit-${i}@example.com`,
+          password: 'integration password 123',
+          birthDate: '2000-01-01',
+          termsAccepted: true,
+          privacyAccepted: true,
+          termsVersion: process.env.CURRENT_TERMS_VERSION,
+          privacyVersion: process.env.CURRENT_PRIVACY_VERSION,
+        })
+        .expect(HttpStatus.CREATED);
+    }
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/register')
+      .send({
+        email: 'integration-redis-isolation-blocked@example.com',
+        password: 'integration password 123',
+        birthDate: '2000-01-01',
+        termsAccepted: true,
+        privacyAccepted: true,
+        termsVersion: process.env.CURRENT_TERMS_VERSION,
+        privacyVersion: process.env.CURRENT_PRIVACY_VERSION,
+      })
+      .expect(HttpStatus.TOO_MANY_REQUESTS)
+      .expect(({ body }) => expect(body.code).toBe('RATE_LIMITED'));
   });
 
   it('serves liveness without duplicating the API version prefix', async () => {
@@ -256,10 +323,9 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
       [winner.status, loser.status].filter((status) => status === Number(HttpStatus.OK)),
     ).toHaveLength(1);
     expect(
-      [winner.status, loser.status].every(
-        (status) => status !== Number(HttpStatus.INTERNAL_SERVER_ERROR),
-      ),
-    ).toBe(true);
+      [winner.status, loser.status].filter((status) => status >= 400 && status < 500),
+    ).toHaveLength(1);
+    expect([winner.status, loser.status]).not.toContain(Number(HttpStatus.INTERNAL_SERVER_ERROR));
     const recoveryCodes = (winner.status === Number(HttpStatus.OK) ? winner.body : loser.body)
       .recoveryCodes as string[];
     expect(recoveryCodes).toHaveLength(10);
@@ -273,10 +339,14 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
       .set('Authorization', auth)
       .expect(HttpStatus.OK)
       .expect(({ body }) => {
+        expect(Object.keys(body).sort()).toEqual(
+          ['enabled', 'enabledAt', 'method', 'recoveryCodesRemaining'].sort(),
+        );
         expect(body.enabled).toBe(true);
         expect(body.method).toBe('EMAIL');
+        expect(new Date(body.enabledAt).toString()).not.toBe('Invalid Date');
         expect(body.recoveryCodesRemaining).toBe(10);
-        expect(JSON.stringify(body)).not.toMatch(/hash|pepper|token|phone|email/i);
+        expect(sensitiveResponsePropertyPaths(body)).toEqual([]);
       });
     const beforeSessions = await prisma.session.count({ where: { userId: account.user.id } });
     const loginChallenge = await request(app.getHttpServer())
@@ -302,13 +372,20 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
         .send({ challengeId: loginChallenge.body.challengeId, recoveryCode: recoveryCodes[0] }),
     ]);
     expect(
-      [loginWinner.status, loginLoser.status].every(
-        (status) => status !== Number(HttpStatus.INTERNAL_SERVER_ERROR),
-      ),
-    ).toBe(true);
-    expect(
       [loginWinner.status, loginLoser.status].filter((status) => status === Number(HttpStatus.OK)),
     ).toHaveLength(1);
+    expect(
+      [loginWinner.status, loginLoser.status].filter((status) => status >= 400 && status < 500),
+    ).toHaveLength(1);
+    expect([loginWinner.status, loginLoser.status]).not.toContain(
+      Number(HttpStatus.INTERNAL_SERVER_ERROR),
+    );
+    await expect(prisma.session.count({ where: { userId: account.user.id } })).resolves.toBe(
+      beforeSessions + 1,
+    );
+    await expect(
+      prisma.sessionRefreshToken.count({ where: { session: { userId: account.user.id } } }),
+    ).resolves.toBe(1);
     const accessToken = (
       loginWinner.status === Number(HttpStatus.OK) ? loginWinner.body : loginLoser.body
     ).accessToken as string;
@@ -321,10 +398,8 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
       .post('/api/v1/auth/2fa/disable/request')
       .set('Authorization', `Bearer ${accessToken}`)
       .send({ currentPassword: account.password })
-      .expect((response) =>
-        expect([HttpStatus.OK, HttpStatus.UNAUTHORIZED]).toContain(response.status),
-      );
-    if (disable.status === Number(HttpStatus.OK)) {
+      .expect(HttpStatus.OK);
+    {
       const disableCode = mailer.sent
         .filter((message) => message.purpose === 'TWO_FACTOR_CODE')
         .at(-1)!.token!;
@@ -1409,7 +1484,14 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
         .post('/api/v1/auth/email/change/confirm')
         .send({ token: simultaneousTokens.newToken, newEmail: simultaneousNewEmail }),
     ]);
-    expect([currentResult.status, newResult.status].every((status) => status !== 500)).toBe(true);
+    expect(
+      [currentResult.status, newResult.status].filter((status) => status === Number(HttpStatus.OK)),
+    ).toHaveLength(1);
+    expect(
+      [currentResult.status, newResult.status].filter(
+        (status) => status === Number(HttpStatus.BAD_REQUEST),
+      ),
+    ).toHaveLength(1);
     await expect(prisma.user.count({ where: { email: simultaneousNewEmail } })).resolves.toBe(1);
     await expect(
       prisma.verificationChallenge.count({

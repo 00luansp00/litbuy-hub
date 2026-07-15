@@ -11,7 +11,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { AuthMailer } from '../src/auth/auth.service';
 import type { AuthRuntimeConfig } from '../src/auth/auth.types';
-import { randomToken } from '../src/auth/auth.utils';
+import { hashPassword, randomToken } from '../src/auth/auth.utils';
 
 type Row = Record<string, unknown>;
 const id = () => crypto.randomUUID();
@@ -23,6 +23,36 @@ function isoDateYearsAgo(years: number, dayOffset = 0): string {
     Date.UTC(today.getUTCFullYear() - years, today.getUTCMonth(), today.getUTCDate() + dayOffset),
   );
   return utc.toISOString().slice(0, 10);
+}
+
+const SENSITIVE_RESPONSE_PROPERTY_NAMES = new Set([
+  'codeHash',
+  'tokenHash',
+  'targetHash',
+  'passwordHash',
+  'csrfTokenHash',
+  'refreshTokenHash',
+  'pepper',
+  'phoneE164',
+  'email',
+  'recoveryCode',
+  'recoveryCodes',
+  'token',
+  'code',
+]);
+
+function sensitiveResponsePropertyPaths(value: unknown, path = 'body'): string[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((entry, index) =>
+      sensitiveResponsePropertyPaths(entry, `${path}[${index}]`),
+    );
+  }
+  if (!value || typeof value !== 'object') return [];
+  return Object.entries(value as Record<string, unknown>).flatMap(([key, entry]) => {
+    const nextPath = `${path}.${key}`;
+    const current = SENSITIVE_RESPONSE_PROPERTY_NAMES.has(key) ? [nextPath] : [];
+    return current.concat(sensitiveResponsePropertyPaths(entry, nextPath));
+  });
 }
 class Delegate<T extends Row> {
   constructor(private rows: T[]) {}
@@ -200,9 +230,10 @@ class FakePrisma {
         a.data,
       );
     },
-    findUniqueOrThrow: async (a: { where: Row }) => {
-      await Promise.resolve();
-      return this.users.find((u) => u.id === a.where.id)!;
+    findUniqueOrThrow: async (a: { where: Row; include?: Row }) => {
+      const user = await this.user.findUnique(a);
+      if (!user) throw new Error('not found');
+      return user;
     },
     findFirst: async (a: { where: Row }) => {
       await Promise.resolve();
@@ -704,7 +735,8 @@ describe('Auth HTTP e2e flows', () => {
     await request(app.getHttpServer())
       .post('/api/v1/auth/password/forgot')
       .send({ email: base.email })
-      .expect((r) => expect([400, 429]).toContain(r.status));
+      .expect(429)
+      .expect((r) => expect(r.body.code).toBe('RATE_LIMITED'));
 
     await request(app.getHttpServer())
       .post('/api/v1/auth/password/reset')
@@ -976,7 +1008,8 @@ describe('Auth HTTP e2e flows', () => {
       .post('/api/v1/auth/phone/request')
       .set('Authorization', auth)
       .send({ phone: '(17) 99999-1234', currentPassword: base.password })
-      .expect((r) => expect([400, 429]).toContain(r.status));
+      .expect(429)
+      .expect((r) => expect(r.body.code).toBe('PHONE_RESEND_COOLDOWN'));
     await request(app.getHttpServer())
       .post('/api/v1/auth/phone/verify')
       .set('Authorization', auth)
@@ -1165,13 +1198,16 @@ describe('Auth HTTP e2e flows', () => {
       .set('Authorization', auth)
       .expect(200)
       .expect((r) => {
+        expect(Object.keys(r.body).sort()).toEqual(
+          ['enabled', 'enabledAt', 'method', 'recoveryCodesRemaining'].sort(),
+        );
         expect(r.body).toEqual({
           enabled: false,
           method: null,
           enabledAt: null,
           recoveryCodesRemaining: 0,
         });
-        expect(JSON.stringify(r.body)).not.toMatch(/hash|pepper|token|phone|email/i);
+        expect(sensitiveResponsePropertyPaths(r.body)).toEqual([]);
       });
     await request(app.getHttpServer())
       .post('/api/v1/auth/2fa/enroll/request')
@@ -1193,11 +1229,7 @@ describe('Auth HTTP e2e flows', () => {
       .set('Authorization', auth)
       .send({ challengeId: enrollment.body.challengeId, code: '000000' })
       .expect(400);
-    expect([
-      'INVALID_OR_EXPIRED_2FA_CODE',
-      'TWO_FACTOR_CHALLENGE_LOCKED',
-      'VALIDATION_ERROR',
-    ]).toContain(bad.body.code);
+    expect(bad.body.code).toBe('INVALID_OR_EXPIRED_2FA_CODE');
     const code = mailer.sent.find((m) => m.purpose === 'TWO_FACTOR_CODE')!.token!;
     const confirmA = request(app.getHttpServer())
       .post('/api/v1/auth/2fa/enroll/confirm')
@@ -1209,7 +1241,10 @@ describe('Auth HTTP e2e flows', () => {
       .send({ challengeId: enrollment.body.challengeId, code });
     const confirmations = await Promise.all([confirmA, confirmB]);
     expect(confirmations.filter((r) => r.status === 200)).toHaveLength(1);
-    expect(confirmations.filter((r) => r.status !== 500)).toHaveLength(2);
+    expect(confirmations.filter((r) => r.status >= 400 && r.status < 500)).toHaveLength(1);
+    expect(confirmations.map((r) => r.status)).not.toContain(500);
+    expect(prisma.events.filter((e) => e.eventType === 'TWO_FACTOR_ENABLED')).toHaveLength(1);
+    expect(prisma.twoFactorSettingsRows.filter((row) => !row.disabledAt)).toHaveLength(1);
     const recoveryCodes = confirmations.find((r) => r.status === 200)!.body
       .recoveryCodes as string[];
     expect(recoveryCodes).toHaveLength(10);
@@ -1224,9 +1259,14 @@ describe('Auth HTTP e2e flows', () => {
       .set('Authorization', auth)
       .expect(200)
       .expect((r) => {
+        expect(Object.keys(r.body).sort()).toEqual(
+          ['enabled', 'enabledAt', 'method', 'recoveryCodesRemaining'].sort(),
+        );
         expect(r.body.enabled).toBe(true);
         expect(r.body.method).toBe('EMAIL');
+        expect(new Date(r.body.enabledAt).toString()).not.toBe('Invalid Date');
         expect(r.body.recoveryCodesRemaining).toBe(10);
+        expect(sensitiveResponsePropertyPaths(r.body)).toEqual([]);
       });
     const beforeSessions = prisma.sessions.length;
     const login2fa = await request(app.getHttpServer())
@@ -1245,29 +1285,44 @@ describe('Auth HTTP e2e flows', () => {
       .post('/api/v1/auth/2fa/login/verify')
       .set('Cookie', firstCookies)
       .send({ challengeId: login2fa.body.challengeId, recoveryCode: recoveryCodes[0] });
+    const beforeRefreshTokens = prisma.refreshTokens.length;
     const verified = await Promise.all([verifyA, verifyB]);
-    expect(verified.every((r) => r.status !== 500)).toBe(true);
-    expect(verified.some((r) => r.status === 200 || r.status === 400)).toBe(true);
+    expect(verified.filter((r) => r.status === 200)).toHaveLength(1);
+    expect(verified.filter((r) => r.status >= 400 && r.status < 500)).toHaveLength(1);
+    expect(verified.map((r) => r.status)).not.toContain(500);
+    expect(prisma.sessions).toHaveLength(beforeSessions + 1);
+    expect(prisma.refreshTokens).toHaveLength(beforeRefreshTokens + 1);
     const secondLogin = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
       .set('Cookie', firstCookies)
       .send({ email: 'two-factor-email@example.com', password: base.password })
       .expect(202);
-    await request(app.getHttpServer())
+    const recoveryLogin = await request(app.getHttpServer())
       .post('/api/v1/auth/2fa/login/verify')
       .set('Cookie', firstCookies)
       .send({ challengeId: secondLogin.body.challengeId, recoveryCode: recoveryCodes[1] })
-      .expect((r) => expect([200, 400]).toContain(r.status));
+      .expect(200);
     await request(app.getHttpServer())
       .post('/api/v1/auth/2fa/login/verify')
       .set('Cookie', firstCookies)
       .send({ challengeId: secondLogin.body.challengeId, recoveryCode: recoveryCodes[1] })
       .expect(400);
+    expect(recoveryLogin.body.accessToken).toEqual(expect.any(String));
+    const activeSession = prisma.sessions
+      .filter((session) => session.userId === prisma.users[0].id && !session.revokedAt)
+      .at(-1)!;
+    const disableAccessToken = await jwt.signAsync(
+      { sub: activeSession.userId, sid: activeSession.id, type: 'access' },
+      { secret: authSecret, expiresIn: '15m' },
+    );
+    prisma.credentials.find(
+      (credential) => credential.userId === activeSession.userId,
+    )!.passwordHash = await hashPassword(base.password);
     await request(app.getHttpServer())
       .post('/api/v1/auth/2fa/disable/request')
-      .set('Authorization', auth)
+      .set('Authorization', `Bearer ${disableAccessToken}`)
       .send({ currentPassword: base.password })
-      .expect((r) => expect([200, 401]).toContain(r.status));
+      .expect(200);
     expect(prisma.events.map((e) => e.eventType)).toEqual(
       expect.arrayContaining([
         'TWO_FACTOR_ENROLLMENT_REQUESTED',
@@ -1309,7 +1364,8 @@ describe('Auth HTTP e2e flows', () => {
       .post('/api/v1/auth/login')
       .set('Cookie', (login as request.Response & { deviceCookies: string[] }).deviceCookies)
       .send({ email: 'two-factor-sms@example.com', password: base.password })
-      .expect((r) => expect([503, 500]).toContain(r.status));
+      .expect(503)
+      .expect((r) => expect(r.body.code).toBe('TWO_FACTOR_DELIVERY_UNAVAILABLE'));
     expect(
       prisma.challenges.filter((c) => c.purpose === 'TWO_FACTOR_LOGIN' && !c.consumedAt),
     ).toHaveLength(0);
@@ -1320,16 +1376,17 @@ describe('Auth HTTP e2e flows', () => {
       .set('Cookie', (login as request.Response & { deviceCookies: string[] }).deviceCookies)
       .send({ email: 'two-factor-sms@example.com', password: base.password })
       .expect(202);
-    await request(app.getHttpServer())
+    const resent = await request(app.getHttpServer())
       .post('/api/v1/auth/2fa/login/resend')
       .set('Cookie', (login as request.Response & { deviceCookies: string[] }).deviceCookies)
       .send({ challengeId: login2fa.body.challengeId })
-      .expect((r) => expect([200, 400, 429]).toContain(r.status));
+      .expect(200);
     await request(app.getHttpServer())
       .post('/api/v1/auth/2fa/login/resend')
       .set('Cookie', (login as request.Response & { deviceCookies: string[] }).deviceCookies)
-      .send({ challengeId: login2fa.body.challengeId })
-      .expect((r) => expect([400, 429]).toContain(r.status));
+      .send({ challengeId: resent.body.challengeId })
+      .expect(429)
+      .expect((r) => expect(r.body.code).toBe('RATE_LIMITED'));
     await request(app.getHttpServer())
       .post('/api/v1/auth/2fa/login/verify')
       .set('Cookie', (login as request.Response & { deviceCookies: string[] }).deviceCookies)
@@ -1345,7 +1402,8 @@ describe('Auth HTTP e2e flows', () => {
     await request(app.getHttpServer())
       .post('/api/v1/auth/register')
       .send({ ...base, email: 'limited@example.com' })
-      .expect((r) => expect([400, 429]).toContain(r.status));
+      .expect(429)
+      .expect((r) => expect(r.body.code).toBe('RATE_LIMITED'));
     expect(
       prisma.events.every(
         (e) =>
