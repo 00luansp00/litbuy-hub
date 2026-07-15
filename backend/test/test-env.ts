@@ -16,6 +16,10 @@ type ManagedEnvKey =
   | 'AUTH_CSRF_TOKEN_PEPPER'
   | 'AUTH_IP_HASH_PEPPER'
   | 'AUTH_2FA_RECOVERY_PEPPER'
+  | 'AUTH_STEP_UP_TOKEN_PEPPER'
+  | 'AUTH_STEP_UP_GRANT_TTL_MINUTES'
+  | 'AUTH_STEP_UP_RESEND_COOLDOWN_SECONDS'
+  | 'AUTH_STEP_UP_MAX_ATTEMPTS'
   | 'AUTH_EMAIL_VERIFICATION_TTL_MINUTES'
   | 'AUTH_DEVICE_APPROVAL_TTL_MINUTES'
   | 'AUTH_PASSWORD_RESET_TTL_MINUTES'
@@ -58,6 +62,10 @@ const defaultTestEnv: Record<ManagedEnvKey, string> = {
   AUTH_CSRF_TOKEN_PEPPER: 'test_auth_csrf_token_pepper',
   AUTH_IP_HASH_PEPPER: 'test_auth_ip_hash_pepper',
   AUTH_2FA_RECOVERY_PEPPER: 'test_auth_2fa_recovery_pepper',
+  AUTH_STEP_UP_TOKEN_PEPPER: 'test_step_up_token_pepper',
+  AUTH_STEP_UP_GRANT_TTL_MINUTES: '10',
+  AUTH_STEP_UP_RESEND_COOLDOWN_SECONDS: '60',
+  AUTH_STEP_UP_MAX_ATTEMPTS: '5',
   AUTH_EMAIL_VERIFICATION_TTL_MINUTES: '30',
   AUTH_DEVICE_APPROVAL_TTL_MINUTES: '30',
   AUTH_PASSWORD_RESET_TTL_MINUTES: '30',
@@ -154,6 +162,36 @@ export function applyTestEnv(overrides: Partial<NodeJS.ProcessEnv> = {}): void {
     'AUTH_SENSITIVE_CHANGE_HOLD_HOURS',
     overrides,
   );
+  process.env.AUTH_2FA_RECOVERY_PEPPER = resolveTestEnvValue('AUTH_2FA_RECOVERY_PEPPER', overrides);
+  process.env.AUTH_2FA_CODE_TTL_MINUTES = resolveTestEnvValue(
+    'AUTH_2FA_CODE_TTL_MINUTES',
+    overrides,
+  );
+  process.env.AUTH_2FA_RESEND_COOLDOWN_SECONDS = resolveTestEnvValue(
+    'AUTH_2FA_RESEND_COOLDOWN_SECONDS',
+    overrides,
+  );
+  process.env.AUTH_2FA_MAX_ATTEMPTS = resolveTestEnvValue('AUTH_2FA_MAX_ATTEMPTS', overrides);
+  process.env.AUTH_2FA_RECOVERY_CODE_COUNT = resolveTestEnvValue(
+    'AUTH_2FA_RECOVERY_CODE_COUNT',
+    overrides,
+  );
+  process.env.AUTH_STEP_UP_TOKEN_PEPPER = resolveTestEnvValue(
+    'AUTH_STEP_UP_TOKEN_PEPPER',
+    overrides,
+  );
+  process.env.AUTH_STEP_UP_GRANT_TTL_MINUTES = resolveTestEnvValue(
+    'AUTH_STEP_UP_GRANT_TTL_MINUTES',
+    overrides,
+  );
+  process.env.AUTH_STEP_UP_RESEND_COOLDOWN_SECONDS = resolveTestEnvValue(
+    'AUTH_STEP_UP_RESEND_COOLDOWN_SECONDS',
+    overrides,
+  );
+  process.env.AUTH_STEP_UP_MAX_ATTEMPTS = resolveTestEnvValue(
+    'AUTH_STEP_UP_MAX_ATTEMPTS',
+    overrides,
+  );
   process.env.CURRENT_TERMS_VERSION = resolveTestEnvValue('CURRENT_TERMS_VERSION', overrides);
   process.env.CURRENT_PRIVACY_VERSION = resolveTestEnvValue('CURRENT_PRIVACY_VERSION', overrides);
 }
@@ -165,3 +203,8 @@ process.env.AUTH_2FA_CODE_TTL_MINUTES ||= '10';
 process.env.AUTH_2FA_RESEND_COOLDOWN_SECONDS ||= '60';
 process.env.AUTH_2FA_MAX_ATTEMPTS ||= '5';
 process.env.AUTH_2FA_RECOVERY_CODE_COUNT ||= '10';
+
+process.env.AUTH_STEP_UP_TOKEN_PEPPER ||= 'test-step-up-pepper';
+process.env.AUTH_STEP_UP_GRANT_TTL_MINUTES ||= '10';
+process.env.AUTH_STEP_UP_RESEND_COOLDOWN_SECONDS ||= '60';
+process.env.AUTH_STEP_UP_MAX_ATTEMPTS ||= '5';

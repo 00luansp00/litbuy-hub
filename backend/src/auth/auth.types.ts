@@ -32,6 +32,10 @@ export interface AuthRuntimeConfig {
   twoFactorMaxAttempts: number;
   twoFactorRecoveryCodeCount: number;
   twoFactorRecoveryPepper: string;
+  stepUpTokenPepper: string;
+  stepUpGrantTtlMinutes: number;
+  stepUpResendCooldownSeconds: number;
+  stepUpMaxAttempts: number;
   currentTermsVersion: string;
   currentPrivacyVersion: string;
 }

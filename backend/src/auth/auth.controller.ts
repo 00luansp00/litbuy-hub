@@ -11,7 +11,14 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiCookieAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiCookieAuth,
+  ApiHeader,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import {
@@ -30,6 +37,11 @@ import {
   TwoFactorDisableRequestDto,
   TwoFactorEnrollRequestDto,
   TwoFactorLoginVerifyDto,
+  StepUpRequestDto,
+  StepUpVerifyDto,
+  StepUpResendDto,
+  TwoFactorMethodChangeRequestDto,
+  TwoFactorMethodChangeConfirmDto,
 } from './dto';
 import { AccessTokenGuard } from './access-token.guard';
 import { CurrentUser } from './current-user.decorator';
@@ -251,6 +263,110 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     return this.auth.verifyPhone(dto, user, req, res);
+  }
+
+  @Post('step-up/request')
+  @HttpCode(202)
+  @UseGuards(AccessTokenGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Solicita step-up authentication para ações sensíveis de 2FA; retorna challenge 202 sem segredos.',
+  })
+  requestStepUp(
+    @Body() dto: StepUpRequestDto,
+    @CurrentUser() user: { userId: string; sessionId: string; deviceId: string },
+    @Req() req: Request,
+  ) {
+    return this.auth.requestStepUp(dto, user, req);
+  }
+
+  @Post('step-up/verify')
+  @HttpCode(200)
+  @UseGuards(AccessTokenGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Confirma step-up por código 2FA ou recovery code e emite token opaco de uso único.',
+  })
+  verifyStepUp(
+    @Body() dto: StepUpVerifyDto,
+    @CurrentUser() user: { userId: string; sessionId: string; deviceId: string },
+    @Req() req: Request,
+  ) {
+    return this.auth.verifyStepUp(dto, user, req);
+  }
+
+  @Post('step-up/resend')
+  @HttpCode(200)
+  @UseGuards(AccessTokenGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Reenvia challenge step-up preservando scope, sessão e dispositivo.' })
+  resendStepUp(
+    @Body() dto: StepUpResendDto,
+    @CurrentUser() user: { userId: string; sessionId: string; deviceId: string },
+    @Req() req: Request,
+  ) {
+    return this.auth.resendStepUp(dto, user, req);
+  }
+
+  @Post('2fa/method/change/request')
+  @HttpCode(200)
+  @UseGuards(AccessTokenGuard)
+  @ApiBearerAuth()
+  @ApiHeader({
+    name: 'X-Step-Up-Token',
+    description:
+      'Token opaco de step-up vinculado a TWO_FACTOR_METHOD_CHANGE; uso único na confirmação.',
+    required: true,
+  })
+  @ApiOperation({
+    summary: 'Solicita troca segura do método 2FA após step-up e envia código ao novo método.',
+  })
+  request2faMethodChange(
+    @Body() dto: TwoFactorMethodChangeRequestDto,
+    @CurrentUser() user: { userId: string; sessionId: string; deviceId: string },
+    @Req() req: Request,
+  ) {
+    return this.auth.requestTwoFactorMethodChange(dto, req.header('X-Step-Up-Token'), user, req);
+  }
+
+  @Post('2fa/method/change/confirm')
+  @HttpCode(200)
+  @UseGuards(AccessTokenGuard)
+  @ApiBearerAuth()
+  @ApiHeader({
+    name: 'X-Step-Up-Token',
+    description: 'Mesmo token X-Step-Up-Token usado na solicitação.',
+    required: true,
+  })
+  @ApiOperation({
+    summary: 'Confirma troca do método 2FA, consome o grant e revoga outras sessões.',
+  })
+  confirm2faMethodChange(
+    @Body() dto: TwoFactorMethodChangeConfirmDto,
+    @CurrentUser() user: { userId: string; sessionId: string; deviceId: string },
+    @Req() req: Request,
+  ) {
+    return this.auth.confirmTwoFactorMethodChange(dto, req.header('X-Step-Up-Token'), user, req);
+  }
+
+  @Post('2fa/recovery/regenerate')
+  @HttpCode(200)
+  @UseGuards(AccessTokenGuard)
+  @ApiBearerAuth()
+  @ApiHeader({
+    name: 'X-Step-Up-Token',
+    description: 'Token opaco de step-up vinculado a TWO_FACTOR_RECOVERY_REGENERATE.',
+    required: true,
+  })
+  @ApiOperation({
+    summary: 'Regenera exatamente 10 recovery codes; códigos são exibidos uma única vez.',
+  })
+  regenerateRecoveryCodes(
+    @CurrentUser() user: { userId: string; sessionId: string; deviceId: string },
+    @Req() req: Request,
+  ) {
+    return this.auth.regenerateRecoveryCodes(req.header('X-Step-Up-Token'), user, req);
   }
 
   @Post('2fa/enroll/request')

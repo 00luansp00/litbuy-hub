@@ -30,6 +30,10 @@ export const authConfig = registerAs('auth', () => ({
   twoFactorMaxAttempts: Number(process.env.AUTH_2FA_MAX_ATTEMPTS ?? 5),
   twoFactorRecoveryCodeCount: Number(process.env.AUTH_2FA_RECOVERY_CODE_COUNT ?? 10),
   twoFactorRecoveryPepper: process.env.AUTH_2FA_RECOVERY_PEPPER!,
+  stepUpTokenPepper: process.env.AUTH_STEP_UP_TOKEN_PEPPER!,
+  stepUpGrantTtlMinutes: Number(process.env.AUTH_STEP_UP_GRANT_TTL_MINUTES ?? 10),
+  stepUpResendCooldownSeconds: Number(process.env.AUTH_STEP_UP_RESEND_COOLDOWN_SECONDS ?? 60),
+  stepUpMaxAttempts: Number(process.env.AUTH_STEP_UP_MAX_ATTEMPTS ?? 5),
   currentTermsVersion: process.env.CURRENT_TERMS_VERSION ?? '2026-07-14',
   currentPrivacyVersion: process.env.CURRENT_PRIVACY_VERSION ?? '2026-07-14',
 }));

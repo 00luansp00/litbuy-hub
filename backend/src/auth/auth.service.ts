@@ -20,6 +20,8 @@ import type {
   SecurityEventType,
   User,
   TwoFactorMethod,
+  StepUpScope,
+  StepUpAssurance,
 } from '@prisma/client';
 import type { CookieOptions, Request, Response } from 'express';
 import { AppError } from '../common/errors/app-error';
@@ -48,6 +50,11 @@ import {
   TwoFactorDisableRequestDto,
   TwoFactorEnrollRequestDto,
   TwoFactorLoginVerifyDto,
+  StepUpRequestDto,
+  StepUpVerifyDto,
+  StepUpResendDto,
+  TwoFactorMethodChangeRequestDto,
+  TwoFactorMethodChangeConfirmDto,
 } from './dto';
 import {
   buildChallengeToken,
@@ -1467,6 +1474,593 @@ export class AuthService {
     }, '2fa-disable-confirm');
     this.clearAuth(res);
     return { message: '2FA desativado. Faça login novamente.' };
+  }
+
+  private stepUpTokenHash(raw: string): string {
+    return hmacToken(`step-up-token:${raw}`, this.authConfig().stepUpTokenPepper);
+  }
+
+  private stepUpScopeHash(scope: StepUpScope): string {
+    return hmacToken(`step-up-scope:${scope}`, this.authConfig().stepUpTokenPepper);
+  }
+
+  private async assertActiveAuthContextTx(
+    tx: Prisma.TransactionClient,
+    auth: { userId: string; sessionId: string; deviceId: string },
+  ) {
+    const [session, device] = await Promise.all([
+      tx.session.findFirst({
+        where: {
+          id: auth.sessionId,
+          userId: auth.userId,
+          deviceId: auth.deviceId,
+          revokedAt: null,
+        },
+      }),
+      tx.device.findFirst({
+        where: { id: auth.deviceId, userId: auth.userId, status: 'APPROVED', revokedAt: null },
+      }),
+    ]);
+    if (!session || !device) throw new ForbiddenException({ code: 'FORBIDDEN' });
+  }
+
+  private async findValidStepUpGrantTx(
+    tx: Prisma.TransactionClient,
+    rawToken: string,
+    scope: StepUpScope,
+    auth: { userId: string; sessionId: string; deviceId: string },
+  ) {
+    const grant = await tx.stepUpGrant.findUnique({
+      where: { tokenHash: this.stepUpTokenHash(rawToken) },
+    });
+    if (!grant) throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_STEP_UP_GRANT' });
+    if (grant.scope !== scope) throw new BadRequestException({ code: 'STEP_UP_SCOPE_MISMATCH' });
+    if (
+      grant.userId !== auth.userId ||
+      grant.sessionId !== auth.sessionId ||
+      grant.deviceId !== auth.deviceId ||
+      grant.expiresAt <= new Date() ||
+      grant.consumedAt ||
+      grant.revokedAt
+    ) {
+      throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_STEP_UP_GRANT' });
+    }
+    await this.assertActiveAuthContextTx(tx, auth);
+    return grant;
+  }
+
+  private async consumeStepUpGrantTx(
+    tx: Prisma.TransactionClient,
+    rawToken: string,
+    scope: StepUpScope,
+    auth: { userId: string; sessionId: string; deviceId: string },
+    req: Request,
+  ) {
+    const grant = await this.findValidStepUpGrantTx(tx, rawToken, scope, auth);
+    const consumed = await tx.stepUpGrant.updateMany({
+      where: {
+        id: grant.id,
+        tokenHash: grant.tokenHash,
+        userId: auth.userId,
+        sessionId: auth.sessionId,
+        deviceId: auth.deviceId,
+        scope,
+        consumedAt: null,
+        revokedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      data: { consumedAt: new Date() },
+    });
+    if (consumed.count !== 1)
+      throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_STEP_UP_GRANT' });
+    await this.persistCriticalSecurityEvent(
+      {
+        userId: auth.userId,
+        sessionId: auth.sessionId,
+        deviceId: auth.deviceId,
+        eventType: 'STEP_UP_GRANT_CONSUMED',
+        outcome: 'CRITICAL',
+        metadata: { scope },
+        req,
+      },
+      tx,
+    );
+    return grant;
+  }
+
+  async requestStepUp(
+    dto: StepUpRequestDto,
+    auth: { userId: string; sessionId: string; deviceId: string },
+    req: Request,
+  ) {
+    await this.rate(['step-up-request', req.ip ?? 'unknown', auth.userId, dto.scope], 5, 300);
+    const [user, session, settings] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: auth.userId },
+        include: { passwordCredential: true },
+      }),
+      this.prisma.session.findFirst({
+        where: {
+          id: auth.sessionId,
+          userId: auth.userId,
+          deviceId: auth.deviceId,
+          revokedAt: null,
+        },
+        include: { device: true },
+      }),
+      this.prisma.twoFactorSettings.findUnique({ where: { userId: auth.userId } }),
+    ]);
+    if (!user?.passwordCredential || !session || session.device.status !== 'APPROVED')
+      throw new ForbiddenException({ code: 'FORBIDDEN' });
+    if (!settings || settings.disabledAt)
+      throw new BadRequestException({ code: 'STEP_UP_NOT_AVAILABLE' });
+    if (!(await verifyPassword(user.passwordCredential.passwordHash, dto.currentPassword)))
+      throw new UnauthorizedException({ code: 'INVALID_CREDENTIALS' });
+    const ch = await this.prisma.$transaction(async (tx) => {
+      await this.advisoryTransactionLock(tx, `step-up-request:${auth.sessionId}:${dto.scope}`);
+      await tx.verificationChallenge.updateMany({
+        where: {
+          userId: auth.userId,
+          deviceId: auth.deviceId,
+          purpose: 'TWO_FACTOR_STEP_UP',
+          contextId: auth.sessionId,
+          targetHash: this.stepUpScopeHash(dto.scope),
+          consumedAt: null,
+        },
+        data: { consumedAt: new Date() },
+      });
+      const id = crypto.randomUUID();
+      const code = generateTwoFactorCode();
+      const expiresAt = new Date(Date.now() + this.authConfig().twoFactorCodeTtlMinutes * 60_000);
+      await tx.verificationChallenge.create({
+        data: {
+          id,
+          userId: auth.userId,
+          deviceId: auth.deviceId,
+          purpose: 'TWO_FACTOR_STEP_UP',
+          contextId: auth.sessionId,
+          targetHash: this.stepUpScopeHash(dto.scope),
+          tokenHash: twoFactorChallengeHash(id, code, this.authConfig().verificationPepper),
+          maxAttempts: this.authConfig().stepUpMaxAttempts,
+          expiresAt,
+        },
+      });
+      await this.persistCriticalSecurityEvent(
+        {
+          userId: auth.userId,
+          sessionId: auth.sessionId,
+          deviceId: auth.deviceId,
+          eventType: 'STEP_UP_REQUESTED',
+          outcome: 'PENDING',
+          metadata: { scope: dto.scope },
+          req,
+        },
+        tx,
+      );
+      return { challengeId: id, code, expiresAt };
+    });
+    try {
+      this.deliverTwoFactorCode(user, settings.method, ch.code);
+    } catch {
+      await this.prisma.verificationChallenge.updateMany({
+        where: { id: ch.challengeId },
+        data: { consumedAt: new Date() },
+      });
+      throw new AppError(
+        'STEP_UP_DELIVERY_UNAVAILABLE',
+        'Entrega indisponível.',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+    return {
+      challengeId: ch.challengeId,
+      scope: dto.scope,
+      method: settings.method,
+      expiresAt: ch.expiresAt,
+    };
+  }
+
+  async verifyStepUp(
+    dto: StepUpVerifyDto,
+    auth: { userId: string; sessionId: string; deviceId: string },
+    req: Request,
+  ) {
+    if (Boolean(dto.code) === Boolean(dto.recoveryCode))
+      throw new BadRequestException({ code: 'INVALID_2FA_INPUT' });
+    const rawToken = randomToken();
+    let scope: StepUpScope = 'TWO_FACTOR_METHOD_CHANGE';
+    let expiresAt = new Date();
+    await this.runSerializableTransactionWithRetry(async (tx) => {
+      await this.advisoryTransactionLock(tx, `step-up-verify:${dto.challengeId}`);
+      const ch = await tx.verificationChallenge.findUnique({ where: { id: dto.challengeId } });
+      if (
+        !ch ||
+        ch.purpose !== 'TWO_FACTOR_STEP_UP' ||
+        ch.userId !== auth.userId ||
+        ch.deviceId !== auth.deviceId ||
+        ch.contextId !== auth.sessionId ||
+        ch.consumedAt ||
+        ch.expiresAt <= new Date() ||
+        ch.attempts >= ch.maxAttempts
+      )
+        throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_STEP_UP_CODE' });
+      await this.assertActiveAuthContextTx(tx, auth);
+      const settings = await tx.twoFactorSettings.findUnique({ where: { userId: auth.userId } });
+      if (!settings || settings.disabledAt)
+        throw new BadRequestException({ code: 'STEP_UP_NOT_AVAILABLE' });
+      scope = safeEqual(ch.targetHash ?? '', this.stepUpScopeHash('TWO_FACTOR_RECOVERY_REGENERATE'))
+        ? 'TWO_FACTOR_RECOVERY_REGENERATE'
+        : 'TWO_FACTOR_METHOD_CHANGE';
+      let assurance: StepUpAssurance = 'TWO_FACTOR';
+      if (dto.code) {
+        if (
+          !safeEqual(
+            twoFactorChallengeHash(ch.id, dto.code, this.authConfig().verificationPepper),
+            ch.tokenHash,
+          )
+        ) {
+          const u = await tx.verificationChallenge.updateMany({
+            where: { id: ch.id, consumedAt: null, attempts: { lt: ch.maxAttempts } },
+            data: { attempts: { increment: 1 } },
+          });
+          throw new BadRequestException({
+            code: u.count === 1 ? 'INVALID_OR_EXPIRED_STEP_UP_CODE' : 'STEP_UP_CHALLENGE_LOCKED',
+          });
+        }
+      } else {
+        assurance = 'RECOVERY_CODE';
+        const used = await tx.twoFactorRecoveryCode.updateMany({
+          where: {
+            userId: auth.userId,
+            codeHash: recoveryCodeHash(
+              dto.recoveryCode!,
+              this.authConfig().twoFactorRecoveryPepper,
+            ),
+            usedAt: null,
+          },
+          data: { usedAt: new Date() },
+        });
+        if (used.count !== 1)
+          throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_STEP_UP_CODE' });
+      }
+      const consumed = await tx.verificationChallenge.updateMany({
+        where: {
+          id: ch.id,
+          consumedAt: null,
+          expiresAt: { gt: new Date() },
+          attempts: { lt: ch.maxAttempts },
+        },
+        data: { consumedAt: new Date(), attempts: { increment: 1 } },
+      });
+      if (consumed.count !== 1)
+        throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_STEP_UP_CODE' });
+      expiresAt = new Date(Date.now() + this.authConfig().stepUpGrantTtlMinutes * 60_000);
+      await tx.stepUpGrant.updateMany({
+        where: { sessionId: auth.sessionId, scope, consumedAt: null, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      await tx.stepUpGrant.create({
+        data: {
+          userId: auth.userId,
+          sessionId: auth.sessionId,
+          deviceId: auth.deviceId,
+          scope,
+          assurance,
+          tokenHash: this.stepUpTokenHash(rawToken),
+          expiresAt,
+        },
+      });
+      await this.persistCriticalSecurityEvent(
+        {
+          userId: auth.userId,
+          sessionId: auth.sessionId,
+          deviceId: auth.deviceId,
+          eventType: 'STEP_UP_SUCCEEDED',
+          outcome: 'SUCCESS',
+          metadata: { scope, assurance },
+          req,
+        },
+        tx,
+      );
+    }, 'step-up-verify');
+    return { stepUpToken: rawToken, scope, expiresAt };
+  }
+
+  async resendStepUp(
+    dto: StepUpResendDto,
+    auth: { userId: string; sessionId: string; deviceId: string },
+    req: Request,
+  ) {
+    const old = await this.prisma.verificationChallenge.findUnique({
+      where: { id: dto.challengeId },
+    });
+    if (
+      !old ||
+      old.purpose !== 'TWO_FACTOR_STEP_UP' ||
+      old.userId !== auth.userId ||
+      old.deviceId !== auth.deviceId ||
+      old.contextId !== auth.sessionId ||
+      !old.targetHash
+    )
+      throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_STEP_UP_CODE' });
+    const scope: StepUpScope = safeEqual(
+      old.targetHash,
+      this.stepUpScopeHash('TWO_FACTOR_RECOVERY_REGENERATE'),
+    )
+      ? 'TWO_FACTOR_RECOVERY_REGENERATE'
+      : 'TWO_FACTOR_METHOD_CHANGE';
+    await this.rate(
+      ['step-up-resend', req.ip ?? 'unknown', auth.userId, scope],
+      1,
+      this.authConfig().stepUpResendCooldownSeconds,
+    );
+    const [user, settings] = await Promise.all([
+      this.prisma.user.findUniqueOrThrow({ where: { id: auth.userId } }),
+      this.prisma.twoFactorSettings.findUnique({ where: { userId: auth.userId } }),
+    ]);
+    if (!settings || settings.disabledAt)
+      throw new BadRequestException({ code: 'STEP_UP_NOT_AVAILABLE' });
+    const ch = await this.prisma.$transaction(async (tx) => {
+      await this.advisoryTransactionLock(tx, `step-up-request:${auth.sessionId}:${scope}`);
+      await this.assertActiveAuthContextTx(tx, auth);
+      await tx.verificationChallenge.updateMany({
+        where: { id: old.id, consumedAt: null },
+        data: { consumedAt: new Date() },
+      });
+      const id = crypto.randomUUID();
+      const code = generateTwoFactorCode();
+      const expiresAt = new Date(Date.now() + this.authConfig().twoFactorCodeTtlMinutes * 60000);
+      await tx.verificationChallenge.create({
+        data: {
+          id,
+          userId: auth.userId,
+          deviceId: auth.deviceId,
+          purpose: 'TWO_FACTOR_STEP_UP',
+          contextId: auth.sessionId,
+          targetHash: this.stepUpScopeHash(scope),
+          tokenHash: twoFactorChallengeHash(id, code, this.authConfig().verificationPepper),
+          maxAttempts: this.authConfig().stepUpMaxAttempts,
+          expiresAt,
+        },
+      });
+      return { challengeId: id, code, expiresAt };
+    });
+    try {
+      this.deliverTwoFactorCode(user, settings.method, ch.code);
+    } catch {
+      await this.prisma.verificationChallenge.updateMany({
+        where: { id: ch.challengeId },
+        data: { consumedAt: new Date() },
+      });
+      throw new AppError(
+        'STEP_UP_DELIVERY_UNAVAILABLE',
+        'Entrega indisponível.',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+    return { challengeId: ch.challengeId, scope, method: settings.method, expiresAt: ch.expiresAt };
+  }
+
+  async requestTwoFactorMethodChange(
+    dto: TwoFactorMethodChangeRequestDto,
+    token: string | undefined,
+    auth: { userId: string; sessionId: string; deviceId: string },
+    req: Request,
+  ) {
+    if (!token) throw new BadRequestException({ code: 'STEP_UP_REQUIRED' });
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: auth.userId } });
+    const result = await this.prisma.$transaction(async (tx) => {
+      await this.findValidStepUpGrantTx(tx, token, 'TWO_FACTOR_METHOD_CHANGE', auth);
+      const settings = await tx.twoFactorSettings.findUnique({ where: { userId: auth.userId } });
+      if (!settings || settings.disabledAt)
+        throw new BadRequestException({ code: 'STEP_UP_NOT_AVAILABLE' });
+      if (settings.method === dto.newMethod)
+        throw new BadRequestException({ code: 'TWO_FACTOR_METHOD_ALREADY_ACTIVE' });
+      if (dto.newMethod === 'EMAIL' && !user.emailVerifiedAt)
+        throw new BadRequestException({ code: 'TWO_FACTOR_METHOD_UNAVAILABLE' });
+      if (dto.newMethod === 'SMS' && (!user.phoneE164 || !user.phoneVerifiedAt))
+        throw new BadRequestException({ code: 'TWO_FACTOR_METHOD_UNAVAILABLE' });
+      const grant = await tx.stepUpGrant.findUniqueOrThrow({
+        where: { tokenHash: this.stepUpTokenHash(token) },
+      });
+      await tx.verificationChallenge.updateMany({
+        where: { userId: auth.userId, purpose: 'TWO_FACTOR_METHOD_CHANGE', consumedAt: null },
+        data: { consumedAt: new Date() },
+      });
+      const id = crypto.randomUUID(),
+        code = generateTwoFactorCode(),
+        expiresAt = new Date(Date.now() + this.authConfig().twoFactorCodeTtlMinutes * 60000);
+      await tx.verificationChallenge.create({
+        data: {
+          id,
+          userId: auth.userId,
+          deviceId: auth.deviceId,
+          purpose: 'TWO_FACTOR_METHOD_CHANGE',
+          contextId: grant.id,
+          targetHash: dto.newMethod,
+          tokenHash: twoFactorChallengeHash(id, code, this.authConfig().verificationPepper),
+          maxAttempts: this.authConfig().twoFactorMaxAttempts,
+          expiresAt,
+        },
+      });
+      await this.persistCriticalSecurityEvent(
+        {
+          userId: auth.userId,
+          sessionId: auth.sessionId,
+          deviceId: auth.deviceId,
+          eventType: 'TWO_FACTOR_METHOD_CHANGE_REQUESTED',
+          outcome: 'PENDING',
+          metadata: { newMethod: dto.newMethod },
+          req,
+        },
+        tx,
+      );
+      return { challengeId: id, code, expiresAt };
+    });
+    try {
+      this.deliverTwoFactorCode(user, dto.newMethod, result.code);
+    } catch {
+      await this.prisma.verificationChallenge.updateMany({
+        where: { id: result.challengeId },
+        data: { consumedAt: new Date() },
+      });
+      throw new AppError(
+        'STEP_UP_DELIVERY_UNAVAILABLE',
+        'Entrega indisponível.',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+    return { challengeId: result.challengeId, expiresAt: result.expiresAt };
+  }
+
+  async confirmTwoFactorMethodChange(
+    dto: TwoFactorMethodChangeConfirmDto,
+    token: string | undefined,
+    auth: { userId: string; sessionId: string; deviceId: string },
+    req: Request,
+  ) {
+    if (!token) throw new BadRequestException({ code: 'STEP_UP_REQUIRED' });
+    await this.runSerializableTransactionWithRetry(async (tx) => {
+      await this.advisoryTransactionLock(tx, `2fa-method-change:${auth.userId}:${dto.challengeId}`);
+      const ch = await tx.verificationChallenge.findUnique({ where: { id: dto.challengeId } });
+      if (
+        !ch ||
+        ch.purpose !== 'TWO_FACTOR_METHOD_CHANGE' ||
+        ch.userId !== auth.userId ||
+        ch.deviceId !== auth.deviceId ||
+        ch.consumedAt ||
+        ch.expiresAt <= new Date()
+      )
+        throw new BadRequestException({ code: 'TWO_FACTOR_METHOD_CHANGE_CONFLICT' });
+      if (
+        !safeEqual(
+          twoFactorChallengeHash(ch.id, dto.code, this.authConfig().verificationPepper),
+          ch.tokenHash,
+        )
+      )
+        throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_STEP_UP_CODE' });
+      const newMethod = ch.targetHash === 'SMS' ? 'SMS' : 'EMAIL';
+      await this.consumeStepUpGrantTx(tx, token, 'TWO_FACTOR_METHOD_CHANGE', auth, req);
+      const consumed = await tx.verificationChallenge.updateMany({
+        where: { id: ch.id, consumedAt: null },
+        data: { consumedAt: new Date(), attempts: { increment: 1 } },
+      });
+      if (consumed.count !== 1)
+        throw new BadRequestException({ code: 'TWO_FACTOR_METHOD_CHANGE_CONFLICT' });
+      await tx.twoFactorSettings.update({
+        where: { userId: auth.userId },
+        data: { method: newMethod },
+      });
+      await tx.verificationChallenge.updateMany({
+        where: {
+          userId: auth.userId,
+          purpose: { in: ['TWO_FACTOR_LOGIN', 'TWO_FACTOR_STEP_UP', 'TWO_FACTOR_METHOD_CHANGE'] },
+          consumedAt: null,
+        },
+        data: { consumedAt: new Date() },
+      });
+      const sessions = await tx.session.findMany({
+        where: { userId: auth.userId, id: { not: auth.sessionId }, revokedAt: null },
+      });
+      await tx.session.updateMany({
+        where: { userId: auth.userId, id: { not: auth.sessionId }, revokedAt: null },
+        data: { revokedAt: new Date(), revocationReason: 'TWO_FACTOR_METHOD_CHANGED' },
+      });
+      await tx.sessionRefreshToken.updateMany({
+        where: { sessionId: { in: sessions.map((s) => s.id) }, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      await this.startSensitiveHold(tx, auth.userId, req);
+      await this.persistCriticalSecurityEvent(
+        {
+          userId: auth.userId,
+          sessionId: auth.sessionId,
+          deviceId: auth.deviceId,
+          eventType: 'TWO_FACTOR_METHOD_CHANGED',
+          outcome: 'CRITICAL',
+          metadata: { newMethod, revokedSessions: sessions.length },
+          req,
+        },
+        tx,
+      );
+      for (const s of sessions)
+        await this.persistCriticalSecurityEvent(
+          {
+            userId: auth.userId,
+            sessionId: s.id,
+            deviceId: s.deviceId,
+            eventType: 'SESSION_REVOKED',
+            outcome: 'CRITICAL',
+            metadata: { reason: 'TWO_FACTOR_METHOD_CHANGED' },
+            req,
+          },
+          tx,
+        );
+    }, '2fa-method-change-confirm');
+    return { methodChanged: true };
+  }
+
+  async regenerateRecoveryCodes(
+    token: string | undefined,
+    auth: { userId: string; sessionId: string; deviceId: string },
+    req: Request,
+  ) {
+    if (!token) throw new BadRequestException({ code: 'STEP_UP_REQUIRED' });
+    const codes = Array.from({ length: this.authConfig().twoFactorRecoveryCodeCount }, () =>
+      generateRecoveryCode(),
+    );
+    await this.runSerializableTransactionWithRetry(async (tx) => {
+      await this.advisoryTransactionLock(tx, `2fa-recovery-regenerate:${auth.userId}`);
+      await this.consumeStepUpGrantTx(tx, token, 'TWO_FACTOR_RECOVERY_REGENERATE', auth, req);
+      await tx.twoFactorRecoveryCode.updateMany({
+        where: { userId: auth.userId, usedAt: null },
+        data: { usedAt: new Date() },
+      });
+      await tx.twoFactorRecoveryCode.createMany({
+        data: codes.map((code) => ({
+          userId: auth.userId,
+          codeHash: recoveryCodeHash(code, this.authConfig().twoFactorRecoveryPepper),
+        })),
+      });
+      const sessions = await tx.session.findMany({
+        where: { userId: auth.userId, id: { not: auth.sessionId }, revokedAt: null },
+      });
+      await tx.session.updateMany({
+        where: { userId: auth.userId, id: { not: auth.sessionId }, revokedAt: null },
+        data: { revokedAt: new Date(), revocationReason: 'TWO_FACTOR_RECOVERY_REGENERATED' },
+      });
+      await tx.sessionRefreshToken.updateMany({
+        where: { sessionId: { in: sessions.map((s) => s.id) }, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      await this.startSensitiveHold(tx, auth.userId, req);
+      await this.persistCriticalSecurityEvent(
+        {
+          userId: auth.userId,
+          sessionId: auth.sessionId,
+          deviceId: auth.deviceId,
+          eventType: 'TWO_FACTOR_RECOVERY_CODES_REGENERATED',
+          outcome: 'CRITICAL',
+          metadata: { revokedSessions: sessions.length },
+          req,
+        },
+        tx,
+      );
+      for (const s of sessions)
+        await this.persistCriticalSecurityEvent(
+          {
+            userId: auth.userId,
+            sessionId: s.id,
+            deviceId: s.deviceId,
+            eventType: 'SESSION_REVOKED',
+            outcome: 'CRITICAL',
+            metadata: { reason: 'TWO_FACTOR_RECOVERY_REGENERATED' },
+            req,
+          },
+          tx,
+        );
+    }, '2fa-recovery-regenerate');
+    return { recoveryCodes: codes };
   }
 
   async approveDevice(dto: TokenDto, req: Request): Promise<{ message: string }> {
