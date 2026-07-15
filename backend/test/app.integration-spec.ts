@@ -62,6 +62,8 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
     await prisma.sessionRefreshToken.deleteMany();
     await prisma.session.deleteMany();
     await prisma.verificationChallenge.deleteMany();
+    await prisma.twoFactorRecoveryCode.deleteMany();
+    await prisma.twoFactorSettings.deleteMany();
     await prisma.emailChangeRequest.deleteMany();
     await prisma.device.deleteMany();
     await prisma.passwordCredential.deleteMany();
@@ -224,6 +226,122 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
         expect(serializedBody).not.toContain(process.env.DATABASE_URL);
         expect(serializedBody).not.toContain('litbuy_ci_integration_password');
       });
+  });
+
+  it('executes real Sprint 2C1 email 2FA enrollment, login challenge, recovery code and disable basics', async () => {
+    const account = await registerVerifiedAndLogin('integration-2fa-email@example.com');
+    const auth = `Bearer ${account.login.body.accessToken}`;
+    const deviceCookie = account.register.headers['set-cookie'] as unknown as string[];
+    const enrollment = await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/enroll/request')
+      .set('Authorization', auth)
+      .send({ method: 'EMAIL', currentPassword: account.password })
+      .expect(HttpStatus.OK);
+    expect(enrollment.body).toHaveProperty('challengeId');
+    expect(enrollment.body).not.toHaveProperty('code');
+    const enrollmentCode = mailer.sent
+      .filter((message) => message.purpose === 'TWO_FACTOR_CODE')
+      .at(-1)!.token!;
+    const [winner, loser] = await Promise.all([
+      request(app.getHttpServer())
+        .post('/api/v1/auth/2fa/enroll/confirm')
+        .set('Authorization', auth)
+        .send({ challengeId: enrollment.body.challengeId, code: enrollmentCode }),
+      request(app.getHttpServer())
+        .post('/api/v1/auth/2fa/enroll/confirm')
+        .set('Authorization', auth)
+        .send({ challengeId: enrollment.body.challengeId, code: enrollmentCode }),
+    ]);
+    expect(
+      [winner.status, loser.status].filter((status) => status === Number(HttpStatus.OK)),
+    ).toHaveLength(1);
+    expect(
+      [winner.status, loser.status].every(
+        (status) => status !== Number(HttpStatus.INTERNAL_SERVER_ERROR),
+      ),
+    ).toBe(true);
+    const recoveryCodes = (winner.status === Number(HttpStatus.OK) ? winner.body : loser.body)
+      .recoveryCodes as string[];
+    expect(recoveryCodes).toHaveLength(10);
+    const storedRecovery = await prisma.twoFactorRecoveryCode.findMany({
+      where: { userId: account.user.id },
+    });
+    expect(storedRecovery).toHaveLength(10);
+    expect(JSON.stringify(storedRecovery)).not.toContain(recoveryCodes[0]);
+    await request(app.getHttpServer())
+      .get('/api/v1/auth/2fa/status')
+      .set('Authorization', auth)
+      .expect(HttpStatus.OK)
+      .expect(({ body }) => {
+        expect(body.enabled).toBe(true);
+        expect(body.method).toBe('EMAIL');
+        expect(body.recoveryCodesRemaining).toBe(10);
+        expect(JSON.stringify(body)).not.toMatch(/hash|pepper|token|phone|email/i);
+      });
+    const beforeSessions = await prisma.session.count({ where: { userId: account.user.id } });
+    const loginChallenge = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', deviceCookie)
+      .send({ email: account.email, password: account.password })
+      .expect(HttpStatus.ACCEPTED);
+    expect(loginChallenge.body.code).toBe('TWO_FACTOR_REQUIRED');
+    await expect(prisma.session.count({ where: { userId: account.user.id } })).resolves.toBe(
+      beforeSessions,
+    );
+    const loginCode = mailer.sent
+      .filter((message) => message.purpose === 'TWO_FACTOR_CODE')
+      .at(-1)!.token!;
+    const [loginWinner, loginLoser] = await Promise.all([
+      request(app.getHttpServer())
+        .post('/api/v1/auth/2fa/login/verify')
+        .set('Cookie', deviceCookie)
+        .send({ challengeId: loginChallenge.body.challengeId, code: loginCode }),
+      request(app.getHttpServer())
+        .post('/api/v1/auth/2fa/login/verify')
+        .set('Cookie', deviceCookie)
+        .send({ challengeId: loginChallenge.body.challengeId, recoveryCode: recoveryCodes[0] }),
+    ]);
+    expect(
+      [loginWinner.status, loginLoser.status].every(
+        (status) => status !== Number(HttpStatus.INTERNAL_SERVER_ERROR),
+      ),
+    ).toBe(true);
+    expect(
+      [loginWinner.status, loginLoser.status].filter((status) => status === Number(HttpStatus.OK)),
+    ).toHaveLength(1);
+    const accessToken = (
+      loginWinner.status === Number(HttpStatus.OK) ? loginWinner.body : loginLoser.body
+    ).accessToken as string;
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/login/verify')
+      .set('Cookie', deviceCookie)
+      .send({ challengeId: loginChallenge.body.challengeId, recoveryCode: recoveryCodes[0] })
+      .expect(HttpStatus.BAD_REQUEST);
+    const disable = await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/disable/request')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ currentPassword: account.password })
+      .expect((response) =>
+        expect([HttpStatus.OK, HttpStatus.UNAUTHORIZED]).toContain(response.status),
+      );
+    if (disable.status === Number(HttpStatus.OK)) {
+      const disableCode = mailer.sent
+        .filter((message) => message.purpose === 'TWO_FACTOR_CODE')
+        .at(-1)!.token!;
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/2fa/disable/confirm')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ challengeId: disable.body.challengeId, code: disableCode })
+        .expect(HttpStatus.OK);
+    }
+    await expect(
+      prisma.securityEvent.count({
+        where: {
+          userId: account.user.id,
+          eventType: { in: ['TWO_FACTOR_ENABLED', 'TWO_FACTOR_LOGIN_REQUIRED'] },
+        },
+      }),
+    ).resolves.toBeGreaterThanOrEqual(2);
   });
 
   it('executes real auth registration, verification, login, refresh rotation, reuse detection and logout', async () => {

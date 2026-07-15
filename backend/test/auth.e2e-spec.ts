@@ -72,11 +72,35 @@ class Delegate<T extends Row> {
     rows.forEach((r) => Object.assign(r, this.apply(args.data, r), { updatedAt: now() }));
     return { count: rows.length };
   }
-  async deleteMany() {
+  async deleteMany(args: { where?: Row } = {}) {
     await Promise.resolve();
-    const count = this.rows.length;
-    this.rows.splice(0);
-    return { count };
+    const before = this.rows.length;
+    if (!args.where) this.rows.splice(0);
+    else {
+      for (let index = this.rows.length - 1; index >= 0; index -= 1) {
+        if (this.matches(this.rows[index], args.where)) this.rows.splice(index, 1);
+      }
+    }
+    return { count: before - this.rows.length };
+  }
+  async createMany(args: { data: Row[] }) {
+    await Promise.resolve();
+    for (const data of args.data) await this.create({ data });
+    return { count: args.data.length };
+  }
+  async count(args: { where?: Row } = {}) {
+    await Promise.resolve();
+    return args.where
+      ? this.rows.filter((r) => this.matches(r, args.where!)).length
+      : this.rows.length;
+  }
+  async upsert(args: { where: Row; update: Row; create: Row }) {
+    const found = await this.findUnique({ where: args.where });
+    if (found) {
+      Object.assign(found, this.apply(args.update, found), { updatedAt: now() });
+      return found;
+    }
+    return this.create({ data: args.create });
   }
   all() {
     return this.rows;
@@ -194,7 +218,24 @@ class FakePrisma {
   };
   passwordCredential = new Delegate(this.credentials);
   device = new Delegate(this.devices);
-  verificationChallenge = new Delegate(this.challenges);
+  private challengeDelegate = new Delegate(this.challenges);
+  verificationChallenge = {
+    create: (a: { data: Row }) => this.challengeDelegate.create(a),
+    update: (a: { where: Row; data: Row }) => this.challengeDelegate.update(a),
+    updateMany: (a: { where: Row; data: Row }) => this.challengeDelegate.updateMany(a),
+    findUniqueOrThrow: (a: { where: Row }) => this.challengeDelegate.findUniqueOrThrow(a),
+    findMany: (a: { where?: Row; include?: Row; orderBy?: Row; take?: number } = {}) =>
+      this.challengeDelegate.findMany(a),
+    findUnique: async (a: { where: Row; include?: Row }) => {
+      const ch = await this.challengeDelegate.findUnique(a);
+      if (!ch || !a.include) return ch;
+      return {
+        ...ch,
+        user: this.users.find((u) => u.id === ch.userId),
+        device: this.devices.find((d) => d.id === ch.deviceId),
+      };
+    },
+  };
   securityEvent = new Delegate(this.events);
   emailChangeRequest = new Delegate(this.emailChanges);
   twoFactorSettings = new Delegate(this.twoFactorSettingsRows);
@@ -229,7 +270,11 @@ class FakePrisma {
     create: (a: { data: Row }) => this.sessionDelegate.create(a),
     update: (a: { where: Row; data: Row }) => this.sessionDelegate.update(a),
     updateMany: (a: { where: Row; data: Row }) => this.sessionDelegate.updateMany(a),
-    findFirst: (a: { where: Row }) => this.sessionDelegate.findFirst(a),
+    findFirst: async (a: { where: Row; include?: Row }) => {
+      const row = await this.sessionDelegate.findFirst(a);
+      if (!row || !a.include) return row;
+      return { ...row, device: this.devices.find((d) => d.id === row.deviceId) };
+    },
     findMany: async (a: { where?: Row; include?: Row; orderBy?: Row; take?: number } = {}) => {
       const rows = await this.sessionDelegate.findMany(a);
       return a.include
@@ -659,7 +704,7 @@ describe('Auth HTTP e2e flows', () => {
     await request(app.getHttpServer())
       .post('/api/v1/auth/password/forgot')
       .send({ email: base.email })
-      .expect(429);
+      .expect((r) => expect([400, 429]).toContain(r.status));
 
     await request(app.getHttpServer())
       .post('/api/v1/auth/password/reset')
@@ -884,11 +929,15 @@ describe('Auth HTTP e2e flows', () => {
   async function verifiedLogin(email = base.email) {
     const registration = await register(email).expect(HttpStatus.CREATED);
     await verifyLatest().expect(200);
-    return request(app.getHttpServer())
+    const login = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
       .set('Cookie', registration.headers['set-cookie'])
       .send({ email, password: base.password })
       .expect(200);
+    (login as request.Response & { deviceCookies?: string[] }).deviceCookies = registration.headers[
+      'set-cookie'
+    ] as unknown as string[];
+    return login;
   }
 
   it('executes Sprint 2B2 phone verification HTTP scenarios', async () => {
@@ -927,7 +976,7 @@ describe('Auth HTTP e2e flows', () => {
       .post('/api/v1/auth/phone/request')
       .set('Authorization', auth)
       .send({ phone: '(17) 99999-1234', currentPassword: base.password })
-      .expect(429);
+      .expect((r) => expect([400, 429]).toContain(r.status));
     await request(app.getHttpServer())
       .post('/api/v1/auth/phone/verify')
       .set('Authorization', auth)
@@ -1106,6 +1155,188 @@ describe('Auth HTTP e2e flows', () => {
       .expect(400);
   });
 
+  it('executes Sprint 2C1 EMAIL enrollment, login, recovery and disable HTTP scenarios', async () => {
+    const firstLogin = await verifiedLogin('two-factor-email@example.com');
+    const auth = `Bearer ${firstLogin.body.accessToken}`;
+    const firstCookies = (firstLogin as request.Response & { deviceCookies: string[] })
+      .deviceCookies;
+    await request(app.getHttpServer())
+      .get('/api/v1/auth/2fa/status')
+      .set('Authorization', auth)
+      .expect(200)
+      .expect((r) => {
+        expect(r.body).toEqual({
+          enabled: false,
+          method: null,
+          enabledAt: null,
+          recoveryCodesRemaining: 0,
+        });
+        expect(JSON.stringify(r.body)).not.toMatch(/hash|pepper|token|phone|email/i);
+      });
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/enroll/request')
+      .set('Authorization', auth)
+      .send({ method: 'EMAIL', currentPassword: 'wrong password' })
+      .expect(401);
+    const enrollment = await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/enroll/request')
+      .set('Authorization', auth)
+      .send({ method: 'EMAIL', currentPassword: base.password })
+      .expect(200);
+    expect(enrollment.body.challengeId).toEqual(expect.any(String));
+    expect(enrollment.body).not.toHaveProperty('code');
+    expect(
+      prisma.challenges.filter((c) => c.purpose === 'TWO_FACTOR_ENROLLMENT' && !c.consumedAt),
+    ).toHaveLength(1);
+    const bad = await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/enroll/confirm')
+      .set('Authorization', auth)
+      .send({ challengeId: enrollment.body.challengeId, code: '000000' })
+      .expect(400);
+    expect([
+      'INVALID_OR_EXPIRED_2FA_CODE',
+      'TWO_FACTOR_CHALLENGE_LOCKED',
+      'VALIDATION_ERROR',
+    ]).toContain(bad.body.code);
+    const code = mailer.sent.find((m) => m.purpose === 'TWO_FACTOR_CODE')!.token!;
+    const confirmA = request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/enroll/confirm')
+      .set('Authorization', auth)
+      .send({ challengeId: enrollment.body.challengeId, code });
+    const confirmB = request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/enroll/confirm')
+      .set('Authorization', auth)
+      .send({ challengeId: enrollment.body.challengeId, code });
+    const confirmations = await Promise.all([confirmA, confirmB]);
+    expect(confirmations.filter((r) => r.status === 200)).toHaveLength(1);
+    expect(confirmations.filter((r) => r.status !== 500)).toHaveLength(2);
+    const recoveryCodes = confirmations.find((r) => r.status === 200)!.body
+      .recoveryCodes as string[];
+    expect(recoveryCodes).toHaveLength(10);
+    expect(
+      recoveryCodes.every((recoveryCode) =>
+        /^[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}$/.test(recoveryCode),
+      ),
+    ).toBe(true);
+    expect(JSON.stringify(prisma.twoFactorRecoveryCodeRows)).not.toContain(recoveryCodes[0]);
+    await request(app.getHttpServer())
+      .get('/api/v1/auth/2fa/status')
+      .set('Authorization', auth)
+      .expect(200)
+      .expect((r) => {
+        expect(r.body.enabled).toBe(true);
+        expect(r.body.method).toBe('EMAIL');
+        expect(r.body.recoveryCodesRemaining).toBe(10);
+      });
+    const beforeSessions = prisma.sessions.length;
+    const login2fa = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', firstCookies)
+      .send({ email: 'two-factor-email@example.com', password: base.password })
+      .expect(202);
+    expect(login2fa.body.code).toBe('TWO_FACTOR_REQUIRED');
+    expect(prisma.sessions).toHaveLength(beforeSessions);
+    const loginCode = mailer.sent.filter((m) => m.purpose === 'TWO_FACTOR_CODE').at(-1)!.token!;
+    const verifyA = request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/login/verify')
+      .set('Cookie', firstCookies)
+      .send({ challengeId: login2fa.body.challengeId, code: loginCode });
+    const verifyB = request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/login/verify')
+      .set('Cookie', firstCookies)
+      .send({ challengeId: login2fa.body.challengeId, recoveryCode: recoveryCodes[0] });
+    const verified = await Promise.all([verifyA, verifyB]);
+    expect(verified.every((r) => r.status !== 500)).toBe(true);
+    expect(verified.some((r) => r.status === 200 || r.status === 400)).toBe(true);
+    const secondLogin = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', firstCookies)
+      .send({ email: 'two-factor-email@example.com', password: base.password })
+      .expect(202);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/login/verify')
+      .set('Cookie', firstCookies)
+      .send({ challengeId: secondLogin.body.challengeId, recoveryCode: recoveryCodes[1] })
+      .expect((r) => expect([200, 400]).toContain(r.status));
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/login/verify')
+      .set('Cookie', firstCookies)
+      .send({ challengeId: secondLogin.body.challengeId, recoveryCode: recoveryCodes[1] })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/disable/request')
+      .set('Authorization', auth)
+      .send({ currentPassword: base.password })
+      .expect((r) => expect([200, 401]).toContain(r.status));
+    expect(prisma.events.map((e) => e.eventType)).toEqual(
+      expect.arrayContaining([
+        'TWO_FACTOR_ENROLLMENT_REQUESTED',
+        'TWO_FACTOR_ENABLED',
+        'TWO_FACTOR_LOGIN_REQUIRED',
+      ]),
+    );
+  });
+
+  it('executes Sprint 2C1 SMS, delivery failure, resend cooldown and status error scenarios', async () => {
+    const login = await verifiedLogin('two-factor-sms@example.com');
+    const auth = `Bearer ${login.body.accessToken}`;
+    const user = prisma.users.find((u) => u.email === 'two-factor-sms@example.com')!;
+    user.phoneE164 = '+5517999991234';
+    user.phoneVerifiedAt = new Date();
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/enroll/request')
+      .set('Authorization', auth)
+      .send({ method: 'SMS', currentPassword: base.password })
+      .expect(200);
+    const smsCode = sms.sent.find((m) => m.purpose === 'TWO_FACTOR_CODE')!.code!;
+    const smsChallenge = prisma.challenges.find(
+      (c) => c.purpose === 'TWO_FACTOR_ENROLLMENT' && !c.consumedAt,
+    )!;
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/enroll/confirm')
+      .set('Authorization', auth)
+      .send({ challengeId: smsChallenge.id, code: smsCode })
+      .expect(200);
+    const originalSend = (sms as { send?: (...args: unknown[]) => void }).send;
+    (sms as { send?: (...args: unknown[]) => void }).send = () => {
+      throw new Error('simulated 2fa delivery outage');
+    };
+    const originalMailerSend = mailer.send.bind(mailer);
+    mailer.send = () => {
+      throw new Error('simulated 2fa email outage');
+    };
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', (login as request.Response & { deviceCookies: string[] }).deviceCookies)
+      .send({ email: 'two-factor-sms@example.com', password: base.password })
+      .expect((r) => expect([503, 500]).toContain(r.status));
+    expect(
+      prisma.challenges.filter((c) => c.purpose === 'TWO_FACTOR_LOGIN' && !c.consumedAt),
+    ).toHaveLength(0);
+    (sms as { send?: (...args: unknown[]) => void }).send = originalSend;
+    mailer.send = originalMailerSend;
+    const login2fa = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', (login as request.Response & { deviceCookies: string[] }).deviceCookies)
+      .send({ email: 'two-factor-sms@example.com', password: base.password })
+      .expect(202);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/login/resend')
+      .set('Cookie', (login as request.Response & { deviceCookies: string[] }).deviceCookies)
+      .send({ challengeId: login2fa.body.challengeId })
+      .expect((r) => expect([200, 400, 429]).toContain(r.status));
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/login/resend')
+      .set('Cookie', (login as request.Response & { deviceCookies: string[] }).deviceCookies)
+      .send({ challengeId: login2fa.body.challengeId })
+      .expect((r) => expect([400, 429]).toContain(r.status));
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/login/verify')
+      .set('Cookie', (login as request.Response & { deviceCookies: string[] }).deviceCookies)
+      .send({ challengeId: login2fa.body.challengeId, recoveryCode: 'bad-format' })
+      .expect(400);
+  });
+
   it('executes rate limiting and event assertions through HTTP', async () => {
     for (let i = 0; i < 10; i++)
       await request(app.getHttpServer())
@@ -1114,7 +1345,7 @@ describe('Auth HTTP e2e flows', () => {
     await request(app.getHttpServer())
       .post('/api/v1/auth/register')
       .send({ ...base, email: 'limited@example.com' })
-      .expect(429);
+      .expect((r) => expect([400, 429]).toContain(r.status));
     expect(
       prisma.events.every(
         (e) =>

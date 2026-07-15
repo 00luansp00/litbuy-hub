@@ -69,7 +69,11 @@ export class TwoFactorCodeDto {
 export class TwoFactorLoginVerifyDto {
   @ApiProperty() @IsUUID('4') challengeId!: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @Matches(/^[0-9]{6}$/) code?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() recoveryCode?: string;
+  @ApiPropertyOptional({ example: 'ABCDE-12345-FGHIJ' })
+  @IsOptional()
+  @IsString()
+  @Matches(/^[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}$/)
+  recoveryCode?: string;
 }
 export class TwoFactorChallengeDto {
   @ApiProperty() @IsUUID('4') challengeId!: string;

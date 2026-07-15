@@ -57,7 +57,15 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
       return {
         statusCode,
-        code: statusCode === Number(HttpStatus.BAD_REQUEST) ? 'VALIDATION_ERROR' : 'HTTP_ERROR',
+        code:
+          typeof payload === 'object' &&
+          payload !== null &&
+          'code' in payload &&
+          typeof (payload as { code?: unknown }).code === 'string'
+            ? (payload as { code: string }).code
+            : statusCode === Number(HttpStatus.BAD_REQUEST)
+              ? 'VALIDATION_ERROR'
+              : 'HTTP_ERROR',
         message,
         details,
         requestId,

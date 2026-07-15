@@ -658,7 +658,22 @@ export class AuthService {
         data: { failedLoginAttempts: 0, lockedUntil: null },
       });
       const challenge = await this.createTwoFactorChallenge(user.id, device.id, 'TWO_FACTOR_LOGIN');
-      this.deliverTwoFactorCode(user, twoFactor.method, challenge.code);
+      try {
+        this.deliverTwoFactorCode(user, twoFactor.method, challenge.code);
+      } catch (error) {
+        await this.prisma.verificationChallenge.updateMany({
+          where: { id: challenge.challengeId, consumedAt: null },
+          data: { consumedAt: new Date() },
+        });
+        this.logger.warn('2FA login delivery failed', {
+          errorName: error instanceof Error ? error.name : 'UnknownError',
+        });
+        throw new AppError(
+          'TWO_FACTOR_DELIVERY_UNAVAILABLE',
+          'Entrega indisponível.',
+          HttpStatus.SERVICE_UNAVAILABLE,
+        );
+      }
       await this.persistBestEffortSecurityEvent({
         userId: user.id,
         deviceId: device.id,
@@ -690,6 +705,48 @@ export class AuthService {
     return this.createSession(user, device, res, req);
   }
 
+  private async createSessionTx(
+    tx: Prisma.TransactionClient,
+    user: User,
+    device: Device,
+    refresh: string,
+    csrf: string,
+    familyId: string,
+    expiresAt: Date,
+    req: Request,
+  ) {
+    const c = this.authConfig();
+    const created = await tx.session.create({
+      data: {
+        userId: user.id,
+        deviceId: device.id,
+        refreshTokenHash: hmacToken(refresh, c.refreshPepper),
+        refreshTokenFamilyId: familyId,
+        csrfTokenHash: hmacToken(csrf, c.csrfPepper),
+        expiresAt,
+      },
+    });
+    await tx.sessionRefreshToken.create({
+      data: {
+        sessionId: created.id,
+        familyId,
+        tokenHash: hmacToken(refresh, c.refreshPepper),
+        expiresAt,
+      },
+    });
+    await this.persistCriticalSecurityEvent(
+      {
+        userId: user.id,
+        sessionId: created.id,
+        deviceId: device.id,
+        eventType: 'SESSION_CREATED',
+        req,
+      },
+      tx,
+    );
+    return created;
+  }
+
   private async createSession(
     user: User,
     device: Device,
@@ -701,37 +758,9 @@ export class AuthService {
     const csrf = randomToken();
     const familyId = crypto.randomUUID();
     const expiresAt = new Date(Date.now() + c.refreshTtlDays * 86400_000);
-    const session = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.session.create({
-        data: {
-          userId: user.id,
-          deviceId: device.id,
-          refreshTokenHash: hmacToken(refresh, c.refreshPepper),
-          refreshTokenFamilyId: familyId,
-          csrfTokenHash: hmacToken(csrf, c.csrfPepper),
-          expiresAt,
-        },
-      });
-      await tx.sessionRefreshToken.create({
-        data: {
-          sessionId: created.id,
-          familyId,
-          tokenHash: hmacToken(refresh, c.refreshPepper),
-          expiresAt,
-        },
-      });
-      await this.persistBestEffortSecurityEvent(
-        {
-          userId: user.id,
-          sessionId: created.id,
-          deviceId: device.id,
-          eventType: 'SESSION_CREATED',
-          req,
-        },
-        tx,
-      );
-      return created;
-    });
+    const session = await this.prisma.$transaction((tx) =>
+      this.createSessionTx(tx, user, device, refresh, csrf, familyId, expiresAt, req),
+    );
     this.setRefreshAndCsrfCookies(res, refresh, csrf);
     const accessToken = await this.jwt.signAsync(
       { sub: user.id, sid: session.id, type: 'access' },
@@ -755,34 +784,40 @@ export class AuthService {
     userId: string,
     deviceId: string | null,
     purpose: 'TWO_FACTOR_ENROLLMENT' | 'TWO_FACTOR_LOGIN' | 'TWO_FACTOR_DISABLE',
+    targetHashValue?: string,
   ): Promise<{ challengeId: string; code: string; expiresAt: Date }> {
-    const c = this.authConfig();
-    const code = generateTwoFactorCode();
-    const challenge = await this.prisma.verificationChallenge.create({
-      data: {
-        userId,
-        deviceId: deviceId ?? undefined,
-        purpose,
-        tokenHash: 'pending',
-        maxAttempts: c.twoFactorMaxAttempts,
-        expiresAt: new Date(Date.now() + c.twoFactorCodeTtlMinutes * 60_000),
-      },
+    return this.prisma.$transaction(async (tx) => {
+      await this.advisoryTransactionLock(
+        tx,
+        `2fa-challenge:${purpose}:${userId}:${deviceId ?? 'none'}`,
+      );
+      const c = this.authConfig();
+      const challengeId = crypto.randomUUID();
+      const code = generateTwoFactorCode();
+      const expiresAt = new Date(Date.now() + c.twoFactorCodeTtlMinutes * 60_000);
+      await tx.verificationChallenge.updateMany({
+        where: {
+          userId,
+          deviceId: deviceId ?? undefined,
+          purpose,
+          consumedAt: null,
+        },
+        data: { consumedAt: new Date() },
+      });
+      await tx.verificationChallenge.create({
+        data: {
+          id: challengeId,
+          userId,
+          deviceId: deviceId ?? undefined,
+          purpose,
+          tokenHash: twoFactorChallengeHash(challengeId, code, c.verificationPepper),
+          targetHash: targetHashValue,
+          maxAttempts: c.twoFactorMaxAttempts,
+          expiresAt,
+        },
+      });
+      return { challengeId, code, expiresAt };
     });
-    await this.prisma.verificationChallenge.updateMany({
-      where: {
-        userId,
-        deviceId: deviceId ?? undefined,
-        purpose,
-        consumedAt: null,
-        id: { not: challenge.id },
-      },
-      data: { consumedAt: new Date() },
-    });
-    await this.prisma.verificationChallenge.update({
-      where: { id: challenge.id },
-      data: { tokenHash: twoFactorChallengeHash(challenge.id, code, c.verificationPepper) },
-    });
-    return { challengeId: challenge.id, code, expiresAt: challenge.expiresAt };
   }
 
   private deliverTwoFactorCode(user: User, method: TwoFactorMethod, code: string): void {
@@ -799,57 +834,45 @@ export class AuthService {
     this.sms.send(user.phoneE164, 'TWO_FACTOR_CODE', code);
   }
 
-  private async validateTwoFactorCode(
-    challengeId: string,
-    code: string,
-    purpose: 'TWO_FACTOR_ENROLLMENT' | 'TWO_FACTOR_LOGIN' | 'TWO_FACTOR_DISABLE',
-    userId?: string,
-    deviceId?: string,
-  ): Promise<{ userId: string; deviceId: string | null }> {
-    const ch = await this.prisma.verificationChallenge.findUnique({ where: { id: challengeId } });
-    if (
-      !ch ||
-      ch.purpose !== purpose ||
-      ch.consumedAt ||
-      ch.expiresAt < new Date() ||
-      (userId && ch.userId !== userId) ||
-      (deviceId && ch.deviceId !== deviceId)
-    )
-      throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_2FA_CODE' });
-    if (ch.attempts >= ch.maxAttempts)
-      throw new BadRequestException({ code: 'TWO_FACTOR_CHALLENGE_LOCKED' });
-    const ok = safeEqual(
-      twoFactorChallengeHash(ch.id, code, this.authConfig().verificationPepper),
-      ch.tokenHash,
-    );
-    if (!ok) {
-      await this.prisma.verificationChallenge.updateMany({
-        where: { id: ch.id, consumedAt: null, attempts: { lt: ch.maxAttempts } },
-        data: { attempts: { increment: 1 } },
-      });
-      throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_2FA_CODE' });
-    }
-    const consumed = await this.prisma.verificationChallenge.updateMany({
-      where: {
-        id: ch.id,
-        consumedAt: null,
-        attempts: { lt: ch.maxAttempts },
-        expiresAt: { gt: new Date() },
-      },
-      data: { consumedAt: new Date(), attempts: { increment: 1 } },
+  private async markFailedTwoFactorLogin(
+    userId: string | null | undefined,
+    deviceId: string | null | undefined,
+    req: Request,
+    code: 'INVALID_OR_EXPIRED_2FA_CODE' | 'INVALID_RECOVERY_CODE' | 'TWO_FACTOR_CHALLENGE_LOCKED',
+  ): Promise<void> {
+    await this.persistBestEffortSecurityEvent({
+      userId: userId ?? undefined,
+      deviceId: deviceId ?? undefined,
+      eventType: 'TWO_FACTOR_LOGIN_FAILED',
+      outcome: code === 'TWO_FACTOR_CHALLENGE_LOCKED' ? 'BLOCKED' : 'FAILURE',
+      metadata: { code },
+      req,
     });
-    if (consumed.count !== 1)
-      throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_2FA_CODE' });
-    return { userId: ch.userId, deviceId: ch.deviceId };
   }
 
-  private async consumeRecoveryCode(userId: string, recoveryCode: string): Promise<void> {
-    const hash = recoveryCodeHash(recoveryCode, this.authConfig().twoFactorRecoveryPepper);
-    const used = await this.prisma.twoFactorRecoveryCode.updateMany({
-      where: { userId, codeHash: hash, usedAt: null },
-      data: { usedAt: new Date() },
+  private async incrementInvalidTwoFactorAttempt(
+    purpose: 'TWO_FACTOR_ENROLLMENT' | 'TWO_FACTOR_LOGIN' | 'TWO_FACTOR_DISABLE',
+    challengeId: string,
+    userId: string,
+    deviceId: string | null,
+  ): Promise<'incremented' | 'locked'> {
+    const updated = await this.prisma.verificationChallenge.updateMany({
+      where: {
+        id: challengeId,
+        purpose,
+        userId,
+        deviceId: deviceId ?? undefined,
+        consumedAt: null,
+        expiresAt: { gt: new Date() },
+        attempts: { lt: this.authConfig().twoFactorMaxAttempts },
+      },
+      data: { attempts: { increment: 1 } },
     });
-    if (used.count !== 1) throw new BadRequestException({ code: 'INVALID_RECOVERY_CODE' });
+    if (updated.count !== 1) return 'locked';
+    const fresh = await this.prisma.verificationChallenge.findUnique({
+      where: { id: challengeId },
+    });
+    return fresh && fresh.attempts >= fresh.maxAttempts ? 'locked' : 'incremented';
   }
 
   async requestTwoFactorEnrollment(
@@ -883,17 +906,17 @@ export class AuthService {
       auth.userId,
       auth.deviceId,
       'TWO_FACTOR_ENROLLMENT',
+      dto.method,
     );
-    await this.prisma.verificationChallenge.update({
-      where: { id: challenge.challengeId },
-      data: { targetHash: dto.method },
-    });
     try {
       this.deliverTwoFactorCode(user, dto.method, challenge.code);
-    } catch {
-      await this.prisma.verificationChallenge.update({
-        where: { id: challenge.challengeId },
+    } catch (error) {
+      await this.prisma.verificationChallenge.updateMany({
+        where: { id: challenge.challengeId, consumedAt: null },
         data: { consumedAt: new Date() },
+      });
+      this.logger.warn('2FA enrollment delivery failed', {
+        errorName: error instanceof Error ? error.name : 'UnknownError',
       });
       throw new AppError(
         'TWO_FACTOR_DELIVERY_UNAVAILABLE',
@@ -918,21 +941,58 @@ export class AuthService {
     req: Request,
   ) {
     await this.rate(['2fa-enroll-confirm', req.ip ?? 'unknown', auth.userId], 10, 300);
-    await this.validateTwoFactorCode(
-      dto.challengeId,
-      dto.code,
-      'TWO_FACTOR_ENROLLMENT',
-      auth.userId,
-      auth.deviceId,
-    );
     const codes = Array.from({ length: this.authConfig().twoFactorRecoveryCodeCount }, () =>
       generateRecoveryCode(),
     );
     await this.runSerializableTransactionWithRetry(async (tx) => {
-      const enrollmentChallenge = await tx.verificationChallenge.findUniqueOrThrow({
+      await this.advisoryTransactionLock(tx, `2fa-enroll-confirm:${auth.userId}`);
+      const challenge = await tx.verificationChallenge.findUnique({
         where: { id: dto.challengeId },
       });
-      const method = enrollmentChallenge.targetHash === 'SMS' ? 'SMS' : 'EMAIL';
+      if (
+        !challenge ||
+        challenge.userId !== auth.userId ||
+        challenge.deviceId !== auth.deviceId ||
+        challenge.purpose !== 'TWO_FACTOR_ENROLLMENT' ||
+        challenge.consumedAt ||
+        challenge.expiresAt <= new Date() ||
+        challenge.attempts >= challenge.maxAttempts
+      )
+        throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_2FA_CODE' });
+      const expected = twoFactorChallengeHash(
+        challenge.id,
+        dto.code,
+        this.authConfig().verificationPepper,
+      );
+      if (!safeEqual(expected, challenge.tokenHash)) {
+        const result = await this.incrementInvalidTwoFactorAttempt(
+          'TWO_FACTOR_ENROLLMENT',
+          challenge.id,
+          auth.userId,
+          auth.deviceId,
+        );
+        throw new BadRequestException({
+          code: result === 'locked' ? 'TWO_FACTOR_CHALLENGE_LOCKED' : 'INVALID_OR_EXPIRED_2FA_CODE',
+        });
+      }
+      const existing = await tx.twoFactorSettings.findUnique({ where: { userId: auth.userId } });
+      if (existing && !existing.disabledAt)
+        throw new BadRequestException({ code: 'TWO_FACTOR_ALREADY_ENABLED' });
+      const consumed = await tx.verificationChallenge.updateMany({
+        where: {
+          id: challenge.id,
+          userId: auth.userId,
+          deviceId: auth.deviceId,
+          purpose: 'TWO_FACTOR_ENROLLMENT',
+          consumedAt: null,
+          expiresAt: { gt: new Date() },
+          attempts: { lt: challenge.maxAttempts },
+        },
+        data: { consumedAt: new Date(), attempts: { increment: 1 } },
+      });
+      if (consumed.count !== 1)
+        throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_2FA_CODE' });
+      const method = challenge.targetHash === 'SMS' ? 'SMS' : 'EMAIL';
       await tx.twoFactorSettings.upsert({
         where: { userId: auth.userId },
         update: { method, enabledAt: new Date(), disabledAt: null },
@@ -945,9 +1005,16 @@ export class AuthService {
           codeHash: recoveryCodeHash(code, this.authConfig().twoFactorRecoveryPepper),
         })),
       });
-      const revoked = await tx.session.updateMany({
+      const revokable = await tx.session.findMany({
+        where: { userId: auth.userId, id: { not: auth.sessionId }, revokedAt: null },
+      });
+      await tx.session.updateMany({
         where: { userId: auth.userId, id: { not: auth.sessionId }, revokedAt: null },
         data: { revokedAt: new Date(), revocationReason: 'TWO_FACTOR_ENABLED' },
+      });
+      await tx.sessionRefreshToken.updateMany({
+        where: { sessionId: { in: revokable.map((session) => session.id) }, revokedAt: null },
+        data: { revokedAt: new Date() },
       });
       await this.startSensitiveHold(tx, auth.userId, req);
       await this.persistCriticalSecurityEvent(
@@ -957,11 +1024,25 @@ export class AuthService {
           deviceId: auth.deviceId,
           eventType: 'TWO_FACTOR_ENABLED',
           outcome: 'CRITICAL',
-          metadata: { revokedSessions: revoked.count },
+          metadata: { revokedSessions: revokable.length },
           req,
         },
         tx,
       );
+      for (const session of revokable) {
+        await this.persistCriticalSecurityEvent(
+          {
+            userId: auth.userId,
+            sessionId: session.id,
+            deviceId: session.deviceId,
+            eventType: 'SESSION_REVOKED',
+            outcome: 'CRITICAL',
+            metadata: { reason: 'TWO_FACTOR_ENABLED' },
+            req,
+          },
+          tx,
+        );
+      }
     }, '2fa-enroll-confirm');
     return { recoveryCodes: codes };
   }
@@ -988,49 +1069,148 @@ export class AuthService {
     if (Boolean(dto.code) === Boolean(dto.recoveryCode))
       throw new BadRequestException({ code: 'INVALID_2FA_INPUT' });
     await this.rate(['2fa-login-verify', req.ip ?? 'unknown', dto.challengeId], 10, 300);
-    const ch = await this.prisma.verificationChallenge.findUnique({
-      where: { id: dto.challengeId },
-    });
-    if (!ch || ch.purpose !== 'TWO_FACTOR_LOGIN' || !ch.deviceId)
-      throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_2FA_CODE' });
-    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: ch.userId } });
-    const device = await this.prisma.device.findUniqueOrThrow({ where: { id: ch.deviceId } });
-    const cookie = req.cookies?.[this.authConfig().deviceCookieName] as string | undefined;
-    if (
-      !cookie ||
-      device.tokenHash !== hmacToken(cookie, this.authConfig().devicePepper) ||
-      device.status !== 'APPROVED'
-    )
-      throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_2FA_CODE' });
-    if (dto.code)
-      await this.validateTwoFactorCode(
-        dto.challengeId,
-        dto.code,
-        'TWO_FACTOR_LOGIN',
-        user.id,
-        device.id,
-      );
-    else {
-      await this.consumeRecoveryCode(user.id, dto.recoveryCode!);
-      await this.prisma.verificationChallenge.updateMany({
-        where: { id: dto.challengeId, consumedAt: null },
-        data: { consumedAt: new Date() },
+    const c = this.authConfig();
+    const refresh = randomToken();
+    const csrf = randomToken();
+    const familyId = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + c.refreshTtlDays * 86400_000);
+    const result = await this.runSerializableTransactionWithRetry(async (tx) => {
+      await this.advisoryTransactionLock(tx, `2fa-login-verify:${dto.challengeId}`);
+      const challenge = await tx.verificationChallenge.findUnique({
+        where: { id: dto.challengeId },
       });
-      await this.persistBestEffortSecurityEvent({
-        userId: user.id,
-        deviceId: device.id,
-        eventType: 'TWO_FACTOR_RECOVERY_CODE_USED',
-        outcome: 'CRITICAL',
+      if (!challenge || challenge.purpose !== 'TWO_FACTOR_LOGIN' || !challenge.deviceId) {
+        throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_2FA_CODE' });
+      }
+      const [settings, user, device] = await Promise.all([
+        tx.twoFactorSettings.findUnique({ where: { userId: challenge.userId } }),
+        tx.user.findUniqueOrThrow({ where: { id: challenge.userId } }),
+        tx.device.findUniqueOrThrow({ where: { id: challenge.deviceId } }),
+      ]);
+      const cookie = req.cookies?.[c.deviceCookieName] as string | undefined;
+      if (
+        !settings ||
+        settings.disabledAt ||
+        !cookie ||
+        device.tokenHash !== hmacToken(cookie, c.devicePepper) ||
+        device.status !== 'APPROVED' ||
+        challenge.consumedAt ||
+        challenge.expiresAt <= new Date() ||
+        challenge.attempts >= challenge.maxAttempts
+      ) {
+        await this.markFailedTwoFactorLogin(
+          challenge.userId,
+          challenge.deviceId,
+          req,
+          'INVALID_OR_EXPIRED_2FA_CODE',
+        );
+        throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_2FA_CODE' });
+      }
+      if (dto.code) {
+        const expected = twoFactorChallengeHash(challenge.id, dto.code, c.verificationPepper);
+        if (!safeEqual(expected, challenge.tokenHash)) {
+          const status = await this.incrementInvalidTwoFactorAttempt(
+            'TWO_FACTOR_LOGIN',
+            challenge.id,
+            challenge.userId,
+            challenge.deviceId,
+          );
+          await this.markFailedTwoFactorLogin(
+            challenge.userId,
+            challenge.deviceId,
+            req,
+            status === 'locked' ? 'TWO_FACTOR_CHALLENGE_LOCKED' : 'INVALID_OR_EXPIRED_2FA_CODE',
+          );
+          throw new BadRequestException({
+            code:
+              status === 'locked' ? 'TWO_FACTOR_CHALLENGE_LOCKED' : 'INVALID_OR_EXPIRED_2FA_CODE',
+          });
+        }
+      } else {
+        const used = await tx.twoFactorRecoveryCode.updateMany({
+          where: {
+            userId: challenge.userId,
+            codeHash: recoveryCodeHash(dto.recoveryCode!, c.twoFactorRecoveryPepper),
+            usedAt: null,
+          },
+          data: { usedAt: new Date() },
+        });
+        if (used.count !== 1) {
+          await this.markFailedTwoFactorLogin(
+            challenge.userId,
+            challenge.deviceId,
+            req,
+            'INVALID_RECOVERY_CODE',
+          );
+          throw new BadRequestException({ code: 'INVALID_RECOVERY_CODE' });
+        }
+      }
+      const consumed = await tx.verificationChallenge.updateMany({
+        where: {
+          id: challenge.id,
+          userId: challenge.userId,
+          deviceId: challenge.deviceId,
+          purpose: 'TWO_FACTOR_LOGIN',
+          consumedAt: null,
+          expiresAt: { gt: new Date() },
+          attempts: { lt: challenge.maxAttempts },
+        },
+        data: { consumedAt: new Date(), attempts: { increment: 1 } },
+      });
+      if (consumed.count !== 1)
+        throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_2FA_CODE' });
+      const session = await this.createSessionTx(
+        tx,
+        user,
+        device,
+        refresh,
+        csrf,
+        familyId,
+        expiresAt,
         req,
-      });
-    }
-    await this.persistBestEffortSecurityEvent({
-      userId: user.id,
-      deviceId: device.id,
-      eventType: 'TWO_FACTOR_LOGIN_SUCCEEDED',
-      req,
-    });
-    return this.createSession(user, device, res, req);
+      );
+      if (dto.recoveryCode) {
+        await this.persistCriticalSecurityEvent(
+          {
+            userId: user.id,
+            sessionId: session.id,
+            deviceId: device.id,
+            eventType: 'TWO_FACTOR_RECOVERY_CODE_USED',
+            outcome: 'CRITICAL',
+            req,
+          },
+          tx,
+        );
+      }
+      await this.persistCriticalSecurityEvent(
+        {
+          userId: user.id,
+          sessionId: session.id,
+          deviceId: device.id,
+          eventType: 'TWO_FACTOR_LOGIN_SUCCEEDED',
+          req,
+        },
+        tx,
+      );
+      return { session, user };
+    }, '2fa-login-verify');
+    this.setRefreshAndCsrfCookies(res, refresh, csrf);
+    const accessToken = await this.jwt.signAsync(
+      { sub: result.user.id, sid: result.session.id, type: 'access' },
+      { secret: c.accessSecret, expiresIn: c.accessTtlSeconds },
+    );
+    return {
+      accessToken,
+      user: {
+        id: result.user.id,
+        email: result.user.email,
+        emailVerified: true,
+        phoneVerified: Boolean(result.user.phoneVerifiedAt),
+        birthDate: result.user.birthDate,
+        status: result.user.status,
+        createdAt: result.user.createdAt,
+      },
+    };
   }
 
   async resendTwoFactorLogin(dto: TwoFactorChallengeDto, req: Request) {
@@ -1045,16 +1225,36 @@ export class AuthService {
       old.device?.status !== 'APPROVED'
     )
       throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_2FA_CODE' });
+    const cookie = req.cookies?.[this.authConfig().deviceCookieName] as string | undefined;
+    if (!cookie || old.device.tokenHash !== hmacToken(cookie, this.authConfig().devicePepper))
+      throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_2FA_CODE' });
+    const settings = await this.prisma.twoFactorSettings.findUnique({
+      where: { userId: old.userId },
+    });
+    if (!settings || settings.disabledAt)
+      throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_2FA_CODE' });
     await this.rate(
       ['2fa-login-resend', req.ip ?? 'unknown', dto.challengeId],
       1,
       this.authConfig().twoFactorResendCooldownSeconds,
     );
-    const settings = await this.prisma.twoFactorSettings.findUniqueOrThrow({
-      where: { userId: old.userId },
-    });
     const ch = await this.createTwoFactorChallenge(old.userId, old.deviceId, 'TWO_FACTOR_LOGIN');
-    this.deliverTwoFactorCode(old.user, settings.method, ch.code);
+    try {
+      this.deliverTwoFactorCode(old.user, settings.method, ch.code);
+    } catch (error) {
+      await this.prisma.verificationChallenge.updateMany({
+        where: { id: ch.challengeId, consumedAt: null },
+        data: { consumedAt: new Date() },
+      });
+      this.logger.warn('2FA login resend delivery failed', {
+        errorName: error instanceof Error ? error.name : 'UnknownError',
+      });
+      throw new AppError(
+        'TWO_FACTOR_DELIVERY_UNAVAILABLE',
+        'Entrega indisponível.',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
     return { challengeId: ch.challengeId, expiresAt: ch.expiresAt };
   }
 
@@ -1083,7 +1283,22 @@ export class AuthService {
       auth.deviceId,
       'TWO_FACTOR_DISABLE',
     );
-    this.deliverTwoFactorCode(user, settings.method, ch.code);
+    try {
+      this.deliverTwoFactorCode(user, settings.method, ch.code);
+    } catch (error) {
+      await this.prisma.verificationChallenge.updateMany({
+        where: { id: ch.challengeId, consumedAt: null },
+        data: { consumedAt: new Date() },
+      });
+      this.logger.warn('2FA disable delivery failed', {
+        errorName: error instanceof Error ? error.name : 'UnknownError',
+      });
+      throw new AppError(
+        'TWO_FACTOR_DELIVERY_UNAVAILABLE',
+        'Entrega indisponível.',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
     await this.persistBestEffortSecurityEvent({
       userId: auth.userId,
       sessionId: auth.sessionId,
@@ -1103,16 +1318,71 @@ export class AuthService {
   ) {
     if (Boolean(dto.code) === Boolean(dto.recoveryCode))
       throw new BadRequestException({ code: 'INVALID_2FA_INPUT' });
-    if (dto.code)
-      await this.validateTwoFactorCode(
-        dto.challengeId,
-        dto.code,
-        'TWO_FACTOR_DISABLE',
-        auth.userId,
-        auth.deviceId,
-      );
-    else await this.consumeRecoveryCode(auth.userId, dto.recoveryCode!);
+    await this.rate(['2fa-disable-confirm', req.ip ?? 'unknown', auth.userId], 10, 300);
     await this.runSerializableTransactionWithRetry(async (tx) => {
+      await this.advisoryTransactionLock(tx, `2fa-disable:${auth.userId}`);
+      const settings = await tx.twoFactorSettings.findUnique({ where: { userId: auth.userId } });
+      if (!settings || settings.disabledAt)
+        throw new BadRequestException({ code: 'TWO_FACTOR_NOT_ENABLED' });
+      const challenge = await tx.verificationChallenge.findUnique({
+        where: { id: dto.challengeId },
+      });
+      if (
+        !challenge ||
+        challenge.userId !== auth.userId ||
+        challenge.deviceId !== auth.deviceId ||
+        challenge.purpose !== 'TWO_FACTOR_DISABLE' ||
+        challenge.consumedAt ||
+        challenge.expiresAt <= new Date() ||
+        challenge.attempts >= challenge.maxAttempts
+      )
+        throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_2FA_CODE' });
+      if (dto.code) {
+        const expected = twoFactorChallengeHash(
+          challenge.id,
+          dto.code,
+          this.authConfig().verificationPepper,
+        );
+        if (!safeEqual(expected, challenge.tokenHash)) {
+          const status = await this.incrementInvalidTwoFactorAttempt(
+            'TWO_FACTOR_DISABLE',
+            challenge.id,
+            auth.userId,
+            auth.deviceId,
+          );
+          throw new BadRequestException({
+            code:
+              status === 'locked' ? 'TWO_FACTOR_CHALLENGE_LOCKED' : 'INVALID_OR_EXPIRED_2FA_CODE',
+          });
+        }
+      } else {
+        const used = await tx.twoFactorRecoveryCode.updateMany({
+          where: {
+            userId: auth.userId,
+            codeHash: recoveryCodeHash(
+              dto.recoveryCode!,
+              this.authConfig().twoFactorRecoveryPepper,
+            ),
+            usedAt: null,
+          },
+          data: { usedAt: new Date() },
+        });
+        if (used.count !== 1) throw new BadRequestException({ code: 'INVALID_RECOVERY_CODE' });
+      }
+      const consumed = await tx.verificationChallenge.updateMany({
+        where: {
+          id: challenge.id,
+          userId: auth.userId,
+          deviceId: auth.deviceId,
+          purpose: 'TWO_FACTOR_DISABLE',
+          consumedAt: null,
+          expiresAt: { gt: new Date() },
+          attempts: { lt: challenge.maxAttempts },
+        },
+        data: { consumedAt: new Date(), attempts: { increment: 1 } },
+      });
+      if (consumed.count !== 1)
+        throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_2FA_CODE' });
       await tx.twoFactorSettings.update({
         where: { userId: auth.userId },
         data: { disabledAt: new Date() },
@@ -1121,12 +1391,23 @@ export class AuthService {
         where: { userId: auth.userId, usedAt: null },
         data: { usedAt: new Date() },
       });
-      const sessions = await tx.session.updateMany({
+      await tx.verificationChallenge.updateMany({
+        where: {
+          userId: auth.userId,
+          purpose: { in: ['TWO_FACTOR_ENROLLMENT', 'TWO_FACTOR_LOGIN', 'TWO_FACTOR_DISABLE'] },
+          consumedAt: null,
+        },
+        data: { consumedAt: new Date() },
+      });
+      const sessions = await tx.session.findMany({
+        where: { userId: auth.userId, revokedAt: null },
+      });
+      await tx.session.updateMany({
         where: { userId: auth.userId, revokedAt: null },
         data: { revokedAt: new Date(), revocationReason: 'TWO_FACTOR_DISABLED' },
       });
       await tx.sessionRefreshToken.updateMany({
-        where: { session: { userId: auth.userId }, revokedAt: null },
+        where: { sessionId: { in: sessions.map((session) => session.id) }, revokedAt: null },
         data: { revokedAt: new Date() },
       });
       await this.startSensitiveHold(tx, auth.userId, req);
@@ -1137,11 +1418,25 @@ export class AuthService {
           deviceId: auth.deviceId,
           eventType: 'TWO_FACTOR_DISABLED',
           outcome: 'CRITICAL',
-          metadata: { revokedSessions: sessions.count },
+          metadata: { revokedSessions: sessions.length },
           req,
         },
         tx,
       );
+      for (const session of sessions) {
+        await this.persistCriticalSecurityEvent(
+          {
+            userId: auth.userId,
+            sessionId: session.id,
+            deviceId: session.deviceId,
+            eventType: 'SESSION_REVOKED',
+            outcome: 'CRITICAL',
+            metadata: { reason: 'TWO_FACTOR_DISABLED' },
+            req,
+          },
+          tx,
+        );
+      }
     }, '2fa-disable-confirm');
     this.clearAuth(res);
     return { message: '2FA desativado. Faça login novamente.' };
