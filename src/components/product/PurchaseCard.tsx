@@ -22,7 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatBRL } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useCart } from "@/providers/CartProvider";
-import { useAuth } from "@/providers/AuthProvider";
+import { useAuth } from "@/providers/AuthContext";
 import { getUnavailabilityReason } from "@/services/productService";
 import { ProductVariantSelector } from "./ProductVariantSelector";
 import { VirtualCurrencyQuoteBox, computeQuote } from "./VirtualCurrencyQuoteBox";

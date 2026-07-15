@@ -13,7 +13,7 @@ import { WalletSummaryCard } from "@/components/account/WalletSummaryCard";
 import { VerificationStatusCard } from "@/components/verification/VerificationStatusCard";
 import { AffiliateProfileCard } from "@/components/affiliate/AffiliateProfileCard";
 import { Badge } from "@/components/ui/badge";
-import { useAuth } from "@/providers/AuthProvider";
+import { useAuth } from "@/providers/AuthContext";
 import { accountService } from "@/services/accountService";
 import { productService } from "@/services/productService";
 import type { Product } from "@/types";

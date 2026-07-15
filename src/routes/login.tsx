@@ -7,7 +7,7 @@ import { EmailInput } from "@/components/auth/EmailInput";
 import { PasswordInput } from "@/components/auth/PasswordInput";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { useAuth } from "@/providers/AuthProvider";
+import { useAuth } from "@/providers/AuthContext";
 import { friendlyAuthError } from "@/services/auth";
 export const Route = createFileRoute("/login")({ component: LoginPage });
 function LoginPage() {
@@ -28,10 +28,13 @@ function LoginPage() {
         navigate({ to: "/" });
       } else if (r.status === "deviceApprovalRequired") {
         toast.info("Aprove este dispositivo pelo link enviado ao seu e-mail.");
-        navigate({ to: "/verificacao-login", search: { email, mode: "device" } as never });
+        navigate({ to: "/verificacao-login", search: { mode: "device", token: undefined } });
       } else if (r.status === "twoFactorRequired") {
         toast.info("Informe seu código de verificação para concluir o login.");
-        navigate({ to: "/verificacao-login", search: { mode: "2fa" } as never });
+        navigate({ to: "/verificacao-login", search: { mode: "2fa", token: undefined } });
+      } else if (r.status === "emailVerificationRequired") {
+        toast.info("Confirme seu e-mail antes de entrar.");
+        navigate({ to: "/verificar-email", search: { token: undefined } });
       }
     } catch (err) {
       toast.error(friendlyAuthError(err).message);

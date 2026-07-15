@@ -1,78 +1,66 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError, setAccessToken, setAuthLostHandler } from "@/lib/api/client";
+import { AuthContext, type AuthContextValue } from "@/providers/AuthContext";
 import {
   authService,
   toDisplayUser,
+  type AuthMe,
+  type AuthSuccess,
   type AuthUser,
   type LoginPayload,
+  type LoginResponse,
+  type LoginResult,
   type RegisterPayload,
   type UserRole,
-  type AuthSuccess,
 } from "@/services/auth";
 
-type AuthStatus =
-  | "initializing"
-  | "anonymous"
-  | "authenticated"
-  | "emailVerificationRequired"
-  | "deviceApprovalRequired"
-  | "twoFactorRequired";
-type LoginResult =
-  | { status: "authenticated"; user: AuthUser }
-  | { status: "deviceApprovalRequired" }
-  | { status: "twoFactorRequired"; challengeId: string; method: "EMAIL" | "SMS"; expiresAt: string }
-  | { status: "emailVerificationRequired" };
-interface AuthContextValue {
-  user: AuthUser | null;
-  isAuthenticated: boolean;
-  initializing: boolean;
-  loading: boolean;
-  status: AuthStatus;
-  activeRole: UserRole;
-  hasSellerProfile: boolean;
-  isAdmin: boolean;
-  twoFactorChallenge: Extract<LoginResult, { status: "twoFactorRequired" }> | null;
-  login: (email: string, password: string) => Promise<LoginResult>;
-  register: (payload: RegisterPayload) => Promise<void>;
-  verifyEmail: (token: string) => Promise<void>;
-  approveDevice: (token: string) => Promise<void>;
-  verifyTwoFactorLogin: (payload: { code?: string; recoveryCode?: string }) => Promise<AuthUser>;
-  resendTwoFactorLogin: () => Promise<void>;
-  resendEmailVerification: (email: string) => Promise<void>;
-  resendDeviceApproval: (email: string) => Promise<void>;
-  refreshSession: () => Promise<void>;
-  requestPasswordReset: (email: string) => Promise<void>;
-  resetPassword: (token: string, newPassword: string) => Promise<void>;
-  logout: () => Promise<void>;
-  switchToBuyer: () => void;
-  switchToSeller: () => { ok: boolean; needsOnboarding: boolean };
-  toggleRole: () => { ok: boolean; needsOnboarding: boolean; role: UserRole };
-}
-const AuthContext = createContext<AuthContextValue | null>(null);
 const demoRoles =
   import.meta.env.MODE !== "production" && import.meta.env.VITE_ENABLE_DEMO_ROLES === "true";
-function withPresentation(
-  u: Omit<AuthUser, "displayName">,
-  activeRole: UserRole = "buyer",
-): AuthUser {
+const uuidV4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function withPresentation(u: AuthMe, activeRole: UserRole = "buyer"): AuthUser {
   return { ...toDisplayUser(u), activeRole };
 }
+
+function isAuthSuccess(response: LoginResponse | AuthSuccess): response is AuthSuccess {
+  return (
+    "accessToken" in response &&
+    typeof response.accessToken === "string" &&
+    response.accessToken.trim().length > 0
+  );
+}
+
+function parseLoginChallenge(response: LoginResponse): LoginResult | null {
+  if ("code" in response && response.code === "DEVICE_APPROVAL_REQUIRED") {
+    return { status: "deviceApprovalRequired" };
+  }
+  if ("code" in response && response.code === "TWO_FACTOR_REQUIRED") {
+    if (
+      !uuidV4.test(response.challengeId) ||
+      (response.method !== "EMAIL" && response.method !== "SMS") ||
+      Number.isNaN(Date.parse(response.expiresAt))
+    ) {
+      throw new Error("Challenge de 2FA malformado.");
+    }
+    return {
+      status: "twoFactorRequired",
+      challengeId: response.challengeId,
+      method: response.method,
+      expiresAt: response.expiresAt,
+    };
+  }
+  return null;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [status, setStatus] = useState<AuthStatus>("initializing");
+  const [status, setStatus] = useState<AuthContextValue["status"]>("initializing");
   const [loading, setLoading] = useState(false);
   const [twoFactorChallenge, setTwoFactorChallenge] =
     useState<AuthContextValue["twoFactorChallenge"]>(null);
+
   const clear = useCallback(() => {
     setAccessToken(null);
     setUser(null);
@@ -80,19 +68,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setTwoFactorChallenge(null);
     queryClient.removeQueries({ predicate: (q) => q.queryKey[0] !== "public" });
   }, [queryClient]);
+
   const applySuccess = useCallback(
     async (result: AuthSuccess) => {
+      if (!isAuthSuccess(result)) {
+        clear();
+        throw new Error("Resposta de autenticação inválida.");
+      }
       setAccessToken(result.accessToken);
-      const fresh = await authService.me();
-      const next = withPresentation(fresh);
-      setUser(next);
-      setStatus("authenticated");
-      setTwoFactorChallenge(null);
-      queryClient.removeQueries();
-      return next;
+      try {
+        const fresh = await authService.me();
+        const next = withPresentation(fresh);
+        setUser(next);
+        setStatus("authenticated");
+        setTwoFactorChallenge(null);
+        queryClient.removeQueries();
+        return next;
+      } catch (error) {
+        clear();
+        throw error;
+      }
     },
-    [queryClient],
+    [clear, queryClient],
   );
+
   useEffect(() => {
     setAuthLostHandler(clear);
     if (typeof window === "undefined") return;
@@ -100,7 +99,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     authService
       .refresh()
       .then(({ accessToken }) => {
-        if (cancelled) return;
+        if (cancelled) return undefined;
+        if (!accessToken || typeof accessToken !== "string") throw new Error("Sessão inválida.");
         setAccessToken(accessToken);
         return authService.me();
       })
@@ -118,6 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cancelled = true;
     };
   }, [clear]);
+
   const login = useCallback(
     async (email: string, password: string): Promise<LoginResult> => {
       setLoading(true);
@@ -125,40 +126,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const result = await authService.login({
           email,
           password,
-          deviceName: navigator?.platform || "Navegador",
+          deviceName: typeof navigator !== "undefined" ? navigator.platform : "Navegador",
         } as LoginPayload);
-        const next = await applySuccess(result);
-        return { status: "authenticated", user: next };
-      } catch (e) {
-        if (e instanceof ApiError && e.status === 202 && e.code === "DEVICE_APPROVAL_REQUIRED") {
-          setStatus("deviceApprovalRequired");
-          return { status: "deviceApprovalRequired" };
+        if (isAuthSuccess(result)) {
+          const next = await applySuccess(result);
+          return { status: "authenticated", user: next };
         }
-        if (e instanceof ApiError && e.status === 202 && e.code === "TWO_FACTOR_REQUIRED") {
-          const body = e as ApiError & {
-            challengeId?: string;
-            method?: "EMAIL" | "SMS";
-            expiresAt?: string;
-          };
-          const challenge = {
-            status: "twoFactorRequired" as const,
-            challengeId: body.challengeId ?? "",
-            method: body.method ?? "EMAIL",
-            expiresAt: body.expiresAt ?? "",
-          };
+        const challenge = parseLoginChallenge(result);
+        if (challenge?.status === "deviceApprovalRequired") {
+          setUser(null);
+          setAccessToken(null);
+          setTwoFactorChallenge(null);
+          setStatus("deviceApprovalRequired");
+          return challenge;
+        }
+        if (challenge?.status === "twoFactorRequired") {
+          setUser(null);
+          setAccessToken(null);
           setTwoFactorChallenge(challenge);
           setStatus("twoFactorRequired");
           return challenge;
         }
-        if (e instanceof ApiError && e.code === "EMAIL_NOT_VERIFIED")
+        clear();
+        throw new Error("Resposta de login desconhecida.");
+      } catch (e) {
+        if (e instanceof ApiError && e.code === "EMAIL_NOT_VERIFIED") {
+          setUser(null);
+          setAccessToken(null);
           setStatus("emailVerificationRequired");
+          return { status: "emailVerificationRequired" };
+        }
         throw e;
       } finally {
         setLoading(false);
       }
     },
-    [applySuccess],
+    [applySuccess, clear],
   );
+
   const register = useCallback(async (payload: RegisterPayload) => {
     setLoading(true);
     try {
@@ -168,39 +173,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     }
   }, []);
+
   const verifyTwoFactorLogin = useCallback(
     async (payload: { code?: string; recoveryCode?: string }) => {
       if (!twoFactorChallenge?.challengeId) throw new Error("2FA challenge ausente");
       setLoading(true);
       try {
-        const next = await applySuccess(
+        return await applySuccess(
           await authService.verifyTwoFactorLogin({
             challengeId: twoFactorChallenge.challengeId,
             ...payload,
           }),
         );
-        return next;
       } finally {
         setLoading(false);
       }
     },
     [applySuccess, twoFactorChallenge],
   );
+
   const logout = useCallback(async () => {
     setLoading(true);
     try {
       await authService.logout();
+    } catch {
+      // Logout local precisa limpar estado mesmo com API indisponível.
     } finally {
       clear();
       setLoading(false);
     }
   }, [clear]);
+
   const refreshSession = useCallback(async () => {
     const r = await authService.refresh();
-    setAccessToken(r.accessToken);
-    setUser(withPresentation(await authService.me()));
-    setStatus("authenticated");
-  }, []);
+    await applySuccess({ accessToken: r.accessToken, user: await authService.me() });
+  }, [applySuccess]);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
@@ -209,7 +217,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       status,
       activeRole: user?.activeRole ?? "buyer",
-      hasSellerProfile: true,
+      hasSellerProfile: demoRoles && !!user,
       isAdmin: demoRoles && !!user,
       twoFactorChallenge,
       login,
@@ -231,6 +239,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout,
       switchToBuyer: () => setUser((p) => (p ? { ...p, activeRole: "buyer" } : p)),
       switchToSeller: () => {
+        // Apenas contexto visual: não representa perfil de vendedor real nem autorização.
         setUser((p) => (p ? { ...p, activeRole: "seller" } : p));
         return { ok: true, needsOnboarding: false };
       },
@@ -257,9 +266,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth deve ser usado dentro de <AuthProvider>");
-  return ctx;
 }

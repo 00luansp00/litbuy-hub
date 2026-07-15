@@ -18,10 +18,13 @@ export class ApiError extends Error {
   }
 }
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3001/api/v1").replace(
-  /\/$/,
-  "",
-);
+function resolveApiBaseUrl(): string {
+  const configured = import.meta.env.VITE_API_BASE_URL;
+  if (configured) return configured.replace(/\/$/, "");
+  if (import.meta.env.DEV || import.meta.env.MODE === "test") return "http://localhost:3001/api/v1";
+  throw new Error("VITE_API_BASE_URL deve ser definido em production.");
+}
+const API_BASE_URL = resolveApiBaseUrl();
 const CSRF_COOKIE = "litbuy_csrf";
 const CSRF_HEADER = "X-CSRF-Token";
 let accessToken: string | null = null;
@@ -130,7 +133,6 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
       messageFromPayload(payload),
       payload?.requestId,
     );
-    if (payload) Object.assign(error, payload);
     throw error;
   }
   return parsed as T;

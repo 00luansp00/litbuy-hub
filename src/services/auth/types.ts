@@ -1,3 +1,5 @@
+export type UserRole = "buyer" | "seller";
+
 export type AuthUser = {
   id: string;
   email: string;
@@ -12,11 +14,12 @@ export type AuthUser = {
   displayName: string;
   name: string;
   avatarUrl?: string;
+  /** Contexto visual legado; perfil real de vendedor virá em sprint própria. */
   sellerSlug?: string | null;
   sellerName?: string | null;
   activeRole?: UserRole;
 };
-export type UserRole = "buyer" | "seller";
+
 export type RegisterPayload = {
   email: string;
   password: string;
@@ -27,8 +30,10 @@ export type RegisterPayload = {
   privacyVersion: string;
   deviceName?: string;
 };
+
 export type LoginPayload = { email: string; password: string; deviceName?: string };
-export type AuthSuccess = { accessToken: string; user: Omit<AuthUser, "displayName"> };
+export type AuthMe = Omit<AuthUser, "displayName" | "name" | "activeRole">;
+export type AuthSuccess = { accessToken: string; user: AuthMe };
 export type TwoFactorRequired = {
   code: "TWO_FACTOR_REQUIRED";
   challengeId: string;
@@ -36,4 +41,16 @@ export type TwoFactorRequired = {
   expiresAt: string;
 };
 export type DeviceApprovalRequired = { code: "DEVICE_APPROVAL_REQUIRED" };
-export type ChallengeResult = AuthSuccess | TwoFactorRequired | DeviceApprovalRequired;
+export type LoginResponse = AuthSuccess | TwoFactorRequired | DeviceApprovalRequired;
+export type AuthStatus =
+  | "initializing"
+  | "anonymous"
+  | "authenticated"
+  | "emailVerificationRequired"
+  | "deviceApprovalRequired"
+  | "twoFactorRequired";
+export type LoginResult =
+  | { status: "authenticated"; user: AuthUser }
+  | { status: "deviceApprovalRequired" }
+  | { status: "twoFactorRequired"; challengeId: string; method: "EMAIL" | "SMS"; expiresAt: string }
+  | { status: "emailVerificationRequired" };

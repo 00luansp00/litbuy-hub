@@ -15,7 +15,7 @@ import { CheckoutSecurityNotice } from "@/components/checkout/CheckoutSecurityNo
 import { EmptyCheckoutState } from "@/components/checkout/EmptyCheckoutState";
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/providers/CartProvider";
-import { useAuth } from "@/providers/AuthProvider";
+import { useAuth } from "@/providers/AuthContext";
 import { checkoutService } from "@/services/checkoutService";
 import { paymentService } from "@/services/paymentService";
 import { cartService } from "@/services/cartService";

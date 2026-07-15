@@ -26,7 +26,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useAuth } from "@/providers/AuthProvider";
+import { useAuth } from "@/providers/AuthContext";
 
 function initials(name: string) {
   return name

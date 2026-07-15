@@ -9,11 +9,19 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAuth } from "@/providers/AuthProvider";
+import { useAuth } from "@/providers/AuthContext";
 import { friendlyAuthError } from "@/services/auth";
 export const Route = createFileRoute("/cadastro")({ component: CadastroPage });
-const termsVersion = import.meta.env.VITE_CURRENT_TERMS_VERSION ?? "2026-07-14";
-const privacyVersion = import.meta.env.VITE_CURRENT_PRIVACY_VERSION ?? "2026-07-14";
+function requiredPublicVersion(
+  name: "VITE_CURRENT_TERMS_VERSION" | "VITE_CURRENT_PRIVACY_VERSION",
+) {
+  const value = import.meta.env[name];
+  if (value) return value;
+  if (import.meta.env.DEV || import.meta.env.MODE === "test") return "2026-07-14";
+  throw new Error(`${name} deve ser definido em production.`);
+}
+const termsVersion = requiredPublicVersion("VITE_CURRENT_TERMS_VERSION");
+const privacyVersion = requiredPublicVersion("VITE_CURRENT_PRIVACY_VERSION");
 function adult(d: string) {
   const b = new Date(`${d}T00:00:00`);
   if (Number.isNaN(b.getTime())) return false;
@@ -49,7 +57,7 @@ function CadastroPage() {
         deviceName: deviceName || undefined,
       });
       toast.success("Cadastro recebido. Verifique seu e-mail para ativar a conta.");
-      navigate({ to: "/verificar-email", search: { email } as never });
+      navigate({ to: "/verificar-email", search: { token: undefined } });
     } catch (err) {
       toast.error(friendlyAuthError(err).message);
     }

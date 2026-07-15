@@ -6,7 +6,7 @@ import { AuthLayout } from "@/components/auth/AuthLayout";
 import { EmailInput } from "@/components/auth/EmailInput";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { useAuth } from "@/providers/AuthProvider";
+import { useAuth } from "@/providers/AuthContext";
 import { friendlyAuthError } from "@/services/auth";
 export const Route = createFileRoute("/recuperar-senha")({ component: Page });
 function Page() {

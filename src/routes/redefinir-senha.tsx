@@ -5,7 +5,7 @@ import { AuthLayout } from "@/components/auth/AuthLayout";
 import { PasswordInput } from "@/components/auth/PasswordInput";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { useAuth } from "@/providers/AuthProvider";
+import { useAuth } from "@/providers/AuthContext";
 import { friendlyAuthError } from "@/services/auth";
 export const Route = createFileRoute("/redefinir-senha")({ component: Page });
 function Page() {

@@ -1,5 +1,5 @@
 import { apiFetch } from "@/lib/api/client";
-import type { AuthSuccess, LoginPayload, RegisterPayload } from "./types";
+import type { AuthMe, AuthSuccess, LoginPayload, LoginResponse, RegisterPayload } from "./types";
 const json = (body: unknown) => JSON.stringify(body);
 export const authService = {
   register: (payload: RegisterPayload) =>
@@ -21,7 +21,7 @@ export const authService = {
       auth: false,
     }),
   login: (payload: LoginPayload) =>
-    apiFetch<AuthSuccess>("/auth/login", { method: "POST", body: json(payload), auth: false }),
+    apiFetch<LoginResponse>("/auth/login", { method: "POST", body: json(payload), auth: false }),
   approveDevice: (token: string) =>
     apiFetch<{ message: string }>("/auth/device/approve", {
       method: "POST",
@@ -62,9 +62,9 @@ export const authService = {
     apiFetch<{ accessToken: string }>("/auth/refresh", { method: "POST", skipAuthRefresh: true }),
   logout: () =>
     apiFetch<{ message: string }>("/auth/logout", { method: "POST", skipAuthRefresh: true }),
-  me: () => apiFetch<Omit<AuthSuccess["user"], "displayName">>("/auth/me"),
+  me: () => apiFetch<AuthMe>("/auth/me"),
 };
-export function toDisplayUser(user: Omit<AuthSuccess["user"], "displayName">) {
+export function toDisplayUser(user: AuthMe) {
   const displayName = user.email.split("@")[0];
   return { ...user, displayName, name: displayName };
 }

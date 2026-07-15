@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import { LogIn, ShieldAlert, ShieldCheck, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/providers/AuthProvider";
+import { useAuth } from "@/providers/AuthContext";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 

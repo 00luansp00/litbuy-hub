@@ -3,7 +3,7 @@ import { BadgeCheck, CalendarDays, Pencil, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/providers/AuthProvider";
+import { useAuth } from "@/providers/AuthContext";
 import { cn } from "@/lib/utils";
 
 interface AccountHeaderProps {
