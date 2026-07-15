@@ -348,7 +348,15 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
         expect(body.recoveryCodesRemaining).toBe(10);
         expect(sensitiveResponsePropertyPaths(body)).toEqual([]);
       });
-    const beforeSessions = await prisma.session.count({ where: { userId: account.user.id } });
+    const existingSessions = await prisma.session.findMany({
+      where: { userId: account.user.id },
+      select: { id: true },
+    });
+    const existingSessionIds = new Set(existingSessions.map((session) => session.id));
+    const beforeSessions = existingSessions.length;
+    const beforeRefreshTokens = await prisma.sessionRefreshToken.count({
+      where: { session: { userId: account.user.id } },
+    });
     const loginChallenge = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
       .set('Cookie', deviceCookie)
@@ -385,10 +393,24 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
     );
     await expect(
       prisma.sessionRefreshToken.count({ where: { session: { userId: account.user.id } } }),
-    ).resolves.toBe(1);
+    ).resolves.toBe(beforeRefreshTokens + 1);
     const accessToken = (
       loginWinner.status === Number(HttpStatus.OK) ? loginWinner.body : loginLoser.body
     ).accessToken as string;
+    const winningSessionId = sessionIdFromAccessToken(accessToken);
+    expect(existingSessionIds.has(winningSessionId)).toBe(false);
+    const winningRefreshTokens = await prisma.sessionRefreshToken.findMany({
+      where: { sessionId: winningSessionId },
+    });
+    expect(winningRefreshTokens).toHaveLength(1);
+    expect(winningRefreshTokens[0].revokedAt).toBeNull();
+    expect(winningRefreshTokens[0].usedAt).toBeNull();
+    await expect(prisma.session.count({ where: { userId: account.user.id } })).resolves.toBe(
+      beforeSessions + 1,
+    );
+    await expect(
+      prisma.sessionRefreshToken.count({ where: { session: { userId: account.user.id } } }),
+    ).resolves.toBe(beforeRefreshTokens + 1);
     await request(app.getHttpServer())
       .post('/api/v1/auth/2fa/login/verify')
       .set('Cookie', deviceCookie)
@@ -1411,6 +1433,7 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
       .send({ newEmail: pendingNewEmail, currentPassword: pendingUser.password })
       .expect(HttpStatus.OK);
     const pendingTokens = await emailChangeTokens(pendingUser.user.id, pendingNewEmail);
+    // Same-token duplicate confirmation allows one success; the duplicate is rejected.
     const [pendingA, pendingB] = await Promise.all([
       request(app.getHttpServer())
         .post('/api/v1/auth/email/change/confirm')
@@ -1484,15 +1507,30 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
         .post('/api/v1/auth/email/change/confirm')
         .send({ token: simultaneousTokens.newToken, newEmail: simultaneousNewEmail }),
     ]);
-    expect(
-      [currentResult.status, newResult.status].filter((status) => status === Number(HttpStatus.OK)),
-    ).toHaveLength(1);
-    expect(
-      [currentResult.status, newResult.status].filter(
-        (status) => status === Number(HttpStatus.BAD_REQUEST),
-      ),
-    ).toHaveLength(1);
+    // Current/new confirmations are different required tokens; both may succeed, with one finalization.
+    expect(currentResult.status).toBe(Number(HttpStatus.OK));
+    expect(newResult.status).toBe(Number(HttpStatus.OK));
+    expect([currentResult.status, newResult.status]).not.toContain(
+      Number(HttpStatus.INTERNAL_SERVER_ERROR),
+    );
     await expect(prisma.user.count({ where: { email: simultaneousNewEmail } })).resolves.toBe(1);
+    await expect(prisma.user.count({ where: { id: simultaneousUser.user.id } })).resolves.toBe(1);
+    const completedChange = await prisma.emailChangeRequest.findUniqueOrThrow({
+      where: { id: simultaneousTokens.change.id },
+    });
+    expect(completedChange.currentEmailConfirmedAt).toEqual(expect.any(Date));
+    expect(completedChange.newEmailConfirmedAt).toEqual(expect.any(Date));
+    expect(completedChange.completedAt).toEqual(expect.any(Date));
+    await expect(
+      prisma.emailChangeRequest.count({
+        where: { id: simultaneousTokens.change.id, completedAt: { not: null } },
+      }),
+    ).resolves.toBe(1);
+    const consumedChallenges = await prisma.verificationChallenge.findMany({
+      where: { contextId: simultaneousTokens.change.id },
+    });
+    expect(consumedChallenges).toHaveLength(2);
+    expect(consumedChallenges.every((challenge) => challenge.consumedAt)).toBe(true);
     await expect(
       prisma.verificationChallenge.count({
         where: { contextId: simultaneousTokens.change.id, consumedAt: null },
@@ -1503,6 +1541,14 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
         where: { userId: simultaneousUser.user.id, eventType: 'EMAIL_CHANGED' },
       }),
     ).resolves.toBe(1);
+    await expect(
+      prisma.securityEvent.count({
+        where: { userId: simultaneousUser.user.id, eventType: 'SENSITIVE_ACTION_HOLD_STARTED' },
+      }),
+    ).resolves.toBe(1);
+    await expect(
+      prisma.session.count({ where: { userId: simultaneousUser.user.id, revokedAt: null } }),
+    ).resolves.toBe(0);
     await request(app.getHttpServer())
       .post('/api/v1/auth/login')
       .set('Cookie', simultaneousUser.register.headers['set-cookie'] as unknown as string[])
@@ -1513,6 +1559,14 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
       .set('Cookie', simultaneousUser.register.headers['set-cookie'] as unknown as string[])
       .send({ email: simultaneousNewEmail, password: simultaneousUser.password })
       .expect(HttpStatus.OK);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/change/confirm')
+      .send({ token: simultaneousTokens.currentToken, newEmail: simultaneousNewEmail })
+      .expect(HttpStatus.BAD_REQUEST);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/change/confirm')
+      .send({ token: simultaneousTokens.newToken, newEmail: simultaneousNewEmail })
+      .expect(HttpStatus.BAD_REQUEST);
   });
 
   it('compensates real delivery failures without reusable challenges or side effects', async () => {
