@@ -24,6 +24,7 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
   let redis: RedisService;
   let mailer: AuthMailer;
   let sms: MemoryAuthSmsPort;
+  let redisIsolationProbeHit = false;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -53,6 +54,10 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
   });
 
   beforeEach(async () => {
+    const redisClient = await redis.getClient();
+    await redisClient.flushdb();
+    mailer.send = AuthMailer.prototype.send.bind(mailer);
+    sms.send = MemoryAuthSmsPort.prototype.send.bind(sms);
     await prisma.securityEvent.deleteMany();
     await prisma.sessionRefreshToken.deleteMany();
     await prisma.session.deleteMany();
@@ -138,6 +143,53 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
   it('confirms direct real PostgreSQL and Redis connections', async () => {
     await expect(prisma.$queryRaw`SELECT 1`).resolves.toEqual([{ '?column?': 1 }]);
     await expect((await redis.getClient()).ping()).resolves.toBe('PONG');
+  });
+
+  it('can hit a real Redis-backed registration rate limit inside one integration test', async () => {
+    for (let i = 0; i < 10; i += 1) {
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/register')
+        .send({
+          email: `integration-redis-limit-${i}@example.com`,
+          password: 'integration password 123',
+          birthDate: '2000-01-01',
+          termsAccepted: true,
+          privacyAccepted: true,
+          termsVersion: process.env.CURRENT_TERMS_VERSION,
+          privacyVersion: process.env.CURRENT_PRIVACY_VERSION,
+        })
+        .expect(HttpStatus.CREATED);
+    }
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/register')
+      .send({
+        email: 'integration-redis-limit-blocked@example.com',
+        password: 'integration password 123',
+        birthDate: '2000-01-01',
+        termsAccepted: true,
+        privacyAccepted: true,
+        termsVersion: process.env.CURRENT_TERMS_VERSION,
+        privacyVersion: process.env.CURRENT_PRIVACY_VERSION,
+      })
+      .expect(HttpStatus.TOO_MANY_REQUESTS)
+      .expect(({ body }) => expect(body.code).toBe('HTTP_ERROR'));
+    redisIsolationProbeHit = true;
+  });
+
+  it('starts the next integration test with Redis state flushed by beforeEach', async () => {
+    expect(redisIsolationProbeHit).toBe(true);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/register')
+      .send({
+        email: 'integration-redis-isolation-after-limit@example.com',
+        password: 'integration password 123',
+        birthDate: '2000-01-01',
+        termsAccepted: true,
+        privacyAccepted: true,
+        termsVersion: process.env.CURRENT_TERMS_VERSION,
+        privacyVersion: process.env.CURRENT_PRIVACY_VERSION,
+      })
+      .expect(HttpStatus.CREATED);
   });
 
   it('serves liveness without duplicating the API version prefix', async () => {
@@ -861,12 +913,52 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
           currentPassword: payload.password,
         }),
     ]);
-    expect(emailReqA.status === 200 || emailReqB.status === 200).toBe(true);
+    const emailStatuses = [emailReqA.status, emailReqB.status];
+    expect(emailStatuses).toContain(HttpStatus.OK);
+    expect(emailStatuses).not.toContain(HttpStatus.INTERNAL_SERVER_ERROR);
+    for (const response of [emailReqA, emailReqB]) {
+      if (response.status !== Number(HttpStatus.OK)) {
+        expect([
+          HttpStatus.BAD_REQUEST,
+          HttpStatus.CONFLICT,
+          HttpStatus.TOO_MANY_REQUESTS,
+        ]).toContain(response.status);
+        expect(JSON.stringify(response.body)).toMatch(
+          /EMAIL_UNAVAILABLE|TRANSACTION_CONFLICT|RATE_LIMITED|HTTP_ERROR|VALIDATION_ERROR/,
+        );
+        expect(JSON.stringify(response.body)).not.toMatch(
+          /P2034|40001|P2002|constraint|SQL|Unique/,
+        );
+      }
+    }
     await expect(
       prisma.emailChangeRequest.count({
         where: { userId: user.id, completedAt: null, cancelledAt: null },
       }),
     ).resolves.toBe(1);
+    const pendingChange = await prisma.emailChangeRequest.findFirstOrThrow({
+      where: { userId: user.id, completedAt: null, cancelledAt: null },
+      orderBy: { createdAt: 'desc' },
+    });
+    await expect(
+      prisma.emailChangeRequest.count({
+        where: { userId: user.id, id: { not: pendingChange.id }, cancelledAt: null },
+      }),
+    ).resolves.toBe(0);
+    await expect(
+      prisma.verificationChallenge.count({
+        where: {
+          userId: user.id,
+          purpose: { in: ['EMAIL_CHANGE_CURRENT', 'EMAIL_CHANGE_NEW'] },
+          OR: [{ contextId: null }, { contextId: { not: pendingChange.id }, consumedAt: null }],
+        },
+      }),
+    ).resolves.toBe(0);
+    await expect(
+      prisma.securityEvent.count({
+        where: { userId: user.id, eventType: 'EMAIL_CHANGED' },
+      }),
+    ).resolves.toBe(0);
   });
 
   it('preserves a larger sensitive hold with real PostgreSQL during password change', async () => {

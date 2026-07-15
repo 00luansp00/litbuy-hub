@@ -207,6 +207,58 @@ export class AuthService {
     return null;
   }
 
+  private transactionConflictCode(error: unknown): string | null {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
+      return 'P2034';
+    }
+    if (typeof error === 'object' && error !== null) {
+      const candidate = error as { code?: unknown; meta?: { code?: unknown } };
+      if (candidate.code === '40001' || candidate.meta?.code === '40001') return '40001';
+    }
+    return null;
+  }
+
+  private async runSerializableTransactionWithRetry<T>(
+    action: (tx: Prisma.TransactionClient) => Promise<T>,
+    context: string,
+  ): Promise<T> {
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        return await this.prisma.$transaction(action, {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        });
+      } catch (error) {
+        const conflictCode = this.transactionConflictCode(error);
+        if (!conflictCode || attempt === maxAttempts) {
+          if (conflictCode) {
+            this.logger.warn('Serializable transaction conflict exhausted', {
+              context,
+              errorCode: conflictCode,
+            });
+            throw new AppError(
+              'TRANSACTION_CONFLICT',
+              'Conflito transacional. Tente novamente.',
+              HttpStatus.CONFLICT,
+            );
+          }
+          throw error;
+        }
+        this.logger.warn('Retrying serializable transaction after conflict', {
+          context,
+          attempt,
+          errorCode: conflictCode,
+        });
+        await new Promise((resolve) => setTimeout(resolve, 5 * attempt + crypto.randomInt(0, 6)));
+      }
+    }
+    throw new AppError(
+      'TRANSACTION_CONFLICT',
+      'Conflito transacional. Tente novamente.',
+      HttpStatus.CONFLICT,
+    );
+  }
+
   private cookieOptions(httpOnly = true): CookieOptions {
     const c = this.authConfig();
     return {
@@ -1514,61 +1566,58 @@ export class AuthService {
     let currentToken = '';
     let newToken = '';
     let oldEmail = '';
-    await this.prisma.$transaction(
-      async (tx) => {
-        await this.advisoryTransactionLock(tx, `email-change-request:${auth.userId}`);
-        const user = await tx.user.findUniqueOrThrow({ where: { id: auth.userId } });
-        oldEmail = user.email;
-        if (newEmail === user.email) throw new BadRequestException({ code: 'EMAIL_UNCHANGED' });
-        if (await tx.user.findUnique({ where: { email: newEmail } })) {
-          throw new AppError('EMAIL_UNAVAILABLE', 'E-mail indisponível.', HttpStatus.BAD_REQUEST);
-        }
-        await tx.emailChangeRequest.updateMany({
-          where: { userId: auth.userId, completedAt: null, cancelledAt: null },
-          data: { cancelledAt: new Date() },
-        });
-        await tx.verificationChallenge.updateMany({
-          where: {
-            userId: auth.userId,
-            purpose: { in: ['EMAIL_CHANGE_CURRENT', 'EMAIL_CHANGE_NEW'] },
-            consumedAt: null,
-          },
-          data: { consumedAt: new Date() },
-        });
-        const change = await tx.emailChangeRequest.create({
-          data: { userId: auth.userId, newEmailHash: emailHash, expiresAt },
-        });
-        requestId = change.id;
-        currentToken = await this.createEmailChallenge(
-          tx,
-          auth.userId,
-          'EMAIL_CHANGE_CURRENT',
-          change.id,
-          emailHash,
-          expiresAt,
-        );
-        newToken = await this.createEmailChallenge(
-          tx,
-          auth.userId,
-          'EMAIL_CHANGE_NEW',
-          change.id,
-          emailHash,
-          expiresAt,
-        );
-        await this.persistCriticalSecurityEvent(
-          {
-            userId: auth.userId,
-            sessionId: auth.sessionId,
-            deviceId: auth.deviceId,
-            eventType: 'EMAIL_CHANGE_REQUESTED',
-            outcome: 'PENDING',
-            req,
-          },
-          tx,
-        );
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-    );
+    await this.runSerializableTransactionWithRetry(async (tx) => {
+      await this.advisoryTransactionLock(tx, `email-change-request:${auth.userId}`);
+      const user = await tx.user.findUniqueOrThrow({ where: { id: auth.userId } });
+      oldEmail = user.email;
+      if (newEmail === user.email) throw new BadRequestException({ code: 'EMAIL_UNCHANGED' });
+      if (await tx.user.findUnique({ where: { email: newEmail } })) {
+        throw new AppError('EMAIL_UNAVAILABLE', 'E-mail indisponível.', HttpStatus.BAD_REQUEST);
+      }
+      await tx.emailChangeRequest.updateMany({
+        where: { userId: auth.userId, completedAt: null, cancelledAt: null },
+        data: { cancelledAt: new Date() },
+      });
+      await tx.verificationChallenge.updateMany({
+        where: {
+          userId: auth.userId,
+          purpose: { in: ['EMAIL_CHANGE_CURRENT', 'EMAIL_CHANGE_NEW'] },
+          consumedAt: null,
+        },
+        data: { consumedAt: new Date() },
+      });
+      const change = await tx.emailChangeRequest.create({
+        data: { userId: auth.userId, newEmailHash: emailHash, expiresAt },
+      });
+      requestId = change.id;
+      currentToken = await this.createEmailChallenge(
+        tx,
+        auth.userId,
+        'EMAIL_CHANGE_CURRENT',
+        change.id,
+        emailHash,
+        expiresAt,
+      );
+      newToken = await this.createEmailChallenge(
+        tx,
+        auth.userId,
+        'EMAIL_CHANGE_NEW',
+        change.id,
+        emailHash,
+        expiresAt,
+      );
+      await this.persistCriticalSecurityEvent(
+        {
+          userId: auth.userId,
+          sessionId: auth.sessionId,
+          deviceId: auth.deviceId,
+          eventType: 'EMAIL_CHANGE_REQUESTED',
+          outcome: 'PENDING',
+          req,
+        },
+        tx,
+      );
+    }, 'email-change-request');
     try {
       this.mailer.send(oldEmail, 'EMAIL_CHANGE_CONFIRM_CURRENT', currentToken);
       this.mailer.send(newEmail, 'EMAIL_CHANGE_CONFIRM_NEW', newToken);
