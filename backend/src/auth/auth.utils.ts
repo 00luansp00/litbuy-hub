@@ -96,3 +96,26 @@ export function applySensitiveHold(
 export function isUniqueConstraintError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
 }
+
+export function generateTwoFactorCode(): string {
+  return generateSmsCode();
+}
+
+export function twoFactorChallengeHash(challengeId: string, code: string, pepper: string): string {
+  return hmacToken(`litbuy:2fa:challenge:${challengeId}:${code}`, pepper);
+}
+
+export function generateRecoveryCode(): string {
+  let raw = '';
+  while (raw.length < 15) {
+    raw += randomBytes(12)
+      .toString('base64url')
+      .replace(/[^A-Z0-9]/gi, '')
+      .toUpperCase();
+  }
+  return `${raw.slice(0, 5)}-${raw.slice(5, 10)}-${raw.slice(10, 15)}`;
+}
+
+export function recoveryCodeHash(code: string, pepper: string): string {
+  return hmacToken(`litbuy:2fa:recovery:${code.trim().toUpperCase()}`, pepper);
+}

@@ -116,6 +116,8 @@ class FakePrisma {
   challenges: Row[] = [];
   events: Row[] = [];
   emailChanges: Row[] = [];
+  twoFactorSettingsRows: Row[] = [];
+  twoFactorRecoveryCodeRows: Row[] = [];
   user = {
     create: async (a: { data: Row }) => {
       await Promise.resolve();
@@ -195,6 +197,8 @@ class FakePrisma {
   verificationChallenge = new Delegate(this.challenges);
   securityEvent = new Delegate(this.events);
   emailChangeRequest = new Delegate(this.emailChanges);
+  twoFactorSettings = new Delegate(this.twoFactorSettingsRows);
+  twoFactorRecoveryCode = new Delegate(this.twoFactorRecoveryCodeRows);
   private refreshDelegate = new Delegate(this.refreshTokens);
   sessionRefreshToken = {
     create: (a: { data: Row }) => this.refreshDelegate.create(a),

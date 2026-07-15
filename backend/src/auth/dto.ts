@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  IsIn,
   Matches,
   MaxLength,
   MinLength,
@@ -55,4 +56,24 @@ export class EmailChangeRequestDto {
 export class EmailChangeConfirmDto {
   @ApiProperty() @IsString() @MinLength(20) token!: string;
   @ApiProperty() @IsEmail() newEmail!: string;
+}
+
+export class TwoFactorEnrollRequestDto {
+  @ApiProperty({ enum: ['EMAIL', 'SMS'] }) @IsIn(['EMAIL', 'SMS']) method!: 'EMAIL' | 'SMS';
+  @ApiProperty() @IsString() currentPassword!: string;
+}
+export class TwoFactorCodeDto {
+  @ApiProperty() @IsUUID('4') challengeId!: string;
+  @ApiProperty() @IsString() @Matches(/^[0-9]{6}$/) code!: string;
+}
+export class TwoFactorLoginVerifyDto {
+  @ApiProperty() @IsUUID('4') challengeId!: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @Matches(/^[0-9]{6}$/) code?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() recoveryCode?: string;
+}
+export class TwoFactorChallengeDto {
+  @ApiProperty() @IsUUID('4') challengeId!: string;
+}
+export class TwoFactorDisableRequestDto {
+  @ApiProperty() @IsString() currentPassword!: string;
 }
