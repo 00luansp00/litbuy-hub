@@ -761,20 +761,25 @@ export class AuthService {
     return { message: 'Se a conta e o dispositivo existirem, enviaremos as instruções.' };
   }
 
-  private async revokeFamilyForReuse(
+  private async revokeFamilyForReuseTx(
+    tx: Prisma.TransactionClient,
     token: { sessionId: string; familyId: string },
     req: Request,
-    res: Response,
   ): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
-      const session = await tx.session.update({
-        where: { id: token.sessionId },
-        data: { revokedAt: new Date(), revocationReason: 'REFRESH_TOKEN_REUSE' },
-      });
-      await tx.sessionRefreshToken.updateMany({
-        where: { familyId: token.familyId, revokedAt: null },
-        data: { revokedAt: new Date() },
-      });
+    const session = await tx.session.findUnique({ where: { id: token.sessionId } });
+    if (!session) return;
+    const revokedSession = await tx.session.updateMany({
+      where: { id: token.sessionId, revokedAt: null },
+      data: { revokedAt: new Date(), revocationReason: 'REFRESH_TOKEN_REUSE' },
+    });
+    await tx.sessionRefreshToken.updateMany({
+      where: { familyId: token.familyId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    const reuseEvent = await tx.securityEvent.findFirst({
+      where: { sessionId: session.id, eventType: 'REFRESH_TOKEN_REUSE_DETECTED' },
+    });
+    if (!reuseEvent) {
       await this.persistCriticalSecurityEvent(
         {
           userId: session.userId,
@@ -786,6 +791,8 @@ export class AuthService {
         },
         tx,
       );
+    }
+    if (revokedSession.count === 1) {
       await this.persistCriticalSecurityEvent(
         {
           userId: session.userId,
@@ -797,8 +804,7 @@ export class AuthService {
         },
         tx,
       );
-    });
-    this.clearAuth(res);
+    }
   }
 
   async refresh(req: Request, res: Response): Promise<{ accessToken: string }> {
@@ -809,36 +815,54 @@ export class AuthService {
     const header = req.headers['x-csrf-token'];
     if (!raw || !csrf || typeof header !== 'string' || !safeEqual(csrf, header))
       throw new UnauthorizedException({ code: 'INVALID_SESSION' });
-    const tokenRecord = await this.prisma.sessionRefreshToken.findUnique({
-      where: { tokenHash: hmacToken(raw, c.refreshPepper) },
-      include: { session: { include: { user: true, device: true } } },
+
+    const tokenHash = hmacToken(raw, c.refreshPepper);
+    const candidate = await this.prisma.sessionRefreshToken.findUnique({
+      where: { tokenHash },
+      select: { familyId: true },
     });
-    if (!tokenRecord) throw new UnauthorizedException({ code: 'INVALID_SESSION' });
-    if (tokenRecord.usedAt || tokenRecord.revokedAt) {
-      await this.revokeFamilyForReuse(tokenRecord, req, res);
-      throw new UnauthorizedException({ code: 'INVALID_SESSION' });
-    }
-    const sess: SessionWithUserDevice = tokenRecord.session;
-    if (
-      tokenRecord.expiresAt < new Date() ||
-      sess.revokedAt ||
-      sess.expiresAt < new Date() ||
-      sess.device.status !== 'APPROVED' ||
-      !safeEqual(hmacToken(csrf, c.csrfPepper), sess.csrfTokenHash)
-    ) {
+    if (!candidate) {
       this.clearAuth(res);
       throw new UnauthorizedException({ code: 'INVALID_SESSION' });
     }
+
     const refresh = randomToken();
     const newCsrf = randomToken();
     const newHash = hmacToken(refresh, c.refreshPepper);
-    const acquired = await this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
+      await this.advisoryTransactionLock(tx, `refresh-family:${candidate.familyId}`);
+      const tokenRecord = await tx.sessionRefreshToken.findUnique({
+        where: { tokenHash },
+        include: { session: { include: { user: true, device: true } } },
+      });
+      if (!tokenRecord || tokenRecord.familyId !== candidate.familyId) {
+        return { status: 'INVALID' as const };
+      }
+      if (tokenRecord.usedAt || tokenRecord.revokedAt) {
+        await this.revokeFamilyForReuseTx(tx, tokenRecord, req);
+        return { status: 'REUSED' as const };
+      }
+
+      const sess: SessionWithUserDevice = tokenRecord.session;
+      if (
+        tokenRecord.expiresAt < new Date() ||
+        sess.revokedAt ||
+        sess.expiresAt < new Date() ||
+        sess.device.status !== 'APPROVED' ||
+        !safeEqual(hmacToken(csrf, c.csrfPepper), sess.csrfTokenHash)
+      ) {
+        return { status: 'INVALID' as const };
+      }
+
       const now = new Date();
       const claim = await tx.sessionRefreshToken.updateMany({
         where: { id: tokenRecord.id, usedAt: null, revokedAt: null },
         data: { usedAt: now },
       });
-      if (claim.count !== 1) return false;
+      if (claim.count !== 1) {
+        await this.revokeFamilyForReuseTx(tx, tokenRecord, req);
+        return { status: 'REUSED' as const };
+      }
       const next = await tx.sessionRefreshToken.create({
         data: {
           sessionId: sess.id,
@@ -869,16 +893,17 @@ export class AuthService {
         },
         tx,
       );
-      return true;
+      return { status: 'ROTATED' as const, session: sess };
     });
-    if (!acquired) {
-      await this.revokeFamilyForReuse(tokenRecord, req, res);
+
+    if (result.status !== 'ROTATED') {
+      this.clearAuth(res);
       throw new UnauthorizedException({ code: 'INVALID_SESSION' });
     }
     this.setRefreshAndCsrfCookies(res, refresh, newCsrf);
     return {
       accessToken: await this.jwt.signAsync(
-        { sub: sess.userId, sid: sess.id, type: 'access' },
+        { sub: result.session.userId, sid: result.session.id, type: 'access' },
         { secret: c.accessSecret, expiresIn: c.accessTtlSeconds },
       ),
     };

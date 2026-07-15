@@ -321,58 +321,72 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
   });
 
   it('handles concurrent refresh attempts for the same token safely with real PostgreSQL and Redis', async () => {
-    const payload = {
-      email: 'integration-concurrent@example.com',
-      password: 'integration password 123',
-      birthDate: '2000-01-01',
-      termsAccepted: true,
-      privacyAccepted: true,
-      termsVersion: process.env.CURRENT_TERMS_VERSION,
-      privacyVersion: process.env.CURRENT_PRIVACY_VERSION,
-    };
-    const register = await request(app.getHttpServer())
-      .post('/api/v1/auth/register')
-      .send(payload)
-      .expect(HttpStatus.CREATED);
-    const deviceCookie = register.headers['set-cookie'] as unknown as string[];
-    const token = mailer.sent.find((message) => message.purpose === 'EMAIL_VERIFICATION')?.token;
-    await request(app.getHttpServer())
-      .post('/api/v1/auth/email/verify')
-      .send({ token })
-      .expect(HttpStatus.OK);
-    const login = await request(app.getHttpServer())
-      .post('/api/v1/auth/login')
-      .set('Cookie', deviceCookie)
-      .send({ email: payload.email, password: payload.password })
-      .expect(HttpStatus.OK);
-    const cookies = login.headers['set-cookie'] as unknown as string[];
-    const csrf = String(cookies.find((cookie) => cookie.startsWith('litbuy_csrf')))
-      .split(';')[0]
-      .split('=')[1];
-    const [first, second] = await Promise.allSettled([
-      request(app.getHttpServer())
+    const account = await registerVerifiedAndLogin('integration-concurrent@example.com');
+
+    for (let index = 0; index < 5; index += 1) {
+      const login = await request(app.getHttpServer())
+        .post('/api/v1/auth/login')
+        .set('Cookie', account.register.headers['set-cookie'] as unknown as string[])
+        .send({ email: account.email, password: account.password })
+        .expect(HttpStatus.OK);
+      const cookies = login.headers['set-cookie'] as unknown as string[];
+      const csrf = String(cookies.find((cookie) => cookie.startsWith('litbuy_csrf')))
+        .split(';')[0]
+        .split('=')[1];
+      const sessionId = sessionIdFromAccessToken(login.body.accessToken as string);
+      const sessionBefore = await prisma.session.findUniqueOrThrow({ where: { id: sessionId } });
+
+      const [first, second] = await Promise.all([
+        request(app.getHttpServer())
+          .post('/api/v1/auth/refresh')
+          .set('Cookie', cookies)
+          .set('X-CSRF-Token', csrf),
+        request(app.getHttpServer())
+          .post('/api/v1/auth/refresh')
+          .set('Cookie', cookies)
+          .set('X-CSRF-Token', csrf),
+      ]);
+      const responses = [first, second];
+      const statuses = responses.map((response) => response.status);
+      expect(statuses.filter((status) => status === Number(HttpStatus.OK))).toHaveLength(1);
+      expect(statuses.filter((status) => status === Number(HttpStatus.UNAUTHORIZED))).toHaveLength(
+        1,
+      );
+      expect(statuses).not.toContain(HttpStatus.INTERNAL_SERVER_ERROR);
+
+      const okResponse = responses.find((response) => response.status === Number(HttpStatus.OK))!;
+      await request(app.getHttpServer())
+        .get('/api/v1/auth/me')
+        .set('Authorization', `Bearer ${okResponse.body.accessToken}`)
+        .expect(HttpStatus.UNAUTHORIZED);
+      const rotatedCookies = okResponse.headers['set-cookie'] as unknown as string[];
+      const rotatedCsrf = String(rotatedCookies.find((cookie) => cookie.startsWith('litbuy_csrf')))
+        .split(';')[0]
+        .split('=')[1];
+      await request(app.getHttpServer())
         .post('/api/v1/auth/refresh')
-        .set('Cookie', cookies)
-        .set('X-CSRF-Token', csrf),
-      request(app.getHttpServer())
-        .post('/api/v1/auth/refresh')
-        .set('Cookie', cookies)
-        .set('X-CSRF-Token', csrf),
-    ]);
-    const statuses = [first, second].map((result) =>
-      result.status === 'fulfilled' ? result.value.status : 500,
-    );
-    expect(statuses.filter((status) => status === 200)).toHaveLength(1);
-    expect(statuses.filter((status) => status === 401)).toHaveLength(1);
-    const session = await prisma.session.findFirstOrThrow({
-      where: { user: { email: payload.email } },
-    });
-    const family = await prisma.sessionRefreshToken.findMany({
-      where: { familyId: session.refreshTokenFamilyId },
-    });
-    expect(family.filter((row) => row.replacedByTokenId !== null)).toHaveLength(1);
-    expect(family.filter((row) => row.revokedAt === null && row.usedAt === null)).toHaveLength(0);
-    expect(session.revokedAt).toBeTruthy();
+        .set('Cookie', rotatedCookies)
+        .set('X-CSRF-Token', rotatedCsrf)
+        .expect(HttpStatus.UNAUTHORIZED);
+
+      const sessionAfter = await prisma.session.findUniqueOrThrow({ where: { id: sessionId } });
+      expect(sessionAfter.revokedAt).toEqual(expect.any(Date));
+      expect(sessionAfter.revocationReason).toBe('REFRESH_TOKEN_REUSE');
+      const family = await prisma.sessionRefreshToken.findMany({
+        where: { familyId: sessionBefore.refreshTokenFamilyId },
+      });
+      expect(family.filter((row) => row.replacedByTokenId !== null)).toHaveLength(1);
+      expect(family.filter((row) => row.revokedAt === null)).toHaveLength(0);
+      expect(family.filter((row) => row.revokedAt === null && row.usedAt === null)).toHaveLength(0);
+      await expect(
+        prisma.securityEvent.count({
+          where: { sessionId, eventType: 'REFRESH_TOKEN_REUSE_DETECTED' },
+        }),
+      ).resolves.toBe(1);
+      await expect(
+        prisma.securityEvent.count({ where: { sessionId, eventType: 'SESSION_REVOKED' } }),
+      ).resolves.toBe(1);
+    }
   });
 
   it('executes real Sprint 2B1 password recovery, sessions, IDOR, device replacement and logout-all flow', async () => {
@@ -1305,7 +1319,11 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
     const phoneUser = await registerVerifiedAndLogin('integration-delivery-phone@example.com');
     const originalSmsSend = sms.send.bind(sms);
     let failSms = true;
+    let attemptedCode: string | undefined;
+    let attemptedPhone: string | undefined;
     const failingSmsSend: typeof sms.send = (to, purpose, code) => {
+      attemptedPhone = to;
+      attemptedCode = code;
       if (failSms) {
         failSms = false;
         throw new Error('simulated sms failure');
@@ -1319,8 +1337,25 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
       .send({ phone: '(17) 95555-3434', currentPassword: phoneUser.password })
       .expect(HttpStatus.SERVICE_UNAVAILABLE);
     expect(failedSms.body.code).toBe('SMS_DELIVERY_UNAVAILABLE');
-    expect(JSON.stringify(failedSms.body)).not.toMatch(
-      /95555|\d{6}|token|hash|pepper|SQL|constraint/,
+    expect(Object.keys(failedSms.body).sort()).toEqual([
+      'code',
+      'details',
+      'message',
+      'path',
+      'requestId',
+      'statusCode',
+      'timestamp',
+    ]);
+    expect(attemptedCode).toMatch(/^[0-9]{6}$/);
+    expect(attemptedPhone).toBe('+5517955553434');
+    const serializedSmsFailure = JSON.stringify(failedSms.body);
+    expect(serializedSmsFailure).not.toContain(attemptedCode);
+    expect(serializedSmsFailure).not.toContain(attemptedPhone);
+    expect(serializedSmsFailure).not.toContain('(17) 95555-3434');
+    expect(serializedSmsFailure).not.toContain('+5517955553434');
+    expect(serializedSmsFailure).not.toContain('3434');
+    expect(serializedSmsFailure).not.toMatch(
+      /tokenHash|targetHash|pepper|P2002|P2034|40001|SQL|constraint|metadata/i,
     );
     await expect(
       prisma.verificationChallenge.count({
