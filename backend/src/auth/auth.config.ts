@@ -25,6 +25,11 @@ export const authConfig = registerAs('auth', () => ({
   phoneResendCooldownSeconds: Number(process.env.AUTH_PHONE_RESEND_COOLDOWN_SECONDS ?? 60),
   emailChangeTtlMinutes: Number(process.env.AUTH_EMAIL_CHANGE_TTL_MINUTES ?? 30),
   sensitiveChangeHoldHours: Number(process.env.AUTH_SENSITIVE_CHANGE_HOLD_HOURS ?? 48),
+  twoFactorCodeTtlMinutes: Number(process.env.AUTH_2FA_CODE_TTL_MINUTES ?? 10),
+  twoFactorResendCooldownSeconds: Number(process.env.AUTH_2FA_RESEND_COOLDOWN_SECONDS ?? 60),
+  twoFactorMaxAttempts: Number(process.env.AUTH_2FA_MAX_ATTEMPTS ?? 5),
+  twoFactorRecoveryCodeCount: Number(process.env.AUTH_2FA_RECOVERY_CODE_COUNT ?? 10),
+  twoFactorRecoveryPepper: process.env.AUTH_2FA_RECOVERY_PEPPER!,
   currentTermsVersion: process.env.CURRENT_TERMS_VERSION ?? '2026-07-14',
   currentPrivacyVersion: process.env.CURRENT_PRIVACY_VERSION ?? '2026-07-14',
 }));

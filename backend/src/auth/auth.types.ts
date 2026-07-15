@@ -27,6 +27,11 @@ export interface AuthRuntimeConfig {
   phoneResendCooldownSeconds: number;
   emailChangeTtlMinutes: number;
   sensitiveChangeHoldHours: number;
+  twoFactorCodeTtlMinutes: number;
+  twoFactorResendCooldownSeconds: number;
+  twoFactorMaxAttempts: number;
+  twoFactorRecoveryCodeCount: number;
+  twoFactorRecoveryPepper: string;
   currentTermsVersion: string;
   currentPrivacyVersion: string;
 }

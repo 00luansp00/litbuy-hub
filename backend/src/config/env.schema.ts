@@ -62,6 +62,7 @@ export class EnvironmentVariables {
   @IsString() @IsNotEmpty() AUTH_DEVICE_TOKEN_PEPPER!: string;
   @IsString() @IsNotEmpty() AUTH_CSRF_TOKEN_PEPPER!: string;
   @IsString() @IsNotEmpty() AUTH_IP_HASH_PEPPER!: string;
+  @IsString() @IsNotEmpty() AUTH_2FA_RECOVERY_PEPPER!: string;
   @Transform(({ value }) => Number(value ?? 30))
   @IsInt()
   @Min(1)
@@ -102,6 +103,19 @@ export class EnvironmentVariables {
   @IsInt()
   @Min(1)
   AUTH_SENSITIVE_CHANGE_HOLD_HOURS!: number;
+  @Transform(({ value }) => Number(value ?? 10))
+  @IsInt()
+  @Min(1)
+  AUTH_2FA_CODE_TTL_MINUTES!: number;
+  @Transform(({ value }) => Number(value ?? 60))
+  @IsInt()
+  @Min(1)
+  AUTH_2FA_RESEND_COOLDOWN_SECONDS!: number;
+  @Transform(({ value }) => Number(value ?? 5)) @IsInt() @Min(1) AUTH_2FA_MAX_ATTEMPTS!: number;
+  @Transform(({ value }) => Number(value ?? 10))
+  @IsInt()
+  @Min(1)
+  AUTH_2FA_RECOVERY_CODE_COUNT!: number;
   @IsString() @IsNotEmpty() CURRENT_TERMS_VERSION!: string;
   @IsString() @IsNotEmpty() CURRENT_PRIVACY_VERSION!: string;
 }

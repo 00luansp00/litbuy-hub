@@ -15,6 +15,10 @@ import {
   targetHash,
   applySensitiveHold,
   isUniqueConstraintError,
+  generateTwoFactorCode,
+  generateRecoveryCode,
+  recoveryCodeHash,
+  twoFactorChallengeHash,
 } from './auth.utils';
 import { AUTH_DUMMY_PASSWORD_HASH } from './auth.service';
 describe('auth utils', () => {
@@ -61,7 +65,11 @@ describe('auth utils', () => {
     expect(normalizeBrazilianMobilePhone('(17) 3333-1234')).toBeNull();
     expect(maskBrazilianPhone('+5517999991234')).toBe('+55 17 *****-1234');
   });
-  it('generates SMS code and challenge-bound hashes', () => {
+  it('generates SMS/2FA code and challenge-bound hashes', () => {
+    expect(generateTwoFactorCode()).toMatch(/^\d{6}$/);
+    expect(twoFactorChallengeHash('challenge-a', '123456', 'pepper')).not.toBe(
+      twoFactorChallengeHash('challenge-b', '123456', 'pepper'),
+    );
     expect(generateSmsCode()).toMatch(/^\d{6}$/);
     expect(challengeSecretHash('a', '123456', 'pepper')).not.toBe(
       challengeSecretHash('b', '123456', 'pepper'),
@@ -70,6 +78,13 @@ describe('auth utils', () => {
       targetHash('email', '+5517999991234', 'pepper'),
     );
   });
+  it('generates recovery codes with domain-separated HMAC hashes', () => {
+    const code = generateRecoveryCode();
+    expect(code).toMatch(/^[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}$/);
+    expect(recoveryCodeHash(code, 'pepper')).toHaveLength(64);
+    expect(recoveryCodeHash(code, 'pepper')).not.toBe(hmacToken(code, 'pepper'));
+  });
+
   it('applies sensitive holds without reducing existing longer hold', () => {
     const now = new Date('2026-07-14T00:00:00Z');
     const next = applySensitiveHold(null, now, 48);

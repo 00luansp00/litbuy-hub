@@ -28,6 +28,14 @@ enum VerificationPurpose {
   PHONE_VERIFICATION
   EMAIL_CHANGE_CURRENT
   EMAIL_CHANGE_NEW
+  TWO_FACTOR_ENROLLMENT
+  TWO_FACTOR_LOGIN
+  TWO_FACTOR_DISABLE
+}
+
+enum TwoFactorMethod {
+  EMAIL
+  SMS
 }
 
 enum SecurityEventType {
@@ -58,6 +66,14 @@ enum SecurityEventType {
   EMAIL_CHANGE_NEW_CONFIRMED
   EMAIL_CHANGED
   SENSITIVE_ACTION_HOLD_STARTED
+  TWO_FACTOR_ENROLLMENT_REQUESTED
+  TWO_FACTOR_ENABLED
+  TWO_FACTOR_LOGIN_REQUIRED
+  TWO_FACTOR_LOGIN_SUCCEEDED
+  TWO_FACTOR_LOGIN_FAILED
+  TWO_FACTOR_RECOVERY_CODE_USED
+  TWO_FACTOR_DISABLE_REQUESTED
+  TWO_FACTOR_DISABLED
 }
 
 enum SecurityEventOutcome {
@@ -91,6 +107,8 @@ model User {
   verificationChallenges   VerificationChallenge[]
   securityEvents           SecurityEvent[]
   emailChangeRequests      EmailChangeRequest[]
+  twoFactorSettings        TwoFactorSettings?
+  twoFactorRecoveryCodes   TwoFactorRecoveryCode[]
 
   @@unique([phoneE164])
   @@index([email])
@@ -237,4 +255,27 @@ model SessionRefreshToken {
   @@index([familyId])
   @@index([tokenHash])
   @@index([familyId, revokedAt, expiresAt])
+}
+
+model TwoFactorSettings {
+  userId     String          @id @db.Uuid
+  user       User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  method     TwoFactorMethod
+  enabledAt  DateTime
+  disabledAt DateTime?
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  @@index([disabledAt])
+}
+
+model TwoFactorRecoveryCode {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  codeHash  String    @unique
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, usedAt])
 }

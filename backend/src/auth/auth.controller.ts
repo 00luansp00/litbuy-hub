@@ -25,6 +25,11 @@ import {
   RegisterDto,
   ResetPasswordDto,
   TokenDto,
+  TwoFactorChallengeDto,
+  TwoFactorCodeDto,
+  TwoFactorDisableRequestDto,
+  TwoFactorEnrollRequestDto,
+  TwoFactorLoginVerifyDto,
 } from './dto';
 import { AccessTokenGuard } from './access-token.guard';
 import { CurrentUser } from './current-user.decorator';
@@ -246,6 +251,97 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     return this.auth.verifyPhone(dto, user, req, res);
+  }
+
+  @Post('2fa/enroll/request')
+  @HttpCode(200)
+  @UseGuards(AccessTokenGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Solicita ativação de 2FA por EMAIL ou SMS; retorna challengeId sem código.',
+  })
+  enroll2faRequest(
+    @Body() dto: TwoFactorEnrollRequestDto,
+    @CurrentUser() user: { userId: string; sessionId: string; deviceId: string },
+    @Req() req: Request,
+  ) {
+    return this.auth.requestTwoFactorEnrollment(dto, user, req);
+  }
+
+  @Post('2fa/enroll/confirm')
+  @HttpCode(200)
+  @UseGuards(AccessTokenGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Confirma ativação de 2FA e retorna códigos de recuperação uma única vez.',
+  })
+  enroll2faConfirm(
+    @Body() dto: TwoFactorCodeDto,
+    @CurrentUser() user: { userId: string; sessionId: string; deviceId: string },
+    @Req() req: Request,
+  ) {
+    return this.auth.confirmTwoFactorEnrollment(dto, user, req);
+  }
+
+  @Get('2fa/status')
+  @UseGuards(AccessTokenGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Retorna status seguro de 2FA sem códigos, hashes, telefone ou e-mail completo.',
+  })
+  twoFactorStatus(@CurrentUser() user: { userId: string }) {
+    return this.auth.twoFactorStatus(user);
+  }
+
+  @Post('2fa/login/verify')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Conclui login com 2FA por código ou recovery code; só então cria sessão/cookies.',
+  })
+  verify2faLogin(
+    @Body() dto: TwoFactorLoginVerifyDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return this.auth.verifyTwoFactorLogin(dto, req, res);
+  }
+
+  @Post('2fa/login/resend')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Reenvia challenge de login 2FA respeitando cooldown Redis e invalida o anterior.',
+  })
+  resend2faLogin(@Body() dto: TwoFactorChallengeDto, @Req() req: Request) {
+    return this.auth.resendTwoFactorLogin(dto, req);
+  }
+
+  @Post('2fa/disable/request')
+  @HttpCode(200)
+  @UseGuards(AccessTokenGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Solicita desativação de 2FA com senha atual e dispositivo aprovado.' })
+  disable2faRequest(
+    @Body() dto: TwoFactorDisableRequestDto,
+    @CurrentUser() user: { userId: string; sessionId: string; deviceId: string },
+    @Req() req: Request,
+  ) {
+    return this.auth.requestTwoFactorDisable(dto, user, req);
+  }
+
+  @Post('2fa/disable/confirm')
+  @HttpCode(200)
+  @UseGuards(AccessTokenGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Desativa 2FA por código ou recovery code, revoga sessões e limpa refresh/CSRF.',
+  })
+  disable2faConfirm(
+    @Body() dto: TwoFactorLoginVerifyDto,
+    @CurrentUser() user: { userId: string; sessionId: string; deviceId: string },
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    return this.auth.confirmTwoFactorDisable(dto, user, req, res);
   }
 
   @Post('refresh') @HttpCode(200) @ApiCookieAuth() refresh(

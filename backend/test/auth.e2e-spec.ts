@@ -11,7 +11,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { AuthMailer } from '../src/auth/auth.service';
 import type { AuthRuntimeConfig } from '../src/auth/auth.types';
-import { randomToken } from '../src/auth/auth.utils';
+import { hashPassword, randomToken } from '../src/auth/auth.utils';
 
 type Row = Record<string, unknown>;
 const id = () => crypto.randomUUID();
@@ -23,6 +23,36 @@ function isoDateYearsAgo(years: number, dayOffset = 0): string {
     Date.UTC(today.getUTCFullYear() - years, today.getUTCMonth(), today.getUTCDate() + dayOffset),
   );
   return utc.toISOString().slice(0, 10);
+}
+
+const SENSITIVE_RESPONSE_PROPERTY_NAMES = new Set([
+  'codeHash',
+  'tokenHash',
+  'targetHash',
+  'passwordHash',
+  'csrfTokenHash',
+  'refreshTokenHash',
+  'pepper',
+  'phoneE164',
+  'email',
+  'recoveryCode',
+  'recoveryCodes',
+  'token',
+  'code',
+]);
+
+function sensitiveResponsePropertyPaths(value: unknown, path = 'body'): string[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((entry, index) =>
+      sensitiveResponsePropertyPaths(entry, `${path}[${index}]`),
+    );
+  }
+  if (!value || typeof value !== 'object') return [];
+  return Object.entries(value as Record<string, unknown>).flatMap(([key, entry]) => {
+    const nextPath = `${path}.${key}`;
+    const current = SENSITIVE_RESPONSE_PROPERTY_NAMES.has(key) ? [nextPath] : [];
+    return current.concat(sensitiveResponsePropertyPaths(entry, nextPath));
+  });
 }
 class Delegate<T extends Row> {
   constructor(private rows: T[]) {}
@@ -72,11 +102,35 @@ class Delegate<T extends Row> {
     rows.forEach((r) => Object.assign(r, this.apply(args.data, r), { updatedAt: now() }));
     return { count: rows.length };
   }
-  async deleteMany() {
+  async deleteMany(args: { where?: Row } = {}) {
     await Promise.resolve();
-    const count = this.rows.length;
-    this.rows.splice(0);
-    return { count };
+    const before = this.rows.length;
+    if (!args.where) this.rows.splice(0);
+    else {
+      for (let index = this.rows.length - 1; index >= 0; index -= 1) {
+        if (this.matches(this.rows[index], args.where)) this.rows.splice(index, 1);
+      }
+    }
+    return { count: before - this.rows.length };
+  }
+  async createMany(args: { data: Row[] }) {
+    await Promise.resolve();
+    for (const data of args.data) await this.create({ data });
+    return { count: args.data.length };
+  }
+  async count(args: { where?: Row } = {}) {
+    await Promise.resolve();
+    return args.where
+      ? this.rows.filter((r) => this.matches(r, args.where!)).length
+      : this.rows.length;
+  }
+  async upsert(args: { where: Row; update: Row; create: Row }) {
+    const found = await this.findUnique({ where: args.where });
+    if (found) {
+      Object.assign(found, this.apply(args.update, found), { updatedAt: now() });
+      return found;
+    }
+    return this.create({ data: args.create });
   }
   all() {
     return this.rows;
@@ -116,6 +170,8 @@ class FakePrisma {
   challenges: Row[] = [];
   events: Row[] = [];
   emailChanges: Row[] = [];
+  twoFactorSettingsRows: Row[] = [];
+  twoFactorRecoveryCodeRows: Row[] = [];
   user = {
     create: async (a: { data: Row }) => {
       await Promise.resolve();
@@ -174,9 +230,10 @@ class FakePrisma {
         a.data,
       );
     },
-    findUniqueOrThrow: async (a: { where: Row }) => {
-      await Promise.resolve();
-      return this.users.find((u) => u.id === a.where.id)!;
+    findUniqueOrThrow: async (a: { where: Row; include?: Row }) => {
+      const user = await this.user.findUnique(a);
+      if (!user) throw new Error('not found');
+      return user;
     },
     findFirst: async (a: { where: Row }) => {
       await Promise.resolve();
@@ -192,9 +249,28 @@ class FakePrisma {
   };
   passwordCredential = new Delegate(this.credentials);
   device = new Delegate(this.devices);
-  verificationChallenge = new Delegate(this.challenges);
+  private challengeDelegate = new Delegate(this.challenges);
+  verificationChallenge = {
+    create: (a: { data: Row }) => this.challengeDelegate.create(a),
+    update: (a: { where: Row; data: Row }) => this.challengeDelegate.update(a),
+    updateMany: (a: { where: Row; data: Row }) => this.challengeDelegate.updateMany(a),
+    findUniqueOrThrow: (a: { where: Row }) => this.challengeDelegate.findUniqueOrThrow(a),
+    findMany: (a: { where?: Row; include?: Row; orderBy?: Row; take?: number } = {}) =>
+      this.challengeDelegate.findMany(a),
+    findUnique: async (a: { where: Row; include?: Row }) => {
+      const ch = await this.challengeDelegate.findUnique(a);
+      if (!ch || !a.include) return ch;
+      return {
+        ...ch,
+        user: this.users.find((u) => u.id === ch.userId),
+        device: this.devices.find((d) => d.id === ch.deviceId),
+      };
+    },
+  };
   securityEvent = new Delegate(this.events);
   emailChangeRequest = new Delegate(this.emailChanges);
+  twoFactorSettings = new Delegate(this.twoFactorSettingsRows);
+  twoFactorRecoveryCode = new Delegate(this.twoFactorRecoveryCodeRows);
   private refreshDelegate = new Delegate(this.refreshTokens);
   sessionRefreshToken = {
     create: (a: { data: Row }) => this.refreshDelegate.create(a),
@@ -225,7 +301,11 @@ class FakePrisma {
     create: (a: { data: Row }) => this.sessionDelegate.create(a),
     update: (a: { where: Row; data: Row }) => this.sessionDelegate.update(a),
     updateMany: (a: { where: Row; data: Row }) => this.sessionDelegate.updateMany(a),
-    findFirst: (a: { where: Row }) => this.sessionDelegate.findFirst(a),
+    findFirst: async (a: { where: Row; include?: Row }) => {
+      const row = await this.sessionDelegate.findFirst(a);
+      if (!row || !a.include) return row;
+      return { ...row, device: this.devices.find((d) => d.id === row.deviceId) };
+    },
     findMany: async (a: { where?: Row; include?: Row; orderBy?: Row; take?: number } = {}) => {
       const rows = await this.sessionDelegate.findMany(a);
       return a.include
@@ -655,7 +735,8 @@ describe('Auth HTTP e2e flows', () => {
     await request(app.getHttpServer())
       .post('/api/v1/auth/password/forgot')
       .send({ email: base.email })
-      .expect(429);
+      .expect(429)
+      .expect((r) => expect(r.body.code).toBe('RATE_LIMITED'));
 
     await request(app.getHttpServer())
       .post('/api/v1/auth/password/reset')
@@ -880,11 +961,15 @@ describe('Auth HTTP e2e flows', () => {
   async function verifiedLogin(email = base.email) {
     const registration = await register(email).expect(HttpStatus.CREATED);
     await verifyLatest().expect(200);
-    return request(app.getHttpServer())
+    const login = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
       .set('Cookie', registration.headers['set-cookie'])
       .send({ email, password: base.password })
       .expect(200);
+    (login as request.Response & { deviceCookies?: string[] }).deviceCookies = registration.headers[
+      'set-cookie'
+    ] as unknown as string[];
+    return login;
   }
 
   it('executes Sprint 2B2 phone verification HTTP scenarios', async () => {
@@ -923,7 +1008,8 @@ describe('Auth HTTP e2e flows', () => {
       .post('/api/v1/auth/phone/request')
       .set('Authorization', auth)
       .send({ phone: '(17) 99999-1234', currentPassword: base.password })
-      .expect(429);
+      .expect(429)
+      .expect((r) => expect(r.body.code).toBe('PHONE_RESEND_COOLDOWN'));
     await request(app.getHttpServer())
       .post('/api/v1/auth/phone/verify')
       .set('Authorization', auth)
@@ -1102,6 +1188,320 @@ describe('Auth HTTP e2e flows', () => {
       .expect(400);
   });
 
+  async function loginOnApprovedSecondDevice(email: string) {
+    const pending = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({ email, password: base.password })
+      .expect(202);
+    const approval = mailer.sent.at(-1)!.token;
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/device/approve')
+      .send({ token: approval })
+      .expect(200);
+    const login = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', pending.headers['set-cookie'] as unknown as string[])
+      .send({ email, password: base.password })
+      .expect(200);
+    return {
+      auth: `Bearer ${login.body.accessToken}`,
+      cookies: pending.headers['set-cookie'] as unknown as string[],
+    };
+  }
+
+  it('serializes cross-device 2FA enrollment requests through HTTP', async () => {
+    const firstLogin = await verifiedLogin('two-factor-cross-device@example.com');
+    const authA = `Bearer ${firstLogin.body.accessToken}`;
+    const user = prisma.users.find((u) => u.email === 'two-factor-cross-device@example.com')!;
+    const deviceA = prisma.devices.find((device) => device.userId === user.id)!;
+    const secondDevice = await loginOnApprovedSecondDevice('two-factor-cross-device@example.com');
+    const deviceB = prisma.devices.find(
+      (device) => device.userId === user.id && device.id !== deviceA.id,
+    )!;
+
+    const enrollmentA = await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/enroll/request')
+      .set('Authorization', authA)
+      .send({ method: 'EMAIL', currentPassword: base.password })
+      .expect(200);
+    const codeA = mailer.sent.at(-1)!.token!;
+    const enrollmentB = await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/enroll/request')
+      .set('Authorization', secondDevice.auth)
+      .send({ method: 'EMAIL', currentPassword: base.password })
+      .expect(200);
+    const codeB = mailer.sent.at(-1)!.token!;
+
+    const activeEnrollmentChallenges = prisma.challenges.filter(
+      (challenge) => challenge.purpose === 'TWO_FACTOR_ENROLLMENT' && !challenge.consumedAt,
+    );
+    expect(activeEnrollmentChallenges).toHaveLength(1);
+    expect(activeEnrollmentChallenges[0].deviceId).toBe(deviceB.id);
+    expect(
+      prisma.challenges.find((challenge) => challenge.id === enrollmentA.body.challengeId),
+    ).toMatchObject({ consumedAt: expect.any(Date) });
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/enroll/confirm')
+      .set('Authorization', authA)
+      .send({ challengeId: enrollmentA.body.challengeId, code: codeA })
+      .expect(400)
+      .expect((response) => expect(response.body.code).toBe('INVALID_OR_EXPIRED_2FA_CODE'));
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/enroll/confirm')
+      .set('Authorization', secondDevice.auth)
+      .send({ challengeId: enrollmentB.body.challengeId, code: codeB })
+      .expect(200)
+      .expect((response) => expect(response.body.recoveryCodes).toHaveLength(10));
+    expect(prisma.events.filter((event) => event.eventType === 'TWO_FACTOR_ENABLED')).toHaveLength(
+      1,
+    );
+
+    const concurrentLogin = await verifiedLogin('two-factor-cross-device-concurrent@example.com');
+    const concurrentAuthA = `Bearer ${concurrentLogin.body.accessToken}`;
+    const concurrentSecondDevice = await loginOnApprovedSecondDevice(
+      'two-factor-cross-device-concurrent@example.com',
+    );
+    const concurrentResponses = await Promise.all([
+      request(app.getHttpServer())
+        .post('/api/v1/auth/2fa/enroll/request')
+        .set('Authorization', concurrentAuthA)
+        .send({ method: 'EMAIL', currentPassword: base.password }),
+      request(app.getHttpServer())
+        .post('/api/v1/auth/2fa/enroll/request')
+        .set('Authorization', concurrentSecondDevice.auth)
+        .send({ method: 'EMAIL', currentPassword: base.password }),
+    ]);
+    expect(concurrentResponses.map((response) => response.status)).not.toContain(500);
+    expect(
+      concurrentResponses.every((response) =>
+        [HttpStatus.OK, HttpStatus.CONFLICT].includes(response.status),
+      ),
+    ).toBe(true);
+    expect(
+      JSON.stringify(concurrentResponses.map((response) => response.body as unknown)),
+    ).not.toMatch(/P2002|constraint|SQL/i);
+    expect(
+      prisma.challenges.filter(
+        (challenge) =>
+          challenge.purpose === 'TWO_FACTOR_ENROLLMENT' &&
+          challenge.userId ===
+            prisma.users.find(
+              (candidate) => candidate.email === 'two-factor-cross-device-concurrent@example.com',
+            )!.id &&
+          !challenge.consumedAt,
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('executes Sprint 2C1 EMAIL enrollment, login, recovery and disable HTTP scenarios', async () => {
+    const firstLogin = await verifiedLogin('two-factor-email@example.com');
+    const auth = `Bearer ${firstLogin.body.accessToken}`;
+    const firstCookies = (firstLogin as request.Response & { deviceCookies: string[] })
+      .deviceCookies;
+    await request(app.getHttpServer())
+      .get('/api/v1/auth/2fa/status')
+      .set('Authorization', auth)
+      .expect(200)
+      .expect((r) => {
+        expect(Object.keys(r.body).sort()).toEqual(
+          ['enabled', 'enabledAt', 'method', 'recoveryCodesRemaining'].sort(),
+        );
+        expect(r.body).toEqual({
+          enabled: false,
+          method: null,
+          enabledAt: null,
+          recoveryCodesRemaining: 0,
+        });
+        expect(sensitiveResponsePropertyPaths(r.body)).toEqual([]);
+      });
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/enroll/request')
+      .set('Authorization', auth)
+      .send({ method: 'EMAIL', currentPassword: 'wrong password' })
+      .expect(401);
+    const enrollment = await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/enroll/request')
+      .set('Authorization', auth)
+      .send({ method: 'EMAIL', currentPassword: base.password })
+      .expect(200);
+    expect(enrollment.body.challengeId).toEqual(expect.any(String));
+    expect(enrollment.body).not.toHaveProperty('code');
+    expect(
+      prisma.challenges.filter((c) => c.purpose === 'TWO_FACTOR_ENROLLMENT' && !c.consumedAt),
+    ).toHaveLength(1);
+    const bad = await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/enroll/confirm')
+      .set('Authorization', auth)
+      .send({ challengeId: enrollment.body.challengeId, code: '000000' })
+      .expect(400);
+    expect(bad.body.code).toBe('INVALID_OR_EXPIRED_2FA_CODE');
+    const code = mailer.sent.find((m) => m.purpose === 'TWO_FACTOR_CODE')!.token!;
+    const confirmA = request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/enroll/confirm')
+      .set('Authorization', auth)
+      .send({ challengeId: enrollment.body.challengeId, code });
+    const confirmB = request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/enroll/confirm')
+      .set('Authorization', auth)
+      .send({ challengeId: enrollment.body.challengeId, code });
+    const confirmations = await Promise.all([confirmA, confirmB]);
+    expect(confirmations.filter((r) => r.status === 200)).toHaveLength(1);
+    expect(confirmations.filter((r) => r.status >= 400 && r.status < 500)).toHaveLength(1);
+    expect(confirmations.map((r) => r.status)).not.toContain(500);
+    expect(prisma.events.filter((e) => e.eventType === 'TWO_FACTOR_ENABLED')).toHaveLength(1);
+    expect(prisma.twoFactorSettingsRows.filter((row) => !row.disabledAt)).toHaveLength(1);
+    const recoveryCodes = confirmations.find((r) => r.status === 200)!.body
+      .recoveryCodes as string[];
+    expect(recoveryCodes).toHaveLength(10);
+    expect(
+      recoveryCodes.every((recoveryCode) =>
+        /^[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}$/.test(recoveryCode),
+      ),
+    ).toBe(true);
+    expect(JSON.stringify(prisma.twoFactorRecoveryCodeRows)).not.toContain(recoveryCodes[0]);
+    await request(app.getHttpServer())
+      .get('/api/v1/auth/2fa/status')
+      .set('Authorization', auth)
+      .expect(200)
+      .expect((r) => {
+        expect(Object.keys(r.body).sort()).toEqual(
+          ['enabled', 'enabledAt', 'method', 'recoveryCodesRemaining'].sort(),
+        );
+        expect(r.body.enabled).toBe(true);
+        expect(r.body.method).toBe('EMAIL');
+        expect(new Date(r.body.enabledAt).toString()).not.toBe('Invalid Date');
+        expect(r.body.recoveryCodesRemaining).toBe(10);
+        expect(sensitiveResponsePropertyPaths(r.body)).toEqual([]);
+      });
+    const beforeSessions = prisma.sessions.length;
+    const login2fa = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', firstCookies)
+      .send({ email: 'two-factor-email@example.com', password: base.password })
+      .expect(202);
+    expect(login2fa.body.code).toBe('TWO_FACTOR_REQUIRED');
+    expect(prisma.sessions).toHaveLength(beforeSessions);
+    const loginCode = mailer.sent.filter((m) => m.purpose === 'TWO_FACTOR_CODE').at(-1)!.token!;
+    const verifyA = request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/login/verify')
+      .set('Cookie', firstCookies)
+      .send({ challengeId: login2fa.body.challengeId, code: loginCode });
+    const verifyB = request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/login/verify')
+      .set('Cookie', firstCookies)
+      .send({ challengeId: login2fa.body.challengeId, recoveryCode: recoveryCodes[0] });
+    const beforeRefreshTokens = prisma.refreshTokens.length;
+    const verified = await Promise.all([verifyA, verifyB]);
+    expect(verified.filter((r) => r.status === 200)).toHaveLength(1);
+    expect(verified.filter((r) => r.status >= 400 && r.status < 500)).toHaveLength(1);
+    expect(verified.map((r) => r.status)).not.toContain(500);
+    expect(prisma.sessions).toHaveLength(beforeSessions + 1);
+    expect(prisma.refreshTokens).toHaveLength(beforeRefreshTokens + 1);
+    const secondLogin = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', firstCookies)
+      .send({ email: 'two-factor-email@example.com', password: base.password })
+      .expect(202);
+    const recoveryLogin = await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/login/verify')
+      .set('Cookie', firstCookies)
+      .send({
+        challengeId: secondLogin.body.challengeId,
+        recoveryCode: ` ${recoveryCodes[1].toLowerCase()} `,
+      })
+      .expect(200);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/login/verify')
+      .set('Cookie', firstCookies)
+      .send({ challengeId: secondLogin.body.challengeId, recoveryCode: recoveryCodes[1] })
+      .expect(400);
+    expect(recoveryLogin.body.accessToken).toEqual(expect.any(String));
+    const activeSession = prisma.sessions
+      .filter((session) => session.userId === prisma.users[0].id && !session.revokedAt)
+      .at(-1)!;
+    const disableAccessToken = await jwt.signAsync(
+      { sub: activeSession.userId, sid: activeSession.id, type: 'access' },
+      { secret: authSecret, expiresIn: '15m' },
+    );
+    prisma.credentials.find(
+      (credential) => credential.userId === activeSession.userId,
+    )!.passwordHash = await hashPassword(base.password);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/disable/request')
+      .set('Authorization', `Bearer ${disableAccessToken}`)
+      .send({ currentPassword: base.password })
+      .expect(200);
+    expect(prisma.events.map((e) => e.eventType)).toEqual(
+      expect.arrayContaining([
+        'TWO_FACTOR_ENROLLMENT_REQUESTED',
+        'TWO_FACTOR_ENABLED',
+        'TWO_FACTOR_LOGIN_REQUIRED',
+      ]),
+    );
+  });
+
+  it('executes Sprint 2C1 SMS, delivery failure, resend cooldown and status error scenarios', async () => {
+    const login = await verifiedLogin('two-factor-sms@example.com');
+    const auth = `Bearer ${login.body.accessToken}`;
+    const user = prisma.users.find((u) => u.email === 'two-factor-sms@example.com')!;
+    user.phoneE164 = '+5517999991234';
+    user.phoneVerifiedAt = new Date();
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/enroll/request')
+      .set('Authorization', auth)
+      .send({ method: 'SMS', currentPassword: base.password })
+      .expect(200);
+    const smsCode = sms.sent.find((m) => m.purpose === 'TWO_FACTOR_CODE')!.code!;
+    const smsChallenge = prisma.challenges.find(
+      (c) => c.purpose === 'TWO_FACTOR_ENROLLMENT' && !c.consumedAt,
+    )!;
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/enroll/confirm')
+      .set('Authorization', auth)
+      .send({ challengeId: smsChallenge.id, code: smsCode })
+      .expect(200);
+    const originalSend = (sms as { send?: (...args: unknown[]) => void }).send;
+    (sms as { send?: (...args: unknown[]) => void }).send = () => {
+      throw new Error('simulated 2fa delivery outage');
+    };
+    const originalMailerSend = mailer.send.bind(mailer);
+    mailer.send = () => {
+      throw new Error('simulated 2fa email outage');
+    };
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', (login as request.Response & { deviceCookies: string[] }).deviceCookies)
+      .send({ email: 'two-factor-sms@example.com', password: base.password })
+      .expect(503)
+      .expect((r) => expect(r.body.code).toBe('TWO_FACTOR_DELIVERY_UNAVAILABLE'));
+    expect(
+      prisma.challenges.filter((c) => c.purpose === 'TWO_FACTOR_LOGIN' && !c.consumedAt),
+    ).toHaveLength(0);
+    (sms as { send?: (...args: unknown[]) => void }).send = originalSend;
+    mailer.send = originalMailerSend;
+    const login2fa = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', (login as request.Response & { deviceCookies: string[] }).deviceCookies)
+      .send({ email: 'two-factor-sms@example.com', password: base.password })
+      .expect(202);
+    const resent = await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/login/resend')
+      .set('Cookie', (login as request.Response & { deviceCookies: string[] }).deviceCookies)
+      .send({ challengeId: login2fa.body.challengeId })
+      .expect(200);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/login/resend')
+      .set('Cookie', (login as request.Response & { deviceCookies: string[] }).deviceCookies)
+      .send({ challengeId: resent.body.challengeId })
+      .expect(429)
+      .expect((r) => expect(r.body.code).toBe('RATE_LIMITED'));
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/login/verify')
+      .set('Cookie', (login as request.Response & { deviceCookies: string[] }).deviceCookies)
+      .send({ challengeId: login2fa.body.challengeId, recoveryCode: 'bad-format' })
+      .expect(400);
+  });
+
   it('executes rate limiting and event assertions through HTTP', async () => {
     for (let i = 0; i < 10; i++)
       await request(app.getHttpServer())
@@ -1110,7 +1510,8 @@ describe('Auth HTTP e2e flows', () => {
     await request(app.getHttpServer())
       .post('/api/v1/auth/register')
       .send({ ...base, email: 'limited@example.com' })
-      .expect(429);
+      .expect(429)
+      .expect((r) => expect(r.body.code).toBe('RATE_LIMITED'));
     expect(
       prisma.events.every(
         (e) =>

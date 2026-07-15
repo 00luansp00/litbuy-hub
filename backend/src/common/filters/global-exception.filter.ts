@@ -55,14 +55,26 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       const details = this.extractDetails(payload);
       const message = this.extractMessage(payload, exception.message);
 
+      const code =
+        typeof payload === 'object' &&
+        payload !== null &&
+        'code' in payload &&
+        typeof (payload as { code?: unknown }).code === 'string'
+          ? (payload as { code: string }).code
+          : statusCode === Number(HttpStatus.BAD_REQUEST)
+            ? 'VALIDATION_ERROR'
+            : 'HTTP_ERROR';
+      const safePayload = this.extractSafePayload(payload, code);
+
       return {
         statusCode,
-        code: statusCode === Number(HttpStatus.BAD_REQUEST) ? 'VALIDATION_ERROR' : 'HTTP_ERROR',
+        code,
         message,
         details,
         requestId,
         timestamp,
         path,
+        ...safePayload,
       };
     }
 
@@ -74,6 +86,21 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       requestId,
       timestamp,
       path,
+    };
+  }
+
+  private extractSafePayload(payload: unknown, code: string): Record<string, unknown> {
+    if (code !== 'TWO_FACTOR_REQUIRED' || typeof payload !== 'object' || payload === null) {
+      return {};
+    }
+
+    const source = payload as Record<string, unknown>;
+    return {
+      ...(typeof source.challengeId === 'string' ? { challengeId: source.challengeId } : {}),
+      ...(source.method === 'EMAIL' || source.method === 'SMS' ? { method: source.method } : {}),
+      ...(source.expiresAt instanceof Date || typeof source.expiresAt === 'string'
+        ? { expiresAt: source.expiresAt }
+        : {}),
     };
   }
 
