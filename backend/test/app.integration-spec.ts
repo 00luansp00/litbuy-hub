@@ -1955,4 +1955,139 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
     ).resolves.toBe(0);
     mailer.send = originalMailSend;
   });
+
+  it('executes real Sprint 2C2A step-up hardening and management coverage', async () => {
+    const account = await registerVerifiedAndLogin('integration-step-up-2c2a@example.com');
+    const auth = `Bearer ${account.login.body.accessToken}`;
+    const sessionId = sessionIdFromAccessToken(account.login.body.accessToken as string);
+    const recoveryCodes = await activateEmailTwoFactor(account.email, account.password, auth);
+
+    const methodStepUp = await request(app.getHttpServer())
+      .post('/api/v1/auth/step-up/request')
+      .set('Authorization', auth)
+      .send({ scope: 'TWO_FACTOR_METHOD_CHANGE', currentPassword: account.password })
+      .expect(HttpStatus.ACCEPTED);
+    const recoveryStepUp = await request(app.getHttpServer())
+      .post('/api/v1/auth/step-up/request')
+      .set('Authorization', auth)
+      .send({ scope: 'TWO_FACTOR_RECOVERY_REGENERATE', currentPassword: account.password })
+      .expect(HttpStatus.ACCEPTED);
+    expect(methodStepUp.body.challengeId).not.toBe(recoveryStepUp.body.challengeId);
+    await expect(
+      prisma.verificationChallenge.count({
+        where: { userId: account.user.id, purpose: 'TWO_FACTOR_STEP_UP', consumedAt: null },
+      }),
+    ).resolves.toBe(2);
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/step-up/verify')
+        .set('Authorization', auth)
+        .send({ challengeId: methodStepUp.body.challengeId, code: '000000' })
+        .expect(HttpStatus.BAD_REQUEST);
+    }
+    const locked = await prisma.verificationChallenge.findUniqueOrThrow({
+      where: { id: methodStepUp.body.challengeId },
+    });
+    expect(locked.attempts).toBe(5);
+    await expect(
+      prisma.securityEvent.count({
+        where: { userId: account.user.id, eventType: 'STEP_UP_FAILED' },
+      }),
+    ).resolves.toBeGreaterThanOrEqual(1);
+
+    const freshMethod = await request(app.getHttpServer())
+      .post('/api/v1/auth/step-up/request')
+      .set('Authorization', auth)
+      .send({ scope: 'TWO_FACTOR_METHOD_CHANGE', currentPassword: account.password })
+      .expect(HttpStatus.ACCEPTED);
+    const methodCode = [...mailer.sent]
+      .reverse()
+      .find((message) => message.purpose === 'TWO_FACTOR_CODE')!.token!;
+    const methodGrant = await request(app.getHttpServer())
+      .post('/api/v1/auth/step-up/verify')
+      .set('Authorization', auth)
+      .send({ challengeId: freshMethod.body.challengeId, code: methodCode })
+      .expect(HttpStatus.OK);
+    await expect(prisma.stepUpGrant.count({ where: { userId: account.user.id } })).resolves.toBe(1);
+    const storedGrant = await prisma.stepUpGrant.findFirstOrThrow({
+      where: { userId: account.user.id },
+    });
+    expect(storedGrant.tokenHash).not.toContain(methodGrant.body.stepUpToken);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/recovery/regenerate')
+      .set('Authorization', auth)
+      .set('X-Step-Up-Token', methodGrant.body.stepUpToken)
+      .expect(HttpStatus.BAD_REQUEST)
+      .expect(({ body }) => expect(body.code).toBe('STEP_UP_SCOPE_MISMATCH'));
+
+    await prisma.user.update({
+      where: { id: account.user.id },
+      data: { phoneE164: '+5517999991234', phoneVerifiedAt: new Date() },
+    });
+    const methodChange = await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/method/change/request')
+      .set('Authorization', auth)
+      .set('X-Step-Up-Token', methodGrant.body.stepUpToken)
+      .send({ newMethod: 'SMS' })
+      .expect(HttpStatus.OK);
+    const smsCode = [...sms.sent]
+      .reverse()
+      .find((message) => message.purpose === 'TWO_FACTOR_CODE')!.code!;
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/method/change/confirm')
+      .set('Authorization', auth)
+      .set('X-Step-Up-Token', methodGrant.body.stepUpToken)
+      .send({ challengeId: methodChange.body.challengeId, code: smsCode })
+      .expect(HttpStatus.OK);
+    await expect(
+      prisma.twoFactorSettings.findUniqueOrThrow({ where: { userId: account.user.id } }),
+    ).resolves.toMatchObject({ method: 'SMS' });
+    expect(
+      mailer.sent.some((message) => message.purpose === 'TWO_FACTOR_METHOD_CHANGED_NOTICE'),
+    ).toBe(true);
+    await expect(
+      prisma.session.findUniqueOrThrow({ where: { id: sessionId } }),
+    ).resolves.toMatchObject({
+      revokedAt: null,
+    });
+
+    const recoveryRequest = await request(app.getHttpServer())
+      .post('/api/v1/auth/step-up/request')
+      .set('Authorization', auth)
+      .send({ scope: 'TWO_FACTOR_RECOVERY_REGENERATE', currentPassword: account.password })
+      .expect(HttpStatus.ACCEPTED);
+    const recoveryCode = [...sms.sent]
+      .reverse()
+      .find((message) => message.purpose === 'TWO_FACTOR_CODE')!.code!;
+    const recoveryGrant = await request(app.getHttpServer())
+      .post('/api/v1/auth/step-up/verify')
+      .set('Authorization', auth)
+      .send({ challengeId: recoveryRequest.body.challengeId, code: recoveryCode })
+      .expect(HttpStatus.OK);
+    const regenerated = await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/recovery/regenerate')
+      .set('Authorization', auth)
+      .set('X-Step-Up-Token', recoveryGrant.body.stepUpToken)
+      .expect(HttpStatus.OK);
+    expect(regenerated.body.recoveryCodes).toHaveLength(10);
+    await expect(
+      prisma.twoFactorRecoveryCode.count({ where: { userId: account.user.id, usedAt: null } }),
+    ).resolves.toBe(10);
+    const serialized = JSON.stringify(
+      await prisma.twoFactorRecoveryCode.findMany({ where: { userId: account.user.id } }),
+    );
+    expect(serialized).not.toContain(regenerated.body.recoveryCodes[0]);
+    expect(serialized).not.toContain(recoveryCodes[0]);
+    expect(
+      mailer.sent.some(
+        (message) => message.purpose === 'TWO_FACTOR_RECOVERY_CODES_REGENERATED_NOTICE',
+      ),
+    ).toBe(true);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/recovery/regenerate')
+      .set('Authorization', auth)
+      .set('X-Step-Up-Token', recoveryGrant.body.stepUpToken)
+      .expect(HttpStatus.BAD_REQUEST);
+  });
 });

@@ -19,6 +19,14 @@ import {
   generateRecoveryCode,
   recoveryCodeHash,
   twoFactorChallengeHash,
+  stepUpTokenHash,
+  stepUpScopeHash,
+  resolveStepUpScopeFromHash,
+  twoFactorMethodChangeTargetHash,
+  resolveTwoFactorMethodFromHash,
+  stepUpTtlExpiresAt,
+  stepUpChallengeLockKey,
+  sanitizeStepUpFailureMetadata,
 } from './auth.utils';
 import { AUTH_DUMMY_PASSWORD_HASH } from './auth.service';
 describe('auth utils', () => {
@@ -111,5 +119,48 @@ describe('auth utils', () => {
     expect(validatePasswordPolicy(' '.repeat(12))).toBe(false);
     expect(validatePasswordPolicy('a'.repeat(12))).toBe(true);
     expect(validatePasswordPolicy('a'.repeat(129))).toBe(false);
+  });
+
+  it('generates and resolves step-up hashes with dedicated domain separation', () => {
+    const pepper = 'step-up-pepper';
+    const otherPepper = 'other-pepper';
+    const tokenHash = stepUpTokenHash('opaque-token', pepper);
+    expect(tokenHash).toHaveLength(64);
+    expect(tokenHash).not.toBe(hmacToken('opaque-token', pepper));
+    expect(tokenHash).not.toBe(stepUpTokenHash('opaque-token', otherPepper));
+    const methodHash = stepUpScopeHash('TWO_FACTOR_METHOD_CHANGE', pepper);
+    const recoveryHash = stepUpScopeHash('TWO_FACTOR_RECOVERY_REGENERATE', pepper);
+    expect(methodHash).not.toBe(recoveryHash);
+    expect(resolveStepUpScopeFromHash(methodHash, pepper)).toBe('TWO_FACTOR_METHOD_CHANGE');
+    expect(resolveStepUpScopeFromHash(recoveryHash, pepper)).toBe('TWO_FACTOR_RECOVERY_REGENERATE');
+    expect(
+      resolveStepUpScopeFromHash(stepUpScopeHash('TWO_FACTOR_METHOD_CHANGE', otherPepper), pepper),
+    ).toBeNull();
+    expect(resolveStepUpScopeFromHash('unknown', pepper)).toBeNull();
+  });
+
+  it('resolves method-change target hashes exactly without fallback', () => {
+    const pepper = 'step-up-pepper';
+    const emailHash = twoFactorMethodChangeTargetHash('EMAIL', pepper);
+    const smsHash = twoFactorMethodChangeTargetHash('SMS', pepper);
+    expect(emailHash).not.toBe(smsHash);
+    expect(resolveTwoFactorMethodFromHash(emailHash, pepper)).toBe('EMAIL');
+    expect(resolveTwoFactorMethodFromHash(smsHash, pepper)).toBe('SMS');
+    expect(resolveTwoFactorMethodFromHash('unknown', pepper)).toBeNull();
+  });
+
+  it('computes step-up ttl, lock keys and sanitized failure metadata', () => {
+    const now = new Date('2026-07-15T00:00:00Z');
+    expect(stepUpTtlExpiresAt(now, 10).toISOString()).toBe('2026-07-15T00:10:00.000Z');
+    expect(stepUpChallengeLockKey('session-id', 'device-id', 'TWO_FACTOR_METHOD_CHANGE')).toBe(
+      'step-up-challenge:session-id:device-id:TWO_FACTOR_METHOD_CHANGE',
+    );
+    expect(
+      sanitizeStepUpFailureMetadata('TWO_FACTOR_METHOD_CHANGE', 'INVALID_CODE', 'FAILURE'),
+    ).toEqual({
+      scope: 'TWO_FACTOR_METHOD_CHANGE',
+      reason: 'INVALID_CODE',
+      outcome: 'FAILURE',
+    });
   });
 });
