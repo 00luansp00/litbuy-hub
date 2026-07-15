@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import {
   IsBoolean,
   IsEmail,
@@ -71,6 +72,9 @@ export class TwoFactorLoginVerifyDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @Matches(/^[0-9]{6}$/) code?: string;
   @ApiPropertyOptional({ example: 'ABCDE-12345-FGHIJ' })
   @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim().toUpperCase() : value,
+  )
   @IsString()
   @Matches(/^[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}$/)
   recoveryCode?: string;

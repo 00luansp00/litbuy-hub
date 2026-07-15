@@ -1188,6 +1188,111 @@ describe('Auth HTTP e2e flows', () => {
       .expect(400);
   });
 
+  async function loginOnApprovedSecondDevice(email: string) {
+    const pending = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({ email, password: base.password })
+      .expect(202);
+    const approval = mailer.sent.at(-1)!.token;
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/device/approve')
+      .send({ token: approval })
+      .expect(200);
+    const login = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', pending.headers['set-cookie'] as unknown as string[])
+      .send({ email, password: base.password })
+      .expect(200);
+    return {
+      auth: `Bearer ${login.body.accessToken}`,
+      cookies: pending.headers['set-cookie'] as unknown as string[],
+    };
+  }
+
+  it('serializes cross-device 2FA enrollment requests through HTTP', async () => {
+    const firstLogin = await verifiedLogin('two-factor-cross-device@example.com');
+    const authA = `Bearer ${firstLogin.body.accessToken}`;
+    const user = prisma.users.find((u) => u.email === 'two-factor-cross-device@example.com')!;
+    const deviceA = prisma.devices.find((device) => device.userId === user.id)!;
+    const secondDevice = await loginOnApprovedSecondDevice('two-factor-cross-device@example.com');
+    const deviceB = prisma.devices.find(
+      (device) => device.userId === user.id && device.id !== deviceA.id,
+    )!;
+
+    const enrollmentA = await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/enroll/request')
+      .set('Authorization', authA)
+      .send({ method: 'EMAIL', currentPassword: base.password })
+      .expect(200);
+    const codeA = mailer.sent.at(-1)!.token!;
+    const enrollmentB = await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/enroll/request')
+      .set('Authorization', secondDevice.auth)
+      .send({ method: 'EMAIL', currentPassword: base.password })
+      .expect(200);
+    const codeB = mailer.sent.at(-1)!.token!;
+
+    const activeEnrollmentChallenges = prisma.challenges.filter(
+      (challenge) => challenge.purpose === 'TWO_FACTOR_ENROLLMENT' && !challenge.consumedAt,
+    );
+    expect(activeEnrollmentChallenges).toHaveLength(1);
+    expect(activeEnrollmentChallenges[0].deviceId).toBe(deviceB.id);
+    expect(
+      prisma.challenges.find((challenge) => challenge.id === enrollmentA.body.challengeId),
+    ).toMatchObject({ consumedAt: expect.any(Date) });
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/enroll/confirm')
+      .set('Authorization', authA)
+      .send({ challengeId: enrollmentA.body.challengeId, code: codeA })
+      .expect(400)
+      .expect((response) => expect(response.body.code).toBe('INVALID_OR_EXPIRED_2FA_CODE'));
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/enroll/confirm')
+      .set('Authorization', secondDevice.auth)
+      .send({ challengeId: enrollmentB.body.challengeId, code: codeB })
+      .expect(200)
+      .expect((response) => expect(response.body.recoveryCodes).toHaveLength(10));
+    expect(prisma.events.filter((event) => event.eventType === 'TWO_FACTOR_ENABLED')).toHaveLength(
+      1,
+    );
+
+    const concurrentLogin = await verifiedLogin('two-factor-cross-device-concurrent@example.com');
+    const concurrentAuthA = `Bearer ${concurrentLogin.body.accessToken}`;
+    const concurrentSecondDevice = await loginOnApprovedSecondDevice(
+      'two-factor-cross-device-concurrent@example.com',
+    );
+    const concurrentResponses = await Promise.all([
+      request(app.getHttpServer())
+        .post('/api/v1/auth/2fa/enroll/request')
+        .set('Authorization', concurrentAuthA)
+        .send({ method: 'EMAIL', currentPassword: base.password }),
+      request(app.getHttpServer())
+        .post('/api/v1/auth/2fa/enroll/request')
+        .set('Authorization', concurrentSecondDevice.auth)
+        .send({ method: 'EMAIL', currentPassword: base.password }),
+    ]);
+    expect(concurrentResponses.map((response) => response.status)).not.toContain(500);
+    expect(
+      concurrentResponses.every((response) =>
+        [HttpStatus.OK, HttpStatus.CONFLICT].includes(response.status),
+      ),
+    ).toBe(true);
+    expect(
+      JSON.stringify(concurrentResponses.map((response) => response.body as unknown)),
+    ).not.toMatch(/P2002|constraint|SQL/i);
+    expect(
+      prisma.challenges.filter(
+        (challenge) =>
+          challenge.purpose === 'TWO_FACTOR_ENROLLMENT' &&
+          challenge.userId ===
+            prisma.users.find(
+              (candidate) => candidate.email === 'two-factor-cross-device-concurrent@example.com',
+            )!.id &&
+          !challenge.consumedAt,
+      ),
+    ).toHaveLength(1);
+  });
+
   it('executes Sprint 2C1 EMAIL enrollment, login, recovery and disable HTTP scenarios', async () => {
     const firstLogin = await verifiedLogin('two-factor-email@example.com');
     const auth = `Bearer ${firstLogin.body.accessToken}`;
@@ -1300,7 +1405,10 @@ describe('Auth HTTP e2e flows', () => {
     const recoveryLogin = await request(app.getHttpServer())
       .post('/api/v1/auth/2fa/login/verify')
       .set('Cookie', firstCookies)
-      .send({ challengeId: secondLogin.body.challengeId, recoveryCode: recoveryCodes[1] })
+      .send({
+        challengeId: secondLogin.body.challengeId,
+        recoveryCode: ` ${recoveryCodes[1].toLowerCase()} `,
+      })
       .expect(200);
     await request(app.getHttpServer())
       .post('/api/v1/auth/2fa/login/verify')

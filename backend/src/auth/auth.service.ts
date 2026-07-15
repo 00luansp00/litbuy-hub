@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   HttpException,
   HttpStatus,
@@ -780,44 +781,70 @@ export class AuthService {
     };
   }
 
+  private twoFactorChallengeLockKey(
+    purpose: 'TWO_FACTOR_ENROLLMENT' | 'TWO_FACTOR_LOGIN' | 'TWO_FACTOR_DISABLE',
+    userId: string,
+    deviceId: string | null,
+  ): string {
+    if (purpose === 'TWO_FACTOR_LOGIN') {
+      return `2fa-challenge:${purpose}:${userId}:${deviceId ?? 'none'}`;
+    }
+    return `2fa-challenge:${purpose}:${userId}`;
+  }
+
+  private twoFactorActiveChallengeWhere(
+    userId: string,
+    deviceId: string | null,
+    purpose: 'TWO_FACTOR_ENROLLMENT' | 'TWO_FACTOR_LOGIN' | 'TWO_FACTOR_DISABLE',
+  ): Prisma.VerificationChallengeUpdateManyArgs['where'] {
+    return {
+      userId,
+      purpose,
+      consumedAt: null,
+      ...(purpose === 'TWO_FACTOR_LOGIN' ? { deviceId: deviceId ?? undefined } : {}),
+    };
+  }
+
   private async createTwoFactorChallenge(
     userId: string,
     deviceId: string | null,
     purpose: 'TWO_FACTOR_ENROLLMENT' | 'TWO_FACTOR_LOGIN' | 'TWO_FACTOR_DISABLE',
     targetHashValue?: string,
   ): Promise<{ challengeId: string; code: string; expiresAt: Date }> {
-    return this.prisma.$transaction(async (tx) => {
-      await this.advisoryTransactionLock(
-        tx,
-        `2fa-challenge:${purpose}:${userId}:${deviceId ?? 'none'}`,
-      );
-      const c = this.authConfig();
-      const challengeId = crypto.randomUUID();
-      const code = generateTwoFactorCode();
-      const expiresAt = new Date(Date.now() + c.twoFactorCodeTtlMinutes * 60_000);
-      await tx.verificationChallenge.updateMany({
-        where: {
-          userId,
-          deviceId: deviceId ?? undefined,
-          purpose,
-          consumedAt: null,
-        },
-        data: { consumedAt: new Date() },
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        await this.advisoryTransactionLock(
+          tx,
+          this.twoFactorChallengeLockKey(purpose, userId, deviceId),
+        );
+        const c = this.authConfig();
+        const challengeId = crypto.randomUUID();
+        const code = generateTwoFactorCode();
+        const expiresAt = new Date(Date.now() + c.twoFactorCodeTtlMinutes * 60_000);
+        await tx.verificationChallenge.updateMany({
+          where: this.twoFactorActiveChallengeWhere(userId, deviceId, purpose),
+          data: { consumedAt: new Date() },
+        });
+        await tx.verificationChallenge.create({
+          data: {
+            id: challengeId,
+            userId,
+            deviceId: deviceId ?? undefined,
+            purpose,
+            tokenHash: twoFactorChallengeHash(challengeId, code, c.verificationPepper),
+            targetHash: targetHashValue,
+            maxAttempts: c.twoFactorMaxAttempts,
+            expiresAt,
+          },
+        });
+        return { challengeId, code, expiresAt };
       });
-      await tx.verificationChallenge.create({
-        data: {
-          id: challengeId,
-          userId,
-          deviceId: deviceId ?? undefined,
-          purpose,
-          tokenHash: twoFactorChallengeHash(challengeId, code, c.verificationPepper),
-          targetHash: targetHashValue,
-          maxAttempts: c.twoFactorMaxAttempts,
-          expiresAt,
-        },
-      });
-      return { challengeId, code, expiresAt };
-    });
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        throw new ConflictException({ code: 'TWO_FACTOR_CHALLENGE_CONFLICT' });
+      }
+      throw error;
+    }
   }
 
   private deliverTwoFactorCode(user: User, method: TwoFactorMethod, code: string): void {

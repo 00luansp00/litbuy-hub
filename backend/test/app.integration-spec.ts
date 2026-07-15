@@ -140,6 +140,66 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
     return { email, password, register, login, user };
   }
 
+  async function loginOnNewApprovedDevice(email: string, password: string) {
+    const pending = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .send({ email, password })
+      .expect(HttpStatus.ACCEPTED);
+    const approval = [...mailer.sent]
+      .reverse()
+      .find((message) => message.purpose === 'DEVICE_APPROVAL')?.token;
+    expect(approval).toEqual(expect.any(String));
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/device/approve')
+      .send({ token: approval })
+      .expect(HttpStatus.OK);
+    const cookies = pending.headers['set-cookie'] as unknown as string[];
+    const login = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', cookies)
+      .send({ email, password })
+      .expect(HttpStatus.OK);
+    return { login, cookies };
+  }
+
+  async function activateEmailTwoFactor(
+    email: string,
+    password: string,
+    auth: string,
+  ): Promise<string[]> {
+    const enrollment = await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/enroll/request')
+      .set('Authorization', auth)
+      .send({ method: 'EMAIL', currentPassword: password })
+      .expect(HttpStatus.OK);
+    const code = [...mailer.sent]
+      .reverse()
+      .find((message) => message.purpose === 'TWO_FACTOR_CODE')!.token!;
+    const confirmed = await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/enroll/confirm')
+      .set('Authorization', auth)
+      .send({ challengeId: enrollment.body.challengeId, code })
+      .expect(HttpStatus.OK);
+    expect(email).toContain('@');
+    return confirmed.body.recoveryCodes as string[];
+  }
+
+  async function completeTwoFactorLogin(email: string, password: string, cookies: string[]) {
+    const challenge = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', cookies)
+      .send({ email, password })
+      .expect(HttpStatus.ACCEPTED);
+    const code = [...mailer.sent]
+      .reverse()
+      .find((message) => message.purpose === 'TWO_FACTOR_CODE')!.token!;
+    return request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/login/verify')
+      .set('Cookie', cookies)
+      .send({ challengeId: challenge.body.challengeId, code })
+      .expect(HttpStatus.OK);
+  }
+
   async function emailChangeTokens(userId: string, newEmail: string) {
     const change = await prisma.emailChangeRequest.findFirstOrThrow({
       where: { userId, completedAt: null, cancelledAt: null },
@@ -439,6 +499,183 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
         },
       }),
     ).resolves.toBeGreaterThanOrEqual(2);
+  });
+
+  it('serializes cross-device 2FA enrollment requests with one active challenge per user', async () => {
+    const account = await registerVerifiedAndLogin('integration-2fa-cross-device@example.com');
+    const authA = `Bearer ${account.login.body.accessToken}`;
+    const deviceB = await loginOnNewApprovedDevice(account.email, account.password);
+    const authB = `Bearer ${deviceB.login.body.accessToken}`;
+
+    const enrollmentA = await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/enroll/request')
+      .set('Authorization', authA)
+      .send({ method: 'EMAIL', currentPassword: account.password })
+      .expect(HttpStatus.OK);
+    const codeA = [...mailer.sent]
+      .reverse()
+      .find((message) => message.purpose === 'TWO_FACTOR_CODE')!.token!;
+    const enrollmentB = await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/enroll/request')
+      .set('Authorization', authB)
+      .send({ method: 'EMAIL', currentPassword: account.password })
+      .expect(HttpStatus.OK);
+    const codeB = [...mailer.sent]
+      .reverse()
+      .find((message) => message.purpose === 'TWO_FACTOR_CODE')!.token!;
+
+    await expect(
+      prisma.verificationChallenge.count({
+        where: { userId: account.user.id, purpose: 'TWO_FACTOR_ENROLLMENT', consumedAt: null },
+      }),
+    ).resolves.toBe(1);
+    const consumedA = await prisma.verificationChallenge.findUniqueOrThrow({
+      where: { id: enrollmentA.body.challengeId },
+    });
+    const activeB = await prisma.verificationChallenge.findUniqueOrThrow({
+      where: { id: enrollmentB.body.challengeId },
+    });
+    expect(consumedA.consumedAt).toEqual(expect.any(Date));
+    expect(activeB.consumedAt).toBeNull();
+    expect(activeB.deviceId).not.toBe(consumedA.deviceId);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/enroll/confirm')
+      .set('Authorization', authA)
+      .send({ challengeId: enrollmentA.body.challengeId, code: codeA })
+      .expect(HttpStatus.BAD_REQUEST);
+    const confirmed = await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/enroll/confirm')
+      .set('Authorization', authB)
+      .send({ challengeId: enrollmentB.body.challengeId, code: codeB })
+      .expect(HttpStatus.OK);
+    expect(confirmed.body.recoveryCodes).toHaveLength(10);
+
+    const concurrent = await registerVerifiedAndLogin(
+      'integration-2fa-cross-device-race@example.com',
+    );
+    const concurrentB = await loginOnNewApprovedDevice(concurrent.email, concurrent.password);
+    const [requestA, requestB] = await Promise.all([
+      request(app.getHttpServer())
+        .post('/api/v1/auth/2fa/enroll/request')
+        .set('Authorization', `Bearer ${concurrent.login.body.accessToken}`)
+        .send({ method: 'EMAIL', currentPassword: concurrent.password }),
+      request(app.getHttpServer())
+        .post('/api/v1/auth/2fa/enroll/request')
+        .set('Authorization', `Bearer ${concurrentB.login.body.accessToken}`)
+        .send({ method: 'EMAIL', currentPassword: concurrent.password }),
+    ]);
+    const statuses = [requestA.status, requestB.status];
+    expect(statuses).not.toContain(Number(HttpStatus.INTERNAL_SERVER_ERROR));
+    expect(statuses.every((status) => [HttpStatus.OK, HttpStatus.CONFLICT].includes(status))).toBe(
+      true,
+    );
+    await expect(
+      prisma.verificationChallenge.count({
+        where: {
+          userId: concurrent.user.id,
+          purpose: 'TWO_FACTOR_ENROLLMENT',
+          consumedAt: null,
+        },
+      }),
+    ).resolves.toBe(1);
+    expect(JSON.stringify([requestA.body, requestB.body])).not.toMatch(/P2002|constraint|SQL/i);
+  });
+
+  it('serializes cross-device 2FA disable requests with one active challenge per user', async () => {
+    const account = await registerVerifiedAndLogin(
+      'integration-2fa-disable-cross-device@example.com',
+    );
+    const authA = `Bearer ${account.login.body.accessToken}`;
+    const deviceB = await loginOnNewApprovedDevice(account.email, account.password);
+    await activateEmailTwoFactor(account.email, account.password, authA);
+    const loginB = await completeTwoFactorLogin(account.email, account.password, deviceB.cookies);
+    const authB = `Bearer ${loginB.body.accessToken}`;
+
+    const disableA = await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/disable/request')
+      .set('Authorization', authA)
+      .send({ currentPassword: account.password })
+      .expect(HttpStatus.OK);
+    const disableB = await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/disable/request')
+      .set('Authorization', authB)
+      .send({ currentPassword: account.password })
+      .expect(HttpStatus.OK);
+    await expect(
+      prisma.verificationChallenge.count({
+        where: { userId: account.user.id, purpose: 'TWO_FACTOR_DISABLE', consumedAt: null },
+      }),
+    ).resolves.toBe(1);
+    await expect(
+      prisma.verificationChallenge.findUniqueOrThrow({ where: { id: disableA.body.challengeId } }),
+    ).resolves.toMatchObject({ consumedAt: expect.any(Date) });
+    const activeDisable = await prisma.verificationChallenge.findUniqueOrThrow({
+      where: { id: disableB.body.challengeId },
+    });
+    expect(activeDisable.consumedAt).toBeNull();
+    const disableCode = [...mailer.sent]
+      .reverse()
+      .find((message) => message.purpose === 'TWO_FACTOR_CODE')!.token!;
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/disable/confirm')
+      .set('Authorization', authA)
+      .send({ challengeId: disableA.body.challengeId, code: disableCode })
+      .expect(HttpStatus.BAD_REQUEST);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/disable/confirm')
+      .set('Authorization', authB)
+      .send({ challengeId: disableB.body.challengeId, code: disableCode })
+      .expect(HttpStatus.OK);
+    await expect(
+      prisma.securityEvent.count({
+        where: { userId: account.user.id, eventType: 'TWO_FACTOR_DISABLED' },
+      }),
+    ).resolves.toBe(1);
+    await expect(
+      prisma.session.count({ where: { userId: account.user.id, revokedAt: null } }),
+    ).resolves.toBe(0);
+    await expect(
+      prisma.sessionRefreshToken.count({
+        where: { session: { userId: account.user.id }, revokedAt: null },
+      }),
+    ).resolves.toBe(0);
+
+    const concurrent = await registerVerifiedAndLogin(
+      'integration-2fa-disable-cross-device-race@example.com',
+    );
+    const concurrentAuthA = `Bearer ${concurrent.login.body.accessToken}`;
+    const concurrentB = await loginOnNewApprovedDevice(concurrent.email, concurrent.password);
+    await activateEmailTwoFactor(concurrent.email, concurrent.password, concurrentAuthA);
+    const concurrentLoginB = await completeTwoFactorLogin(
+      concurrent.email,
+      concurrent.password,
+      concurrentB.cookies,
+    );
+    const [requestA, requestB] = await Promise.all([
+      request(app.getHttpServer())
+        .post('/api/v1/auth/2fa/disable/request')
+        .set('Authorization', concurrentAuthA)
+        .send({ currentPassword: concurrent.password }),
+      request(app.getHttpServer())
+        .post('/api/v1/auth/2fa/disable/request')
+        .set('Authorization', `Bearer ${concurrentLoginB.body.accessToken}`)
+        .send({ currentPassword: concurrent.password }),
+    ]);
+    const statuses = [requestA.status, requestB.status];
+    expect(statuses).not.toContain(Number(HttpStatus.INTERNAL_SERVER_ERROR));
+    expect(statuses.every((status) => [HttpStatus.OK, HttpStatus.CONFLICT].includes(status))).toBe(
+      true,
+    );
+    await expect(
+      prisma.verificationChallenge.count({
+        where: {
+          userId: concurrent.user.id,
+          purpose: 'TWO_FACTOR_DISABLE',
+          consumedAt: null,
+        },
+      }),
+    ).resolves.toBe(1);
+    expect(JSON.stringify([requestA.body, requestB.body])).not.toMatch(/P2002|constraint|SQL/i);
   });
 
   it('executes real auth registration, verification, login, refresh rotation, reuse detection and logout', async () => {
