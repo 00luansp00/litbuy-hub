@@ -93,12 +93,13 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
     mailer.send = AuthMailer.prototype.send.bind(mailer);
     sms.send = MemoryAuthSmsPort.prototype.send.bind(sms);
     await prisma.securityEvent.deleteMany();
+    await prisma.stepUpGrant.deleteMany();
     await prisma.sessionRefreshToken.deleteMany();
-    await prisma.session.deleteMany();
     await prisma.verificationChallenge.deleteMany();
     await prisma.twoFactorRecoveryCode.deleteMany();
     await prisma.twoFactorSettings.deleteMany();
     await prisma.emailChangeRequest.deleteMany();
+    await prisma.session.deleteMany();
     await prisma.device.deleteMany();
     await prisma.passwordCredential.deleteMany();
     await prisma.user.deleteMany();
