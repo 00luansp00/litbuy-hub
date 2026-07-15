@@ -141,7 +141,11 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
     return { email, password, register, login, user };
   }
 
-  async function loginOnNewApprovedDevice(email: string, password: string) {
+  async function loginOnNewApprovedDevice(
+    email: string,
+    password: string,
+    options: { completeTwoFactor?: boolean } = {},
+  ) {
     const pending = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
       .send({ email, password })
@@ -155,12 +159,29 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
       .send({ token: approval })
       .expect(HttpStatus.OK);
     const cookies = pending.headers['set-cookie'] as unknown as string[];
-    const login = await request(app.getHttpServer())
+    const approvedLogin = request(app.getHttpServer())
       .post('/api/v1/auth/login')
       .set('Cookie', cookies)
-      .send({ email, password })
+      .send({ email, password });
+    if (!options.completeTwoFactor) {
+      const login = await approvedLogin.expect(HttpStatus.OK);
+      return { login, cookies };
+    }
+    const challenge = await approvedLogin.expect(HttpStatus.ACCEPTED);
+    expect(challenge.body).toMatchObject({
+      code: 'TWO_FACTOR_REQUIRED',
+      challengeId: expect.any(String),
+    });
+    expect(challenge.body.accessToken).toBeUndefined();
+    const code = [...mailer.sent]
+      .reverse()
+      .find((message) => message.purpose === 'TWO_FACTOR_CODE')!.token!;
+    const login = await request(app.getHttpServer())
+      .post('/api/v1/auth/2fa/login/verify')
+      .set('Cookie', cookies)
+      .send({ challengeId: challenge.body.challengeId, code })
       .expect(HttpStatus.OK);
-    return { login, cookies };
+    return { login, cookies, challenge };
   }
 
   async function activateEmailTwoFactor(
@@ -1857,13 +1878,26 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
     const auth = `Bearer ${account.login.body.accessToken}`;
     const currentSessionId = sessionIdFromAccessToken(account.login.body.accessToken as string);
     await activateEmailTwoFactor(account.email, account.password, auth);
-    const secondary = await loginOnNewApprovedDevice(account.email, account.password);
-    const secondaryLogin = await completeTwoFactorLogin(
-      account.email,
-      account.password,
-      secondary.cookies,
-    );
-    const secondarySessionId = sessionIdFromAccessToken(secondaryLogin.body.accessToken as string);
+    const secondary = await loginOnNewApprovedDevice(account.email, account.password, {
+      completeTwoFactor: true,
+    });
+    const secondarySessionId = sessionIdFromAccessToken(secondary.login.body.accessToken as string);
+    expect(secondarySessionId).not.toBe(currentSessionId);
+    const [currentSessionBefore, secondarySessionBefore] = await Promise.all([
+      prisma.session.findUniqueOrThrow({ where: { id: currentSessionId } }),
+      prisma.session.findUniqueOrThrow({ where: { id: secondarySessionId } }),
+    ]);
+    expect(currentSessionBefore.revokedAt).toBeNull();
+    expect(secondarySessionBefore.revokedAt).toBeNull();
+    expect(secondarySessionBefore.deviceId).not.toBe(currentSessionBefore.deviceId);
+    await expect(
+      prisma.sessionRefreshToken.count({
+        where: { sessionId: secondarySessionId, revokedAt: null },
+      }),
+    ).resolves.toBe(1);
+    await expect(
+      prisma.session.count({ where: { userId: account.user.id, revokedAt: null } }),
+    ).resolves.toBe(2);
     await prisma.user.update({
       where: { id: account.user.id },
       data: { phoneE164: '+5517999991234', phoneVerifiedAt: new Date() },
@@ -1921,10 +1955,18 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
       prisma.session.findUniqueOrThrow({ where: { id: secondarySessionId } }),
     ).resolves.toMatchObject({ revokedAt: expect.any(Date) });
     await expect(
+      prisma.sessionRefreshToken.count({ where: { sessionId: currentSessionId, revokedAt: null } }),
+    ).resolves.toBe(1);
+    await expect(
       prisma.sessionRefreshToken.count({
         where: { sessionId: secondarySessionId, revokedAt: { not: null } },
       }),
-    ).resolves.toBeGreaterThan(0);
+    ).resolves.toBe(1);
+    await expect(
+      prisma.securityEvent.count({
+        where: { userId: account.user.id, eventType: 'SESSION_REVOKED' },
+      }),
+    ).resolves.toBe(1);
   });
 
   it('handles concurrent recovery regeneration with one final active hash set', async () => {
