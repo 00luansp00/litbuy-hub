@@ -69,6 +69,66 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
     await app.close();
   });
 
+  async function registerVerifiedAndLogin(email: string, password = 'integration password 123') {
+    const payload = {
+      email,
+      password,
+      birthDate: '2000-01-01',
+      termsAccepted: true,
+      privacyAccepted: true,
+      termsVersion: process.env.CURRENT_TERMS_VERSION,
+      privacyVersion: process.env.CURRENT_PRIVACY_VERSION,
+    };
+    const register = await request(app.getHttpServer())
+      .post('/api/v1/auth/register')
+      .send(payload)
+      .expect(HttpStatus.CREATED);
+    const verifyToken = mailer.sent.find(
+      (message) => message.to === email && message.purpose === 'EMAIL_VERIFICATION',
+    )?.token;
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/verify')
+      .send({ token: verifyToken })
+      .expect(HttpStatus.OK);
+    const login = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', register.headers['set-cookie'] as unknown as string[])
+      .send({ email, password })
+      .expect(HttpStatus.OK);
+    const user = await prisma.user.findUniqueOrThrow({ where: { email } });
+    return { email, password, register, login, user };
+  }
+
+  async function emailChangeTokens(userId: string, newEmail: string) {
+    const change = await prisma.emailChangeRequest.findFirstOrThrow({
+      where: { userId, completedAt: null, cancelledAt: null },
+      orderBy: { createdAt: 'desc' },
+    });
+    const challenges = await prisma.verificationChallenge.findMany({
+      where: { contextId: change.id },
+    });
+    const currentChallenge = challenges.find(
+      (challenge) => challenge.purpose === 'EMAIL_CHANGE_CURRENT',
+    )!;
+    const newChallenge = challenges.find((challenge) => challenge.purpose === 'EMAIL_CHANGE_NEW')!;
+    const currentToken = mailer.sent.find((message) =>
+      message.token?.startsWith(`${currentChallenge.id}.`),
+    )?.token;
+    const newToken = mailer.sent.find((message) =>
+      message.token?.startsWith(`${newChallenge.id}.`),
+    )?.token;
+    expect(currentToken).toEqual(expect.any(String));
+    expect(newToken).toEqual(expect.any(String));
+    expect(newEmail).toContain('@');
+    return {
+      change,
+      currentChallenge,
+      newChallenge,
+      currentToken: currentToken!,
+      newToken: newToken!,
+    };
+  }
+
   it('keeps Swagger disabled when SWAGGER_ENABLED=false', () => {
     const config = app.get(ConfigService);
 
@@ -863,5 +923,418 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
         where: { userId: user.id, eventType: 'SENSITIVE_ACTION_HOLD_STARTED' },
       }),
     ).resolves.toBe(1);
+  });
+
+  it('handles a real cross-account race for the same phone without loser side effects', async () => {
+    const first = await registerVerifiedAndLogin('integration-phone-race-a@example.com');
+    const second = await registerVerifiedAndLogin('integration-phone-race-b@example.com');
+    const phone = '(17) 96666-1212';
+    const target = '+5517966661212';
+
+    const firstReq = await request(app.getHttpServer())
+      .post('/api/v1/auth/phone/request')
+      .set('Authorization', `Bearer ${first.login.body.accessToken}`)
+      .send({ phone, currentPassword: first.password })
+      .expect(HttpStatus.OK);
+    const firstCode = sms.sent.at(-1)?.code;
+    const secondReq = await request(app.getHttpServer())
+      .post('/api/v1/auth/phone/request')
+      .set('Authorization', `Bearer ${second.login.body.accessToken}`)
+      .send({ phone, currentPassword: second.password })
+      .expect(HttpStatus.OK);
+    const secondCode = sms.sent.at(-1)?.code;
+
+    const [firstVerify, secondVerify] = await Promise.all([
+      request(app.getHttpServer())
+        .post('/api/v1/auth/phone/verify')
+        .set('Authorization', `Bearer ${first.login.body.accessToken}`)
+        .send({ challengeId: firstReq.body.challengeId, code: firstCode, phone }),
+      request(app.getHttpServer())
+        .post('/api/v1/auth/phone/verify')
+        .set('Authorization', `Bearer ${second.login.body.accessToken}`)
+        .send({ challengeId: secondReq.body.challengeId, code: secondCode, phone }),
+    ]);
+    expect([firstVerify.status, secondVerify.status].sort()).toEqual([200, 400]);
+    const winner = firstVerify.status === 200 ? first : second;
+    const loser = firstVerify.status === 200 ? second : first;
+    const loserChallengeId =
+      firstVerify.status === 200 ? secondReq.body.challengeId : firstReq.body.challengeId;
+    const loserCode = firstVerify.status === 200 ? secondCode : firstCode;
+    const loserResponse = firstVerify.status === 200 ? secondVerify : firstVerify;
+    expect(JSON.stringify(loserResponse.body)).toContain('PHONE_UNAVAILABLE');
+    expect(JSON.stringify(loserResponse.body)).not.toMatch(
+      /P2002|constraint|SQL|Unique|phoneE164|96666/,
+    );
+
+    const winnerUser = await prisma.user.findUniqueOrThrow({ where: { id: winner.user.id } });
+    const loserUser = await prisma.user.findUniqueOrThrow({ where: { id: loser.user.id } });
+    expect(winnerUser.phoneE164).toBe(target);
+    expect(winnerUser.sensitiveActionHoldUntil).toEqual(expect.any(Date));
+    expect(loserUser.phoneE164).toBeNull();
+    expect(loserUser.sensitiveActionHoldUntil).toBeNull();
+    expect(loserUser.lastSensitiveChangeAt).toBeNull();
+    await expect(prisma.user.count({ where: { phoneE164: target } })).resolves.toBe(1);
+    await expect(
+      prisma.session.count({ where: { userId: winner.user.id, revokedAt: null } }),
+    ).resolves.toBe(0);
+    await expect(
+      prisma.session.count({ where: { userId: loser.user.id, revokedAt: null } }),
+    ).resolves.toBe(1);
+    await expect(
+      prisma.sessionRefreshToken.count({
+        where: { session: { userId: loser.user.id }, revokedAt: null },
+      }),
+    ).resolves.toBeGreaterThan(0);
+    await expect(
+      prisma.securityEvent.count({
+        where: { userId: winner.user.id, eventType: { in: ['PHONE_VERIFIED', 'PHONE_CHANGED'] } },
+      }),
+    ).resolves.toBe(1);
+    await expect(
+      prisma.securityEvent.count({
+        where: {
+          userId: loser.user.id,
+          eventType: { in: ['PHONE_VERIFIED', 'PHONE_CHANGED', 'SESSION_REVOKED'] },
+        },
+      }),
+    ).resolves.toBe(0);
+    const loserChallenge = await prisma.verificationChallenge.findUniqueOrThrow({
+      where: { id: loserChallengeId },
+    });
+    expect(loserChallenge.consumedAt).toEqual(expect.any(Date));
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/phone/verify')
+      .set('Authorization', `Bearer ${loser.login.body.accessToken}`)
+      .send({ challengeId: loserChallengeId, code: loserCode, phone })
+      .expect(HttpStatus.BAD_REQUEST);
+  });
+
+  it('handles a real cross-account race for the same new email without loser side effects', async () => {
+    const first = await registerVerifiedAndLogin('integration-email-race-a@example.com');
+    const second = await registerVerifiedAndLogin('integration-email-race-b@example.com');
+    const newEmail = 'integration-email-race-target@example.com';
+
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/change/request')
+      .set('Authorization', `Bearer ${first.login.body.accessToken}`)
+      .send({ newEmail, currentPassword: first.password })
+      .expect(HttpStatus.OK);
+    const firstTokens = await emailChangeTokens(first.user.id, newEmail);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/change/request')
+      .set('Authorization', `Bearer ${second.login.body.accessToken}`)
+      .send({ newEmail, currentPassword: second.password })
+      .expect(HttpStatus.OK);
+    const secondTokens = await emailChangeTokens(second.user.id, newEmail);
+
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/change/confirm')
+      .send({ token: firstTokens.currentToken, newEmail })
+      .expect(HttpStatus.OK);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/change/confirm')
+      .send({ token: secondTokens.currentToken, newEmail })
+      .expect(HttpStatus.OK);
+
+    const [firstFinal, secondFinal] = await Promise.all([
+      request(app.getHttpServer())
+        .post('/api/v1/auth/email/change/confirm')
+        .send({ token: firstTokens.newToken, newEmail }),
+      request(app.getHttpServer())
+        .post('/api/v1/auth/email/change/confirm')
+        .send({ token: secondTokens.newToken, newEmail }),
+    ]);
+    expect([firstFinal.status, secondFinal.status].sort()).toEqual([200, 400]);
+    const winner = firstFinal.status === 200 ? first : second;
+    const loser = firstFinal.status === 200 ? second : first;
+    const loserTokens = firstFinal.status === 200 ? secondTokens : firstTokens;
+    const loserResponse = firstFinal.status === 200 ? secondFinal : firstFinal;
+    expect(JSON.stringify(loserResponse.body)).toContain('EMAIL_UNAVAILABLE');
+    expect(JSON.stringify(loserResponse.body)).not.toMatch(
+      /P2002|constraint|SQL|Unique|email_key|integration-email-race-target/,
+    );
+
+    await expect(prisma.user.count({ where: { email: newEmail } })).resolves.toBe(1);
+    const winnerUser = await prisma.user.findUniqueOrThrow({ where: { id: winner.user.id } });
+    const loserUser = await prisma.user.findUniqueOrThrow({ where: { id: loser.user.id } });
+    expect(winnerUser.email).toBe(newEmail);
+    expect(winnerUser.sensitiveActionHoldUntil).toEqual(expect.any(Date));
+    expect(loserUser.email).toBe(loser.email);
+    expect(loserUser.sensitiveActionHoldUntil).toBeNull();
+    expect(loserUser.lastSensitiveChangeAt).toBeNull();
+    const loserChange = await prisma.emailChangeRequest.findUniqueOrThrow({
+      where: { id: loserTokens.change.id },
+    });
+    expect(loserChange.cancelledAt).toEqual(expect.any(Date));
+    await expect(
+      prisma.verificationChallenge.count({
+        where: { contextId: loserChange.id, consumedAt: null },
+      }),
+    ).resolves.toBe(0);
+    await expect(
+      prisma.session.count({ where: { userId: winner.user.id, revokedAt: null } }),
+    ).resolves.toBe(0);
+    await expect(
+      prisma.session.count({ where: { userId: loser.user.id, revokedAt: null } }),
+    ).resolves.toBe(1);
+    await expect(
+      prisma.sessionRefreshToken.count({
+        where: { session: { userId: loser.user.id }, revokedAt: null },
+      }),
+    ).resolves.toBeGreaterThan(0);
+    await expect(
+      prisma.securityEvent.count({ where: { userId: winner.user.id, eventType: 'EMAIL_CHANGED' } }),
+    ).resolves.toBe(1);
+    await expect(
+      prisma.securityEvent.count({
+        where: { userId: loser.user.id, eventType: { in: ['EMAIL_CHANGED', 'SESSION_REVOKED'] } },
+      }),
+    ).resolves.toBe(0);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', loser.register.headers['set-cookie'] as unknown as string[])
+      .send({ email: loser.email, password: loser.password })
+      .expect(HttpStatus.OK);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/change/confirm')
+      .send({ token: loserTokens.newToken, newEmail })
+      .expect(HttpStatus.BAD_REQUEST);
+  });
+
+  it('serializes duplicate and simultaneous real email confirmations without duplicate effects', async () => {
+    const pendingUser = await registerVerifiedAndLogin(
+      'integration-email-token-pending@example.com',
+    );
+    const pendingNewEmail = 'integration-email-token-pending-new@example.com';
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/change/request')
+      .set('Authorization', `Bearer ${pendingUser.login.body.accessToken}`)
+      .send({ newEmail: pendingNewEmail, currentPassword: pendingUser.password })
+      .expect(HttpStatus.OK);
+    const pendingTokens = await emailChangeTokens(pendingUser.user.id, pendingNewEmail);
+    const [pendingA, pendingB] = await Promise.all([
+      request(app.getHttpServer())
+        .post('/api/v1/auth/email/change/confirm')
+        .send({ token: pendingTokens.currentToken, newEmail: pendingNewEmail }),
+      request(app.getHttpServer())
+        .post('/api/v1/auth/email/change/confirm')
+        .send({ token: pendingTokens.currentToken, newEmail: pendingNewEmail }),
+    ]);
+    expect([pendingA.status, pendingB.status].sort()).toEqual([200, 400]);
+    await expect(
+      prisma.securityEvent.count({
+        where: { userId: pendingUser.user.id, eventType: 'EMAIL_CHANGED' },
+      }),
+    ).resolves.toBe(0);
+    const consumedCurrent = await prisma.verificationChallenge.findUniqueOrThrow({
+      where: { id: pendingTokens.currentChallenge.id },
+    });
+    expect(consumedCurrent.consumedAt).toEqual(expect.any(Date));
+
+    const finalUser = await registerVerifiedAndLogin('integration-email-token-final@example.com');
+    const finalNewEmail = 'integration-email-token-final-new@example.com';
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/change/request')
+      .set('Authorization', `Bearer ${finalUser.login.body.accessToken}`)
+      .send({ newEmail: finalNewEmail, currentPassword: finalUser.password })
+      .expect(HttpStatus.OK);
+    const finalTokens = await emailChangeTokens(finalUser.user.id, finalNewEmail);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/change/confirm')
+      .send({ token: finalTokens.currentToken, newEmail: finalNewEmail })
+      .expect(HttpStatus.OK);
+    const [finalA, finalB] = await Promise.all([
+      request(app.getHttpServer())
+        .post('/api/v1/auth/email/change/confirm')
+        .send({ token: finalTokens.newToken, newEmail: finalNewEmail }),
+      request(app.getHttpServer())
+        .post('/api/v1/auth/email/change/confirm')
+        .send({ token: finalTokens.newToken, newEmail: finalNewEmail }),
+    ]);
+    expect([finalA.status, finalB.status].sort()).toEqual([200, 400]);
+    await expect(prisma.user.count({ where: { email: finalNewEmail } })).resolves.toBe(1);
+    await expect(
+      prisma.emailChangeRequest.count({
+        where: { id: finalTokens.change.id, completedAt: { not: null } },
+      }),
+    ).resolves.toBe(1);
+    await expect(
+      prisma.securityEvent.count({
+        where: { userId: finalUser.user.id, eventType: 'EMAIL_CHANGED' },
+      }),
+    ).resolves.toBe(1);
+
+    const simultaneousUser = await registerVerifiedAndLogin(
+      'integration-email-token-simultaneous@example.com',
+    );
+    const simultaneousNewEmail = 'integration-email-token-simultaneous-new@example.com';
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/change/request')
+      .set('Authorization', `Bearer ${simultaneousUser.login.body.accessToken}`)
+      .send({ newEmail: simultaneousNewEmail, currentPassword: simultaneousUser.password })
+      .expect(HttpStatus.OK);
+    const simultaneousTokens = await emailChangeTokens(
+      simultaneousUser.user.id,
+      simultaneousNewEmail,
+    );
+    const [currentResult, newResult] = await Promise.all([
+      request(app.getHttpServer())
+        .post('/api/v1/auth/email/change/confirm')
+        .send({ token: simultaneousTokens.currentToken, newEmail: simultaneousNewEmail }),
+      request(app.getHttpServer())
+        .post('/api/v1/auth/email/change/confirm')
+        .send({ token: simultaneousTokens.newToken, newEmail: simultaneousNewEmail }),
+    ]);
+    expect([currentResult.status, newResult.status].every((status) => status !== 500)).toBe(true);
+    await expect(prisma.user.count({ where: { email: simultaneousNewEmail } })).resolves.toBe(1);
+    await expect(
+      prisma.verificationChallenge.count({
+        where: { contextId: simultaneousTokens.change.id, consumedAt: null },
+      }),
+    ).resolves.toBe(0);
+    await expect(
+      prisma.securityEvent.count({
+        where: { userId: simultaneousUser.user.id, eventType: 'EMAIL_CHANGED' },
+      }),
+    ).resolves.toBe(1);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', simultaneousUser.register.headers['set-cookie'] as unknown as string[])
+      .send({ email: simultaneousUser.email, password: simultaneousUser.password })
+      .expect(HttpStatus.UNAUTHORIZED);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', simultaneousUser.register.headers['set-cookie'] as unknown as string[])
+      .send({ email: simultaneousNewEmail, password: simultaneousUser.password })
+      .expect(HttpStatus.OK);
+  });
+
+  it('compensates real delivery failures without reusable challenges or side effects', async () => {
+    const phoneUser = await registerVerifiedAndLogin('integration-delivery-phone@example.com');
+    const originalSmsSend = sms.send.bind(sms);
+    let failSms = true;
+    const failingSmsSend: typeof sms.send = (to, purpose, code) => {
+      if (failSms) {
+        failSms = false;
+        throw new Error('simulated sms failure');
+      }
+      originalSmsSend(to, purpose, code);
+    };
+    sms.send = failingSmsSend;
+    const failedSms = await request(app.getHttpServer())
+      .post('/api/v1/auth/phone/request')
+      .set('Authorization', `Bearer ${phoneUser.login.body.accessToken}`)
+      .send({ phone: '(17) 95555-3434', currentPassword: phoneUser.password })
+      .expect(HttpStatus.SERVICE_UNAVAILABLE);
+    expect(failedSms.body.code).toBe('SMS_DELIVERY_UNAVAILABLE');
+    expect(JSON.stringify(failedSms.body)).not.toMatch(
+      /95555|\d{6}|token|hash|pepper|SQL|constraint/,
+    );
+    await expect(
+      prisma.verificationChallenge.count({
+        where: { userId: phoneUser.user.id, purpose: 'PHONE_VERIFICATION', consumedAt: null },
+      }),
+    ).resolves.toBe(0);
+    const phoneAfterFailure = await prisma.user.findUniqueOrThrow({
+      where: { id: phoneUser.user.id },
+    });
+    expect(phoneAfterFailure.sensitiveActionHoldUntil).toBeNull();
+    await expect(
+      prisma.session.count({ where: { userId: phoneUser.user.id, revokedAt: null } }),
+    ).resolves.toBe(1);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/phone/request')
+      .set('Authorization', `Bearer ${phoneUser.login.body.accessToken}`)
+      .send({ phone: '(17) 95555-3434', currentPassword: phoneUser.password })
+      .expect(HttpStatus.OK);
+    sms.send = originalSmsSend;
+
+    const firstEmailUser = await registerVerifiedAndLogin(
+      'integration-delivery-email-first@example.com',
+    );
+    const originalMailSend = mailer.send.bind(mailer);
+    const failingFirstMailSend: AuthMailer['send'] = (to, purpose, token) => {
+      if (purpose === 'EMAIL_CHANGE_CONFIRM_CURRENT')
+        throw new Error('simulated first email failure');
+      originalMailSend(to, purpose, token);
+    };
+    mailer.send = failingFirstMailSend;
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/change/request')
+      .set('Authorization', `Bearer ${firstEmailUser.login.body.accessToken}`)
+      .send({
+        newEmail: 'integration-delivery-email-first-new@example.com',
+        currentPassword: firstEmailUser.password,
+      })
+      .expect(HttpStatus.SERVICE_UNAVAILABLE)
+      .expect(({ body }) => expect(body.code).toBe('EMAIL_DELIVERY_UNAVAILABLE'));
+    await expect(
+      prisma.emailChangeRequest.count({
+        where: { userId: firstEmailUser.user.id, cancelledAt: null },
+      }),
+    ).resolves.toBe(0);
+    await expect(
+      prisma.verificationChallenge.count({
+        where: { userId: firstEmailUser.user.id, consumedAt: null },
+      }),
+    ).resolves.toBe(0);
+    const firstEmailAfter = await prisma.user.findUniqueOrThrow({
+      where: { id: firstEmailUser.user.id },
+    });
+    expect(firstEmailAfter.sensitiveActionHoldUntil).toBeNull();
+    await expect(
+      prisma.securityEvent.count({
+        where: { userId: firstEmailUser.user.id, eventType: 'EMAIL_CHANGED' },
+      }),
+    ).resolves.toBe(0);
+    mailer.send = originalMailSend;
+
+    const secondEmailUser = await registerVerifiedAndLogin(
+      'integration-delivery-email-second@example.com',
+    );
+    let deliveredCurrentToken = '';
+    const failingSecondMailSend: AuthMailer['send'] = (to, purpose, token) => {
+      if (purpose === 'EMAIL_CHANGE_CONFIRM_NEW') throw new Error('simulated second email failure');
+      if (purpose === 'EMAIL_CHANGE_CONFIRM_CURRENT') deliveredCurrentToken = token ?? '';
+      originalMailSend(to, purpose, token);
+    };
+    mailer.send = failingSecondMailSend;
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/change/request')
+      .set('Authorization', `Bearer ${secondEmailUser.login.body.accessToken}`)
+      .send({
+        newEmail: 'integration-delivery-email-second-new@example.com',
+        currentPassword: secondEmailUser.password,
+      })
+      .expect(HttpStatus.SERVICE_UNAVAILABLE)
+      .expect(({ body }) => expect(body.code).toBe('EMAIL_DELIVERY_UNAVAILABLE'));
+    expect(deliveredCurrentToken).toEqual(expect.any(String));
+    const cancelled = await prisma.emailChangeRequest.findFirstOrThrow({
+      where: { userId: secondEmailUser.user.id },
+    });
+    expect(cancelled.cancelledAt).toEqual(expect.any(Date));
+    await expect(
+      prisma.verificationChallenge.count({ where: { contextId: cancelled.id, consumedAt: null } }),
+    ).resolves.toBe(0);
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/change/confirm')
+      .send({
+        token: deliveredCurrentToken,
+        newEmail: 'integration-delivery-email-second-new@example.com',
+      })
+      .expect(HttpStatus.BAD_REQUEST);
+    const secondEmailAfter = await prisma.user.findUniqueOrThrow({
+      where: { id: secondEmailUser.user.id },
+    });
+    expect(secondEmailAfter.sensitiveActionHoldUntil).toBeNull();
+    await expect(
+      prisma.session.count({ where: { userId: secondEmailUser.user.id, revokedAt: null } }),
+    ).resolves.toBe(1);
+    await expect(
+      prisma.securityEvent.count({
+        where: { userId: secondEmailUser.user.id, eventType: 'EMAIL_CHANGED' },
+      }),
+    ).resolves.toBe(0);
+    mailer.send = originalMailSend;
   });
 });

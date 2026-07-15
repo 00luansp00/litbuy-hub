@@ -196,6 +196,17 @@ export class AuthService {
     return this.config.getOrThrow<AuthRuntimeConfig>('auth');
   }
 
+  private exceptionCode(error: unknown): string | null {
+    if (error instanceof AppError) return error.code;
+    if (!(error instanceof HttpException)) return null;
+    const response = error.getResponse();
+    if (typeof response === 'object' && response !== null && 'code' in response) {
+      const code = (response as { code?: unknown }).code;
+      return typeof code === 'string' ? code : null;
+    }
+    return null;
+  }
+
   private cookieOptions(httpOnly = true): CookieOptions {
     const c = this.authConfig();
     return {
@@ -1298,7 +1309,7 @@ export class AuthService {
           throw new BadRequestException({ code: 'PHONE_ALREADY_VERIFIED' });
         }
         if (await tx.user.findFirst({ where: { phoneE164: phone, id: { not: auth.userId } } })) {
-          throw new BadRequestException({ code: 'PHONE_UNAVAILABLE' });
+          throw new AppError('PHONE_UNAVAILABLE', 'Telefone indisponível.', HttpStatus.BAD_REQUEST);
         }
         cooldownLease = await this.acquireSmsCooldown(['phone-request', auth.userId, phone]);
         await tx.verificationChallenge.updateMany({
@@ -1425,7 +1436,7 @@ export class AuthService {
         });
         if (claim.count !== 1) throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_CODE' });
         if (await tx.user.findFirst({ where: { phoneE164: phone, id: { not: auth.userId } } })) {
-          throw new BadRequestException({ code: 'PHONE_UNAVAILABLE' });
+          throw new AppError('PHONE_UNAVAILABLE', 'Telefone indisponível.', HttpStatus.BAD_REQUEST);
         }
         const before = await tx.user.findUniqueOrThrow({ where: { id: auth.userId } });
         noticeEmail = before.email;
@@ -1450,12 +1461,12 @@ export class AuthService {
         });
       });
     } catch (error) {
-      if (isUniqueConstraintError(error)) {
+      if (isUniqueConstraintError(error) || this.exceptionCode(error) === 'PHONE_UNAVAILABLE') {
         await this.prisma.verificationChallenge.updateMany({
           where: { id: challenge.id, userId: auth.userId, purpose: 'PHONE_VERIFICATION' },
           data: { consumedAt: new Date() },
         });
-        throw new BadRequestException({ code: 'PHONE_UNAVAILABLE' });
+        throw new AppError('PHONE_UNAVAILABLE', 'Telefone indisponível.', HttpStatus.BAD_REQUEST);
       }
       throw error;
     }
@@ -1510,7 +1521,7 @@ export class AuthService {
         oldEmail = user.email;
         if (newEmail === user.email) throw new BadRequestException({ code: 'EMAIL_UNCHANGED' });
         if (await tx.user.findUnique({ where: { email: newEmail } })) {
-          throw new BadRequestException({ code: 'EMAIL_UNAVAILABLE' });
+          throw new AppError('EMAIL_UNAVAILABLE', 'E-mail indisponível.', HttpStatus.BAD_REQUEST);
         }
         await tx.emailChangeRequest.updateMany({
           where: { userId: auth.userId, completedAt: null, cancelledAt: null },
@@ -1697,7 +1708,7 @@ export class AuthService {
         if (finalClaim.count !== 1)
           throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_TOKEN' });
         if (await tx.user.findUnique({ where: { email: newEmail } })) {
-          throw new BadRequestException({ code: 'EMAIL_UNAVAILABLE' });
+          throw new AppError('EMAIL_UNAVAILABLE', 'E-mail indisponível.', HttpStatus.BAD_REQUEST);
         }
         const user = await tx.user.findUniqueOrThrow({ where: { id: challenge.userId } });
         oldEmail = user.email;
@@ -1722,7 +1733,7 @@ export class AuthService {
         return { status: 'COMPLETED' as const };
       });
     } catch (error) {
-      if (isUniqueConstraintError(error)) {
+      if (isUniqueConstraintError(error) || this.exceptionCode(error) === 'EMAIL_UNAVAILABLE') {
         await this.prisma.$transaction(async (tx) => {
           await tx.emailChangeRequest.updateMany({
             where: { id: challenge.contextId!, userId: challenge.userId, completedAt: null },
@@ -1733,7 +1744,7 @@ export class AuthService {
             data: { consumedAt: new Date() },
           });
         });
-        throw new BadRequestException({ code: 'EMAIL_UNAVAILABLE' });
+        throw new AppError('EMAIL_UNAVAILABLE', 'E-mail indisponível.', HttpStatus.BAD_REQUEST);
       }
       throw error;
     }
