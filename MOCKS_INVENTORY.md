@@ -135,3 +135,8 @@ Criticidade: **baixa / média / alta / crítica**.
 ## Sprint 2C2B2A
 
 Sessões, dispositivos aprovados e alteração autenticada de senha usam somente endpoints reais NestJS. Outros domínios do marketplace permanecem mockados conforme inventário acima.
+
+## Sprint 2C2B2B1
+
+- Telefone seguro e alteração de e-mail não usam fallback mockado no frontend.
+- Services reais adicionados em `src/services/auth/phoneEmailSecurity.ts` para os endpoints `/auth/phone/request`, `/auth/phone/verify`, `/auth/email/change/request` e `/auth/email/change/confirm`.

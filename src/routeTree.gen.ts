@@ -28,6 +28,7 @@ import { Route as LitPointsRouteImport } from './routes/lit-points'
 import { Route as ItensProibidosRouteImport } from './routes/itens-proibidos'
 import { Route as FavoritosRouteImport } from './routes/favoritos'
 import { Route as ContatoRouteImport } from './routes/contato'
+import { Route as ConfirmarAlteracaoEmailRouteImport } from './routes/confirmar-alteracao-email'
 import { Route as ComoVenderRouteImport } from './routes/como-vender'
 import { Route as ComoComprarRouteImport } from './routes/como-comprar'
 import { Route as CheckoutRouteImport } from './routes/checkout'
@@ -168,6 +169,11 @@ const FavoritosRoute = FavoritosRouteImport.update({
 const ContatoRoute = ContatoRouteImport.update({
   id: '/contato',
   path: '/contato',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConfirmarAlteracaoEmailRoute = ConfirmarAlteracaoEmailRouteImport.update({
+  id: '/confirmar-alteracao-email',
+  path: '/confirmar-alteracao-email',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ComoVenderRoute = ComoVenderRouteImport.update({
@@ -413,6 +419,7 @@ export interface FileRoutesByFullPath {
   '/checkout': typeof CheckoutRoute
   '/como-comprar': typeof ComoComprarRoute
   '/como-vender': typeof ComoVenderRoute
+  '/confirmar-alteracao-email': typeof ConfirmarAlteracaoEmailRoute
   '/contato': typeof ContatoRoute
   '/favoritos': typeof FavoritosRoute
   '/itens-proibidos': typeof ItensProibidosRoute
@@ -479,6 +486,7 @@ export interface FileRoutesByTo {
   '/checkout': typeof CheckoutRoute
   '/como-comprar': typeof ComoComprarRoute
   '/como-vender': typeof ComoVenderRoute
+  '/confirmar-alteracao-email': typeof ConfirmarAlteracaoEmailRoute
   '/contato': typeof ContatoRoute
   '/favoritos': typeof FavoritosRoute
   '/itens-proibidos': typeof ItensProibidosRoute
@@ -545,6 +553,7 @@ export interface FileRoutesById {
   '/checkout': typeof CheckoutRoute
   '/como-comprar': typeof ComoComprarRoute
   '/como-vender': typeof ComoVenderRoute
+  '/confirmar-alteracao-email': typeof ConfirmarAlteracaoEmailRoute
   '/contato': typeof ContatoRoute
   '/favoritos': typeof FavoritosRoute
   '/itens-proibidos': typeof ItensProibidosRoute
@@ -614,6 +623,7 @@ export interface FileRouteTypes {
     | '/checkout'
     | '/como-comprar'
     | '/como-vender'
+    | '/confirmar-alteracao-email'
     | '/contato'
     | '/favoritos'
     | '/itens-proibidos'
@@ -680,6 +690,7 @@ export interface FileRouteTypes {
     | '/checkout'
     | '/como-comprar'
     | '/como-vender'
+    | '/confirmar-alteracao-email'
     | '/contato'
     | '/favoritos'
     | '/itens-proibidos'
@@ -745,6 +756,7 @@ export interface FileRouteTypes {
     | '/checkout'
     | '/como-comprar'
     | '/como-vender'
+    | '/confirmar-alteracao-email'
     | '/contato'
     | '/favoritos'
     | '/itens-proibidos'
@@ -813,6 +825,7 @@ export interface RootRouteChildren {
   CheckoutRoute: typeof CheckoutRoute
   ComoComprarRoute: typeof ComoComprarRoute
   ComoVenderRoute: typeof ComoVenderRoute
+  ConfirmarAlteracaoEmailRoute: typeof ConfirmarAlteracaoEmailRoute
   ContatoRoute: typeof ContatoRoute
   FavoritosRoute: typeof FavoritosRoute
   ItensProibidosRoute: typeof ItensProibidosRoute
@@ -975,6 +988,13 @@ declare module '@tanstack/react-router' {
       path: '/contato'
       fullPath: '/contato'
       preLoaderRoute: typeof ContatoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/confirmar-alteracao-email': {
+      id: '/confirmar-alteracao-email'
+      path: '/confirmar-alteracao-email'
+      fullPath: '/confirmar-alteracao-email'
+      preLoaderRoute: typeof ConfirmarAlteracaoEmailRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/como-vender': {
@@ -1424,6 +1444,7 @@ const rootRouteChildren: RootRouteChildren = {
   CheckoutRoute: CheckoutRoute,
   ComoComprarRoute: ComoComprarRoute,
   ComoVenderRoute: ComoVenderRoute,
+  ConfirmarAlteracaoEmailRoute: ConfirmarAlteracaoEmailRoute,
   ContatoRoute: ContatoRoute,
   FavoritosRoute: FavoritosRoute,
   ItensProibidosRoute: ItensProibidosRoute,

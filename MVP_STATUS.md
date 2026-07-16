@@ -508,3 +508,10 @@ Autenticação central do frontend integrada à API NestJS real. Tokens não sã
 - Rota: `/perfil/seguranca`.
 - Fora do escopo e pendente para próximas sprints: telefone, alteração de e-mail, gerenciamento de 2FA, recovery codes e demais áreas 2C2B2B.
 - O frontend continua chamando exclusivamente a API NestJS; nenhum segredo, senha ou access token é persistido em storage.
+
+## Sprint 2C2B2B1
+
+- Integrados ao frontend: solicitação/confirmacão de telefone por SMS, solicitação de alteração de e-mail e dupla confirmação de e-mail.
+- Fluxos que revogam sessões limpam autenticação local e direcionam para login.
+- Senha, telefone, novo e-mail, challengeId, código SMS e token não são persistidos em storage.
+- Gestão de 2FA permanece pendente para Sprint 2C2B2B2.
