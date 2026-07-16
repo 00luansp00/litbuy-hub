@@ -77,3 +77,11 @@ verdade para dinheiro, permissão, KYC ou notificação de segurança.
 - Status de 2FA fica exclusivamente em TanStack Query com chave `['auth','2fa','status']`.
 - Recovery codes, challengeId, senha e códigos digitados permanecem somente no estado local transitório de `TwoFactorSecuritySection`.
 - Desativação confirmada limpa access token em memória, remove queries privadas e usa `clearAuthentication`; não há persistência de segredo em provider, storage ou URL.
+
+## Sprint 2C2B2B2B1 — step-up recovery regeneration
+- Frontend integrates real step-up endpoints for `TWO_FACTOR_RECOVERY_REGENERATE`: `POST /auth/step-up/request`, `POST /auth/step-up/verify`, `POST /auth/step-up/resend`, and `POST /auth/2fa/recovery/regenerate`.
+- Recovery-code regeneration confirms by six-digit 2FA code or a normalized 5-5-5 recovery code; the recovery confirmation code is sent only in the verify payload.
+- The opaque `stepUpToken` is validated defensively, kept only in the local Promise scope, and immediately sent as `X-Step-Up-Token` to regenerate recovery codes.
+- Regeneration expects exactly 10 unique uppercase 5-5-5 codes, treats malformed responses as `MALFORMED_RESPONSE`, warns that old codes may have been invalidated, and reconciles status/sessions without logging out.
+- Successful regeneration invalidates old recovery codes and visually refreshes the real sessions list while preserving the current session; new codes are shown once in an exclusive screen.
+- 2FA method change remains pending for Sprint 2C2B2B2B2; no method-change UI was added.

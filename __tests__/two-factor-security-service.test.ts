@@ -264,3 +264,122 @@ describe("twoFactorSecurityService", () => {
     expect(normalizeRecoveryCode("abcde-12345-fghij-extra")).toBe("ABCDE-12345-FGHIJ");
   });
 });
+
+import {
+  buildStepUpVerifyPayload,
+  stepUpRecoveryRegenerateScope,
+  stepUpSecurityService,
+} from "@/services/auth/stepUpSecurity";
+
+const stepUpChallenge = {
+  challengeId: "123e4567-e89b-42d3-a456-426614174000",
+  scope: stepUpRecoveryRegenerateScope,
+  method: "EMAIL",
+  expiresAt: "2027-07-16T12:00:00.000Z",
+};
+const stepUpGrant = {
+  stepUpToken: "opaque-step-up-token-value",
+  scope: stepUpRecoveryRegenerateScope,
+  expiresAt: "2027-07-16T12:00:00.000Z",
+};
+
+describe("stepUpSecurityService", () => {
+  it("requests, verifies, resends and regenerates with exact contracts", async () => {
+    fetchMock
+      .mockResolvedValueOnce(await ok(stepUpChallenge))
+      .mockResolvedValueOnce(await ok({ ...stepUpChallenge, method: "SMS" }))
+      .mockResolvedValueOnce(await ok(stepUpGrant))
+      .mockResolvedValueOnce(await ok({ recoveryCodes }));
+    await stepUpSecurityService.requestStepUp("secret");
+    await stepUpSecurityService.resendStepUp(stepUpChallenge.challengeId);
+    await stepUpSecurityService.verifyStepUpAndRegenerateRecoveryCodes({
+      challengeId: stepUpChallenge.challengeId,
+      code: "123456",
+    });
+    expect(fetchMock.mock.calls[0][0]).toContain("/auth/step-up/request");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      scope: stepUpRecoveryRegenerateScope,
+      currentPassword: "secret",
+    });
+    expect(fetchMock.mock.calls[1][0]).toContain("/auth/step-up/resend");
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({
+      challengeId: stepUpChallenge.challengeId,
+    });
+    expect(fetchMock.mock.calls[2][0]).toContain("/auth/step-up/verify");
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({
+      challengeId: stepUpChallenge.challengeId,
+      code: "123456",
+    });
+    expect(fetchMock.mock.calls[3][0]).toContain("/auth/2fa/recovery/regenerate");
+    expect(fetchMock.mock.calls[3][1].body).toBeUndefined();
+    expect(fetchMock.mock.calls[3][1].headers.get("X-Step-Up-Token")).toBe(
+      "opaque-step-up-token-value",
+    );
+    expect(fetchMock.mock.calls[3][1].headers.get("Authorization")).toBe("Bearer access-token");
+    expect(fetchMock.mock.calls[3][1].headers.get("X-CSRF-Token")).toBe("csrf-token");
+  });
+
+  it("builds code or normalized recovery payloads, never both or neither", () => {
+    expect(buildStepUpVerifyPayload(stepUpChallenge.challengeId, "123456", "")).toEqual({
+      challengeId: stepUpChallenge.challengeId,
+      code: "123456",
+    });
+    expect(buildStepUpVerifyPayload(stepUpChallenge.challengeId, "", "abcde12345fghij")).toEqual({
+      challengeId: stepUpChallenge.challengeId,
+      recoveryCode: "ABCDE-12345-FGHIJ",
+    });
+    expect(() => buildStepUpVerifyPayload(stepUpChallenge.challengeId, "123", "")).toThrow(
+      ApiError,
+    );
+    expect(() =>
+      buildStepUpVerifyPayload(stepUpChallenge.challengeId, "123456", "ABCDE-12345-FGHIJ"),
+    ).toThrow(ApiError);
+    expect(() => buildStepUpVerifyPayload(stepUpChallenge.challengeId, "", "")).toThrow(ApiError);
+  });
+
+  it("rejects malformed step-up challenge, grant and recovery code responses", async () => {
+    for (const body of [
+      {},
+      { ...stepUpChallenge, scope: "TWO_FACTOR_METHOD_CHANGE" },
+      { ...stepUpChallenge, challengeId: "123e4567-e89b-12d3-a456-426614174000" },
+      { ...stepUpChallenge, method: "PUSH" },
+      { ...stepUpChallenge, expiresAt: "bad" },
+    ]) {
+      fetchMock.mockResolvedValueOnce(await ok(body));
+      await expect(stepUpSecurityService.requestStepUp("secret")).rejects.toMatchObject({
+        code: "MALFORMED_RESPONSE",
+      });
+    }
+    for (const body of [
+      {},
+      { ...stepUpGrant, stepUpToken: "" },
+      { ...stepUpGrant, stepUpToken: "short" },
+      { ...stepUpGrant, scope: "TWO_FACTOR_METHOD_CHANGE" },
+      { ...stepUpGrant, expiresAt: "bad" },
+      { ...stepUpGrant, expiresAt: "2020-01-01T00:00:00.000Z" },
+    ]) {
+      fetchMock.mockResolvedValueOnce(await ok(body));
+      await expect(
+        stepUpSecurityService.verifyStepUp({
+          challengeId: stepUpChallenge.challengeId,
+          code: "123456",
+        }),
+      ).rejects.toMatchObject({ code: "MALFORMED_RESPONSE" });
+    }
+    for (const body of [
+      {},
+      { recoveryCodes: recoveryCodes.slice(0, 9) },
+      { recoveryCodes: [...recoveryCodes, "KLMNO-12345-PQRST"] },
+      { recoveryCodes: [...recoveryCodes.slice(0, 9), recoveryCodes[0]] },
+      { recoveryCodes: [...recoveryCodes.slice(0, 9), "ABCD-1234-EFGH"] },
+      { recoveryCodes: [...recoveryCodes.slice(0, 9), "abcde-12345-fghij"] },
+    ]) {
+      fetchMock.mockResolvedValueOnce(await ok(body));
+      await expect(
+        stepUpSecurityService.regenerateRecoveryCodes("opaque-token-value"),
+      ).rejects.toMatchObject({
+        code: "MALFORMED_RESPONSE",
+      });
+    }
+  });
+});
