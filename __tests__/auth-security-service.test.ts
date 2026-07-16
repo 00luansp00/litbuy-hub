@@ -189,3 +189,77 @@ describe("phoneEmailSecurityService", () => {
     ).rejects.toMatchObject({ status: 503, code: "SMS_DELIVERY_UNAVAILABLE" });
   });
 });
+
+describe("phone/email runtime response parsers", () => {
+  it("rejects malformed phone request responses and accepts valid response", async () => {
+    const {
+      parsePhoneRequestResponse,
+      parseEmailChangeRequestResponse,
+      parseEmailChangeConfirmResponse,
+    } = await import("@/services/auth/phoneEmailSecurity");
+    expect(() => parsePhoneRequestResponse({ expiresAt: "2026-07-16T12:00:00.000Z" })).toThrow(
+      ApiError,
+    );
+    expect(() =>
+      parsePhoneRequestResponse({
+        challengeId: "not-a-uuid",
+        expiresAt: "2026-07-16T12:00:00.000Z",
+      }),
+    ).toThrow(ApiError);
+    expect(() =>
+      parsePhoneRequestResponse({
+        challengeId: "11111111-1111-4111-8111-111111111111",
+        expiresAt: "not-a-date",
+      }),
+    ).toThrow(ApiError);
+    expect(
+      parsePhoneRequestResponse({
+        challengeId: "11111111-1111-4111-8111-111111111111",
+        expiresAt: "2026-07-16T12:00:00.000Z",
+      }),
+    ).toMatchObject({ message: "Código enviado por SMS." });
+    expect(() => parseEmailChangeRequestResponse(undefined)).toThrow(ApiError);
+    expect(() => parseEmailChangeRequestResponse("<html>bad</html>")).toThrow(ApiError);
+    expect(() =>
+      parseEmailChangeRequestResponse({ requestId: "", expiresAt: "2026-07-16T12:00:00.000Z" }),
+    ).toThrow(ApiError);
+    expect(() => parseEmailChangeRequestResponse({ requestId: "req", expiresAt: "bad" })).toThrow(
+      ApiError,
+    );
+    expect(
+      parseEmailChangeRequestResponse({ requestId: "req", expiresAt: "2026-07-16T12:00:00.000Z" }),
+    ).toMatchObject({ message: "Enviamos confirmações para os dois e-mails." });
+    expect(() => parseEmailChangeConfirmResponse({ status: "UNKNOWN" })).toThrow(ApiError);
+    expect(parseEmailChangeConfirmResponse({ status: "PENDING" })).toMatchObject({
+      status: "PENDING",
+    });
+    expect(parseEmailChangeConfirmResponse({ status: "COMPLETED" })).toMatchObject({
+      status: "COMPLETED",
+    });
+  });
+
+  it("rejects empty, HTML and malformed JSON bodies returned by apiFetch", async () => {
+    const { phoneEmailSecurityService } = await import("@/services/auth/phoneEmailSecurity");
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 200 }));
+    await expect(
+      phoneEmailSecurityService.requestPhoneVerification({
+        phone: "(17) 99999-1234",
+        currentPassword: "current secret",
+      }),
+    ).rejects.toMatchObject({ code: "MALFORMED_RESPONSE" });
+    fetchMock.mockResolvedValueOnce(new Response("<html>ok</html>", { status: 200 }));
+    await expect(
+      phoneEmailSecurityService.requestEmailChange({
+        newEmail: "new@example.com",
+        currentPassword: "current secret",
+      }),
+    ).rejects.toMatchObject({ code: "MALFORMED_RESPONSE" });
+    fetchMock.mockResolvedValueOnce(new Response("{", { status: 200 }));
+    await expect(
+      phoneEmailSecurityService.confirmEmailChange({
+        token: "token.secret",
+        newEmail: "new@example.com",
+      }),
+    ).rejects.toMatchObject({ code: "MALFORMED_RESPONSE" });
+  });
+});

@@ -6,10 +6,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { usePhoneSecurity, friendlyAuthError } from "@/services/auth";
 
-type Challenge = { challengeId: string; expiresAt: string; phone: string };
+type Challenge = { challengeId: string; expiresAt: string; phone: string; currentPassword: string };
 const obviousBrazilianMobile = (value: string) =>
   value.replace(/\D/g, "").replace(/^55/, "").length === 11 &&
   value.replace(/\D/g, "").replace(/^55/, "")[2] === "9";
+
+function formatExpiresAt(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "prazo informado pela API";
+  return date.toLocaleString("pt-BR");
+}
 
 export function PhoneSecuritySection({
   phoneMasked,
@@ -18,15 +24,17 @@ export function PhoneSecuritySection({
   phoneMasked?: string | null;
   phoneVerified: boolean;
 }) {
-  const { requestPhone, verifyPhone } = usePhoneSecurity();
+  const { requestPhone, verifyPhone, requestPending, verifyPending } = usePhoneSecurity();
   const [phone, setPhone] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [code, setCode] = useState("");
   const [challenge, setChallenge] = useState<Challenge | null>(null);
   const [message, setMessage] = useState("");
+  const [messageTone, setMessageTone] = useState<"error" | "info" | "success">("info");
   const inFlight = useRef(false);
   const errorRef = useRef<HTMLParagraphElement>(null);
   const fail = (m: string) => {
+    setMessageTone("error");
     setMessage(m);
     window.setTimeout(() => errorRef.current?.focus(), 0);
   };
@@ -39,9 +47,15 @@ export function PhoneSecuritySection({
     inFlight.current = true;
     setMessage("");
     try {
-      const response = await requestPhone.mutateAsync({ phone, currentPassword });
-      setChallenge({ challengeId: response.challengeId, expiresAt: response.expiresAt, phone });
+      const response = await requestPhone({ phone, currentPassword });
+      setChallenge({
+        challengeId: response.challengeId,
+        expiresAt: response.expiresAt,
+        phone,
+        currentPassword,
+      });
       setCode("");
+      setMessageTone("success");
       setMessage("Código enviado por SMS. O prazo exibido vem da API.");
     } catch (error) {
       fail(friendlyAuthError(error).message);
@@ -56,11 +70,35 @@ export function PhoneSecuritySection({
     inFlight.current = true;
     setMessage("");
     try {
-      await verifyPhone.mutateAsync({
+      await verifyPhone({
         challengeId: challenge.challengeId,
         phone: challenge.phone,
         code,
       });
+    } catch (error) {
+      fail(friendlyAuthError(error).message);
+    } finally {
+      inFlight.current = false;
+    }
+  };
+
+  const resendSms = async () => {
+    if (inFlight.current || !challenge) return;
+    inFlight.current = true;
+    setMessage("");
+    try {
+      const response = await requestPhone({
+        phone: challenge.phone,
+        currentPassword: challenge.currentPassword,
+      });
+      setChallenge({
+        challengeId: response.challengeId,
+        expiresAt: response.expiresAt,
+        phone: challenge.phone,
+        currentPassword: challenge.currentPassword,
+      });
+      setMessageTone("success");
+      setMessage("Novo código enviado por SMS. O prazo exibido vem da API.");
     } catch (error) {
       fail(friendlyAuthError(error).message);
     } finally {
@@ -80,11 +118,16 @@ export function PhoneSecuritySection({
           {phoneVerified ? `confirmado${phoneMasked ? ` (${phoneMasked})` : ""}` : "não confirmado"}
           . O telefone e o challenge ficam só em memória.
         </p>
-        <p ref={errorRef} tabIndex={-1} aria-live="polite" className="text-sm text-destructive">
+        <p
+          ref={errorRef}
+          tabIndex={-1}
+          aria-live="polite"
+          className={`text-sm ${messageTone === "error" ? "text-destructive" : "text-muted-foreground"}`}
+        >
           {message}
         </p>
         {!challenge ? (
-          <form onSubmit={submitRequest} className="space-y-3">
+          <form onSubmit={submitRequest} noValidate className="space-y-3">
             <div>
               <Label htmlFor="secure-phone">Telefone celular</Label>
               <Input
@@ -106,15 +149,15 @@ export function PhoneSecuritySection({
                 onChange={(e) => setCurrentPassword(e.target.value)}
               />
             </div>
-            <Button type="submit" disabled={requestPhone.isPending}>
+            <Button type="submit" disabled={requestPending}>
               {" "}
-              {requestPhone.isPending ? "Enviando SMS..." : "Enviar código SMS"}
+              {requestPending ? "Enviando SMS..." : "Enviar código SMS"}
             </Button>
           </form>
         ) : (
-          <form onSubmit={submitVerify} className="space-y-3">
+          <form onSubmit={submitVerify} noValidate className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Challenge recebido. Expira em {new Date(challenge.expiresAt).toLocaleString("pt-BR")}.
+              Challenge recebido. Expira em {formatExpiresAt(challenge.expiresAt)}.
             </p>
             <div>
               <Label htmlFor="phone-code">Código SMS</Label>
@@ -128,14 +171,22 @@ export function PhoneSecuritySection({
               />
             </div>
             <div className="flex gap-2">
-              <Button type="submit" disabled={verifyPhone.isPending}>
-                {verifyPhone.isPending ? "Confirmando..." : "Confirmar telefone"}
+              <Button type="submit" disabled={verifyPending}>
+                {verifyPending ? "Confirmando..." : "Confirmar telefone"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void resendSms()}
+                disabled={requestPending || verifyPending}
+              >
+                {requestPending ? "Reenviando..." : "Reenviar SMS"}
               </Button>
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => setChallenge(null)}
-                disabled={verifyPhone.isPending}
+                disabled={verifyPending}
               >
                 Voltar
               </Button>

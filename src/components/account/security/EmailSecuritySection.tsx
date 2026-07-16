@@ -1,5 +1,4 @@
 import { useRef, useState, type FormEvent } from "react";
-import { Link } from "@tanstack/react-router";
 import { Mail } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,14 +7,16 @@ import { Label } from "@/components/ui/label";
 import { useEmailSecurity, friendlyAuthError } from "@/services/auth";
 
 export function EmailSecuritySection({ currentEmail }: { currentEmail?: string }) {
-  const { requestEmailChange } = useEmailSecurity();
+  const { requestEmailChange, requestPending } = useEmailSecurity();
   const [newEmail, setNewEmail] = useState("");
   const [confirmEmail, setConfirmEmail] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [message, setMessage] = useState("");
+  const [messageTone, setMessageTone] = useState<"error" | "info" | "success">("info");
   const inFlight = useRef(false);
   const errorRef = useRef<HTMLParagraphElement>(null);
   const fail = (m: string) => {
+    setMessageTone("error");
     setMessage(m);
     window.setTimeout(() => errorRef.current?.focus(), 0);
   };
@@ -30,7 +31,8 @@ export function EmailSecuritySection({ currentEmail }: { currentEmail?: string }
     inFlight.current = true;
     setMessage("");
     try {
-      const response = await requestEmailChange.mutateAsync({ newEmail, currentPassword });
+      const response = await requestEmailChange({ newEmail, currentPassword });
+      setMessageTone("success");
       setMessage(`${response.message} A alteração só termina após a dupla confirmação.`);
       setCurrentPassword("");
       setNewEmail("");
@@ -53,10 +55,15 @@ export function EmailSecuritySection({ currentEmail }: { currentEmail?: string }
           E-mail atual: {currentEmail ?? "não informado"}. O novo e-mail não é gravado em URL ou
           storage.
         </p>
-        <p ref={errorRef} tabIndex={-1} aria-live="polite" className="text-sm text-destructive">
+        <p
+          ref={errorRef}
+          tabIndex={-1}
+          aria-live="polite"
+          className={`text-sm ${messageTone === "error" ? "text-destructive" : "text-muted-foreground"}`}
+        >
           {message}
         </p>
-        <form onSubmit={submit} className="space-y-3">
+        <form onSubmit={submit} noValidate className="space-y-3">
           <div>
             <Label htmlFor="new-email">Novo e-mail</Label>
             <Input
@@ -87,18 +94,10 @@ export function EmailSecuritySection({ currentEmail }: { currentEmail?: string }
               onChange={(e) => setCurrentPassword(e.target.value)}
             />
           </div>
-          <Button type="submit" disabled={requestEmailChange.isPending}>
-            {requestEmailChange.isPending
-              ? "Enviando confirmações..."
-              : "Solicitar alteração de e-mail"}
+          <Button type="submit" disabled={requestPending}>
+            {requestPending ? "Enviando confirmações..." : "Solicitar alteração de e-mail"}
           </Button>
         </form>
-        <p className="text-xs text-muted-foreground">
-          <Link to="/confirmar-alteracao-email" className="underline">
-            Abrir página de confirmação
-          </Link>{" "}
-          se o link de e-mail solicitar confirmação manual.
-        </p>
       </CardContent>
     </Card>
   );

@@ -25,6 +25,7 @@ const messages: Record<string, string> = {
   OUTDATED_TERMS_OR_PRIVACY: "Atualize a página e aceite as versões atuais dos termos.",
   INVALID_REGISTRATION: "Revise os dados do cadastro.",
   INVALID_2FA_INPUT: "Informe código de seis dígitos ou recovery code, nunca ambos.",
+  MALFORMED_RESPONSE: "Resposta inválida da API.",
   HTTP_ERROR: "Não foi possível concluir a operação.",
   NETWORK_ERROR: "Não foi possível conectar à API.",
 };

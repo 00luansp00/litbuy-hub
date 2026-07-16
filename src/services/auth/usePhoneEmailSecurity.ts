@@ -1,4 +1,5 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { setAccessToken } from "@/lib/api/client";
@@ -7,58 +8,129 @@ import { friendlyAuthError } from "./errors";
 import {
   phoneEmailSecurityService,
   type EmailChangeConfirmPayload,
+  type EmailChangeConfirmResponse,
   type EmailChangeRequestPayload,
+  type EmailChangeRequestResponse,
   type PhoneRequestPayload,
+  type PhoneRequestResponse,
   type PhoneVerifyPayload,
 } from "./phoneEmailSecurity";
+
+const privateQuery = (queryKey: readonly unknown[]) => queryKey[0] !== "public";
+const emailConfirmInFlightTokens = new Set<string>();
 
 export function useEndRevokedAuthentication() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { clearAuthentication } = useAuth();
-  return (message: string) => {
+  return async (message: string) => {
     setAccessToken(null);
-    queryClient.cancelQueries({ predicate: (q) => q.queryKey[0] !== "public" });
-    queryClient.removeQueries({ predicate: (q) => q.queryKey[0] !== "public" });
+    await queryClient
+      .cancelQueries({ predicate: (q) => privateQuery(q.queryKey) })
+      .catch(() => undefined);
+    queryClient.removeQueries({ predicate: (q) => privateQuery(q.queryKey) });
     clearAuthentication();
-    toast.info(message);
     navigate({ to: "/login" });
+    toast.info(message);
   };
 }
 
 export function usePhoneSecurity() {
   const endRevokedAuthentication = useEndRevokedAuthentication();
-  const requestPhone = useMutation({
-    mutationFn: (payload: PhoneRequestPayload) =>
-      phoneEmailSecurityService.requestPhoneVerification(payload),
-    onError: (error) => toast.error(friendlyAuthError(error).message),
-  });
-  const verifyPhone = useMutation({
-    mutationFn: (payload: PhoneVerifyPayload) => phoneEmailSecurityService.verifyPhone(payload),
-    onSuccess: () =>
-      endRevokedAuthentication("Telefone confirmado. Entre novamente para continuar."),
-    onError: (error) => toast.error(friendlyAuthError(error).message),
-  });
-  return { requestPhone, verifyPhone };
+  const [requestPending, setRequestPending] = useState(false);
+  const [verifyPending, setVerifyPending] = useState(false);
+  const requestInFlight = useRef(false);
+  const verifyInFlight = useRef(false);
+
+  const requestPhone = async (payload: PhoneRequestPayload): Promise<PhoneRequestResponse> => {
+    if (requestInFlight.current) throw new Error("PHONE_REQUEST_IN_FLIGHT");
+    requestInFlight.current = true;
+    setRequestPending(true);
+    try {
+      return await phoneEmailSecurityService.requestPhoneVerification(payload);
+    } catch (error) {
+      toast.error(friendlyAuthError(error).message);
+      throw error;
+    } finally {
+      requestInFlight.current = false;
+      setRequestPending(false);
+    }
+  };
+
+  const verifyPhone = async (payload: PhoneVerifyPayload) => {
+    if (verifyInFlight.current) throw new Error("PHONE_VERIFY_IN_FLIGHT");
+    verifyInFlight.current = true;
+    setVerifyPending(true);
+    try {
+      const response = await phoneEmailSecurityService.verifyPhone(payload);
+      await endRevokedAuthentication("Telefone confirmado. Entre novamente para continuar.");
+      return response;
+    } catch (error) {
+      toast.error(friendlyAuthError(error).message);
+      throw error;
+    } finally {
+      verifyInFlight.current = false;
+      setVerifyPending(false);
+    }
+  };
+
+  return { requestPhone, verifyPhone, requestPending, verifyPending };
 }
 
 export function useEmailSecurity() {
   const endRevokedAuthentication = useEndRevokedAuthentication();
-  const requestEmailChange = useMutation({
-    mutationFn: (payload: EmailChangeRequestPayload) =>
-      phoneEmailSecurityService.requestEmailChange(payload),
-    onSuccess: () => toast.success("Enviamos confirmações para os dois e-mails."),
-    onError: (error) => toast.error(friendlyAuthError(error).message),
-  });
-  const confirmEmailChange = useMutation({
-    mutationFn: (payload: EmailChangeConfirmPayload) =>
-      phoneEmailSecurityService.confirmEmailChange(payload),
-    onSuccess: (result) => {
-      if (result.status === "COMPLETED")
-        endRevokedAuthentication("E-mail alterado. Entre com o novo e-mail.");
-      else toast.info("Confirmação registrada. Aguarde a outra confirmação.");
-    },
-    onError: (error) => toast.error(friendlyAuthError(error).message),
-  });
-  return { requestEmailChange, confirmEmailChange };
+  const [requestPending, setRequestPending] = useState(false);
+  const [confirmPending, setConfirmPending] = useState(false);
+  const requestInFlight = useRef(false);
+  const confirmInFlight = useRef(false);
+
+  const requestEmailChange = async (
+    payload: EmailChangeRequestPayload,
+  ): Promise<EmailChangeRequestResponse> => {
+    if (requestInFlight.current) throw new Error("EMAIL_REQUEST_IN_FLIGHT");
+    requestInFlight.current = true;
+    setRequestPending(true);
+    try {
+      const response = await phoneEmailSecurityService.requestEmailChange(payload);
+      toast.success("Enviamos confirmações para os dois e-mails.");
+      return response;
+    } catch (error) {
+      toast.error(friendlyAuthError(error).message);
+      throw error;
+    } finally {
+      requestInFlight.current = false;
+      setRequestPending(false);
+    }
+  };
+
+  const confirmEmailChange = async (
+    payload: EmailChangeConfirmPayload,
+  ): Promise<EmailChangeConfirmResponse> => {
+    if (confirmInFlight.current || emailConfirmInFlightTokens.has(payload.token))
+      throw new Error("EMAIL_CONFIRM_IN_FLIGHT");
+    confirmInFlight.current = true;
+    emailConfirmInFlightTokens.add(payload.token);
+    setConfirmPending(true);
+    let completedWithoutError = false;
+    try {
+      const result = await phoneEmailSecurityService.confirmEmailChange(payload);
+      if (result.status === "COMPLETED") {
+        await endRevokedAuthentication("E-mail alterado. Entre com o novo e-mail.");
+      } else {
+        toast.info("Confirmação registrada. Aguarde a outra confirmação.");
+      }
+      completedWithoutError = true;
+      return result;
+    } catch (error) {
+      toast.error(friendlyAuthError(error).message);
+      throw error;
+    } finally {
+      if (confirmInFlight.current && !completedWithoutError)
+        emailConfirmInFlightTokens.delete(payload.token);
+      confirmInFlight.current = false;
+      setConfirmPending(false);
+    }
+  };
+
+  return { requestEmailChange, confirmEmailChange, requestPending, confirmPending };
 }

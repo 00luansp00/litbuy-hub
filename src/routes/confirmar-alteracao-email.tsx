@@ -7,6 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useEmailSecurity, friendlyAuthError } from "@/services/auth";
 
+const submittedEmailChangeTokensKey = "__litbuySubmittedEmailChangeTokens";
+const submittedEmailChangeTokens = ((globalThis as unknown as Record<string, Set<string>>)[
+  submittedEmailChangeTokensKey
+] ??= new Set<string>());
+
 export const Route = createFileRoute("/confirmar-alteracao-email")({
   component: EmailChangeConfirmationPage,
   validateSearch: (search: Record<string, unknown>) => ({
@@ -19,9 +24,10 @@ function EmailChangeConfirmationPage() {
   const navigate = useNavigate();
   const tokenRef = useRef<string | null>(null);
   const consumedRef = useRef(false);
-  const { confirmEmailChange } = useEmailSecurity();
+  const { confirmEmailChange, confirmPending } = useEmailSecurity();
   const [newEmail, setNewEmail] = useState("");
   const [message, setMessage] = useState("");
+  const [messageTone, setMessageTone] = useState<"error" | "info" | "success">("info");
   const errorRef = useRef<HTMLParagraphElement>(null);
   useEffect(() => {
     if (search.token && !tokenRef.current) {
@@ -33,26 +39,33 @@ function EmailChangeConfirmationPage() {
     event.preventDefault();
     if (consumedRef.current) return;
     if (!tokenRef.current) {
+      setMessageTone("error");
       setMessage("Token ausente ou já removido. Abra novamente o link recebido.");
       return;
     }
     if (!/^\S+@\S+\.\S+$/.test(newEmail)) {
+      setMessageTone("error");
       setMessage("Informe o novo e-mail para validar o token.");
       return;
     }
+    if (submittedEmailChangeTokens.has(tokenRef.current)) return;
     consumedRef.current = true;
+    submittedEmailChangeTokens.add(tokenRef.current);
     setMessage("");
     try {
-      const result = await confirmEmailChange.mutateAsync({ token: tokenRef.current, newEmail });
+      const result = await confirmEmailChange({ token: tokenRef.current, newEmail });
       tokenRef.current = null;
       setNewEmail("");
+      setMessageTone(result.status === "PENDING" ? "info" : "success");
       setMessage(
         result.status === "PENDING"
           ? "Confirmação registrada. Ainda falta a outra confirmação."
           : "E-mail alterado. Você será direcionado ao login.",
       );
     } catch (error) {
+      if (tokenRef.current) submittedEmailChangeTokens.delete(tokenRef.current);
       consumedRef.current = false;
+      setMessageTone("error");
       setMessage(friendlyAuthError(error).message);
       window.setTimeout(() => errorRef.current?.focus(), 0);
     }
@@ -70,10 +83,15 @@ function EmailChangeConfirmationPage() {
             O token do link é removido imediatamente da URL e fica apenas em memória. Informe o novo
             e-mail para concluir esta confirmação.
           </p>
-          <p ref={errorRef} tabIndex={-1} aria-live="polite" className="text-sm text-destructive">
+          <p
+            ref={errorRef}
+            tabIndex={-1}
+            aria-live="polite"
+            className={`text-sm ${messageTone === "error" ? "text-destructive" : "text-muted-foreground"}`}
+          >
             {message}
           </p>
-          <form onSubmit={submit} className="space-y-3">
+          <form onSubmit={submit} noValidate className="space-y-3">
             <div>
               <Label htmlFor="confirm-change-email">Novo e-mail</Label>
               <Input
@@ -84,8 +102,8 @@ function EmailChangeConfirmationPage() {
                 onChange={(e) => setNewEmail(e.target.value)}
               />
             </div>
-            <Button type="submit" disabled={confirmEmailChange.isPending}>
-              {confirmEmailChange.isPending ? "Confirmando..." : "Confirmar alteração"}
+            <Button type="submit" disabled={confirmPending}>
+              {confirmPending ? "Confirmando..." : "Confirmar alteração"}
             </Button>
           </form>
         </CardContent>
