@@ -59,20 +59,21 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function setup() {
+function setup(strict = false) {
   cleanup();
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   const authValue = auth();
-  render(
+  const ui = (
     <QueryClientProvider client={queryClient}>
       <AuthContext.Provider value={authValue}>
         <PhoneSecuritySection phoneVerified={false} />
       </AuthContext.Provider>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
-  return { queryClient, authValue };
+  const view = render(strict ? <React.StrictMode>{ui}</React.StrictMode> : ui);
+  return { queryClient, authValue, unmount: view.unmount };
 }
 
 function mutationCacheText(queryClient: QueryClient) {
@@ -341,6 +342,81 @@ describe("PhoneSecuritySection", () => {
     expect(await screen.findByText("Aguarde antes de solicitar outro SMS.")).toBeInTheDocument();
     expect(screen.getByText(/12:00/)).toBeInTheDocument();
     expect(screen.getByLabelText(/código sms/i)).toHaveValue("654321");
+  });
+
+  it("creates the SMS challenge after a pending request resolves under StrictMode", async () => {
+    setup(true);
+    const pending = deferred<{ challengeId: string; expiresAt: string; message: string }>();
+    vi.spyOn(phoneEmailSecurityService, "requestPhoneVerification").mockReturnValue(
+      pending.promise,
+    );
+    fireEvent.change(screen.getByLabelText(/telefone celular/i), {
+      target: { value: "(17) 99999-1234" },
+    });
+    fireEvent.change(screen.getByLabelText(/senha da conta/i), {
+      target: { value: "current secret" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /enviar código sms/i }));
+    pending.resolve({
+      challengeId: "11111111-1111-4111-8111-111111111111",
+      expiresAt: "2026-07-16T12:00:00.000Z",
+      message: "sent",
+    });
+    expect(await screen.findByLabelText(/código sms/i)).toBeInTheDocument();
+    expect(screen.getByText(/12:00/)).toBeInTheDocument();
+  });
+
+  it("updates resend challenge and clears old code after a pending resend resolves under StrictMode", async () => {
+    setup(true);
+    const resend = deferred<{ challengeId: string; expiresAt: string; message: string }>();
+    vi.spyOn(phoneEmailSecurityService, "requestPhoneVerification")
+      .mockResolvedValueOnce({
+        challengeId: "11111111-1111-4111-8111-111111111111",
+        expiresAt: "2026-07-16T12:00:00.000Z",
+        message: "sent",
+      })
+      .mockReturnValueOnce(resend.promise);
+    fireEvent.change(screen.getByLabelText(/telefone celular/i), {
+      target: { value: "(17) 99999-1234" },
+    });
+    fireEvent.change(screen.getByLabelText(/senha da conta/i), {
+      target: { value: "current secret" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /enviar código sms/i }));
+    await screen.findByText(/12:00/);
+    fireEvent.change(screen.getByLabelText(/código sms/i), { target: { value: "654321" } });
+    fireEvent.click(screen.getByRole("button", { name: /reenviar sms/i }));
+    resend.resolve({
+      challengeId: "22222222-2222-4222-8222-222222222222",
+      expiresAt: "2026-07-16T12:30:00.000Z",
+      message: "sent",
+    });
+    expect(await screen.findByText(/12:30/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/código sms/i)).toHaveValue("");
+  });
+
+  it("does not update the visual flow when a pending request resolves after real unmount", async () => {
+    const { unmount } = setup();
+    const pending = deferred<{ challengeId: string; expiresAt: string; message: string }>();
+    vi.spyOn(phoneEmailSecurityService, "requestPhoneVerification").mockReturnValue(
+      pending.promise,
+    );
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    fireEvent.change(screen.getByLabelText(/telefone celular/i), {
+      target: { value: "(17) 99999-1234" },
+    });
+    fireEvent.change(screen.getByLabelText(/senha da conta/i), {
+      target: { value: "current secret" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /enviar código sms/i }));
+    unmount();
+    pending.resolve({
+      challengeId: "11111111-1111-4111-8111-111111111111",
+      expiresAt: "2026-07-16T12:00:00.000Z",
+      message: "sent",
+    });
+    await waitFor(() => expect(screen.queryByLabelText(/código sms/i)).not.toBeInTheDocument());
+    expect(consoleError).not.toHaveBeenCalled();
   });
 
   it("shows loading and disables resend while request is pending", async () => {

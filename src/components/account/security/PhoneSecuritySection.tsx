@@ -30,11 +30,13 @@ export function PhoneSecuritySection({
   const [message, setMessage] = useState("");
   const [messageTone, setMessageTone] = useState<"error" | "info" | "success">("info");
   const inFlight = useRef(false);
-  const mountedRef = useRef(true);
+  const mountedRef = useRef(false);
   const errorRef = useRef<HTMLParagraphElement>(null);
   const busy = requestPending || verifyPending;
 
   useEffect(() => {
+    mountedRef.current = true;
+
     return () => {
       mountedRef.current = false;
     };
@@ -68,7 +70,7 @@ export function PhoneSecuritySection({
       setMessageTone("success");
       setMessage("Código enviado por SMS. O prazo exibido vem da API.");
     } catch (error) {
-      fail(friendlyAuthError(error).message);
+      if (mountedRef.current) fail(friendlyAuthError(error).message);
     } finally {
       inFlight.current = false;
     }
@@ -86,7 +88,7 @@ export function PhoneSecuritySection({
         code,
       });
     } catch (error) {
-      fail(friendlyAuthError(error).message);
+      if (mountedRef.current) fail(friendlyAuthError(error).message);
     } finally {
       inFlight.current = false;
     }
@@ -112,7 +114,7 @@ export function PhoneSecuritySection({
       setMessageTone("success");
       setMessage("Novo código enviado por SMS. O prazo exibido vem da API.");
     } catch (error) {
-      fail(friendlyAuthError(error).message);
+      if (mountedRef.current) fail(friendlyAuthError(error).message);
     } finally {
       inFlight.current = false;
     }

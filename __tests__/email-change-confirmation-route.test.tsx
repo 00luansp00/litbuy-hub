@@ -64,14 +64,15 @@ async function setup(strict = false) {
   const authValue = auth();
   const mod = await import("../src/routes/confirmar-alteracao-email");
   const element = React.createElement(mod.Route.component);
-  render(
+  const ui = (
     <QueryClientProvider client={queryClient}>
       <AuthContext.Provider value={authValue}>
         {strict ? <StrictMode>{element}</StrictMode> : element}
       </AuthContext.Provider>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
-  return { queryClient, authValue, mod };
+  const view = render(ui);
+  return { queryClient, authValue, mod, rerender: () => view.rerender(ui) };
 }
 
 function cacheText(queryClient: QueryClient) {
@@ -84,6 +85,11 @@ beforeEach(() => {
   tokenCounter += 1;
   mockSearch = { token: `email-token-${tokenCounter}.secret` };
   navigate.mockReset();
+  navigate.mockImplementation((options: { search?: { token?: string } }) => {
+    if (options.search?.token === undefined) {
+      mockSearch = {};
+    }
+  });
   toast.error.mockReset();
   toast.info.mockReset();
   localStorage.clear();
@@ -139,12 +145,14 @@ describe("email change confirmation route", () => {
     expect(confirm).toHaveBeenCalledTimes(1);
   });
 
-  it("does not duplicate a valid confirmation under StrictMode", async () => {
-    await setup(true);
+  it("does not lose the URL token before a valid StrictMode confirmation", async () => {
+    const { rerender, queryClient } = await setup(true);
     const confirm = vi.spyOn(phoneEmailSecurityService, "confirmEmailChange").mockResolvedValue({
       status: "PENDING",
       message: "pending",
     });
+    await waitFor(() => expect(mockSearch).toEqual({}));
+    rerender();
     fireEvent.change(screen.getByLabelText(/novo e-mail/i), {
       target: { value: "new@example.com" },
     });
@@ -152,6 +160,7 @@ describe("email change confirmation route", () => {
     fireEvent.click(button);
     fireEvent.click(button);
     await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
+    expect(cacheText(queryClient)).not.toContain(`email-token-${tokenCounter}.secret`);
   });
 
   it("handles COMPLETED by clearing auth, navigating to login, and preventing private query repopulation", async () => {

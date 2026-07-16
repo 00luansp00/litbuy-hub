@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -18,6 +18,20 @@ import {
 
 const privateQuery = (queryKey: readonly unknown[]) => queryKey[0] !== "public";
 
+function useMountedRef() {
+  const mountedRef = useRef(false);
+
+  useEffect(() => {
+    mountedRef.current = true;
+
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  return mountedRef;
+}
+
 export function useEndRevokedAuthentication() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -36,6 +50,7 @@ export function useEndRevokedAuthentication() {
 
 export function usePhoneSecurity() {
   const endRevokedAuthentication = useEndRevokedAuthentication();
+  const mountedRef = useMountedRef();
   const [requestPending, setRequestPending] = useState(false);
   const [verifyPending, setVerifyPending] = useState(false);
   const requestInFlight = useRef(false);
@@ -52,7 +67,7 @@ export function usePhoneSecurity() {
       throw error;
     } finally {
       requestInFlight.current = false;
-      setRequestPending(false);
+      if (mountedRef.current) setRequestPending(false);
     }
   };
 
@@ -69,7 +84,7 @@ export function usePhoneSecurity() {
       throw error;
     } finally {
       verifyInFlight.current = false;
-      setVerifyPending(false);
+      if (mountedRef.current) setVerifyPending(false);
     }
   };
 
@@ -78,6 +93,7 @@ export function usePhoneSecurity() {
 
 export function useEmailSecurity() {
   const endRevokedAuthentication = useEndRevokedAuthentication();
+  const mountedRef = useMountedRef();
   const [requestPending, setRequestPending] = useState(false);
   const [confirmPending, setConfirmPending] = useState(false);
   const requestInFlight = useRef(false);
@@ -98,7 +114,7 @@ export function useEmailSecurity() {
       throw error;
     } finally {
       requestInFlight.current = false;
-      setRequestPending(false);
+      if (mountedRef.current) setRequestPending(false);
     }
   };
 
@@ -121,7 +137,7 @@ export function useEmailSecurity() {
       throw error;
     } finally {
       confirmInFlight.current = false;
-      setConfirmPending(false);
+      if (mountedRef.current) setConfirmPending(false);
     }
   };
 

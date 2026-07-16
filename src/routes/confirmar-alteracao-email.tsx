@@ -17,7 +17,7 @@ export const Route = createFileRoute("/confirmar-alteracao-email")({
 function EmailChangeConfirmationPage() {
   const search = Route.useSearch();
   const navigate = useNavigate();
-  const tokenRef = useRef<string | null>(null);
+  const tokenRef = useRef<string | null>(search.token ?? null);
   const consumedRef = useRef(false);
   const submitInFlightRef = useRef(false);
   const { confirmEmailChange, confirmPending } = useEmailSecurity();
@@ -26,18 +26,16 @@ function EmailChangeConfirmationPage() {
   const [messageTone, setMessageTone] = useState<"error" | "info" | "success">("info");
   const errorRef = useRef<HTMLParagraphElement>(null);
   useEffect(() => {
-    if (search.token && !tokenRef.current && !consumedRef.current) {
-      tokenRef.current = search.token;
-      navigate({ to: "/confirmar-alteracao-email", search: { token: undefined }, replace: true });
-    }
-  }, [navigate, search.token]);
+    const token = search.token;
 
-  useEffect(() => {
-    return () => {
-      tokenRef.current = null;
-      submitInFlightRef.current = false;
-    };
-  }, []);
+    if (!token || consumedRef.current) return;
+
+    if (!tokenRef.current) {
+      tokenRef.current = token;
+    }
+
+    navigate({ to: "/confirmar-alteracao-email", search: { token: undefined }, replace: true });
+  }, [navigate, search.token]);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (consumedRef.current || submitInFlightRef.current) return;
