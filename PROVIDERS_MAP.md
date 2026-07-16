@@ -5,6 +5,7 @@ Providers globais em `src/providers/` embrulham a aplicação em
 apenas em memória.
 
 ## AuthProvider (`src/providers/AuthProvider.tsx`)
+
 - **Responsabilidade**: expor usuário logado, `activeRole`
   (buyer/seller/admin visual), login/logout demo.
 - **Estado**: usuário atual em memória (`useState`).
@@ -17,6 +18,7 @@ apenas em memória.
   proteção real precisa RLS/checks no backend.
 
 ## CartProvider (`src/providers/CartProvider.tsx`)
+
 - **Responsabilidade**: itens do carrinho, quantidade, cupom, Proteção
   LIT, LIT Points selecionados.
 - **Estado**: array em memória.
@@ -27,6 +29,7 @@ apenas em memória.
 - **Riscos**: nunca confiar em totais vindos do frontend em produção.
 
 ## NotificationProvider (`src/providers/NotificationProvider.tsx`)
+
 - **Responsabilidade**: expor lista de notificações mockadas, contador
   de não lidas, marcar como lida.
 - **Estado**: array em memória.
@@ -58,3 +61,7 @@ verdade para dinheiro, permissão, KYC ou notificação de segurança.
 ## Sprint 2C2B1 — AuthProvider real
 
 `src/providers/AuthProvider.tsx` não depende mais de `authMock`. Ele inicializa de forma segura no cliente, tenta `/auth/refresh`, carrega `/auth/me`, mantém access token em memória via `src/lib/api/client.ts` e expõe estados `initializing`, `anonymous`, `authenticated`, `emailVerificationRequired`, `deviceApprovalRequired` e `twoFactorRequired`. Papéis comprador/vendedor seguem apenas como contexto visual; `VITE_ENABLE_DEMO_ROLES=false` por padrão e não concede autorização real.
+
+## Sprint 2C2B2A
+
+`AuthProvider` segue sem armazenar listas de sessões/dispositivos. A única expansão foi uma ação explícita de limpeza local para fluxos em que a API revoga a sessão atual. Dados privados da Central de Segurança ficam em TanStack Query e são removidos no logout/perda de autenticação.

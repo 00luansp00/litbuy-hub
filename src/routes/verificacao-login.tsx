@@ -31,6 +31,7 @@ function Page() {
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [recovery, setRecovery] = useState("");
+  const [resendingDevice, setResendingDevice] = useState(false);
   useEffect(() => {
     const token = search.mode === "device" ? search.token : undefined;
     if (token && processedDeviceTokenRef.current !== token) {
@@ -132,16 +133,23 @@ function Page() {
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              resendDeviceApproval(email).then(
-                () => setMsg("Se a conta e o dispositivo existirem, enviaremos as instruções."),
-                (err) => setMsg(friendlyAuthError(err).message),
-              );
+              if (loading || resendingDevice) return;
+              setResendingDevice(true);
+              setMsg("Enviando nova aprovação...");
+              resendDeviceApproval(email)
+                .then(() =>
+                  setMsg("Se a conta e o dispositivo existirem, enviaremos as instruções."),
+                )
+                .catch((err) => setMsg(friendlyAuthError(err).message))
+                .finally(() => setResendingDevice(false));
             }}
             className="space-y-3"
           >
             <Label htmlFor="email">E-mail</Label>
             <EmailInput id="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-            <Button className="w-full">Reenviar aprovação</Button>
+            <Button disabled={loading || resendingDevice} className="w-full">
+              {resendingDevice ? "Enviando aprovação..." : "Reenviar aprovação"}
+            </Button>
             <Button asChild variant="outline" className="w-full">
               <Link to="/login">Voltar ao login</Link>
             </Button>

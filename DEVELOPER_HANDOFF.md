@@ -9,6 +9,7 @@ freelancer ou agência assumir o projeto.
 com foco em contas, gift cards, moedas virtuais, skins e serviços.
 
 Atores:
+
 - **Comprador**: navega, compra, favorita, avalia.
 - **Vendedor**: cria anúncios (normal / dinâmico / serviço), gerencia
   vendas, finanças, equipe.
@@ -16,6 +17,7 @@ Atores:
   relatórios.
 
 Funcionalidades presentes visualmente:
+
 - Anúncios normais, dinâmicos (com variações) e serviços sob orçamento.
 - Checkout mockado com Pix, boleto, cartão, saldo LIT, LIT Points e
   Proteção LIT.
@@ -139,3 +141,12 @@ Ordem sugerida:
 - Perfil, CPF, vendedor real, RBAC, gestão de sessões/dispositivos, alteração autenticada de senha e 2FA de gerenciamento permanecem para Sprint 2C2B2+.
 - Supabase não é arquitetura obrigatória para autenticação; a fonte de verdade é a API NestJS `/api/v1`.
 - Para desenvolvimento local: subir PostgreSQL e Redis do backend, `cd backend && bun install && bun run prisma:migrate:deploy && bun run dev`; em outro terminal, na raiz, `bun install && bun run dev`.
+
+## Sprint 2C2B2A — Central de Segurança da Conta
+
+- Frontend integrado aos endpoints reais NestJS `/auth/sessions`, `/auth/sessions/:sessionId`, `/auth/sessions/logout-all`, `/auth/devices`, `/auth/devices/:deviceId` e `/auth/password/change`.
+- Nova rota autenticada `/perfil/seguranca` usa o layout de perfil existente para sessões ativas, dispositivos aprovados e alteração autenticada de senha.
+- A página usa TanStack Query com chaves privadas `['auth','sessions']` e `['auth','devices']`, sem persistir access token, senha, IDs de sessão/dispositivo em storage, analytics ou URL pública.
+- Alteração de senha segue o contrato real `{ currentPassword, newPassword }`; o backend revoga todas as sessões e o frontend limpa autenticação local e redireciona para login.
+- Revogar a sessão atual ou o dispositivo atual limpa access token em memória, usuário e queries privadas; revogar uma sessão/dispositivo não atual apenas invalida as listas. O endpoint `/auth/sessions/logout-all` é tratado como logout de todas as sessões, incluindo a atual.
+- Telefone, e-mail de gerenciamento, 2FA de gerenciamento, recovery codes e Sprint 2C2B2B permanecem fora do escopo.

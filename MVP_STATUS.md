@@ -14,6 +14,7 @@ e consome dados fictícios de `src/data/`.
 ## 1. O que já está pronto (visualmente)
 
 ### Público
+
 - Home (`/`) — hero, categorias, seções de produtos, benefícios, newsletter.
 - Categoria (`/categoria/$slug`) — grid com filtros/sort.
 - Produto (`/produto/$id`) — galeria, descrição, avaliações, card de compra, produtos relacionados.
@@ -22,27 +23,32 @@ e consome dados fictícios de `src/data/`.
 - Checkout (`/checkout`) — steps, revisão, métodos de pagamento (mock), sucesso.
 
 ### Autenticação (mockada)
+
 - `/login`, `/cadastro`, `/recuperar-senha` — apenas visuais.
 - `AuthProvider` mantém usuário em memória com papel ativo (comprador/vendedor) e `isAdmin`.
 - `AuthGate` protege visualmente rotas privadas.
 
 ### Área do usuário (comprador)
+
 - `/perfil`, `/pedidos`, `/favoritos`, `/mensagens`, `/carteira`.
 - Layout com `AccountHeader` + `AccountSidebar` reutilizáveis.
 
 ### Área do vendedor
+
 - `/vendedor` (dashboard), `/vendedor/anuncios`, `/vendedor/anuncios/novo` (wizard),
   `/vendedor/vendas`, `/vendedor/financeiro`, `/vendedor/avaliacoes`.
 - `SellerDashboardLayout` + sidebar + header reutilizáveis.
 - `ImageUploader` apenas visual (File API + preview + progresso simulado).
 
 ### Admin
+
 - `/admin` + subrotas: usuários, vendedores, anúncios, pedidos, transações,
   disputas, denúncias, configurações.
 - Protegido por `AdminGate` (proteção **apenas visual**).
 - Todas as ações administrativas exibem toast mockado.
 
 ### Arquitetura
+
 - TanStack Start + file-based routing.
 - Services intermediando páginas e mocks (`src/services/*`).
 - Tipos centralizados em `src/types/index.ts`.
@@ -53,29 +59,29 @@ e consome dados fictícios de `src/data/`.
 
 ## 2. O que está mockado (precisa virar real depois)
 
-| Área              | Estado atual                                     | Precisa de |
-|-------------------|--------------------------------------------------|------------|
-| Autenticação      | `authMock.ts` in-memory                          | Supabase Auth (email/senha, Google, Apple) |
-| Sessão            | Não persiste; some no F5                         | Supabase session + middleware SSR |
-| Roles / admin     | Flag `isAdmin` no user mock                      | Tabela `user_roles` + `has_role()` + RLS |
-| Produtos          | `src/data/products.ts`                           | Tabela `products` + Data API |
-| Vendedores        | `src/data/sellers.ts`                            | Tabela `sellers` |
-| Categorias        | `src/data/categories.ts`                         | Tabela `categories` |
-| Reviews           | `reviewService` mock                             | Tabela `reviews` |
-| Carrinho          | `CartProvider` em memória (sem localStorage)     | Persistir server-side por usuário |
-| Cupom             | Regra fictícia em `cartService`                  | Tabela `coupons` + validação backend |
-| Checkout / pedido | `checkoutService.createOrder` gera id fake       | Integração com gateway + tabela `orders` |
-| Pagamento         | Seleção visual apenas                            | Stripe/Paddle (edge function) |
-| Carteira          | Saldo mockado                                    | Ledger real com movimentações |
-| Upload de imagem  | `ImageUploader` só usa File API                  | Supabase Storage |
-| Publicar anúncio  | Wizard visual sem persistência                   | INSERT em `products` + storage |
-| Mensagens         | Conversas fixas em mock                          | Tabela `messages` + realtime |
-| Favoritos         | Estático (não persiste)                          | Tabela `favorites` |
-| Pedidos           | Lista fixa                                       | Tabela `orders` filtrada por `user_id` |
-| Admin actions     | Só toast                                         | Server functions com `requireSupabaseAuth` + `has_role('admin')` |
-| Disputas          | Estado visual                                    | Tabela `disputes` + workflow |
-| Denúncias         | Estado visual                                    | Tabela `reports` |
-| SEO leaf `og:image` | Placeholders                                   | Imagens hero reais |
+| Área                | Estado atual                                 | Precisa de                                                       |
+| ------------------- | -------------------------------------------- | ---------------------------------------------------------------- |
+| Autenticação        | `authMock.ts` in-memory                      | Supabase Auth (email/senha, Google, Apple)                       |
+| Sessão              | Não persiste; some no F5                     | Supabase session + middleware SSR                                |
+| Roles / admin       | Flag `isAdmin` no user mock                  | Tabela `user_roles` + `has_role()` + RLS                         |
+| Produtos            | `src/data/products.ts`                       | Tabela `products` + Data API                                     |
+| Vendedores          | `src/data/sellers.ts`                        | Tabela `sellers`                                                 |
+| Categorias          | `src/data/categories.ts`                     | Tabela `categories`                                              |
+| Reviews             | `reviewService` mock                         | Tabela `reviews`                                                 |
+| Carrinho            | `CartProvider` em memória (sem localStorage) | Persistir server-side por usuário                                |
+| Cupom               | Regra fictícia em `cartService`              | Tabela `coupons` + validação backend                             |
+| Checkout / pedido   | `checkoutService.createOrder` gera id fake   | Integração com gateway + tabela `orders`                         |
+| Pagamento           | Seleção visual apenas                        | Stripe/Paddle (edge function)                                    |
+| Carteira            | Saldo mockado                                | Ledger real com movimentações                                    |
+| Upload de imagem    | `ImageUploader` só usa File API              | Supabase Storage                                                 |
+| Publicar anúncio    | Wizard visual sem persistência               | INSERT em `products` + storage                                   |
+| Mensagens           | Conversas fixas em mock                      | Tabela `messages` + realtime                                     |
+| Favoritos           | Estático (não persiste)                      | Tabela `favorites`                                               |
+| Pedidos             | Lista fixa                                   | Tabela `orders` filtrada por `user_id`                           |
+| Admin actions       | Só toast                                     | Server functions com `requireSupabaseAuth` + `has_role('admin')` |
+| Disputas            | Estado visual                                | Tabela `disputes` + workflow                                     |
+| Denúncias           | Estado visual                                | Tabela `reports`                                                 |
+| SEO leaf `og:image` | Placeholders                                 | Imagens hero reais                                               |
 
 ---
 
@@ -295,11 +301,13 @@ Docs de suporte atualizados: `DATABASE_SCHEMA.md`, `ENTITY_RELATIONSHIP.md`, `SU
 - Typecheck limpo.
 
 ### Limitações atuais
+
 - Sem backend, sem persistência (nem LocalStorage, nem Cookies).
 - Sem upload real, sem cofre real, sem criptografia real.
 - Sem envio de mensagem real, sem cobrança de plano, sem assinatura LIT-MAX real.
 
 ### Próximo passo sugerido
+
 - Sprint 18.8 — Produto Dinâmico na página pública + Perguntas Públicas + Mini Cart.
 
 ## Sprint 18.8 — Produto Dinâmico, Perguntas Públicas e Mini Cart
@@ -314,6 +322,7 @@ Docs de suporte atualizados: `DATABASE_SCHEMA.md`, `ENTITY_RELATIONSHIP.md`, `SU
 - Typecheck limpo. Nenhum backend, nenhum LocalStorage, nenhum Cookie.
 
 ### Limitações conhecidas
+
 - Moderação, cotação real, multi-vendedor e cofre automático exigem backend.
 - Perguntas são in-memory: recarregar a página reseta a lista.
 
@@ -334,6 +343,7 @@ Docs de suporte atualizados: `DATABASE_SCHEMA.md`, `ENTITY_RELATIONSHIP.md`, `SU
 - Typecheck limpo. Nenhum backend, LocalStorage ou Cookie.
 
 ### Limitações conhecidas
+
 - Pagamentos, carteira e LIT Points são visuais/in-memory (Map).
 - Cartão nunca é coletado; boleto e Pix não são reais.
 - Analytics não envia eventos — apenas `console.debug` em dev.
@@ -350,6 +360,7 @@ Docs de suporte atualizados: `DATABASE_SCHEMA.md`, `ENTITY_RELATIONSHIP.md`, `SU
 - Footer aponta para `/lit-points` e `/taxas`.
 
 ## Sprint 18.11 — Verificação/KYC + Equipe do Vendedor
+
 - Fluxo visual de KYC (`/perfil/verificacao`) com etapas Dados básicos, SMS, Documento, Selfie e Revisão — 100% mockado.
 - `verificationService` centraliza status, etapas, documentos aceitos, timeline e simulações.
 - Selo "Vendedor Verificado" via `SellerVerificationBadge` em `/loja/$slug` e `/produto/$id`.
@@ -360,6 +371,7 @@ Docs de suporte atualizados: `DATABASE_SCHEMA.md`, `ENTITY_RELATIONSHIP.md`, `SU
 - Limitações: nenhum KYC real, sem upload, sem RBAC, sem envio de e-mail, sem persistência.
 
 ## Sprint 18.12 — Admin Avançado / Configurações Gerenciáveis
+
 - Novas rotas: `/admin/catalogo`, `/admin/permissoes`, `/admin/verificacoes`, `/admin/financeiro`, `/admin/conteudo`, `/admin/relatorios`, `/admin/auditoria` — todas mockadas.
 - `adminAdvancedService` centraliza categorias/subcategorias, permissões, roles, KYC queue, taxas, métodos de pagamento, LIT Points, níveis, planos, feature flags, páginas de conteúdo, relatórios e audit log.
 - Dashboard `/admin` ganha bloco de ações rápidas.
@@ -399,6 +411,7 @@ Docs de suporte atualizados: `DATABASE_SCHEMA.md`, `ENTITY_RELATIONSHIP.md`, `SU
 - Envio real de denúncias, upload de evidências, moderação, audit log e ações destrutivas (suspender anúncio, bloquear usuário) **exigem backend seguro, RBAC e storage** — nada disso está implementado.
 
 ## Sprint 18.16 — Programa de Afiliados (concluída)
+
 - Rota `/afiliados` criada com AuthGate.
 - `affiliateService` mockado (perfil, link, stats, conversões, comissões, campanhas, materiais, regras, FAQ, prévia de saque).
 - Componentes visuais dedicados em `src/components/affiliate/`.
@@ -417,6 +430,7 @@ Docs de suporte atualizados: `DATABASE_SCHEMA.md`, `ENTITY_RELATIONSHIP.md`, `SU
 - Limitações: sem backend, sem CMS, sem envio real, sem persistência, sem cookies, sem tracking real, sem SEO SSR (a Sprint 18.18 cuidará).
 
 ## Sprint 18.18 — Chat Oficial do Pedido + Mediação Guiada — concluída
+
 - Chat oficial do pedido com aviso de manual, banner de prazo, botão fixo "Reportar problema", mensagens automáticas do sistema, mensagem LIT-MAX, divisores de data e botão "última mensagem".
 - `OrderProblemDialog` reescrito como mediação guiada em 3 passos com descrição mínima, motivos de mediação, aviso de saldo retido e sugestão de denúncia paralela quando aplicável.
 - Vendedor em `/vendedor/vendas/$id` recebe a mesma UX (banner + botão + dialog) e vê "Saldo bloqueado em mediação" quando aplicável.
@@ -435,6 +449,7 @@ Docs de suporte atualizados: `DATABASE_SCHEMA.md`, `ENTITY_RELATIONSHIP.md`, `SU
   nenhuma detecção real de dispositivo; nenhum provedor de e-mail integrado.
 
 ## Sprint 18.20 — SEO, Analytics, Error Boundaries e Edge Cases ✅
+
 - ErrorBoundary global integrado em `__root.tsx`.
 - OfflineNotice ativo no topo da aplicação.
 - RetryState reutilizável para falhas mockadas.
@@ -486,3 +501,10 @@ Docs de suporte atualizados: `DATABASE_SCHEMA.md`, `ENTITY_RELATIONSHIP.md`, `SU
 ## Sprint 2C2B1 — status
 
 Autenticação central do frontend integrada à API NestJS real. Tokens não são persistidos pelo frontend. CI frontend agora inclui instalação congelada, lint, testes, typecheck e build. Ainda permanecem mockados os domínios de catálogo, carrinho, vendedor, admin visual, pagamentos, wallet e KYC.
+
+## Sprint 2C2B2A — Central de Segurança da Conta
+
+- Integrado no frontend: sessões ativas, dispositivos aprovados e alteração autenticada de senha.
+- Rota: `/perfil/seguranca`.
+- Fora do escopo e pendente para próximas sprints: telefone, alteração de e-mail, gerenciamento de 2FA, recovery codes e demais áreas 2C2B2B.
+- O frontend continua chamando exclusivamente a API NestJS; nenhum segredo, senha ou access token é persistido em storage.

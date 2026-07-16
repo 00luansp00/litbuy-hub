@@ -41,6 +41,7 @@ const baseAuth = (): AuthContextValue => ({
   requestPasswordReset: vi.fn(),
   resetPassword: vi.fn(),
   logout: vi.fn(),
+  clearAuthentication: vi.fn(),
   switchToBuyer: vi.fn(),
   switchToSeller: vi.fn(() => ({ ok: true, needsOnboarding: false })),
   toggleRole: vi.fn(() => ({ ok: true, needsOnboarding: false, role: "buyer" })),

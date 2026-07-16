@@ -44,6 +44,7 @@ function value(overrides: Partial<AuthContextValue>): AuthContextValue {
     requestPasswordReset: async () => {},
     resetPassword: async () => {},
     logout: async () => {},
+    clearAuthentication: () => {},
     switchToBuyer: () => {},
     switchToSeller: () => ({ ok: true, needsOnboarding: false }),
     toggleRole: () => ({ ok: true, needsOnboarding: false, role: "buyer" }),
