@@ -120,7 +120,7 @@ describe("twoFactorSecurityService", () => {
       .mockResolvedValueOnce(await ok({ recoveryCodes }))
       .mockResolvedValueOnce(await ok(challenge))
       .mockResolvedValueOnce(await ok({ message: "done" }))
-      .mockResolvedValueOnce(await ok(undefined));
+      .mockResolvedValueOnce(await ok({ message: "2FA desativado. Faça login novamente." }));
     await twoFactorSecurityService.requestEnrollment({
       method: "EMAIL",
       currentPassword: "secret",
@@ -213,7 +213,7 @@ describe("twoFactorSecurityService", () => {
     ).toThrow(ApiError);
   });
 
-  it("rejects malformed bodies and parses disable responses defensively", async () => {
+  it("rejects malformed bodies and parses disable responses strictly", async () => {
     fetchMock.mockResolvedValueOnce(
       await ok({ challengeId: "bad", expiresAt: "2026-07-16T12:00:00.000Z" }),
     );
@@ -230,11 +230,33 @@ describe("twoFactorSecurityService", () => {
         code: "MALFORMED_RESPONSE",
       });
     }
-    expect(parseTwoFactorDisableConfirmResponse(undefined)).toEqual({ message: "2FA desativado." });
     expect(parseTwoFactorDisableConfirmResponse({ message: "done" })).toEqual({ message: "done" });
-    expect(() => parseTwoFactorDisableConfirmResponse({ message: "done", leaked: true })).toThrow(
-      ApiError,
-    );
+    for (const body of [
+      undefined,
+      {},
+      { message: "" },
+      { message: "   " },
+      { message: "done", leaked: true },
+    ]) {
+      expect(() => parseTwoFactorDisableConfirmResponse(body)).toThrow(ApiError);
+    }
+
+    for (const response of [
+      new Response(null, { status: 200 }),
+      new Response("<html></html>", { status: 200 }),
+      new Response("{", { status: 200 }),
+      await ok({}),
+      await ok({ message: "" }),
+      await ok({ message: "done", leaked: true }),
+    ]) {
+      fetchMock.mockResolvedValueOnce(response);
+      await expect(
+        twoFactorSecurityService.confirmDisable({
+          challengeId: challenge.challengeId,
+          code: "654321",
+        }),
+      ).rejects.toMatchObject({ code: "MALFORMED_RESPONSE" });
+    }
   });
 
   it("normalizes recovery codes for disable input", () => {

@@ -248,7 +248,9 @@ describe("TwoFactorSecuritySection", () => {
       target: { value: "123456" },
     });
     fireEvent.click(screen.getByRole("button", { name: /Confirmar ativação/i }));
-    expect(await screen.findByText(/Não foi possível concluir/i)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getAllByText(/Não foi possível concluir/i).length).toBeGreaterThan(0),
+    );
     expect(screen.queryByRole("button", { name: /Ativar 2FA/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Tentar novamente/i })).toBeInTheDocument();
   });
@@ -297,6 +299,146 @@ describe("TwoFactorSecuritySection", () => {
     await waitFor(() => expect(screen.queryByText(codes[0])).not.toBeInTheDocument());
   });
 
+  it("blocks actions while closing recovery codes until status refetch succeeds", async () => {
+    const closeRefetch = deferred<Awaited<ReturnType<typeof twoFactorSecurityService.getStatus>>>();
+    const getStatus = vi
+      .spyOn(twoFactorSecurityService, "getStatus")
+      .mockResolvedValueOnce({
+        enabled: false,
+        method: null,
+        enabledAt: null,
+        recoveryCodesRemaining: 0,
+      })
+      .mockReturnValueOnce(closeRefetch.promise);
+    vi.spyOn(twoFactorSecurityService, "requestEnrollment").mockResolvedValue(challenge);
+    vi.spyOn(twoFactorSecurityService, "confirmEnrollment").mockResolvedValue({
+      recoveryCodes: codes,
+    });
+    const { queryClient } = setup();
+    vi.spyOn(queryClient, "invalidateQueries").mockRejectedValue(new Error("background failed"));
+    await screen.findByText(/Status: inativo/i);
+    fireEvent.change(screen.getByLabelText(/Senha da conta/i), { target: { value: "secret" } });
+    fireEvent.click(screen.getByRole("button", { name: /Ativar 2FA/i }));
+    await screen.findByLabelText(/Código de seis dígitos/i);
+    fireEvent.change(screen.getByLabelText(/Código de seis dígitos/i), {
+      target: { value: "123456" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar ativação/i }));
+    await screen.findByText(codes[0]);
+    fireEvent.click(screen.getByLabelText(/Confirmei/i));
+    fireEvent.click(screen.getByRole("button", { name: /Fechar recovery codes/i }));
+    await waitFor(() => expect(screen.queryByText(codes[0])).not.toBeInTheDocument());
+    expect(screen.getByText(/Verificando o status real do 2FA/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Ativar 2FA/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Solicitar desativação/i }),
+    ).not.toBeInTheDocument();
+    closeRefetch.resolve({
+      enabled: true,
+      method: "EMAIL",
+      enabledAt: "2026-07-16T12:00:00.000Z",
+      recoveryCodesRemaining: 10,
+    });
+    expect(
+      await screen.findByRole("button", { name: /Solicitar desativação/i }),
+    ).toBeInTheDocument();
+    expect(getStatus).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps actions blocked when closing recovery codes cannot refetch status", async () => {
+    const closeRefetch = deferred<Awaited<ReturnType<typeof twoFactorSecurityService.getStatus>>>();
+    vi.spyOn(twoFactorSecurityService, "getStatus")
+      .mockResolvedValueOnce({
+        enabled: false,
+        method: null,
+        enabledAt: null,
+        recoveryCodesRemaining: 0,
+      })
+      .mockReturnValueOnce(closeRefetch.promise);
+    vi.spyOn(twoFactorSecurityService, "requestEnrollment").mockResolvedValue(challenge);
+    vi.spyOn(twoFactorSecurityService, "confirmEnrollment").mockResolvedValue({
+      recoveryCodes: codes,
+    });
+    const { queryClient } = setup();
+    vi.spyOn(queryClient, "invalidateQueries").mockRejectedValue(new Error("background failed"));
+    await screen.findByText(/Status: inativo/i);
+    fireEvent.change(screen.getByLabelText(/Senha da conta/i), { target: { value: "secret" } });
+    fireEvent.click(screen.getByRole("button", { name: /Ativar 2FA/i }));
+    await screen.findByLabelText(/Código de seis dígitos/i);
+    fireEvent.change(screen.getByLabelText(/Código de seis dígitos/i), {
+      target: { value: "123456" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar ativação/i }));
+    await screen.findByText(codes[0]);
+    fireEvent.click(screen.getByLabelText(/Confirmei/i));
+    fireEvent.click(screen.getByRole("button", { name: /Fechar recovery codes/i }));
+    await waitFor(() => expect(screen.queryByText(codes[0])).not.toBeInTheDocument());
+    closeRefetch.reject(new ApiError(503, "HTTP_ERROR", "internal"));
+    await waitFor(() =>
+      expect(screen.getAllByText(/Não foi possível concluir/i).length).toBeGreaterThan(0),
+    );
+    expect(screen.queryByRole("button", { name: /Ativar 2FA/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Solicitar desativação/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Tentar novamente/i })).toBeInTheDocument();
+  });
+
+  it("does not update clipboard state after unmount when writeText settles", async () => {
+    vi.spyOn(twoFactorSecurityService, "getStatus").mockResolvedValue({
+      enabled: false,
+      method: null,
+      enabledAt: null,
+      recoveryCodesRemaining: 0,
+    });
+    vi.spyOn(twoFactorSecurityService, "requestEnrollment").mockResolvedValue(challenge);
+    vi.spyOn(twoFactorSecurityService, "confirmEnrollment").mockResolvedValue({
+      recoveryCodes: codes,
+    });
+    const pendingCopy = deferred<void>();
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn().mockReturnValueOnce(pendingCopy.promise) },
+    });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const view = setup();
+    await screen.findByText(/Status: inativo/i);
+    fireEvent.change(screen.getByLabelText(/Senha da conta/i), { target: { value: "secret" } });
+    fireEvent.click(screen.getByRole("button", { name: /Ativar 2FA/i }));
+    await screen.findByLabelText(/Código de seis dígitos/i);
+    fireEvent.change(screen.getByLabelText(/Código de seis dígitos/i), {
+      target: { value: "123456" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar ativação/i }));
+    await screen.findByText(codes[0]);
+    fireEvent.click(screen.getByRole("button", { name: /Copiar todos/i }));
+    view.unmount();
+    pendingCopy.resolve();
+    await pendingCopy.promise;
+    expect(consoleError).not.toHaveBeenCalled();
+
+    const rejectedCopy = deferred<void>();
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn().mockReturnValueOnce(rejectedCopy.promise) },
+    });
+    const secondView = setup();
+    await screen.findByText(/Status: inativo/i);
+    fireEvent.change(screen.getByLabelText(/Senha da conta/i), { target: { value: "secret" } });
+    fireEvent.click(screen.getByRole("button", { name: /Ativar 2FA/i }));
+    await screen.findByLabelText(/Código de seis dígitos/i);
+    fireEvent.change(screen.getByLabelText(/Código de seis dígitos/i), {
+      target: { value: "123456" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar ativação/i }));
+    await screen.findByText(codes[0]);
+    fireEvent.click(screen.getByRole("button", { name: /Copiar todos/i }));
+    secondView.unmount();
+    rejectedCopy.reject(new Error("denied"));
+    await rejectedCopy.promise.catch(() => undefined);
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
   it("disables by normalized recovery code or code, rejects invalid inputs, and clears auth on success", async () => {
     vi.spyOn(twoFactorSecurityService, "getStatus").mockResolvedValue({
       enabled: true,
@@ -316,14 +458,14 @@ describe("TwoFactorSecuritySection", () => {
     fireEvent.click(screen.getByRole("button", { name: /Solicitar desativação/i }));
     await screen.findByText(/Confirme com código/i);
     fireEvent.click(screen.getByRole("button", { name: /Confirmar desativação/i }));
-    expect(screen.getByText(/nunca ambos/i)).toBeInTheDocument();
+    expect(screen.getByText(/Informe o código ou um recovery code/i)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/Recovery code/i), {
       target: { value: "abcde12345fghij" },
     });
     expect(screen.getByLabelText(/Recovery code/i)).toHaveValue("ABCDE-12345-FGHIJ");
     fireEvent.change(screen.getByLabelText(/^Código$/i), { target: { value: "123456" } });
     fireEvent.click(screen.getByRole("button", { name: /Confirmar desativação/i }));
-    expect(screen.getByText(/nunca ambos/i)).toBeInTheDocument();
+    expect(screen.getByText(/Use apenas o código ou o recovery code/i)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/^Código$/i), { target: { value: "" } });
     fireEvent.click(screen.getByRole("button", { name: /Confirmar desativação/i }));
     await waitFor(() =>
@@ -336,6 +478,83 @@ describe("TwoFactorSecuritySection", () => {
     expect(authValue.clearAuthentication).toHaveBeenCalledTimes(1);
     expect(mocks.navigate).toHaveBeenCalledWith({ to: "/login" });
     expect(queryClient.getQueryData(["auth", "private"])).toBeUndefined();
+  });
+
+  it("rejects disable confirmation when either field is partial or both contain content", async () => {
+    vi.spyOn(twoFactorSecurityService, "getStatus").mockResolvedValue({
+      enabled: true,
+      method: "EMAIL",
+      enabledAt: "2026-07-16T12:00:00.000Z",
+      recoveryCodesRemaining: 9,
+    });
+    vi.spyOn(twoFactorSecurityService, "requestDisable").mockResolvedValue(challenge);
+    const confirm = vi
+      .spyOn(twoFactorSecurityService, "confirmDisable")
+      .mockRejectedValue(new ApiError(400, "INVALID_OR_EXPIRED_2FA_CODE", "bad"));
+    setup();
+    await screen.findByText(/Recovery codes restantes: 9/i);
+    fireEvent.change(screen.getByLabelText(/Senha da conta/i), { target: { value: "secret" } });
+    fireEvent.click(screen.getByLabelText(/Entendo o risco/i));
+    fireEvent.click(screen.getByRole("button", { name: /Solicitar desativação/i }));
+    await screen.findByText(/Confirme com código/i);
+
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar desativação/i }));
+    expect(screen.getByText(/Informe o código ou um recovery code/i)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/^Código$/i), { target: { value: "12345" } });
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar desativação/i }));
+    expect(screen.getByText(/^Informe o código de seis dígitos\.$/i)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/^Código$/i), { target: { value: "12345" } });
+    fireEvent.change(screen.getByLabelText(/Recovery code/i), {
+      target: { value: "ABCDE12345FGHIJ" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar desativação/i }));
+    expect(screen.getByText(/Use apenas o código ou o recovery code/i)).toBeInTheDocument();
+    expect(confirm).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText(/^Código$/i), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText(/Recovery code/i), { target: { value: "ABCDE123" } });
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar desativação/i }));
+    expect(screen.getByText(/formato XXXXX-XXXXX-XXXXX/i)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/Recovery code/i), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText(/^Código$/i), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar desativação/i }));
+    await waitFor(() =>
+      expect(confirm).toHaveBeenCalledWith({
+        challengeId: challenge.challengeId,
+        code: "123456",
+      }),
+    );
+  });
+
+  it("keeps auth when disable confirmation returns malformed response and allows retry", async () => {
+    vi.spyOn(twoFactorSecurityService, "getStatus").mockResolvedValue({
+      enabled: true,
+      method: "EMAIL",
+      enabledAt: "2026-07-16T12:00:00.000Z",
+      recoveryCodesRemaining: 9,
+    });
+    vi.spyOn(twoFactorSecurityService, "requestDisable").mockResolvedValue(challenge);
+    const confirm = vi
+      .spyOn(twoFactorSecurityService, "confirmDisable")
+      .mockRejectedValueOnce(new ApiError(502, "MALFORMED_RESPONSE", "bad"))
+      .mockRejectedValueOnce(new ApiError(400, "INVALID_OR_EXPIRED_2FA_CODE", "bad"));
+    const { authValue } = setup();
+    await screen.findByText(/Recovery codes restantes: 9/i);
+    fireEvent.change(screen.getByLabelText(/Senha da conta/i), { target: { value: "secret" } });
+    fireEvent.click(screen.getByLabelText(/Entendo o risco/i));
+    fireEvent.click(screen.getByRole("button", { name: /Solicitar desativação/i }));
+    await screen.findByText(/Confirme com código/i);
+    fireEvent.change(screen.getByLabelText(/^Código$/i), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar desativação/i }));
+    expect(await screen.findByText(/Resposta inválida da API/i)).toBeInTheDocument();
+    expect(getAccessToken()).toBe("access-token");
+    expect(authValue.clearAuthentication).not.toHaveBeenCalled();
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar desativação/i }));
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(2));
   });
 
   it("resends disable challenge with single-flight, preserves state on error, and avoids unmount updates", async () => {

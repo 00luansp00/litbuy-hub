@@ -52,7 +52,11 @@ export function TwoFactorSecuritySection({ smsAvailable }: { smsAvailable: boole
   const messageRef = useRef<HTMLParagraphElement>(null);
   const showingRecoveryCodes = recoveryCodes.length > 0;
   const statusReady =
-    Boolean(status.data) && !status.isLoading && !status.error && !reconcilingStatus;
+    Boolean(status.data) &&
+    !status.isLoading &&
+    !status.isFetching &&
+    !status.error &&
+    !reconcilingStatus;
   const busy =
     actions.requestPending ||
     actions.confirmPending ||
@@ -166,23 +170,34 @@ export function TwoFactorSecuritySection({ smsAvailable }: { smsAvailable: boole
 
   const closeRecoveryCodes = async () => {
     if (!acknowledged) return;
+    setReconcilingStatus(true);
     setRecoveryCodes([]);
     setAcknowledged(false);
     setClipboardState("");
-    await status.refetch().catch(() => undefined);
+    try {
+      const result = await status.refetch();
+      if (!mountedRef.current) return;
+      if (result.error) {
+        fail(friendlyAuthError(result.error).message);
+        return;
+      }
+      setReconcilingStatus(false);
+    } catch (error) {
+      if (mountedRef.current) fail(friendlyAuthError(error).message);
+    }
   };
 
   const copyRecoveryCodes = async () => {
     setClipboardState("");
     try {
       if (!navigator.clipboard?.writeText) {
-        setClipboardState("Clipboard indisponível neste navegador.");
+        if (mountedRef.current) setClipboardState("Clipboard indisponível neste navegador.");
         return;
       }
       await navigator.clipboard.writeText(recoveryCodes.join("\n"));
-      setClipboardState("Códigos copiados.");
+      if (mountedRef.current) setClipboardState("Códigos copiados.");
     } catch {
-      setClipboardState("Não foi possível copiar os códigos.");
+      if (mountedRef.current) setClipboardState("Não foi possível copiar os códigos.");
     }
   };
 
@@ -228,20 +243,26 @@ export function TwoFactorSecuritySection({ smsAvailable }: { smsAvailable: boole
   const confirmDisable = async (event: FormEvent) => {
     event.preventDefault();
     if (busy || !disableChallenge || showingRecoveryCodes || !statusReady) return;
-    const normalizedRecovery = normalizeRecoveryCode(disableRecovery);
-    const hasCode = /^\d{6}$/.test(disableCode);
+    const hasCodeInput = disableCode.length > 0;
     const hasRecoveryInput = disableRecovery.trim().length > 0;
+    if (hasCodeInput && hasRecoveryInput) {
+      return fail("Use apenas o código ou o recovery code, nunca ambos.");
+    }
+    if (!hasCodeInput && !hasRecoveryInput) {
+      return fail("Informe o código ou um recovery code.");
+    }
+    if (hasCodeInput && !/^\d{6}$/.test(disableCode)) {
+      return fail("Informe o código de seis dígitos.");
+    }
+    const normalizedRecovery = normalizeRecoveryCode(disableRecovery);
     const hasRecovery = recoveryCodePattern.test(normalizedRecovery);
-    if (hasCode && hasRecoveryInput)
-      return fail("Informe código de seis dígitos ou recovery code, nunca ambos.");
-    if (!hasCode && !hasRecoveryInput)
-      return fail("Informe código de seis dígitos ou recovery code, nunca ambos.");
-    if (hasRecoveryInput && !hasRecovery)
+    if (hasRecoveryInput && !hasRecovery) {
       return fail("Informe um recovery code no formato XXXXX-XXXXX-XXXXX.");
+    }
     inFlight.current = true;
     setMessage("");
     try {
-      if (hasCode)
+      if (hasCodeInput)
         await actions.confirmDisable({
           challengeId: disableChallenge.challengeId,
           code: disableCode,

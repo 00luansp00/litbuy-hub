@@ -90,11 +90,15 @@ export function parseTwoFactorEnrollConfirmResponse(
 export function parseTwoFactorDisableConfirmResponse(
   value: unknown,
 ): TwoFactorDisableConfirmResponse {
-  if (value === undefined) return { message: "2FA desativado." };
   const body = asRecord(value);
-  const allowedKeys = new Set(["message"]);
-  if (Object.keys(body).some((key) => !allowedKeys.has(key))) malformed();
-  return { message: safeMessage(body.message, "2FA desativado.") };
+  if (
+    Object.keys(body).some((key) => key !== "message") ||
+    typeof body.message !== "string" ||
+    !body.message.trim()
+  ) {
+    malformed();
+  }
+  return { message: body.message };
 }
 
 export function normalizeRecoveryCode(value: string) {
