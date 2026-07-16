@@ -158,3 +158,13 @@ Ordem sugerida:
 - `/confirmar-alteracao-email` remove imediatamente `token` da URL com navegação `replace`, exige o novo e-mail novamente para funcionar em nova aba, consome o token uma única vez e trata `PENDING` e `COMPLETED`.
 - `COMPLETED` de alteração de e-mail e sucesso de telefone encerram a autenticação local, removem queries privadas e direcionam para `/login`, alinhado à revogação de sessões e limpeza de cookies do backend.
 - Gerenciamento de 2FA continua fora de escopo e pendente para Sprint 2C2B2B2.
+
+## Sprint 2C2B2B2A — status, ativação e desativação segura de 2FA
+
+- `/perfil/seguranca` agora integra o status real de 2FA via `GET /auth/2fa/status` e os fluxos de ativação/desativação com a API NestJS.
+- Ativação usa `POST /auth/2fa/enroll/request` para EMAIL ou SMS e `POST /auth/2fa/enroll/confirm` para confirmar código de seis dígitos.
+- Recovery codes seguem o contrato real do backend: `XXXXX-XXXXX-XXXXX`, exatamente 10 códigos únicos, exibidos uma única vez e mantidos somente em estado local transitório.
+- Desativação usa `POST /auth/2fa/disable/request` e `POST /auth/2fa/disable/confirm`, por código de seis dígitos ou recovery code normalizado, nunca ambos.
+- Após desativação confirmada, o frontend limpa access token em memória, cancela/remove queries privadas, limpa autenticação local e navega para `/login`, sem tentar refresh posterior.
+- A ativação invalida status de 2FA e lista real de sessões em background; falhas auxiliares não impedem a exibição dos recovery codes.
+- Step-up, troca de método e regeneração de recovery codes continuam pendentes para sprints futuras.

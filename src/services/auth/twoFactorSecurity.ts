@@ -1,8 +1,8 @@
 import { ApiError, apiFetch } from "@/lib/api/client";
 
 const json = (body: unknown) => JSON.stringify(body);
-const uuidV4 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const recoveryCode = /^[A-Z0-9]{4}(?:-[A-Z0-9]{4}){2,}$/;
+const uuidV4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+export const recoveryCodePattern = /^[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}$/;
 
 export type TwoFactorMethod = "EMAIL" | "SMS";
 export type TwoFactorStatus = {
@@ -19,6 +19,7 @@ export type TwoFactorDisableRequestPayload = { currentPassword: string };
 export type TwoFactorDisableConfirmPayload =
   | { challengeId: string; code: string; recoveryCode?: never }
   | { challengeId: string; recoveryCode: string; code?: never };
+export type TwoFactorDisableConfirmResponse = { message: string };
 
 type RecordValue = Record<string, unknown>;
 
@@ -79,11 +80,29 @@ export function parseTwoFactorEnrollConfirmResponse(
   if (!Array.isArray(body.recoveryCodes) || body.recoveryCodes.length !== 10) malformed();
   const seen = new Set<string>();
   const recoveryCodes = body.recoveryCodes.map((item) => {
-    if (typeof item !== "string" || !recoveryCode.test(item) || seen.has(item)) malformed();
+    if (typeof item !== "string" || !recoveryCodePattern.test(item) || seen.has(item)) malformed();
     seen.add(item);
     return item;
   });
   return { recoveryCodes };
+}
+
+export function parseTwoFactorDisableConfirmResponse(
+  value: unknown,
+): TwoFactorDisableConfirmResponse {
+  if (value === undefined) return { message: "2FA desativado." };
+  const body = asRecord(value);
+  const allowedKeys = new Set(["message"]);
+  if (Object.keys(body).some((key) => !allowedKeys.has(key))) malformed();
+  return { message: safeMessage(body.message, "2FA desativado.") };
+}
+
+export function normalizeRecoveryCode(value: string) {
+  return value
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 15)
+    .replace(/(.{5})(?=.)/g, "$1-");
 }
 
 export const twoFactorSecurityService = {
@@ -100,9 +119,11 @@ export const twoFactorSecurityService = {
     parseTwoFactorChallenge(
       await apiFetch<unknown>("/auth/2fa/disable/request", { method: "POST", body: json(payload) }),
     ),
-  confirmDisable: (payload: TwoFactorDisableConfirmPayload) =>
-    apiFetch<{ message?: string }>("/auth/2fa/disable/confirm", {
-      method: "POST",
-      body: json(payload),
-    }),
+  confirmDisable: async (payload: TwoFactorDisableConfirmPayload) =>
+    parseTwoFactorDisableConfirmResponse(
+      await apiFetch<unknown>("/auth/2fa/disable/confirm", {
+        method: "POST",
+        body: json(payload),
+      }),
+    ),
 };

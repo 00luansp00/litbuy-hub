@@ -9,6 +9,8 @@ import {
   friendlyAuthError,
   useTwoFactorSecurity,
   useTwoFactorStatus,
+  normalizeRecoveryCode,
+  recoveryCodePattern,
   type TwoFactorMethod,
 } from "@/services/auth";
 
@@ -44,10 +46,20 @@ export function TwoFactorSecuritySection({ smsAvailable }: { smsAvailable: boole
   const [clipboardState, setClipboardState] = useState("");
   const [message, setMessage] = useState("");
   const [tone, setTone] = useState<Tone>("info");
+  const [reconcilingStatus, setReconcilingStatus] = useState(false);
   const mountedRef = useRef(false);
   const inFlight = useRef(false);
   const messageRef = useRef<HTMLParagraphElement>(null);
   const showingRecoveryCodes = recoveryCodes.length > 0;
+  const statusReady =
+    Boolean(status.data) && !status.isLoading && !status.error && !reconcilingStatus;
+  const busy =
+    actions.requestPending ||
+    actions.confirmPending ||
+    actions.disablePending ||
+    actions.disableConfirmPending ||
+    inFlight.current ||
+    reconcilingStatus;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -68,7 +80,7 @@ export function TwoFactorSecuritySection({ smsAvailable }: { smsAvailable: boole
 
   const requestEnrollment = async (event?: FormEvent) => {
     event?.preventDefault();
-    if (inFlight.current || showingRecoveryCodes) return;
+    if (busy || showingRecoveryCodes || !statusReady) return;
     if (method === "SMS" && !smsAvailable)
       return fail("Ativação por SMS indisponível até confirmar um telefone.");
     if (!password) return fail("Informe a senha atual.");
@@ -88,14 +100,22 @@ export function TwoFactorSecuritySection({ smsAvailable }: { smsAvailable: boole
     }
   };
 
+  const reconcileMalformedEnrollment = async () => {
+    setReconcilingStatus(true);
+    try {
+      await status.refetch();
+      if (mountedRef.current) {
+        fail(
+          "O 2FA pode ter sido ativado, mas não foi possível exibir os recovery codes. Consulte o status da conta.",
+        );
+      }
+    } finally {
+      if (mountedRef.current) setReconcilingStatus(false);
+    }
+  };
+
   const resendEnrollment = async () => {
-    if (
-      inFlight.current ||
-      !challenge?.method ||
-      !challenge.currentPassword ||
-      showingRecoveryCodes
-    )
-      return;
+    if (busy || !challenge?.method || !challenge.currentPassword || showingRecoveryCodes) return;
     const currentMethod = challenge.method;
     const currentPassword = challenge.currentPassword;
     inFlight.current = true;
@@ -118,7 +138,7 @@ export function TwoFactorSecuritySection({ smsAvailable }: { smsAvailable: boole
 
   const confirmEnrollment = async (event: FormEvent) => {
     event.preventDefault();
-    if (inFlight.current || !challenge || showingRecoveryCodes) return;
+    if (busy || !challenge || showingRecoveryCodes || !statusReady) return;
     if (!/^\d{6}$/.test(code)) return fail("Informe o código de seis dígitos.");
     inFlight.current = true;
     setMessage("");
@@ -128,15 +148,16 @@ export function TwoFactorSecuritySection({ smsAvailable }: { smsAvailable: boole
       setRecoveryCodes(result.recoveryCodes);
       setChallenge(null);
       setCode("");
+      setPassword("");
       inform("2FA ativado. Guarde seus recovery codes agora.");
+      void actions.refreshTwoFactorRelatedData();
     } catch (error) {
       if (!mountedRef.current) return;
       setChallenge(null);
       setCode("");
+      setPassword("");
       if (error instanceof ApiError && error.code === "MALFORMED_RESPONSE") {
-        fail(
-          "O 2FA pode ter sido ativado, mas não foi possível exibir os recovery codes. Consulte o status da conta.",
-        );
+        void reconcileMalformedEnrollment();
       } else fail(friendlyAuthError(error).message);
     } finally {
       inFlight.current = false;
@@ -167,7 +188,7 @@ export function TwoFactorSecuritySection({ smsAvailable }: { smsAvailable: boole
 
   const requestDisable = async (event: FormEvent) => {
     event.preventDefault();
-    if (inFlight.current || showingRecoveryCodes) return;
+    if (busy || showingRecoveryCodes || !statusReady) return;
     if (!disablePassword) return fail("Informe a senha atual.");
     if (!disableAccepted) return fail("Confirme que entende o risco de desativar o 2FA.");
     inFlight.current = true;
@@ -175,7 +196,7 @@ export function TwoFactorSecuritySection({ smsAvailable }: { smsAvailable: boole
     try {
       const response = await actions.requestDisable({ currentPassword: disablePassword });
       if (!mountedRef.current) return;
-      setDisableChallenge(response);
+      setDisableChallenge({ ...response, currentPassword: disablePassword });
       setDisablePassword("");
       inform("Código de desativação enviado.");
     } catch (error) {
@@ -185,13 +206,38 @@ export function TwoFactorSecuritySection({ smsAvailable }: { smsAvailable: boole
     }
   };
 
+  const resendDisable = async () => {
+    if (busy || !disableChallenge?.currentPassword || showingRecoveryCodes || !statusReady) return;
+    const currentPassword = disableChallenge.currentPassword;
+    inFlight.current = true;
+    setMessage("");
+    try {
+      const response = await actions.requestDisable({ currentPassword });
+      if (!mountedRef.current) return;
+      setDisableChallenge({ ...response, currentPassword });
+      setDisableCode("");
+      setDisableRecovery("");
+      inform("Novo código de desativação enviado.");
+    } catch (error) {
+      if (mountedRef.current) fail(friendlyAuthError(error).message);
+    } finally {
+      inFlight.current = false;
+    }
+  };
+
   const confirmDisable = async (event: FormEvent) => {
     event.preventDefault();
-    if (inFlight.current || !disableChallenge || showingRecoveryCodes) return;
+    if (busy || !disableChallenge || showingRecoveryCodes || !statusReady) return;
+    const normalizedRecovery = normalizeRecoveryCode(disableRecovery);
     const hasCode = /^\d{6}$/.test(disableCode);
-    const hasRecovery = disableRecovery.trim().length > 0;
-    if (hasCode === hasRecovery)
+    const hasRecoveryInput = disableRecovery.trim().length > 0;
+    const hasRecovery = recoveryCodePattern.test(normalizedRecovery);
+    if (hasCode && hasRecoveryInput)
       return fail("Informe código de seis dígitos ou recovery code, nunca ambos.");
+    if (!hasCode && !hasRecoveryInput)
+      return fail("Informe código de seis dígitos ou recovery code, nunca ambos.");
+    if (hasRecoveryInput && !hasRecovery)
+      return fail("Informe um recovery code no formato XXXXX-XXXXX-XXXXX.");
     inFlight.current = true;
     setMessage("");
     try {
@@ -203,13 +249,22 @@ export function TwoFactorSecuritySection({ smsAvailable }: { smsAvailable: boole
       else
         await actions.confirmDisable({
           challengeId: disableChallenge.challengeId,
-          recoveryCode: disableRecovery.trim(),
+          recoveryCode: normalizedRecovery,
         });
     } catch (error) {
       if (mountedRef.current) fail(friendlyAuthError(error).message);
     } finally {
       inFlight.current = false;
     }
+  };
+
+  const retryStatus = async () => {
+    setMessage("");
+    setReconcilingStatus(true);
+    await status.refetch().catch((error) => {
+      if (mountedRef.current) fail(friendlyAuthError(error).message);
+    });
+    if (mountedRef.current) setReconcilingStatus(false);
   };
 
   if (showingRecoveryCodes) {
@@ -262,18 +317,39 @@ export function TwoFactorSecuritySection({ smsAvailable }: { smsAvailable: boole
         {status.isLoading && (
           <p className="text-sm text-muted-foreground">Carregando status real do 2FA...</p>
         )}
+        {reconcilingStatus && (
+          <p className="text-sm text-muted-foreground">Verificando o status real do 2FA...</p>
+        )}
         {status.error && (
-          <p role="alert" className="text-sm text-destructive">
-            {friendlyAuthError(status.error).message}
-          </p>
+          <div role="alert" className="space-y-2 text-sm text-destructive">
+            <p>{friendlyAuthError(status.error).message}</p>
+            <Button type="button" variant="outline" onClick={() => void retryStatus()}>
+              Tentar novamente
+            </Button>
+          </div>
         )}
         {status.data && (
-          <p className="text-sm text-muted-foreground">
-            Status:{" "}
-            {status.data.enabled
-              ? `ativo por ${status.data.method}, desde ${formatDate(status.data.enabledAt)}. Recovery codes restantes: ${status.data.recoveryCodesRemaining}.`
-              : "inativo."}
-          </p>
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <p>
+              Status:{" "}
+              {status.data.enabled
+                ? `ativo por ${status.data.method}, desde ${formatDate(status.data.enabledAt)}. Recovery codes restantes: ${status.data.recoveryCodesRemaining}.`
+                : "inativo."}
+            </p>
+            {status.data.enabled && status.data.recoveryCodesRemaining === 0 && (
+              <p className="font-medium text-destructive">
+                Você não possui recovery codes restantes. A regeneração será integrada na Sprint
+                2C2B2B2B.
+              </p>
+            )}
+            {status.data.enabled &&
+              status.data.recoveryCodesRemaining > 0 &&
+              status.data.recoveryCodesRemaining <= 2 && (
+                <p className="font-medium text-amber-600">
+                  Restam poucos recovery codes. A regeneração será integrada na Sprint 2C2B2B2B.
+                </p>
+              )}
+          </div>
         )}
         <p
           ref={messageRef}
@@ -283,7 +359,7 @@ export function TwoFactorSecuritySection({ smsAvailable }: { smsAvailable: boole
         >
           {message}
         </p>
-        {!status.data?.enabled && !challenge && (
+        {statusReady && !status.data?.enabled && !challenge && (
           <form onSubmit={requestEnrollment} className="space-y-3">
             <div>
               <Label htmlFor="two-factor-method">Método</Label>
@@ -309,12 +385,12 @@ export function TwoFactorSecuritySection({ smsAvailable }: { smsAvailable: boole
                 onChange={(e) => setPassword(e.target.value)}
               />
             </div>
-            <Button type="submit" disabled={actions.requestPending}>
+            <Button type="submit" disabled={busy}>
               {actions.requestPending ? "Enviando..." : "Ativar 2FA"}
             </Button>
           </form>
         )}
-        {challenge && (
+        {statusReady && challenge && (
           <form onSubmit={confirmEnrollment} className="space-y-3">
             <p className="text-sm text-muted-foreground">
               Código enviado. Expira em {formatDate(challenge.expiresAt)}.
@@ -330,20 +406,20 @@ export function TwoFactorSecuritySection({ smsAvailable }: { smsAvailable: boole
                 onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
               />
             </div>
-            <Button type="submit" disabled={actions.confirmPending}>
+            <Button type="submit" disabled={busy}>
               {actions.confirmPending ? "Confirmando..." : "Confirmar ativação"}
             </Button>
             <Button
               type="button"
               variant="outline"
-              disabled={actions.requestPending}
+              disabled={busy}
               onClick={() => void resendEnrollment()}
             >
               {actions.requestPending ? "Reenviando..." : "Reenviar código"}
             </Button>
           </form>
         )}
-        {status.data?.enabled && !disableChallenge && (
+        {statusReady && status.data?.enabled && !disableChallenge && (
           <form onSubmit={requestDisable} className="space-y-3 rounded-2xl border p-4">
             <p className="text-sm text-destructive">
               Desativar o 2FA reduz a proteção da conta e revogará as sessões.
@@ -366,12 +442,12 @@ export function TwoFactorSecuritySection({ smsAvailable }: { smsAvailable: boole
               />{" "}
               Entendo o risco de desativar o 2FA
             </label>
-            <Button type="submit" variant="destructive" disabled={actions.disablePending}>
+            <Button type="submit" variant="destructive" disabled={busy}>
               {actions.disablePending ? "Solicitando..." : "Solicitar desativação"}
             </Button>
           </form>
         )}
-        {disableChallenge && (
+        {statusReady && disableChallenge && (
           <form onSubmit={confirmDisable} className="space-y-3 rounded-2xl border p-4">
             <p className="text-sm text-muted-foreground">
               Confirme com código de seis dígitos ou recovery code.
@@ -391,12 +467,22 @@ export function TwoFactorSecuritySection({ smsAvailable }: { smsAvailable: boole
               <Input
                 id="disable-two-factor-recovery"
                 value={disableRecovery}
-                onChange={(e) => setDisableRecovery(e.target.value)}
+                onChange={(e) => setDisableRecovery(normalizeRecoveryCode(e.target.value))}
               />
             </div>
-            <Button type="submit" variant="destructive" disabled={actions.disableConfirmPending}>
-              {actions.disableConfirmPending ? "Desativando..." : "Confirmar desativação"}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button type="submit" variant="destructive" disabled={busy}>
+                {actions.disableConfirmPending ? "Desativando..." : "Confirmar desativação"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy}
+                onClick={() => void resendDisable()}
+              >
+                {actions.disablePending ? "Reenviando..." : "Reenviar código de desativação"}
+              </Button>
+            </div>
           </form>
         )}
       </CardContent>

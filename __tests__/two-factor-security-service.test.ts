@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, getAccessToken, setAccessToken } from "@/lib/api/client";
 import {
+  normalizeRecoveryCode,
+  parseTwoFactorChallenge,
+  parseTwoFactorDisableConfirmResponse,
   parseTwoFactorEnrollConfirmResponse,
   parseTwoFactorStatus,
   twoFactorSecurityService,
@@ -14,7 +17,18 @@ const challenge = {
   expiresAt: "2026-07-16T12:00:00.000Z",
   message: "sent",
 };
-const recoveryCodes = Array.from({ length: 10 }, (_, index) => `ABCD-EF${index}1-GH${index}2`);
+const recoveryCodes = [
+  "ABCDE-12345-FGHIJ",
+  "BCDEF-23456-GHIJK",
+  "CDEFG-34567-HIJKL",
+  "DEFGH-45678-IJKLM",
+  "EFGHI-56789-JKLMN",
+  "FGHIJ-67890-KLMNO",
+  "GHIJK-78901-LMNOP",
+  "HIJKL-89012-MNOPQ",
+  "IJKLM-90123-NOPQR",
+  "JKLMN-01234-OPQRS",
+];
 
 function ok(body?: unknown) {
   return Promise.resolve(
@@ -77,8 +91,27 @@ describe("twoFactorSecurityService", () => {
         enabledAt: "2026-07-16T12:00:00.000Z",
         recoveryCodesRemaining: 1.2,
       },
-    ])
+    ]) {
       expect(() => parseTwoFactorStatus(body)).toThrow(ApiError);
+    }
+  });
+
+  it("validates UUID v4 challenges only", () => {
+    expect(parseTwoFactorChallenge(challenge)).toMatchObject({
+      challengeId: challenge.challengeId,
+    });
+    for (const challengeId of [
+      "123e4567-e89b-12d3-a456-426614174000",
+      "123e4567-e89b-52d3-a456-426614174000",
+      "not-a-uuid",
+    ]) {
+      expect(() =>
+        parseTwoFactorChallenge({
+          challengeId,
+          expiresAt: "2026-07-16T12:00:00.000Z",
+        }),
+      ).toThrow(ApiError);
+    }
   });
 
   it("sends Authorization, CSRF and exact payloads", async () => {
@@ -87,7 +120,7 @@ describe("twoFactorSecurityService", () => {
       .mockResolvedValueOnce(await ok({ recoveryCodes }))
       .mockResolvedValueOnce(await ok(challenge))
       .mockResolvedValueOnce(await ok({ message: "done" }))
-      .mockResolvedValueOnce(await ok({ message: "done" }));
+      .mockResolvedValueOnce(await ok(undefined));
     await twoFactorSecurityService.requestEnrollment({
       method: "EMAIL",
       currentPassword: "secret",
@@ -103,7 +136,7 @@ describe("twoFactorSecurityService", () => {
     });
     await twoFactorSecurityService.confirmDisable({
       challengeId: challenge.challengeId,
-      recoveryCode: "ABCD-EF01-GH02",
+      recoveryCode: "ABCDE-12345-FGHIJ",
     });
     expect(fetchMock.mock.calls[0][0]).toContain("/auth/2fa/enroll/request");
     expect(fetchMock.mock.calls[0][1].headers.get("Authorization")).toBe("Bearer access-token");
@@ -123,7 +156,7 @@ describe("twoFactorSecurityService", () => {
     });
     expect(JSON.parse(fetchMock.mock.calls[4][1].body)).toEqual({
       challengeId: challenge.challengeId,
-      recoveryCode: "ABCD-EF01-GH02",
+      recoveryCode: "ABCDE-12345-FGHIJ",
     });
     expect(JSON.stringify(localStorage)).not.toContain("secret");
     expect(JSON.stringify(sessionStorage)).not.toContain("123456");
@@ -153,28 +186,17 @@ describe("twoFactorSecurityService", () => {
     expect(getAccessToken()).toBeNull();
   });
 
-  it("rejects malformed challenge, empty body, HTML, malformed JSON and recovery code lists", async () => {
-    fetchMock.mockResolvedValueOnce(
-      await ok({ challengeId: "bad", expiresAt: "2026-07-16T12:00:00.000Z" }),
-    );
-    await expect(
-      twoFactorSecurityService.requestEnrollment({ method: "SMS", currentPassword: "secret" }),
-    ).rejects.toMatchObject({ code: "MALFORMED_RESPONSE" });
-    fetchMock.mockResolvedValueOnce(new Response(null, { status: 200 }));
-    await expect(twoFactorSecurityService.getStatus()).rejects.toMatchObject({
-      code: "MALFORMED_RESPONSE",
-    });
-    fetchMock.mockResolvedValueOnce(new Response("<html></html>", { status: 200 }));
-    await expect(twoFactorSecurityService.getStatus()).rejects.toMatchObject({
-      code: "MALFORMED_RESPONSE",
-    });
-    fetchMock.mockResolvedValueOnce(new Response("{", { status: 200 }));
-    await expect(twoFactorSecurityService.getStatus()).rejects.toMatchObject({
-      code: "MALFORMED_RESPONSE",
-    });
+  it("accepts real recovery codes and rejects old/lowercase/duplicate/wrong counts", () => {
     expect(parseTwoFactorEnrollConfirmResponse({ recoveryCodes })).toEqual({ recoveryCodes });
     expect(() =>
-      parseTwoFactorEnrollConfirmResponse({ recoveryCodes: recoveryCodes.slice(0, 9) }),
+      parseTwoFactorEnrollConfirmResponse({
+        recoveryCodes: [...recoveryCodes.slice(0, 9), "WXYZ-1234-QRST"],
+      }),
+    ).toThrow(ApiError);
+    expect(() =>
+      parseTwoFactorEnrollConfirmResponse({
+        recoveryCodes: [...recoveryCodes.slice(0, 9), "abcde-12345-fghij"],
+      }),
     ).toThrow(ApiError);
     expect(() =>
       parseTwoFactorEnrollConfirmResponse({
@@ -182,7 +204,41 @@ describe("twoFactorSecurityService", () => {
       }),
     ).toThrow(ApiError);
     expect(() =>
-      parseTwoFactorEnrollConfirmResponse({ recoveryCodes: [...recoveryCodes.slice(0, 9), "bad"] }),
+      parseTwoFactorEnrollConfirmResponse({ recoveryCodes: recoveryCodes.slice(0, 9) }),
     ).toThrow(ApiError);
+    expect(() =>
+      parseTwoFactorEnrollConfirmResponse({
+        recoveryCodes: [...recoveryCodes, "KLMNO-12345-PQRST"],
+      }),
+    ).toThrow(ApiError);
+  });
+
+  it("rejects malformed bodies and parses disable responses defensively", async () => {
+    fetchMock.mockResolvedValueOnce(
+      await ok({ challengeId: "bad", expiresAt: "2026-07-16T12:00:00.000Z" }),
+    );
+    await expect(
+      twoFactorSecurityService.requestEnrollment({ method: "SMS", currentPassword: "secret" }),
+    ).rejects.toMatchObject({ code: "MALFORMED_RESPONSE" });
+    for (const response of [
+      new Response(null, { status: 200 }),
+      new Response("<html></html>", { status: 200 }),
+      new Response("{", { status: 200 }),
+    ]) {
+      fetchMock.mockResolvedValueOnce(response);
+      await expect(twoFactorSecurityService.getStatus()).rejects.toMatchObject({
+        code: "MALFORMED_RESPONSE",
+      });
+    }
+    expect(parseTwoFactorDisableConfirmResponse(undefined)).toEqual({ message: "2FA desativado." });
+    expect(parseTwoFactorDisableConfirmResponse({ message: "done" })).toEqual({ message: "done" });
+    expect(() => parseTwoFactorDisableConfirmResponse({ message: "done", leaked: true })).toThrow(
+      ApiError,
+    );
+  });
+
+  it("normalizes recovery codes for disable input", () => {
+    expect(normalizeRecoveryCode("abcde12345fghij")).toBe("ABCDE-12345-FGHIJ");
+    expect(normalizeRecoveryCode("abcde-12345-fghij-extra")).toBe("ABCDE-12345-FGHIJ");
   });
 });

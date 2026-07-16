@@ -4,7 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { setAccessToken } from "@/lib/api/client";
 import { useAuth } from "@/providers/AuthContext";
-import { friendlyAuthError } from "./errors";
+import { accountSecurityQueryKeys } from "./useAccountSecurity";
 import {
   twoFactorSecurityService,
   type TwoFactorDisableConfirmPayload,
@@ -48,10 +48,11 @@ export function useTwoFactorSecurity() {
   const disableInFlight = useRef(false);
   const disableConfirmInFlight = useRef(false);
 
-  const refreshStatus = async () => {
-    await queryClient
-      .invalidateQueries({ queryKey: twoFactorStatusQueryKey })
-      .catch(() => undefined);
+  const refreshTwoFactorRelatedData = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: twoFactorStatusQueryKey }),
+      queryClient.invalidateQueries({ queryKey: accountSecurityQueryKeys.sessions }),
+    ]).catch(() => undefined);
   };
 
   const requestEnrollment = async (payload: TwoFactorEnrollRequestPayload) => {
@@ -60,9 +61,6 @@ export function useTwoFactorSecurity() {
     setRequestPending(true);
     try {
       return await twoFactorSecurityService.requestEnrollment(payload);
-    } catch (error) {
-      toast.error(friendlyAuthError(error).message);
-      throw error;
     } finally {
       requestInFlight.current = false;
       if (mountedRef.current) setRequestPending(false);
@@ -74,13 +72,7 @@ export function useTwoFactorSecurity() {
     confirmInFlight.current = true;
     setConfirmPending(true);
     try {
-      const result = await twoFactorSecurityService.confirmEnrollment(payload);
-      void refreshStatus();
-      return result;
-    } catch (error) {
-      if (friendlyAuthError(error).code === "MALFORMED_RESPONSE") void refreshStatus();
-      toast.error(friendlyAuthError(error).message);
-      throw error;
+      return await twoFactorSecurityService.confirmEnrollment(payload);
     } finally {
       confirmInFlight.current = false;
       if (mountedRef.current) setConfirmPending(false);
@@ -93,9 +85,6 @@ export function useTwoFactorSecurity() {
     setDisablePending(true);
     try {
       return await twoFactorSecurityService.requestDisable(payload);
-    } catch (error) {
-      toast.error(friendlyAuthError(error).message);
-      throw error;
     } finally {
       disableInFlight.current = false;
       if (mountedRef.current) setDisablePending(false);
@@ -117,9 +106,6 @@ export function useTwoFactorSecurity() {
       navigate({ to: "/login" });
       toast.info("2FA desativado. Entre novamente para continuar.");
       return response;
-    } catch (error) {
-      toast.error(friendlyAuthError(error).message);
-      throw error;
     } finally {
       disableConfirmInFlight.current = false;
       if (mountedRef.current) setDisableConfirmPending(false);
@@ -135,6 +121,6 @@ export function useTwoFactorSecurity() {
     confirmPending,
     disablePending,
     disableConfirmPending,
-    refreshStatus,
+    refreshTwoFactorRelatedData,
   };
 }
