@@ -34,13 +34,17 @@ describe("authSecurityService", () => {
     fetchMock.mockImplementation(() => ok({ message: "ok" }));
     await authSecurityService.revokeSession("11111111-1111-4111-8111-111111111111");
     await authSecurityService.revokeDevice("22222222-2222-4222-8222-222222222222");
+    await authSecurityService.logoutAllSessions();
     await authSecurityService.changePassword({
       currentPassword: "current secret",
       newPassword: "new secret 123",
     });
     expect(fetchMock.mock.calls[0][1].headers.get("X-CSRF-Token")).toBe("csrf-token");
     expect(fetchMock.mock.calls[1][1].method).toBe("DELETE");
-    expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({
+    expect(fetchMock.mock.calls[2][1].method).toBe("POST");
+    expect(fetchMock.mock.calls[2][0]).toContain("/auth/sessions/logout-all");
+    expect(fetchMock.mock.calls[2][1].headers.get("X-CSRF-Token")).toBe("csrf-token");
+    expect(JSON.parse(fetchMock.mock.calls[3][1].body)).toEqual({
       currentPassword: "current secret",
       newPassword: "new secret 123",
     });
@@ -50,7 +54,7 @@ describe("authSecurityService", () => {
 
   it("handles responses without body and ApiError", async () => {
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 200 }));
-    await expect(authSecurityService.revokeOtherSessions()).resolves.toBeUndefined();
+    await expect(authSecurityService.logoutAllSessions()).resolves.toBeUndefined();
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ code: "RATE_LIMITED", message: "rate" }), { status: 429 }),
     );

@@ -76,9 +76,11 @@ function SecurityListState({
 function SessionCard({
   session,
   onRevoke,
+  disabled,
 }: {
   session: AuthSession;
   onRevoke: (s: AuthSession) => void;
+  disabled: boolean;
 }) {
   return (
     <li className="rounded-2xl border border-border bg-surface/60 p-4">
@@ -108,7 +110,11 @@ function SessionCard({
             </div>
           </dl>
         </div>
-        <Button variant="outline" disabled={session.revoked} onClick={() => onRevoke(session)}>
+        <Button
+          variant="outline"
+          disabled={session.revoked || disabled}
+          onClick={() => onRevoke(session)}
+        >
           Revogar sessão
         </Button>
       </div>
@@ -119,11 +125,13 @@ function SessionCard({
 function DeviceCard({
   device,
   onRevoke,
+  disabled,
 }: {
   device: AuthDevice;
   onRevoke: (d: AuthDevice) => void;
+  disabled: boolean;
 }) {
-  const disabled = device.status === "REVOKED";
+  const actionDisabled = device.status === "REVOKED" || disabled;
   return (
     <li className="rounded-2xl border border-border bg-surface/60 p-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -152,7 +160,7 @@ function DeviceCard({
             </div>
           </dl>
         </div>
-        <Button variant="outline" disabled={disabled} onClick={() => onRevoke(device)}>
+        <Button variant="outline" disabled={actionDisabled} onClick={() => onRevoke(device)}>
           Revogar dispositivo
         </Button>
       </div>
@@ -165,15 +173,18 @@ function PasswordForm({
   onSubmit,
 }: {
   pending: boolean;
-  onSubmit: (p: { currentPassword: string; newPassword: string }) => void;
+  onSubmit: (p: { currentPassword: string; newPassword: string }) => Promise<void>;
 }) {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [message, setMessage] = useState("");
+  const [localSubmitting, setLocalSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const errorRef = useRef<HTMLParagraphElement>(null);
-  const submit = (event: FormEvent) => {
+  const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (pending || submittingRef.current) return;
     let next = "";
     if (!currentPassword) next = "Informe a senha atual.";
     else if (newPassword.length < 12) next = "A nova senha precisa ter pelo menos 12 caracteres.";
@@ -186,10 +197,19 @@ function PasswordForm({
       return;
     }
     setMessage("");
-    onSubmit({ currentPassword, newPassword });
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirm("");
+    submittingRef.current = true;
+    setLocalSubmitting(true);
+    try {
+      await onSubmit({ currentPassword, newPassword });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirm("");
+    } catch {
+      // A mutation já exibe feedback seguro; preservar campos permite correção e novo envio.
+    } finally {
+      submittingRef.current = false;
+      setLocalSubmitting(false);
+    }
   };
   return (
     <form onSubmit={submit} className="space-y-4">
@@ -226,8 +246,8 @@ function PasswordForm({
           onChange={(e) => setConfirm(e.target.value)}
         />
       </div>
-      <Button disabled={pending} type="submit">
-        {pending ? "Alterando senha..." : "Alterar senha"}
+      <Button disabled={pending || localSubmitting} type="submit">
+        {pending || localSubmitting ? "Alterando senha..." : "Alterar senha"}
       </Button>
       <p className="text-xs text-muted-foreground">
         A API revoga todas as sessões ao alterar senha; será necessário entrar novamente.
@@ -241,6 +261,8 @@ function AccountSecurityPage() {
   const { sessions, devices } = useAccountSecurityQueries(isAuthenticated);
   const mutations = useAccountSecurityMutations();
   const [confirm, setConfirm] = useState<ConfirmAction | null>(null);
+  const [confirmSubmitting, setConfirmSubmitting] = useState(false);
+  const confirmSubmittingRef = useRef(false);
   const activeSessions = useMemo(
     () => sessions.data?.sessions.filter((s) => !s.revoked) ?? [],
     [sessions.data],
@@ -250,15 +272,25 @@ function AccountSecurityPage() {
     [devices.data],
   );
   const busy =
+    confirmSubmitting ||
     mutations.revokeSession.isPending ||
     mutations.revokeDevice.isPending ||
-    mutations.revokeOtherSessions.isPending;
-  const confirmAction = () => {
-    if (!confirm || busy) return;
-    if (confirm.kind === "session") mutations.revokeSession.mutate(confirm.id);
-    if (confirm.kind === "device") mutations.revokeDevice.mutate(confirm.id);
-    if (confirm.kind === "logoutAll") mutations.revokeOtherSessions.mutate();
-    setConfirm(null);
+    mutations.logoutAllSessions.isPending;
+  const confirmAction = async () => {
+    if (!confirm || confirmSubmittingRef.current) return;
+    confirmSubmittingRef.current = true;
+    setConfirmSubmitting(true);
+    try {
+      if (confirm.kind === "session") await mutations.revokeSession.mutateAsync(confirm.id);
+      if (confirm.kind === "device") await mutations.revokeDevice.mutateAsync(confirm.id);
+      if (confirm.kind === "logoutAll") await mutations.logoutAllSessions.mutateAsync();
+      setConfirm(null);
+    } catch {
+      // A mutation já exibe feedback seguro e o modal permanece disponível para nova tentativa.
+    } finally {
+      confirmSubmittingRef.current = false;
+      setConfirmSubmitting(false);
+    }
   };
   return (
     <AuthGate>
@@ -289,17 +321,18 @@ function AccountSecurityPage() {
             <CardTitle>Sessões ativas</CardTitle>
             <Button
               variant="outline"
+              disabled={sessions.isLoading || !!sessions.error || busy}
               onClick={() =>
                 setConfirm({
                   kind: "logoutAll",
                   id: "all",
                   title: "Encerrar todas as sessões",
                   description:
-                    "Todas as sessões serão encerradas e você precisará entrar novamente.",
+                    "Todas as sessões, incluindo esta, serão encerradas. Será necessário entrar novamente em um dispositivo aprovado.",
                 })
               }
             >
-              Revogar outras sessões
+              Encerrar todas as sessões
             </Button>
           </CardHeader>
           <CardContent>
@@ -313,6 +346,7 @@ function AccountSecurityPage() {
                 <SessionCard
                   key={session.id}
                   session={session}
+                  disabled={busy}
                   onRevoke={(s) =>
                     setConfirm({
                       kind: "session",
@@ -343,6 +377,7 @@ function AccountSecurityPage() {
                 <DeviceCard
                   key={device.id}
                   device={device}
+                  disabled={busy}
                   onRevoke={(d) =>
                     setConfirm({
                       kind: "device",
@@ -367,11 +402,13 @@ function AccountSecurityPage() {
           <CardContent>
             <PasswordForm
               pending={mutations.changePassword.isPending}
-              onSubmit={(payload) => mutations.changePassword.mutate(payload)}
+              onSubmit={async (payload) => {
+                await mutations.changePassword.mutateAsync(payload);
+              }}
             />
           </CardContent>
         </Card>
-        <AlertDialog open={!!confirm} onOpenChange={(open) => !open && setConfirm(null)}>
+        <AlertDialog open={!!confirm} onOpenChange={(open) => !busy && !open && setConfirm(null)}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>{confirm?.title}</AlertDialogTitle>
@@ -379,7 +416,13 @@ function AccountSecurityPage() {
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel disabled={busy}>Cancelar</AlertDialogCancel>
-              <AlertDialogAction disabled={busy} onClick={confirmAction}>
+              <AlertDialogAction
+                disabled={busy}
+                onClick={(event) => {
+                  event.preventDefault();
+                  void confirmAction();
+                }}
+              >
                 {busy ? "Enviando..." : "Confirmar"}
               </AlertDialogAction>
             </AlertDialogFooter>

@@ -40,7 +40,7 @@ export const authSecurityService = {
     apiFetch<MessageResponse>(`/auth/sessions/${encodeURIComponent(sessionId)}`, {
       method: "DELETE",
     }),
-  revokeOtherSessions: () =>
+  logoutAllSessions: () =>
     apiFetch<MessageResponse>("/auth/sessions/logout-all", {
       method: "POST",
     }),

@@ -64,9 +64,10 @@ export function useAccountSecurityMutations() {
     onError: (error) => toast.error(friendlyAuthError(error).message),
   });
 
-  const revokeOtherSessions = useMutation({
-    mutationFn: authSecurityService.revokeOtherSessions,
-    onSuccess: () => endCurrentSession("Todas as sessões foram encerradas. Entre novamente."),
+  const logoutAllSessions = useMutation({
+    mutationFn: authSecurityService.logoutAllSessions,
+    onSuccess: () =>
+      endCurrentSession("Todas as sessões foram encerradas e você foi desconectado."),
     onError: (error) => toast.error(friendlyAuthError(error).message),
   });
 
@@ -94,5 +95,5 @@ export function useAccountSecurityMutations() {
     onError: (error) => toast.error(friendlyAuthError(error).message),
   });
 
-  return { revokeSession, revokeOtherSessions, revokeDevice, changePassword };
+  return { revokeSession, logoutAllSessions, revokeDevice, changePassword };
 }
