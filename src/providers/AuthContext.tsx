@@ -23,6 +23,7 @@ export interface AuthContextValue {
   requestPasswordReset: (email: string) => Promise<void>;
   resetPassword: (token: string, newPassword: string) => Promise<void>;
   logout: () => Promise<void>;
+  clearAuthentication: () => void;
   switchToBuyer: () => void;
   switchToSeller: () => { ok: boolean; needsOnboarding: boolean };
   toggleRole: () => { ok: boolean; needsOnboarding: boolean; role: UserRole };

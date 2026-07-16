@@ -320,6 +320,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       requestPasswordReset,
       resetPassword,
       logout,
+      clearAuthentication: clear,
       switchToBuyer: () => setUser((p) => (p ? { ...p, activeRole: "buyer" } : p)),
       switchToSeller: () => {
         // Apenas contexto visual: não representa perfil de vendedor real nem autorização.
@@ -346,6 +347,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       verifyTwoFactorLogin,
       refreshSession,
       logout,
+      clear,
       verifyEmail,
       approveDevice,
       resendTwoFactorLogin,

@@ -23,6 +23,7 @@ type AccountRoute =
   | "/carteira"
   | "/perfil/verificacao"
   | "/perfil/preferencias"
+  | "/perfil/seguranca"
   | "/afiliados"
   | "/vendedor";
 
@@ -45,13 +46,8 @@ const items: AccountNavItem[] = [
   { label: "Carteira", icon: Wallet, to: "/carteira" },
   { label: "Verificação", icon: ShieldCheck, to: "/perfil/verificacao" },
   { label: "Preferências", icon: Bell, to: "/perfil/preferencias" },
+  { label: "Segurança", icon: ShieldCheck, to: "/perfil/seguranca" },
   { label: "Afiliados", icon: Users, to: "/afiliados" },
-  {
-    label: "Segurança",
-    icon: ShieldCheck,
-    soon: true,
-    soonMessage: "A área de segurança será liberada em uma próxima sprint.",
-  },
   {
     label: "Configurações",
     icon: Settings,
@@ -71,10 +67,7 @@ interface AccountSidebarProps {
  * AccountSidebar — menu de navegação da área do usuário.
  * Em desktop é vertical; em mobile é uma barra horizontal scrollável.
  */
-export function AccountSidebar({
-  className,
-  orientation = "vertical",
-}: AccountSidebarProps) {
+export function AccountSidebar({ className, orientation = "vertical" }: AccountSidebarProps) {
   const currentPath = useRouterState({
     select: (r) => r.location.pathname,
   });
@@ -97,9 +90,7 @@ export function AccountSidebar({
 
         const baseClass = cn(
           "group inline-flex items-center gap-2.5 rounded-lg text-sm font-medium transition-colors",
-          isHorizontal
-            ? "shrink-0 border border-border px-3 py-2"
-            : "w-full px-3 py-2.5",
+          isHorizontal ? "shrink-0 border border-border px-3 py-2" : "w-full px-3 py-2.5",
           active
             ? isHorizontal
               ? "border-primary/50 bg-primary/10 text-primary"

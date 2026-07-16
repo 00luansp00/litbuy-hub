@@ -154,3 +154,9 @@ imediata (antes de dev) / alta (durante) / média / baixa.
 ## Sprint 2C2B1 — lint global histórico
 
 O lint raiz legado (`eslint .`) ainda varre todo o monorepo, incluindo backend e arquivos históricos, com aproximadamente 1.662 problemas preexistentes observados no CI #33/execução local — majoritariamente `prettier/prettier`. Este PR não formata centenas de arquivos fora do escopo para não misturar saneamento mecânico com autenticação. A validação rigorosa desta sprint usa `bun run lint:auth` e `bun run format:check:auth` somente sobre a superfície integrada; uma sprint própria deverá normalizar o lint global.
+
+## Sprint 2C2B2A
+
+- A Central de Segurança não implementa geolocalização, fingerprint adicional ou step-up de gerenciamento.
+- O endpoint real `POST /auth/sessions/logout-all` revoga inclusive a sessão atual; a UI comunica esse efeito e redireciona para login.
+- 2FA de gerenciamento, telefone e alteração de e-mail permanecem para sprint futura.
