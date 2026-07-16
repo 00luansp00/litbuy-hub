@@ -69,6 +69,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryClient.removeQueries({ predicate: (q) => q.queryKey[0] !== "public" });
   }, [queryClient]);
 
+  const applyAuthenticatedUser = useCallback(
+    (fresh: AuthMe) => {
+      const next = withPresentation(fresh);
+      setUser(next);
+      setStatus("authenticated");
+      setTwoFactorChallenge(null);
+      queryClient.removeQueries();
+      return next;
+    },
+    [queryClient],
+  );
+
   const applySuccess = useCallback(
     async (result: AuthSuccess) => {
       if (!isAuthSuccess(result)) {
@@ -78,18 +90,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAccessToken(result.accessToken);
       try {
         const fresh = await authService.me();
-        const next = withPresentation(fresh);
-        setUser(next);
-        setStatus("authenticated");
-        setTwoFactorChallenge(null);
-        queryClient.removeQueries();
-        return next;
+        return applyAuthenticatedUser(fresh);
       } catch (error) {
         clear();
         throw error;
       }
     },
-    [clear, queryClient],
+    [applyAuthenticatedUser, clear],
   );
 
   useEffect(() => {
@@ -116,6 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     return () => {
       cancelled = true;
+      setAuthLostHandler(() => {});
     };
   }, [clear]);
 
@@ -206,8 +214,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshSession = useCallback(async () => {
     const r = await authService.refresh();
-    await applySuccess({ accessToken: r.accessToken, user: await authService.me() });
-  }, [applySuccess]);
+    if (!r.accessToken || typeof r.accessToken !== "string") {
+      clear();
+      throw new Error("Sessão inválida.");
+    }
+    setAccessToken(r.accessToken);
+    try {
+      applyAuthenticatedUser(await authService.me());
+    } catch (error) {
+      clear();
+      throw error;
+    }
+  }, [applyAuthenticatedUser, clear]);
+
+  const verifyEmail = useCallback(
+    (token: string) => authService.verifyEmail(token).then(() => {}),
+    [],
+  );
+  const approveDevice = useCallback(
+    (token: string) => authService.approveDevice(token).then(() => {}),
+    [],
+  );
+  const resendEmailVerification = useCallback(
+    (email: string) => authService.resendEmailVerification(email).then(() => {}),
+    [],
+  );
+  const resendDeviceApproval = useCallback(
+    (email: string) => authService.resendDeviceApproval(email).then(() => {}),
+    [],
+  );
+  const requestPasswordReset = useCallback(
+    (email: string) => authService.forgotPassword(email).then(() => {}),
+    [],
+  );
+  const resetPassword = useCallback(
+    (token: string, password: string) => authService.resetPassword(token, password).then(() => {}),
+    [],
+  );
+  const resendTwoFactorLogin = useCallback(() => {
+    if (!twoFactorChallenge?.challengeId) return Promise.reject(new Error("2FA challenge ausente"));
+    return authService
+      .resendTwoFactorLogin(twoFactorChallenge.challengeId)
+      .then((r) => setTwoFactorChallenge({ ...twoFactorChallenge, ...r }));
+  }, [twoFactorChallenge]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -222,20 +271,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       twoFactorChallenge,
       login,
       register,
-      verifyEmail: (t) => authService.verifyEmail(t).then(() => {}),
-      approveDevice: (t) => authService.approveDevice(t).then(() => {}),
+      verifyEmail,
+      approveDevice,
       verifyTwoFactorLogin,
-      resendTwoFactorLogin: () =>
-        twoFactorChallenge?.challengeId
-          ? authService
-              .resendTwoFactorLogin(twoFactorChallenge.challengeId)
-              .then((r) => setTwoFactorChallenge({ ...twoFactorChallenge, ...r }))
-          : Promise.reject(new Error("2FA challenge ausente")),
-      resendEmailVerification: (email) => authService.resendEmailVerification(email).then(() => {}),
-      resendDeviceApproval: (email) => authService.resendDeviceApproval(email).then(() => {}),
+      resendTwoFactorLogin,
+      resendEmailVerification,
+      resendDeviceApproval,
       refreshSession,
-      requestPasswordReset: (email) => authService.forgotPassword(email).then(() => {}),
-      resetPassword: (t, p) => authService.resetPassword(t, p).then(() => {}),
+      requestPasswordReset,
+      resetPassword,
       logout,
       switchToBuyer: () => setUser((p) => (p ? { ...p, activeRole: "buyer" } : p)),
       switchToSeller: () => {
@@ -263,6 +307,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       verifyTwoFactorLogin,
       refreshSession,
       logout,
+      verifyEmail,
+      approveDevice,
+      resendTwoFactorLogin,
+      resendEmailVerification,
+      resendDeviceApproval,
+      requestPasswordReset,
+      resetPassword,
     ],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

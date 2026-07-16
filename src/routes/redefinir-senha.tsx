@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { AuthLayout } from "@/components/auth/AuthLayout";
 import { PasswordInput } from "@/components/auth/PasswordInput";
@@ -7,22 +7,29 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/providers/AuthContext";
 import { friendlyAuthError } from "@/services/auth";
-export const Route = createFileRoute("/redefinir-senha")({ component: Page });
+export const Route = createFileRoute("/redefinir-senha")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    token: typeof search.token === "string" ? search.token : undefined,
+  }),
+  component: Page,
+});
 function Page() {
   const nav = useNavigate();
+  const search = Route.useSearch();
+  const capturedTokenRef = useRef(false);
   const { resetPassword, loading } = useAuth();
   const [token, setToken] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   useEffect(() => {
-    const u = new URL(window.location.href);
-    const t = u.searchParams.get("token") ?? "";
+    if (capturedTokenRef.current) return;
+    capturedTokenRef.current = true;
+    const t = search.token ?? "";
     setToken(t);
     if (t) {
-      u.searchParams.delete("token");
-      window.history.replaceState(null, "", u.toString());
+      nav({ to: "/redefinir-senha", search: { token: undefined }, replace: true });
     }
-  }, []);
+  }, [nav, search.token]);
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!token) return toast.error("Token ausente ou expirado.");

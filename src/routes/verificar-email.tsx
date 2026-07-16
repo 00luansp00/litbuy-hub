@@ -1,5 +1,5 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState, type FormEvent } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { AuthLayout } from "@/components/auth/AuthLayout";
 import { EmailInput } from "@/components/auth/EmailInput";
@@ -14,16 +14,18 @@ export const Route = createFileRoute("/verificar-email")({
   component: Page,
 });
 function Page() {
+  const navigate = useNavigate();
   const search = Route.useSearch();
+  const processedTokenRef = useRef<string | null>(null);
   const { verifyEmail, resendEmailVerification, loading } = useAuth();
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState(
     "Informe o e-mail para reenviar a confirmação ou abra o link recebido.",
   );
   useEffect(() => {
-    const url = new URL(window.location.href);
-    const token = search.token ?? url.searchParams.get("token");
-    if (token) {
+    const token = search.token;
+    if (token && processedTokenRef.current !== token) {
+      processedTokenRef.current = token;
       setStatus("Verificando token...");
       verifyEmail(token)
         .then(() => {
@@ -32,11 +34,10 @@ function Page() {
         })
         .catch((e) => setStatus(friendlyAuthError(e).message))
         .finally(() => {
-          url.searchParams.delete("token");
-          window.history.replaceState(null, "", url.toString());
+          navigate({ to: "/verificar-email", search: { token: undefined }, replace: true });
         });
     }
-  }, [search.token, verifyEmail]);
+  }, [navigate, search.token, verifyEmail]);
   const resend = async (e: FormEvent) => {
     e.preventDefault();
     if (!email) return toast.error("Informe o e-mail.");

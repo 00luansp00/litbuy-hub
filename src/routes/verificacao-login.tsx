@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { AuthLayout } from "@/components/auth/AuthLayout";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ export const Route = createFileRoute("/verificacao-login")({
 function Page() {
   const nav = useNavigate();
   const search = Route.useSearch();
+  const processedDeviceTokenRef = useRef<string | null>(null);
   const {
     approveDevice,
     resendDeviceApproval,
@@ -31,9 +32,9 @@ function Page() {
   const [code, setCode] = useState("");
   const [recovery, setRecovery] = useState("");
   useEffect(() => {
-    const url = new URL(window.location.href);
-    const token = search.token ?? url.searchParams.get("token");
-    if (token) {
+    const token = search.mode === "device" ? search.token : undefined;
+    if (token && processedDeviceTokenRef.current !== token) {
+      processedDeviceTokenRef.current = token;
       setMsg("Aprovando dispositivo...");
       approveDevice(token)
         .then(
@@ -41,11 +42,14 @@ function Page() {
           (e) => setMsg(friendlyAuthError(e).message),
         )
         .finally(() => {
-          url.searchParams.delete("token");
-          window.history.replaceState(null, "", url.toString());
+          nav({
+            to: "/verificacao-login",
+            search: { mode: "device", token: undefined },
+            replace: true,
+          });
         });
     }
-  }, [approveDevice, search.token]);
+  }, [approveDevice, nav, search.mode, search.token]);
   const submit2fa = async (e: FormEvent) => {
     e.preventDefault();
     if (!twoFactorChallenge?.challengeId) {
@@ -53,10 +57,18 @@ function Page() {
       nav({ to: "/login" });
       return;
     }
-    if (Boolean(code.trim()) === Boolean(recovery.trim()))
+    const trimmedCode = code.trim();
+    const normalizedRecovery = recovery.trim().toUpperCase();
+    if (Boolean(trimmedCode) === Boolean(normalizedRecovery))
       return toast.error("Informe código ou recovery code, não ambos.");
+    if (trimmedCode && !/^\d{6}$/.test(trimmedCode))
+      return toast.error("Informe um código de seis dígitos.");
+    if (normalizedRecovery && !/^[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}$/.test(normalizedRecovery))
+      return toast.error("Recovery code inválido.");
     try {
-      await verifyTwoFactorLogin(code ? { code } : { recoveryCode: recovery.trim().toUpperCase() });
+      await verifyTwoFactorLogin(
+        trimmedCode ? { code: trimmedCode } : { recoveryCode: normalizedRecovery },
+      );
       toast.success("Login confirmado.");
       nav({ to: "/" });
     } catch (err) {
@@ -106,6 +118,7 @@ function Page() {
             </Button>
             <Button
               type="button"
+              disabled={loading}
               variant="outline"
               className="w-full"
               onClick={() =>

@@ -87,7 +87,7 @@ describe("apiFetch", () => {
     });
   });
 
-  it("sends CSRF on refresh and logout and tolerates malformed cookies", async () => {
+  it("decodes a valid CSRF cookie before refresh and logout", async () => {
     document.cookie = "litbuy_csrf=a%20b; path=/";
     const fetch = vi
       .fn()
@@ -99,6 +99,20 @@ describe("apiFetch", () => {
     expect(fetch.mock.calls[0][1].headers.get("X-CSRF-Token")).toBe("a b");
     await apiFetch("/auth/logout", { method: "POST", skipAuthRefresh: true });
     expect(fetch.mock.calls[1][1].headers.get("X-CSRF-Token")).toBe("a b");
+  });
+
+  it("ignores a truly malformed CSRF cookie without crashing or sending it", async () => {
+    document.cookie = "litbuy_csrf=%E0%A4%A; path=/";
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ accessToken: "new" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(
+      apiFetch("/auth/refresh", { method: "POST", skipAuthRefresh: true }),
+    ).resolves.toEqual({ accessToken: "new" });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0][1].headers.has("X-CSRF-Token")).toBe(false);
   });
 
   it("single-flights refresh, retries once, and does not loop on a second 401", async () => {

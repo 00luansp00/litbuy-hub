@@ -62,6 +62,15 @@ function readCsrfCookie(): string | undefined {
     ?.slice(CSRF_COOKIE.length + 1);
 }
 
+function decodeCsrfCookie(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return undefined;
+  }
+}
+
 function messageFromPayload(payload: ApiErrorPayload | null): string {
   if (!payload?.message) return "Não foi possível concluir a operação.";
   return Array.isArray(payload.message) ? payload.message.join(" ") : payload.message;
@@ -108,8 +117,8 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
   if (options.body && !(options.body instanceof FormData) && !headers.has("Content-Type"))
     headers.set("Content-Type", "application/json");
   if (accessToken && options.auth !== false) headers.set("Authorization", `Bearer ${accessToken}`);
-  const csrf = readCsrfCookie();
-  if (csrf && unsafe.has(method)) headers.set(CSRF_HEADER, decodeURIComponent(csrf));
+  const csrf = decodeCsrfCookie(readCsrfCookie());
+  if (csrf && unsafe.has(method)) headers.set(CSRF_HEADER, csrf);
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
     method,

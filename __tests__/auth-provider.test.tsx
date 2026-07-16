@@ -134,9 +134,11 @@ describe("AuthProvider", () => {
     const meSpy = vi.spyOn(authService, "me").mockResolvedValue(me);
     setup();
     await screen.findByText("anonymous");
-    await expect(ctx.login("user@example.com", "passwordpassword")).rejects.toThrow(
-      "Challenge de 2FA",
-    );
+    await act(async () => {
+      await expect(ctx.login("user@example.com", "passwordpassword")).rejects.toThrow(
+        "Challenge de 2FA",
+      );
+    });
     expect(ctx.user).toBeNull();
     expect(meSpy).not.toHaveBeenCalled();
   });
@@ -166,11 +168,29 @@ describe("AuthProvider", () => {
     vi.spyOn(authService, "me").mockRejectedValue(new ApiError(401, "INVALID_SESSION", "invalid"));
     setup();
     await screen.findByText("anonymous");
-    await expect(ctx.login("user@example.com", "passwordpassword")).rejects.toMatchObject({
-      code: "INVALID_SESSION",
+    await act(async () => {
+      await expect(ctx.login("user@example.com", "passwordpassword")).rejects.toMatchObject({
+        code: "INVALID_SESSION",
+      });
     });
     expect(ctx.user).toBeNull();
     expect(getAccessToken()).toBeNull();
+  });
+
+  it("refreshSession calls refresh once and /me once", async () => {
+    vi.spyOn(authService, "refresh")
+      .mockRejectedValueOnce(new ApiError(401, "INVALID_SESSION", "invalid"))
+      .mockResolvedValueOnce({ accessToken: "fresh" });
+    const meSpy = vi.spyOn(authService, "me").mockResolvedValue(me);
+    setup();
+    await screen.findByText("anonymous");
+    await act(async () => {
+      await ctx.refreshSession();
+    });
+    expect(authService.refresh).toHaveBeenCalledTimes(2);
+    expect(meSpy).toHaveBeenCalledTimes(1);
+    expect(ctx.status).toBe("authenticated");
+    expect(getAccessToken()).toBe("fresh");
   });
 
   it("logout clears local state even when API fails and does not persist tokens", async () => {
