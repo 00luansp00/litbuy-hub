@@ -115,3 +115,10 @@ Legenda:
 | Rota                | Tela                          | Acesso | Guard    | Serviço                              | Status      |
 | ------------------- | ----------------------------- | ------ | -------- | ------------------------------------ | ----------- |
 | `/perfil/seguranca` | Central de segurança da conta | user   | AuthGate | authSecurityService + TanStack Query | Real NestJS |
+
+## Sprint 2C2B2B1
+
+| Rota | Arquivo | Estado |
+|---|---|---|
+| `/perfil/seguranca` | `src/routes/perfil.seguranca.tsx` | Central real de segurança com sessões, dispositivos, senha, telefone e solicitação de alteração de e-mail. |
+| `/confirmar-alteracao-email` | `src/routes/confirmar-alteracao-email.tsx` | Rota pública para dupla confirmação de alteração de e-mail; remove `token` da URL e solicita o novo e-mail novamente. |

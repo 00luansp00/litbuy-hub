@@ -160,3 +160,9 @@ O lint raiz legado (`eslint .`) ainda varre todo o monorepo, incluindo backend e
 - A Central de Segurança não implementa geolocalização, fingerprint adicional ou step-up de gerenciamento.
 - O endpoint real `POST /auth/sessions/logout-all` revoga inclusive a sessão atual; a UI comunica esse efeito e redireciona para login.
 - 2FA de gerenciamento, telefone e alteração de e-mail permanecem para sprint futura.
+
+## Sprint 2C2B2B1
+
+- O frontend bloqueia entradas obviamente inválidas, mas o backend continua autoridade para normalização de telefone, cooldown, rate limit, expiração e disponibilidade.
+- A rota de confirmação de e-mail depende de o usuário informar novamente o novo e-mail; isso evita colocar e-mail completo na URL e mantém funcionamento em nova aba.
+- 2FA, recovery codes e step-up permanecem pendentes para sprint futura.
