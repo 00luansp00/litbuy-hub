@@ -4,6 +4,7 @@ import { ShieldCheck, Smartphone, Monitor, KeyRound, Loader2 } from "lucide-reac
 import { AuthGate } from "@/components/auth/AuthGate";
 import { EmailSecuritySection } from "@/components/account/security/EmailSecuritySection";
 import { PhoneSecuritySection } from "@/components/account/security/PhoneSecuritySection";
+import { TwoFactorSecuritySection } from "@/components/account/security/TwoFactorSecuritySection";
 import { AccountHeader } from "@/components/account/AccountHeader";
 import { AccountLayout } from "@/components/account/AccountLayout";
 import { Button } from "@/components/ui/button";
@@ -403,6 +404,7 @@ function AccountSecurityPage() {
           phoneVerified={Boolean(user?.phoneVerified)}
         />
         <EmailSecuritySection currentEmail={user?.email} />
+        <TwoFactorSecuritySection smsAvailable={Boolean(user?.phoneVerified)} />
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

@@ -166,3 +166,10 @@ O lint raiz legado (`eslint .`) ainda varre todo o monorepo, incluindo backend e
 - O frontend bloqueia entradas obviamente inválidas, mas o backend continua autoridade para normalização de telefone, cooldown, rate limit, expiração e disponibilidade.
 - A rota de confirmação de e-mail depende de o usuário informar novamente o novo e-mail; isso evita colocar e-mail completo na URL e mantém funcionamento em nova aba.
 - 2FA, recovery codes e step-up permanecem pendentes para sprint futura.
+
+## Sprint 2C2B2B2A
+
+- 2FA de gerenciamento foi integrado, mas step-up, troca de método e regeneração de recovery codes permanecem deliberadamente fora do escopo.
+- Usuários com `recoveryCodesRemaining` igual a 0 ou muito baixo recebem alerta; a UI não oferece regeneração falsa e informa que a regeneração será integrada na Sprint 2C2B2B2B.
+- A segurança dos challenges, expiração, rate limit, entrega EMAIL/SMS e revogação de sessões continua sob autoridade do backend NestJS.
+- Recovery codes são segredo crítico: devem continuar fora de QueryCache, MutationCache, storage, URL, provider, logs, analytics, toast e snapshots.

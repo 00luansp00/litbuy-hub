@@ -70,3 +70,10 @@ verdade para dinheiro, permissão, KYC ou notificação de segurança.
 
 - Nenhum estado sensível de formulário foi adicionado ao `AuthProvider`.
 - Os hooks específicos de telefone/e-mail reutilizam `clearAuthentication`, removem access token em memória e limpam queries privadas quando o backend revoga sessões.
+
+## Sprint 2C2B2B2A
+
+- `AuthProvider` não armazena status de 2FA, challengeId, senha, código ou recovery codes.
+- Status de 2FA fica exclusivamente em TanStack Query com chave `['auth','2fa','status']`.
+- Recovery codes, challengeId, senha e códigos digitados permanecem somente no estado local transitório de `TwoFactorSecuritySection`.
+- Desativação confirmada limpa access token em memória, remove queries privadas e usa `clearAuthentication`; não há persistência de segredo em provider, storage ou URL.
