@@ -1,15 +1,13 @@
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Smartphone } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { usePhoneSecurity, friendlyAuthError } from "@/services/auth";
+import { isObviouslyBrazilianMobilePhone } from "./phoneValidation";
 
 type Challenge = { challengeId: string; expiresAt: string; phone: string; currentPassword: string };
-const obviousBrazilianMobile = (value: string) =>
-  value.replace(/\D/g, "").replace(/^55/, "").length === 11 &&
-  value.replace(/\D/g, "").replace(/^55/, "")[2] === "9";
 
 function formatExpiresAt(value: string) {
   const date = new Date(value);
@@ -32,7 +30,15 @@ export function PhoneSecuritySection({
   const [message, setMessage] = useState("");
   const [messageTone, setMessageTone] = useState<"error" | "info" | "success">("info");
   const inFlight = useRef(false);
+  const mountedRef = useRef(true);
   const errorRef = useRef<HTMLParagraphElement>(null);
+  const busy = requestPending || verifyPending;
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   const fail = (m: string) => {
     setMessageTone("error");
     setMessage(m);
@@ -42,18 +48,22 @@ export function PhoneSecuritySection({
     event.preventDefault();
     if (inFlight.current) return;
     if (!phone.trim()) return fail("Informe o telefone.");
-    if (!obviousBrazilianMobile(phone)) return fail("Informe um celular brasileiro válido.");
+    if (!isObviouslyBrazilianMobilePhone(phone))
+      return fail("Informe um celular brasileiro válido.");
     if (!currentPassword) return fail("Informe a senha atual.");
     inFlight.current = true;
     setMessage("");
     try {
-      const response = await requestPhone({ phone, currentPassword });
+      const passwordForResend = currentPassword;
+      const response = await requestPhone({ phone, currentPassword: passwordForResend });
+      if (!mountedRef.current) return;
       setChallenge({
         challengeId: response.challengeId,
         expiresAt: response.expiresAt,
         phone,
-        currentPassword,
+        currentPassword: passwordForResend,
       });
+      setCurrentPassword("");
       setCode("");
       setMessageTone("success");
       setMessage("Código enviado por SMS. O prazo exibido vem da API.");
@@ -84,19 +94,21 @@ export function PhoneSecuritySection({
 
   const resendSms = async () => {
     if (inFlight.current || !challenge) return;
+    const currentChallenge = challenge;
     inFlight.current = true;
     setMessage("");
     try {
       const response = await requestPhone({
-        phone: challenge.phone,
-        currentPassword: challenge.currentPassword,
+        phone: currentChallenge.phone,
+        currentPassword: currentChallenge.currentPassword,
       });
+      if (!mountedRef.current) return;
       setChallenge({
+        ...currentChallenge,
         challengeId: response.challengeId,
         expiresAt: response.expiresAt,
-        phone: challenge.phone,
-        currentPassword: challenge.currentPassword,
       });
+      setCode("");
       setMessageTone("success");
       setMessage("Novo código enviado por SMS. O prazo exibido vem da API.");
     } catch (error) {
@@ -171,22 +183,26 @@ export function PhoneSecuritySection({
               />
             </div>
             <div className="flex gap-2">
-              <Button type="submit" disabled={verifyPending}>
+              <Button type="submit" disabled={busy}>
                 {verifyPending ? "Confirmando..." : "Confirmar telefone"}
               </Button>
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => void resendSms()}
-                disabled={requestPending || verifyPending}
+                disabled={busy}
               >
                 {requestPending ? "Reenviando..." : "Reenviar SMS"}
               </Button>
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setChallenge(null)}
-                disabled={verifyPending}
+                onClick={() => {
+                  setChallenge(null);
+                  setCode("");
+                  setCurrentPassword("");
+                }}
+                disabled={busy}
               >
                 Voltar
               </Button>

@@ -6,6 +6,7 @@ import { ApiError, setAccessToken } from "@/lib/api/client";
 import { AuthContext, type AuthContextValue } from "@/providers/AuthContext";
 import { phoneEmailSecurityService } from "@/services/auth/phoneEmailSecurity";
 import { PhoneSecuritySection } from "@/components/account/security/PhoneSecuritySection";
+import { isObviouslyBrazilianMobilePhone } from "@/components/account/security/phoneValidation";
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -90,6 +91,16 @@ beforeEach(() => {
 });
 
 describe("PhoneSecuritySection", () => {
+  it("accepts valid Brazilian mobile numbers without stripping DDD 55", () => {
+    expect(isObviouslyBrazilianMobilePhone("(17) 99999-1234")).toBe(true);
+    expect(isObviouslyBrazilianMobilePhone("+55 (17) 99999-1234")).toBe(true);
+    expect(isObviouslyBrazilianMobilePhone("(55) 99999-1234")).toBe(true);
+    expect(isObviouslyBrazilianMobilePhone("+55 (55) 99999-1234")).toBe(true);
+    expect(isObviouslyBrazilianMobilePhone("(17) 3333-1234")).toBe(false);
+    expect(isObviouslyBrazilianMobilePhone("(17) 9999-1234")).toBe(false);
+    expect(isObviouslyBrazilianMobilePhone("123")).toBe(false);
+  });
+
   it("validates request fields and preserves empty initial flow after reload", () => {
     setup();
     fireEvent.click(screen.getByRole("button", { name: /enviar código sms/i }));
@@ -107,7 +118,7 @@ describe("PhoneSecuritySection", () => {
     expect(screen.queryByLabelText(/código sms/i)).not.toBeInTheDocument();
   });
 
-  it("submits exact phone request once, enters challenge, and keeps secrets out of URL/storage/mutation cache", async () => {
+  it("submits exact phone request once, enters challenge, clears input password, and keeps secrets out of URL/storage/mutation cache", async () => {
     const { queryClient } = setup();
     const request = vi
       .spyOn(phoneEmailSecurityService, "requestPhoneVerification")
@@ -131,12 +142,36 @@ describe("PhoneSecuritySection", () => {
       currentPassword: "current secret",
     });
     expect(await screen.findByLabelText(/código sms/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/senha da conta/i)).not.toBeInTheDocument();
     expect(location.href).not.toContain("99999");
     expect(location.href).not.toContain("11111111");
     expect(JSON.stringify(localStorage)).not.toContain("current secret");
     expect(JSON.stringify(sessionStorage)).not.toContain("99999");
     expect(mutationCacheText(queryClient)).not.toContain("current secret");
     expect(mutationCacheText(queryClient)).not.toContain("11111111");
+  });
+
+  it("sends the original DDD 55 phone value without divergent normalization", async () => {
+    setup();
+    const request = vi
+      .spyOn(phoneEmailSecurityService, "requestPhoneVerification")
+      .mockResolvedValue({
+        challengeId: "11111111-1111-4111-8111-111111111111",
+        expiresAt: "2026-07-16T12:00:00.000Z",
+        message: "sent",
+      });
+    fireEvent.change(screen.getByLabelText(/telefone celular/i), {
+      target: { value: "(55) 99999-1234" },
+    });
+    fireEvent.change(screen.getByLabelText(/senha da conta/i), {
+      target: { value: "current secret" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /enviar código sms/i }));
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+    expect(request).toHaveBeenCalledWith({
+      phone: "(55) 99999-1234",
+      currentPassword: "current secret",
+    });
   });
 
   it("keeps fields on malformed request, SMS outage, rate limit, and does not create challenge", async () => {
@@ -244,6 +279,68 @@ describe("PhoneSecuritySection", () => {
     expect(request).toHaveBeenCalledTimes(3);
     expect(mutationCacheText(queryClient)).not.toContain("123456");
     expect(mutationCacheText(queryClient)).not.toContain("22222222");
+  });
+
+  it("keeps challenge controls disabled during resend and updates only after success", async () => {
+    setup();
+    const resend = deferred<{ challengeId: string; expiresAt: string; message: string }>();
+    const request = vi
+      .spyOn(phoneEmailSecurityService, "requestPhoneVerification")
+      .mockResolvedValueOnce({
+        challengeId: "11111111-1111-4111-8111-111111111111",
+        expiresAt: "2026-07-16T12:00:00.000Z",
+        message: "sent",
+      })
+      .mockReturnValueOnce(resend.promise);
+    fireEvent.change(screen.getByLabelText(/telefone celular/i), {
+      target: { value: "(17) 99999-1234" },
+    });
+    fireEvent.change(screen.getByLabelText(/senha da conta/i), {
+      target: { value: "current secret" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /enviar código sms/i }));
+    await screen.findByText(/12:00/);
+    fireEvent.change(screen.getByLabelText(/código sms/i), { target: { value: "654321" } });
+    const resendButton = screen.getByRole("button", { name: /reenviar sms/i });
+    fireEvent.click(resendButton);
+    fireEvent.click(resendButton);
+    expect(await screen.findByRole("button", { name: /reenviando/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /confirmar telefone/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /voltar/i })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: /voltar/i }));
+    expect(screen.getByLabelText(/código sms/i)).toBeInTheDocument();
+    expect(request).toHaveBeenCalledTimes(2);
+    resend.resolve({
+      challengeId: "22222222-2222-4222-8222-222222222222",
+      expiresAt: "2026-07-16T12:30:00.000Z",
+      message: "sent",
+    });
+    expect(await screen.findByText(/12:30/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/código sms/i)).toHaveValue("");
+  });
+
+  it("preserves challenge, expiration, and code when resend fails", async () => {
+    setup();
+    vi.spyOn(phoneEmailSecurityService, "requestPhoneVerification")
+      .mockResolvedValueOnce({
+        challengeId: "11111111-1111-4111-8111-111111111111",
+        expiresAt: "2026-07-16T12:00:00.000Z",
+        message: "sent",
+      })
+      .mockRejectedValueOnce(new ApiError(429, "PHONE_RESEND_COOLDOWN", "cooldown"));
+    fireEvent.change(screen.getByLabelText(/telefone celular/i), {
+      target: { value: "(17) 99999-1234" },
+    });
+    fireEvent.change(screen.getByLabelText(/senha da conta/i), {
+      target: { value: "current secret" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /enviar código sms/i }));
+    await screen.findByText(/12:00/);
+    fireEvent.change(screen.getByLabelText(/código sms/i), { target: { value: "654321" } });
+    fireEvent.click(screen.getByRole("button", { name: /reenviar sms/i }));
+    expect(await screen.findByText("Aguarde antes de solicitar outro SMS.")).toBeInTheDocument();
+    expect(screen.getByText(/12:00/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/código sms/i)).toHaveValue("654321");
   });
 
   it("shows loading and disables resend while request is pending", async () => {

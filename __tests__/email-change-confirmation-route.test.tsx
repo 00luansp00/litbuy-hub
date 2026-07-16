@@ -79,6 +79,8 @@ function cacheText(queryClient: QueryClient) {
 }
 
 beforeEach(() => {
+  vi.restoreAllMocks();
+  Reflect.deleteProperty(globalThis, "__litbuySubmittedEmailChangeTokens");
   tokenCounter += 1;
   mockSearch = { token: `email-token-${tokenCounter}.secret` };
   navigate.mockReset();
@@ -132,12 +134,24 @@ describe("email change confirmation route", () => {
     expect(authValue.clearAuthentication).not.toHaveBeenCalled();
     expect(cacheText(queryClient)).not.toContain(`email-token-${tokenCounter}.secret`);
     expect(cacheText(queryClient)).not.toContain("new@example.com");
+    expect(Reflect.has(globalThis, "__litbuySubmittedEmailChangeTokens")).toBe(false);
+    fireEvent.click(button);
+    expect(confirm).toHaveBeenCalledTimes(1);
   });
 
-  it("does not duplicate confirmation under StrictMode when no new email is provided", async () => {
+  it("does not duplicate a valid confirmation under StrictMode", async () => {
     await setup(true);
-    fireEvent.click(screen.getByRole("button", { name: /confirmar alteração/i }));
-    expect(screen.getByText("Informe o novo e-mail para validar o token.")).toBeInTheDocument();
+    const confirm = vi.spyOn(phoneEmailSecurityService, "confirmEmailChange").mockResolvedValue({
+      status: "PENDING",
+      message: "pending",
+    });
+    fireEvent.change(screen.getByLabelText(/novo e-mail/i), {
+      target: { value: "new@example.com" },
+    });
+    const button = screen.getByRole("button", { name: /confirmar alteração/i });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
   });
 
   it("handles COMPLETED by clearing auth, navigating to login, and preventing private query repopulation", async () => {
@@ -181,5 +195,24 @@ describe("email change confirmation route", () => {
     expect(JSON.stringify(localStorage)).not.toContain(`email-token-${tokenCounter}.secret`);
     expect(JSON.stringify(sessionStorage)).not.toContain("new@example.com");
     expect(cacheText(queryClient)).not.toContain(`email-token-${tokenCounter}.secret`);
+    expect(Reflect.has(globalThis, "__litbuySubmittedEmailChangeTokens")).toBe(false);
+  });
+
+  it("allows a second attempt after a recoverable token error without storing token globally", async () => {
+    await setup();
+    const confirm = vi
+      .spyOn(phoneEmailSecurityService, "confirmEmailChange")
+      .mockRejectedValueOnce(new ApiError(400, "INVALID_OR_EXPIRED_TOKEN", "bad"))
+      .mockResolvedValueOnce({ status: "PENDING", message: "pending" });
+    fireEvent.change(screen.getByLabelText(/novo e-mail/i), {
+      target: { value: "new@example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /confirmar alteração/i }));
+    expect(
+      await screen.findByText("Token inválido, expirado ou já utilizado."),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /confirmar alteração/i }));
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(2));
+    expect(Reflect.has(globalThis, "__litbuySubmittedEmailChangeTokens")).toBe(false);
   });
 });

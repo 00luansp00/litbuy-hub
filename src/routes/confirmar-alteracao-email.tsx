@@ -7,11 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useEmailSecurity, friendlyAuthError } from "@/services/auth";
 
-const submittedEmailChangeTokensKey = "__litbuySubmittedEmailChangeTokens";
-const submittedEmailChangeTokens = ((globalThis as unknown as Record<string, Set<string>>)[
-  submittedEmailChangeTokensKey
-] ??= new Set<string>());
-
 export const Route = createFileRoute("/confirmar-alteracao-email")({
   component: EmailChangeConfirmationPage,
   validateSearch: (search: Record<string, unknown>) => ({
@@ -24,21 +19,30 @@ function EmailChangeConfirmationPage() {
   const navigate = useNavigate();
   const tokenRef = useRef<string | null>(null);
   const consumedRef = useRef(false);
+  const submitInFlightRef = useRef(false);
   const { confirmEmailChange, confirmPending } = useEmailSecurity();
   const [newEmail, setNewEmail] = useState("");
   const [message, setMessage] = useState("");
   const [messageTone, setMessageTone] = useState<"error" | "info" | "success">("info");
   const errorRef = useRef<HTMLParagraphElement>(null);
   useEffect(() => {
-    if (search.token && !tokenRef.current) {
+    if (search.token && !tokenRef.current && !consumedRef.current) {
       tokenRef.current = search.token;
       navigate({ to: "/confirmar-alteracao-email", search: { token: undefined }, replace: true });
     }
   }, [navigate, search.token]);
+
+  useEffect(() => {
+    return () => {
+      tokenRef.current = null;
+      submitInFlightRef.current = false;
+    };
+  }, []);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (consumedRef.current) return;
-    if (!tokenRef.current) {
+    if (consumedRef.current || submitInFlightRef.current) return;
+    const token = tokenRef.current;
+    if (!token) {
       setMessageTone("error");
       setMessage("Token ausente ou já removido. Abra novamente o link recebido.");
       return;
@@ -48,12 +52,11 @@ function EmailChangeConfirmationPage() {
       setMessage("Informe o novo e-mail para validar o token.");
       return;
     }
-    if (submittedEmailChangeTokens.has(tokenRef.current)) return;
     consumedRef.current = true;
-    submittedEmailChangeTokens.add(tokenRef.current);
+    submitInFlightRef.current = true;
     setMessage("");
     try {
-      const result = await confirmEmailChange({ token: tokenRef.current, newEmail });
+      const result = await confirmEmailChange({ token, newEmail });
       tokenRef.current = null;
       setNewEmail("");
       setMessageTone(result.status === "PENDING" ? "info" : "success");
@@ -63,11 +66,12 @@ function EmailChangeConfirmationPage() {
           : "E-mail alterado. Você será direcionado ao login.",
       );
     } catch (error) {
-      if (tokenRef.current) submittedEmailChangeTokens.delete(tokenRef.current);
       consumedRef.current = false;
       setMessageTone("error");
       setMessage(friendlyAuthError(error).message);
       window.setTimeout(() => errorRef.current?.focus(), 0);
+    } finally {
+      submitInFlightRef.current = false;
     }
   };
   return (

@@ -17,7 +17,6 @@ import {
 } from "./phoneEmailSecurity";
 
 const privateQuery = (queryKey: readonly unknown[]) => queryKey[0] !== "public";
-const emailConfirmInFlightTokens = new Set<string>();
 
 export function useEndRevokedAuthentication() {
   const queryClient = useQueryClient();
@@ -106,12 +105,9 @@ export function useEmailSecurity() {
   const confirmEmailChange = async (
     payload: EmailChangeConfirmPayload,
   ): Promise<EmailChangeConfirmResponse> => {
-    if (confirmInFlight.current || emailConfirmInFlightTokens.has(payload.token))
-      throw new Error("EMAIL_CONFIRM_IN_FLIGHT");
+    if (confirmInFlight.current) throw new Error("EMAIL_CONFIRM_IN_FLIGHT");
     confirmInFlight.current = true;
-    emailConfirmInFlightTokens.add(payload.token);
     setConfirmPending(true);
-    let completedWithoutError = false;
     try {
       const result = await phoneEmailSecurityService.confirmEmailChange(payload);
       if (result.status === "COMPLETED") {
@@ -119,14 +115,11 @@ export function useEmailSecurity() {
       } else {
         toast.info("Confirmação registrada. Aguarde a outra confirmação.");
       }
-      completedWithoutError = true;
       return result;
     } catch (error) {
       toast.error(friendlyAuthError(error).message);
       throw error;
     } finally {
-      if (confirmInFlight.current && !completedWithoutError)
-        emailConfirmInFlightTokens.delete(payload.token);
       confirmInFlight.current = false;
       setConfirmPending(false);
     }
