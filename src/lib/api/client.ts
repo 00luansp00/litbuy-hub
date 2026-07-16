@@ -89,11 +89,14 @@ async function parseBody<T>(response: Response): Promise<T | undefined> {
 
 async function refreshAccessToken(): Promise<string> {
   if (!refreshPromise) {
-    refreshPromise = apiFetch<{ accessToken: string }>("/auth/refresh", {
+    refreshPromise = apiFetch<{ accessToken: unknown }>("/auth/refresh", {
       method: "POST",
       skipAuthRefresh: true,
     })
       .then((data) => {
+        if (typeof data.accessToken !== "string" || data.accessToken.trim().length === 0) {
+          throw new ApiError(401, "INVALID_SESSION", "Sessão inválida.");
+        }
         setAccessToken(data.accessToken);
         return data.accessToken;
       })

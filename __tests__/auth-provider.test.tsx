@@ -193,6 +193,107 @@ describe("AuthProvider", () => {
     expect(getAccessToken()).toBe("fresh");
   });
 
+  it("exposes loading for password reset, resend actions, and concurrent operations", async () => {
+    vi.spyOn(authService, "refresh").mockRejectedValue(
+      new ApiError(401, "INVALID_SESSION", "invalid"),
+    );
+    let resolveForgot!: () => void;
+    let resolveEmail!: () => void;
+    vi.spyOn(authService, "forgotPassword").mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveForgot = resolve;
+        }),
+    );
+    vi.spyOn(authService, "resendEmailVerification").mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveEmail = resolve;
+        }),
+    );
+    setup();
+    await screen.findByText("anonymous");
+    let forgot!: Promise<void>;
+    await act(async () => {
+      forgot = ctx.requestPasswordReset("user@example.com");
+    });
+    expect(ctx.loading).toBe(true);
+    let email!: Promise<void>;
+    await act(async () => {
+      email = ctx.resendEmailVerification("user@example.com");
+    });
+    expect(ctx.loading).toBe(true);
+    await act(async () => {
+      resolveForgot();
+      await forgot;
+    });
+    expect(ctx.loading).toBe(true);
+    await act(async () => {
+      resolveEmail();
+      await email;
+    });
+    expect(ctx.loading).toBe(false);
+  });
+
+  it("keeps loading around reset errors and single-flights 2FA resend", async () => {
+    vi.spyOn(authService, "refresh").mockRejectedValue(
+      new ApiError(401, "INVALID_SESSION", "invalid"),
+    );
+    vi.spyOn(authService, "login").mockResolvedValue({
+      code: "TWO_FACTOR_REQUIRED",
+      challengeId: "22222222-2222-4222-8222-222222222222",
+      method: "EMAIL",
+      expiresAt: "2026-07-16T00:10:00.000Z",
+    });
+    let rejectReset!: (error: Error) => void;
+    vi.spyOn(authService, "resetPassword").mockImplementation(
+      () =>
+        new Promise<void>((_, reject) => {
+          rejectReset = reject;
+        }),
+    );
+    let resolveResend!: (value: { challengeId: string; expiresAt: string }) => void;
+    const resendSpy = vi.spyOn(authService, "resendTwoFactorLogin").mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveResend = resolve;
+        }),
+    );
+    setup();
+    await screen.findByText("anonymous");
+    await act(async () => {
+      await ctx.login("user@example.com", "passwordpassword");
+    });
+    let reset!: Promise<void>;
+    await act(async () => {
+      reset = ctx.resetPassword("token", "passwordpassword");
+    });
+    expect(ctx.loading).toBe(true);
+    await act(async () => {
+      rejectReset(new Error("bad token"));
+      await expect(reset).rejects.toThrow("bad token");
+    });
+    expect(ctx.loading).toBe(false);
+
+    let first!: Promise<void>;
+    let second!: Promise<void>;
+    await act(async () => {
+      first = ctx.resendTwoFactorLogin();
+      second = ctx.resendTwoFactorLogin();
+    });
+    expect(ctx.loading).toBe(true);
+    await act(async () => {
+      resolveResend({
+        challengeId: "33333333-3333-4333-8333-333333333333",
+        expiresAt: "2026-07-16T00:20:00.000Z",
+      });
+      await Promise.all([first, second]);
+    });
+    expect(resendSpy).toHaveBeenCalledTimes(1);
+    expect(ctx.twoFactorChallenge?.challengeId).toBe("33333333-3333-4333-8333-333333333333");
+    expect(ctx.loading).toBe(false);
+  });
+
   it("logout clears local state even when API fails and does not persist tokens", async () => {
     vi.spyOn(authService, "refresh").mockResolvedValue({ accessToken: "token" });
     vi.spyOn(authService, "me").mockResolvedValue(me);

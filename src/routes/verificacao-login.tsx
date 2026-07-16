@@ -35,19 +35,16 @@ function Page() {
     const token = search.mode === "device" ? search.token : undefined;
     if (token && processedDeviceTokenRef.current !== token) {
       processedDeviceTokenRef.current = token;
+      nav({
+        to: "/verificacao-login",
+        search: { mode: "device", token: undefined },
+        replace: true,
+      });
       setMsg("Aprovando dispositivo...");
-      approveDevice(token)
-        .then(
-          () => setMsg("Dispositivo aprovado. Volte ao login para criar uma sessão."),
-          (e) => setMsg(friendlyAuthError(e).message),
-        )
-        .finally(() => {
-          nav({
-            to: "/verificacao-login",
-            search: { mode: "device", token: undefined },
-            replace: true,
-          });
-        });
+      approveDevice(token).then(
+        () => setMsg("Dispositivo aprovado. Volte ao login para criar uma sessão."),
+        (e) => setMsg(friendlyAuthError(e).message),
+      );
     }
   }, [approveDevice, nav, search.mode, search.token]);
   const submit2fa = async (e: FormEvent) => {

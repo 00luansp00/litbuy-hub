@@ -138,6 +138,42 @@ describe("apiFetch", () => {
     expect(fetch.mock.calls.filter((c) => String(c[0]).endsWith("/still-401"))).toHaveLength(2);
   });
 
+  it.each([
+    ["missing", {}],
+    ["empty", { accessToken: "" }],
+    ["non-string", { accessToken: 123 }],
+  ])(
+    "clears auth when automatic refresh returns an invalid %s access token",
+    async (_name, body) => {
+      setAccessToken("old");
+      const lost = vi.fn();
+      setAuthLostHandler(lost);
+      const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+        if (url.endsWith("/auth/refresh")) {
+          return new Response(JSON.stringify(body), { status: 200 });
+        }
+        if (url.endsWith("/private")) {
+          return new Response(JSON.stringify({ code: "INVALID_SESSION" }), { status: 401 });
+        }
+        return new Response("{}", { status: 200 });
+      });
+      vi.stubGlobal("fetch", fetch);
+
+      await expect(apiFetch("/private")).rejects.toMatchObject({ status: 401 });
+
+      expect(getAccessToken()).toBeNull();
+      expect(lost).toHaveBeenCalledTimes(1);
+      expect(fetch.mock.calls.filter((c) => String(c[0]).endsWith("/private"))).toHaveLength(1);
+      expect(
+        fetch.mock.calls.some(
+          (c) =>
+            String(c[0]).endsWith("/private") &&
+            c[1]?.headers?.get("Authorization") === "Bearer 123",
+        ),
+      ).toBe(false);
+    },
+  );
+
   it("clears auth when refresh fails", async () => {
     setAccessToken("old");
     const lost = vi.fn();

@@ -26,16 +26,14 @@ function Page() {
     const token = search.token;
     if (token && processedTokenRef.current !== token) {
       processedTokenRef.current = token;
+      navigate({ to: "/verificar-email", search: { token: undefined }, replace: true });
       setStatus("Verificando token...");
       verifyEmail(token)
         .then(() => {
           setStatus("E-mail confirmado. Faça login para continuar.");
           toast.success("E-mail confirmado.");
         })
-        .catch((e) => setStatus(friendlyAuthError(e).message))
-        .finally(() => {
-          navigate({ to: "/verificar-email", search: { token: undefined }, replace: true });
-        });
+        .catch((e) => setStatus(friendlyAuthError(e).message));
     }
   }, [navigate, search.token, verifyEmail]);
   const resend = async (e: FormEvent) => {

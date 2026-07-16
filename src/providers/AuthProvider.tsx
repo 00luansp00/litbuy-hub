@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ApiError, setAccessToken, setAuthLostHandler } from "@/lib/api/client";
 import { AuthContext, type AuthContextValue } from "@/providers/AuthContext";
@@ -60,6 +60,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(false);
   const [twoFactorChallenge, setTwoFactorChallenge] =
     useState<AuthContextValue["twoFactorChallenge"]>(null);
+  const pendingCountRef = useRef(0);
+  const mountedRef = useRef(false);
+  const resendTwoFactorPromiseRef = useRef<Promise<void> | null>(null);
+
+  const setSafeLoading = useCallback((next: boolean) => {
+    if (mountedRef.current) setLoading(next);
+  }, []);
+
+  const runPending = useCallback(
+    async <T,>(operation: () => Promise<T>) => {
+      pendingCountRef.current += 1;
+      setSafeLoading(true);
+      try {
+        return await operation();
+      } finally {
+        pendingCountRef.current = Math.max(0, pendingCountRef.current - 1);
+        if (pendingCountRef.current === 0) setSafeLoading(false);
+      }
+    },
+    [setSafeLoading],
+  );
 
   const clear = useCallback(() => {
     setAccessToken(null);
@@ -100,8 +121,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
+    mountedRef.current = true;
     setAuthLostHandler(clear);
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined") {
+      return () => {
+        mountedRef.current = false;
+        setAuthLostHandler(() => {});
+      };
+    }
     let cancelled = false;
     authService
       .refresh()
@@ -123,13 +150,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     return () => {
       cancelled = true;
+      mountedRef.current = false;
       setAuthLostHandler(() => {});
     };
   }, [clear]);
 
   const login = useCallback(
     async (email: string, password: string): Promise<LoginResult> => {
-      setLoading(true);
+      setSafeLoading(true);
       try {
         const result = await authService.login({
           email,
@@ -166,97 +194,108 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         throw e;
       } finally {
-        setLoading(false);
+        setSafeLoading(false);
       }
     },
-    [applySuccess, clear],
+    [applySuccess, clear, setSafeLoading],
   );
 
-  const register = useCallback(async (payload: RegisterPayload) => {
-    setLoading(true);
-    try {
-      await authService.register(payload);
-      setStatus("emailVerificationRequired");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const register = useCallback(
+    async (payload: RegisterPayload) =>
+      runPending(async () => {
+        await authService.register(payload);
+        setStatus("emailVerificationRequired");
+      }),
+    [runPending],
+  );
 
   const verifyTwoFactorLogin = useCallback(
     async (payload: { code?: string; recoveryCode?: string }) => {
       if (!twoFactorChallenge?.challengeId) throw new Error("2FA challenge ausente");
-      setLoading(true);
-      try {
-        return await applySuccess(
-          await authService.verifyTwoFactorLogin({
+      return runPending(() =>
+        authService
+          .verifyTwoFactorLogin({
             challengeId: twoFactorChallenge.challengeId,
             ...payload,
-          }),
-        );
-      } finally {
-        setLoading(false);
-      }
+          })
+          .then(applySuccess),
+      );
     },
-    [applySuccess, twoFactorChallenge],
+    [applySuccess, runPending, twoFactorChallenge],
   );
 
   const logout = useCallback(async () => {
-    setLoading(true);
+    setSafeLoading(true);
     try {
       await authService.logout();
     } catch {
       // Logout local precisa limpar estado mesmo com API indisponível.
     } finally {
       clear();
-      setLoading(false);
+      setSafeLoading(false);
     }
-  }, [clear]);
+  }, [clear, setSafeLoading]);
 
-  const refreshSession = useCallback(async () => {
-    const r = await authService.refresh();
-    if (!r.accessToken || typeof r.accessToken !== "string") {
-      clear();
-      throw new Error("Sessão inválida.");
-    }
-    setAccessToken(r.accessToken);
-    try {
-      applyAuthenticatedUser(await authService.me());
-    } catch (error) {
-      clear();
-      throw error;
-    }
-  }, [applyAuthenticatedUser, clear]);
+  const refreshSession = useCallback(
+    () =>
+      runPending(async () => {
+        const r = await authService.refresh();
+        if (!r.accessToken || typeof r.accessToken !== "string") {
+          clear();
+          throw new Error("Sessão inválida.");
+        }
+        setAccessToken(r.accessToken);
+        try {
+          applyAuthenticatedUser(await authService.me());
+        } catch (error) {
+          clear();
+          throw error;
+        }
+      }),
+    [applyAuthenticatedUser, clear, runPending],
+  );
 
   const verifyEmail = useCallback(
-    (token: string) => authService.verifyEmail(token).then(() => {}),
-    [],
+    (token: string) => runPending(() => authService.verifyEmail(token).then(() => {})),
+    [runPending],
   );
   const approveDevice = useCallback(
-    (token: string) => authService.approveDevice(token).then(() => {}),
-    [],
+    (token: string) => runPending(() => authService.approveDevice(token).then(() => {})),
+    [runPending],
   );
   const resendEmailVerification = useCallback(
-    (email: string) => authService.resendEmailVerification(email).then(() => {}),
-    [],
+    (email: string) => runPending(() => authService.resendEmailVerification(email).then(() => {})),
+    [runPending],
   );
   const resendDeviceApproval = useCallback(
-    (email: string) => authService.resendDeviceApproval(email).then(() => {}),
-    [],
+    (email: string) => runPending(() => authService.resendDeviceApproval(email).then(() => {})),
+    [runPending],
   );
   const requestPasswordReset = useCallback(
-    (email: string) => authService.forgotPassword(email).then(() => {}),
-    [],
+    (email: string) => runPending(() => authService.forgotPassword(email).then(() => {})),
+    [runPending],
   );
   const resetPassword = useCallback(
-    (token: string, password: string) => authService.resetPassword(token, password).then(() => {}),
-    [],
+    (token: string, password: string) =>
+      runPending(() => authService.resetPassword(token, password).then(() => {})),
+    [runPending],
   );
   const resendTwoFactorLogin = useCallback(() => {
     if (!twoFactorChallenge?.challengeId) return Promise.reject(new Error("2FA challenge ausente"));
-    return authService
-      .resendTwoFactorLogin(twoFactorChallenge.challengeId)
-      .then((r) => setTwoFactorChallenge({ ...twoFactorChallenge, ...r }));
-  }, [twoFactorChallenge]);
+    if (resendTwoFactorPromiseRef.current) return resendTwoFactorPromiseRef.current;
+    const challenge = twoFactorChallenge;
+    const promise = runPending(() =>
+      authService.resendTwoFactorLogin(challenge.challengeId).then((r) => {
+        setTwoFactorChallenge((current) =>
+          current?.challengeId === challenge.challengeId ? { ...current, ...r } : current,
+        );
+      }),
+    ).finally(() => {
+      resendTwoFactorPromiseRef.current = null;
+    });
+    resendTwoFactorPromiseRef.current = promise;
+    return promise;
+  }, [runPending, twoFactorChallenge]);
 
   const value = useMemo<AuthContextValue>(
     () => ({

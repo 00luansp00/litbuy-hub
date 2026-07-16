@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/providers/AuthContext";
 import { friendlyAuthError } from "@/services/auth";
+import { isAdultOn } from "@/services/auth/age";
 export const Route = createFileRoute("/cadastro")({ component: CadastroPage });
 function requiredPublicVersion(
   name: "VITE_CURRENT_TERMS_VERSION" | "VITE_CURRENT_PRIVACY_VERSION",
@@ -22,13 +23,6 @@ function requiredPublicVersion(
 }
 const termsVersion = requiredPublicVersion("VITE_CURRENT_TERMS_VERSION");
 const privacyVersion = requiredPublicVersion("VITE_CURRENT_PRIVACY_VERSION");
-function adult(d: string) {
-  const b = new Date(`${d}T00:00:00`);
-  if (Number.isNaN(b.getTime())) return false;
-  const a = new Date();
-  a.setFullYear(a.getFullYear() - 18);
-  return b <= a;
-}
 function CadastroPage() {
   const { register, loading } = useAuth();
   const navigate = useNavigate();
@@ -43,7 +37,7 @@ function CadastroPage() {
     e.preventDefault();
     if (password.length < 12) return toast.error("A senha precisa ter pelo menos 12 caracteres.");
     if (password !== confirm) return toast.error("As senhas não conferem.");
-    if (!adult(birthDate)) return toast.error("É necessário ter pelo menos 18 anos.");
+    if (!isAdultOn(birthDate)) return toast.error("É necessário ter pelo menos 18 anos.");
     if (!terms || !privacy) return toast.error("Aceite termos e privacidade separadamente.");
     try {
       await register({
