@@ -150,3 +150,19 @@ Ordem sugerida:
 - Alteração de senha segue o contrato real `{ currentPassword, newPassword }`; o backend revoga todas as sessões e o frontend limpa autenticação local e redireciona para login.
 - Revogar a sessão atual ou o dispositivo atual limpa access token em memória, usuário e queries privadas; revogar uma sessão/dispositivo não atual apenas invalida as listas. O endpoint `/auth/sessions/logout-all` é tratado como logout de todas as sessões, incluindo a atual.
 - Telefone, e-mail de gerenciamento, 2FA de gerenciamento, recovery codes e Sprint 2C2B2B permanecem fora do escopo.
+
+## Sprint 2C2B2B1 — telefone seguro e alteração de e-mail
+
+- Frontend integrou os contratos reais `POST /auth/phone/request`, `POST /auth/phone/verify`, `POST /auth/email/change/request` e `POST /auth/email/change/confirm` usando `apiFetch`, bearer em memória, cookies `include` e CSRF para métodos inseguros.
+- `/perfil/seguranca` segue como Central de Segurança e agora inclui cards dedicados para telefone e e-mail. Challenge de telefone, SMS code, senha, novo e-mail e token de confirmação não são persistidos.
+- `/confirmar-alteracao-email` remove imediatamente `token` da URL com navegação `replace`, exige o novo e-mail novamente para funcionar em nova aba, consome o token uma única vez e trata `PENDING` e `COMPLETED`.
+- `COMPLETED` de alteração de e-mail e sucesso de telefone encerram a autenticação local, removem queries privadas e direcionam para `/login`, alinhado à revogação de sessões e limpeza de cookies do backend.
+- Gerenciamento de 2FA continua fora de escopo e pendente para Sprint 2C2B2B2.
+
+## Sprint 2C2B2B2A — 2FA status/enrollment/disable frontend
+
+- A Central de Segurança (`/perfil/seguranca`) agora integra o status real de 2FA via `GET /auth/2fa/status` com TanStack Query na chave `['auth', '2fa', 'status']`.
+- A ativação de 2FA usa somente os contratos reais `POST /auth/2fa/enroll/request` e `POST /auth/2fa/enroll/confirm`, para métodos `EMAIL` e `SMS`, sem `useMutation` para payloads sensíveis.
+- Os recovery codes retornados pela confirmação de ativação são exibidos uma única vez em estado local transitório e zerados ao fechar o card.
+- A desativação usa `POST /auth/2fa/disable/request` e `POST /auth/2fa/disable/confirm` por código ou recovery code; no sucesso, o backend revoga todas as sessões e o frontend encerra a autenticação local com limpeza assíncrona das queries privadas.
+- Step-up, troca de método de 2FA e regeneração de recovery codes continuam pendentes para a Sprint 2C2B2B2B.

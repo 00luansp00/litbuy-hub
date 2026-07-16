@@ -115,3 +115,15 @@ Legenda:
 | Rota                | Tela                          | Acesso | Guard    | Serviço                              | Status      |
 | ------------------- | ----------------------------- | ------ | -------- | ------------------------------------ | ----------- |
 | `/perfil/seguranca` | Central de segurança da conta | user   | AuthGate | authSecurityService + TanStack Query | Real NestJS |
+
+## Sprint 2C2B2B1
+
+| Rota                         | Arquivo                                    | Estado                                                                                                                |
+| ---------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `/perfil/seguranca`          | `src/routes/perfil.seguranca.tsx`          | Central real de segurança com sessões, dispositivos, senha, telefone e solicitação de alteração de e-mail.            |
+| `/confirmar-alteracao-email` | `src/routes/confirmar-alteracao-email.tsx` | Rota pública para dupla confirmação de alteração de e-mail; remove `token` da URL e solicita o novo e-mail novamente. |
+
+## Sprint 2C2B2B2A — Central de Segurança 2FA
+
+- `/perfil/seguranca`: além de sessões, dispositivos, senha, telefone e alteração de e-mail, exibe o status real do 2FA, ativação por e-mail/SMS, recovery codes de ativação exibidos uma única vez e desativação por código ou recovery code.
+- Não há novas rotas públicas para 2FA nesta sprint; step-up, troca de método e regeneração de recovery codes continuam fora do escopo.

@@ -3,3 +3,7 @@ export * from "./types";
 export * from "./errors";
 export * from "./security";
 export * from "./useAccountSecurity";
+export * from "./phoneEmailSecurity";
+export * from "./usePhoneEmailSecurity";
+export * from "./twoFactorSecurity";
+export * from "./useTwoFactorSecurity";

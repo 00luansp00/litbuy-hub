@@ -86,3 +86,180 @@ describe("authSecurityService", () => {
     expect(getAccessToken()).toBeNull();
   });
 });
+
+describe("phoneEmailSecurityService", () => {
+  it("requests and verifies phone with exact payload, Authorization and CSRF without storage", async () => {
+    const { phoneEmailSecurityService } = await import("@/services/auth/phoneEmailSecurity");
+    fetchMock
+      .mockResolvedValueOnce(
+        await ok({
+          challengeId: "11111111-1111-4111-8111-111111111111",
+          expiresAt: "2026-07-16T12:00:00.000Z",
+          message: "sent",
+        }),
+      )
+      .mockResolvedValueOnce(await ok({ message: "done" }));
+    await phoneEmailSecurityService.requestPhoneVerification({
+      phone: "(17) 99999-1234",
+      currentPassword: "current secret",
+    });
+    await phoneEmailSecurityService.verifyPhone({
+      challengeId: "11111111-1111-4111-8111-111111111111",
+      code: "123456",
+      phone: "(17) 99999-1234",
+    });
+    expect(fetchMock.mock.calls[0][0]).toContain("/auth/phone/request");
+    expect(fetchMock.mock.calls[0][1].headers.get("Authorization")).toBe("Bearer access-token");
+    expect(fetchMock.mock.calls[0][1].headers.get("X-CSRF-Token")).toBe("csrf-token");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      phone: "(17) 99999-1234",
+      currentPassword: "current secret",
+    });
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({
+      challengeId: "11111111-1111-4111-8111-111111111111",
+      code: "123456",
+      phone: "(17) 99999-1234",
+    });
+    expect(JSON.stringify(localStorage)).not.toContain("99999");
+    expect(JSON.stringify(sessionStorage)).not.toContain("123456");
+  });
+
+  it("requests and confirms email change with PENDING and COMPLETED without persisting token", async () => {
+    const { phoneEmailSecurityService } = await import("@/services/auth/phoneEmailSecurity");
+    fetchMock
+      .mockResolvedValueOnce(
+        await ok({ requestId: "req", expiresAt: "2026-07-16T12:00:00.000Z", message: "sent" }),
+      )
+      .mockResolvedValueOnce(await ok({ status: "PENDING", message: "pending" }))
+      .mockResolvedValueOnce(await ok({ status: "COMPLETED", message: "done" }));
+    await phoneEmailSecurityService.requestEmailChange({
+      newEmail: "new@example.com",
+      currentPassword: "current secret",
+    });
+    await expect(
+      phoneEmailSecurityService.confirmEmailChange({
+        token: "token.secret.value",
+        newEmail: "new@example.com",
+      }),
+    ).resolves.toMatchObject({ status: "PENDING" });
+    await expect(
+      phoneEmailSecurityService.confirmEmailChange({
+        token: "token.secret.value2",
+        newEmail: "new@example.com",
+      }),
+    ).resolves.toMatchObject({ status: "COMPLETED" });
+    expect(fetchMock.mock.calls[0][0]).toContain("/auth/email/change/request");
+    expect(fetchMock.mock.calls[0][1].headers.get("Authorization")).toBe("Bearer access-token");
+    expect(fetchMock.mock.calls[0][1].headers.get("X-CSRF-Token")).toBe("csrf-token");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      newEmail: "new@example.com",
+      currentPassword: "current secret",
+    });
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({
+      token: "token.secret.value",
+      newEmail: "new@example.com",
+    });
+    expect(JSON.stringify(localStorage)).not.toContain("token.secret");
+    expect(JSON.stringify(sessionStorage)).not.toContain("new@example.com");
+  });
+
+  it("propagates ApiError for token and delivery failures", async () => {
+    const { phoneEmailSecurityService } = await import("@/services/auth/phoneEmailSecurity");
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ code: "INVALID_OR_EXPIRED_TOKEN", message: "bad" }), {
+        status: 400,
+      }),
+    );
+    await expect(
+      phoneEmailSecurityService.confirmEmailChange({
+        token: "bad.token.value",
+        newEmail: "new@example.com",
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_OR_EXPIRED_TOKEN" });
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ code: "SMS_DELIVERY_UNAVAILABLE", message: "down" }), {
+        status: 503,
+      }),
+    );
+    await expect(
+      phoneEmailSecurityService.requestPhoneVerification({
+        phone: "(17) 99999-1234",
+        currentPassword: "current secret",
+      }),
+    ).rejects.toMatchObject({ status: 503, code: "SMS_DELIVERY_UNAVAILABLE" });
+  });
+});
+
+describe("phone/email runtime response parsers", () => {
+  it("rejects malformed phone request responses and accepts valid response", async () => {
+    const {
+      parsePhoneRequestResponse,
+      parseEmailChangeRequestResponse,
+      parseEmailChangeConfirmResponse,
+    } = await import("@/services/auth/phoneEmailSecurity");
+    expect(() => parsePhoneRequestResponse({ expiresAt: "2026-07-16T12:00:00.000Z" })).toThrow(
+      ApiError,
+    );
+    expect(() =>
+      parsePhoneRequestResponse({
+        challengeId: "not-a-uuid",
+        expiresAt: "2026-07-16T12:00:00.000Z",
+      }),
+    ).toThrow(ApiError);
+    expect(() =>
+      parsePhoneRequestResponse({
+        challengeId: "11111111-1111-4111-8111-111111111111",
+        expiresAt: "not-a-date",
+      }),
+    ).toThrow(ApiError);
+    expect(
+      parsePhoneRequestResponse({
+        challengeId: "11111111-1111-4111-8111-111111111111",
+        expiresAt: "2026-07-16T12:00:00.000Z",
+      }),
+    ).toMatchObject({ message: "Código enviado por SMS." });
+    expect(() => parseEmailChangeRequestResponse(undefined)).toThrow(ApiError);
+    expect(() => parseEmailChangeRequestResponse("<html>bad</html>")).toThrow(ApiError);
+    expect(() =>
+      parseEmailChangeRequestResponse({ requestId: "", expiresAt: "2026-07-16T12:00:00.000Z" }),
+    ).toThrow(ApiError);
+    expect(() => parseEmailChangeRequestResponse({ requestId: "req", expiresAt: "bad" })).toThrow(
+      ApiError,
+    );
+    expect(
+      parseEmailChangeRequestResponse({ requestId: "req", expiresAt: "2026-07-16T12:00:00.000Z" }),
+    ).toMatchObject({ message: "Enviamos confirmações para os dois e-mails." });
+    expect(() => parseEmailChangeConfirmResponse({ status: "UNKNOWN" })).toThrow(ApiError);
+    expect(parseEmailChangeConfirmResponse({ status: "PENDING" })).toMatchObject({
+      status: "PENDING",
+    });
+    expect(parseEmailChangeConfirmResponse({ status: "COMPLETED" })).toMatchObject({
+      status: "COMPLETED",
+    });
+  });
+
+  it("rejects empty, HTML and malformed JSON bodies returned by apiFetch", async () => {
+    const { phoneEmailSecurityService } = await import("@/services/auth/phoneEmailSecurity");
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 200 }));
+    await expect(
+      phoneEmailSecurityService.requestPhoneVerification({
+        phone: "(17) 99999-1234",
+        currentPassword: "current secret",
+      }),
+    ).rejects.toMatchObject({ code: "MALFORMED_RESPONSE" });
+    fetchMock.mockResolvedValueOnce(new Response("<html>ok</html>", { status: 200 }));
+    await expect(
+      phoneEmailSecurityService.requestEmailChange({
+        newEmail: "new@example.com",
+        currentPassword: "current secret",
+      }),
+    ).rejects.toMatchObject({ code: "MALFORMED_RESPONSE" });
+    fetchMock.mockResolvedValueOnce(new Response("{", { status: 200 }));
+    await expect(
+      phoneEmailSecurityService.confirmEmailChange({
+        token: "token.secret",
+        newEmail: "new@example.com",
+      }),
+    ).rejects.toMatchObject({ code: "MALFORMED_RESPONSE" });
+  });
+});

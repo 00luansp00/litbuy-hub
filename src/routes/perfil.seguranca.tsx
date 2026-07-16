@@ -2,6 +2,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useRef, useState, type FormEvent } from "react";
 import { ShieldCheck, Smartphone, Monitor, KeyRound, Loader2 } from "lucide-react";
 import { AuthGate } from "@/components/auth/AuthGate";
+import { EmailSecuritySection } from "@/components/account/security/EmailSecuritySection";
+import { PhoneSecuritySection } from "@/components/account/security/PhoneSecuritySection";
+import { TwoFactorSecuritySection } from "@/components/account/security/TwoFactorSecuritySection";
 import { AccountHeader } from "@/components/account/AccountHeader";
 import { AccountLayout } from "@/components/account/AccountLayout";
 import { Button } from "@/components/ui/button";
@@ -257,7 +260,7 @@ function PasswordForm({
 }
 
 function AccountSecurityPage() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const { sessions, devices } = useAccountSecurityQueries(isAuthenticated);
   const mutations = useAccountSecurityMutations();
   const [confirm, setConfirm] = useState<ConfirmAction | null>(null);
@@ -313,7 +316,10 @@ function AccountSecurityPage() {
               <strong className="text-foreground">{approvedDevices.length}</strong> dispositivos
               aprovados.
             </p>
-            <p>Nenhum token, senha ou ID é persistido no navegador por esta página.</p>
+            <p>
+              Nenhum token, senha, telefone, e-mail novo ou ID é persistido no navegador por esta
+              página.
+            </p>
           </CardContent>
         </Card>
         <Card>
@@ -393,6 +399,16 @@ function AccountSecurityPage() {
             </ul>
           </CardContent>
         </Card>
+        <PhoneSecuritySection
+          phoneMasked={user?.phoneMasked}
+          phoneVerified={Boolean(user?.phoneVerified)}
+        />
+        <EmailSecuritySection currentEmail={user?.email} />
+        <TwoFactorSecuritySection
+          isAuthenticated={isAuthenticated}
+          emailVerified={Boolean(user?.emailVerified)}
+          phoneVerified={Boolean(user?.phoneVerified)}
+        />
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

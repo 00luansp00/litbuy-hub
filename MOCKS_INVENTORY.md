@@ -135,3 +135,13 @@ Criticidade: **baixa / média / alta / crítica**.
 ## Sprint 2C2B2A
 
 Sessões, dispositivos aprovados e alteração autenticada de senha usam somente endpoints reais NestJS. Outros domínios do marketplace permanecem mockados conforme inventário acima.
+
+## Sprint 2C2B2B1
+
+- Telefone seguro e alteração de e-mail não usam fallback mockado no frontend.
+- Services reais adicionados em `src/services/auth/phoneEmailSecurity.ts` para os endpoints `/auth/phone/request`, `/auth/phone/verify`, `/auth/email/change/request` e `/auth/email/change/confirm`.
+
+## Sprint 2C2B2B2A — 2FA real
+
+- Os fluxos de gerenciamento de 2FA da Central de Segurança não usam fallback mockado: status, ativação, confirmação, recovery codes e desativação chamam os endpoints reais de `/auth/2fa/*`.
+- Testes frontend usam mocks controlados apenas para isolar UI/service; a aplicação em runtime depende de `VITE_API_BASE_URL` e `apiFetch`.
