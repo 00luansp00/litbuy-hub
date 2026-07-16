@@ -1,41 +1,80 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { toast } from "sonner";
 import { AuthLayout } from "@/components/auth/AuthLayout";
-import { PasswordResetMockForm } from "@/components/email/PasswordResetMockForm";
-import { EmailSecurityNotice } from "@/components/email/EmailSecurityNotice";
-
+import { PasswordInput } from "@/components/auth/PasswordInput";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { useAuth } from "@/providers/AuthContext";
+import { friendlyAuthError } from "@/services/auth";
 export const Route = createFileRoute("/redefinir-senha")({
-  component: RedefinirSenhaPage,
-  head: () => ({
-    meta: [
-      { title: "Redefinir senha — LIT Buy" },
-      { name: "robots", content: "noindex" },
-      { name: "description", content: "Defina uma nova senha para sua conta LIT Buy (modo demonstração)." },
-    ],
+  validateSearch: (search: Record<string, unknown>) => ({
+    token: typeof search.token === "string" ? search.token : undefined,
   }),
+  component: Page,
 });
-
-function RedefinirSenhaPage() {
+function Page() {
+  const nav = useNavigate();
+  const search = Route.useSearch();
+  const capturedTokenRef = useRef(false);
+  const { resetPassword, loading } = useAuth();
+  const [token, setToken] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  useEffect(() => {
+    if (capturedTokenRef.current) return;
+    capturedTokenRef.current = true;
+    const t = search.token ?? "";
+    setToken(t);
+    if (t) {
+      nav({ to: "/redefinir-senha", search: { token: undefined }, replace: true });
+    }
+  }, [nav, search.token]);
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!token) return toast.error("Token ausente ou expirado.");
+    if (password.length < 12) return toast.error("A senha precisa ter pelo menos 12 caracteres.");
+    if (password !== confirm) return toast.error("As senhas não conferem.");
+    try {
+      await resetPassword(token, password);
+      toast.success("Senha redefinida. Faça login novamente.");
+      nav({ to: "/login" });
+    } catch (err) {
+      toast.error(friendlyAuthError(err).message);
+    }
+  };
   return (
     <AuthLayout
       eyebrow="Segurança"
       title="Redefinir senha"
-      subtitle="Escolha uma nova senha forte para sua conta."
-      footer={
-        <>
-          Voltar para{" "}
-          <Link to="/login" className="font-medium text-foreground hover:text-primary transition-colors">
-            login
-          </Link>
-        </>
-      }
+      subtitle="Escolha uma nova senha forte."
     >
-      <div className="space-y-4">
-        <p className="rounded-lg border border-border bg-surface/40 p-3 text-xs text-muted-foreground">
-          Simulação: o token recebido por e-mail seria validado aqui. Nenhum token real é verificado.
-        </p>
-        <PasswordResetMockForm />
-        <EmailSecurityNotice compact />
-      </div>
+      <form onSubmit={submit} className="space-y-4">
+        <div>
+          <Label htmlFor="password">Nova senha</Label>
+          <PasswordInput
+            id="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="new-password"
+          />
+        </div>
+        <div>
+          <Label htmlFor="confirm">Confirmar senha</Label>
+          <PasswordInput
+            id="confirm"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            autoComplete="new-password"
+          />
+        </div>
+        <Button disabled={loading} className="w-full">
+          Redefinir senha
+        </Button>
+        <Button asChild variant="outline" className="w-full">
+          <Link to="/login">Voltar ao login</Link>
+        </Button>
+      </form>
     </AuthLayout>
   );
 }

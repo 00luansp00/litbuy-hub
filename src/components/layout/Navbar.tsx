@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { categories } from "@/data/categories";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/providers/AuthProvider";
+import { useAuth } from "@/providers/AuthContext";
 import { useCart } from "@/providers/CartProvider";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { UserMenu } from "./UserMenu";

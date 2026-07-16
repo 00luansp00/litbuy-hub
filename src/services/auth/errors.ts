@@ -1,0 +1,31 @@
+import { ApiError } from "@/lib/api/client";
+const messages: Record<string, string> = {
+  INVALID_CREDENTIALS: "E-mail ou senha inválidos.",
+  EMAIL_NOT_VERIFIED: "Confirme seu e-mail antes de entrar.",
+  DEVICE_APPROVAL_REQUIRED: "Aprove este dispositivo pelo link enviado ao e-mail.",
+  TWO_FACTOR_REQUIRED: "Informe o código de verificação para concluir o login.",
+  INVALID_OR_EXPIRED_TOKEN: "Token inválido, expirado ou já utilizado.",
+  INVALID_OR_EXPIRED_2FA_CODE: "Código inválido, expirado ou já utilizado.",
+  TWO_FACTOR_CHALLENGE_LOCKED: "Muitas tentativas. Solicite um novo código.",
+  INVALID_RECOVERY_CODE: "Recovery code inválido.",
+  INVALID_SESSION: "Sua sessão expirou. Entre novamente.",
+  INVALID_CSRF: "Não foi possível validar a sessão. Recarregue a página.",
+  RATE_LIMITED: "Muitas tentativas. Aguarde alguns minutos.",
+  EMAIL_DELIVERY_UNAVAILABLE: "Entrega de e-mail indisponível no momento.",
+  TWO_FACTOR_DELIVERY_UNAVAILABLE: "Entrega do código indisponível no momento.",
+  OUTDATED_TERMS_OR_PRIVACY: "Atualize a página e aceite as versões atuais dos termos.",
+  INVALID_REGISTRATION: "Revise os dados do cadastro.",
+  INVALID_2FA_INPUT: "Informe código de seis dígitos ou recovery code, nunca ambos.",
+  HTTP_ERROR: "Não foi possível concluir a operação.",
+  NETWORK_ERROR: "Não foi possível conectar à API.",
+};
+export function friendlyAuthError(error: unknown) {
+  if (error instanceof ApiError)
+    return {
+      message: messages[error.code] ?? messages.HTTP_ERROR,
+      requestId: error.requestId,
+      code: error.code,
+      status: error.status,
+    };
+  return { message: messages.NETWORK_ERROR };
+}

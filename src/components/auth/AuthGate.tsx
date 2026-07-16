@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import { LogIn, ShieldCheck, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/providers/AuthProvider";
+import { useAuth } from "@/providers/AuthContext";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 
@@ -15,7 +15,7 @@ interface AuthGateProps {
 
 /**
  * AuthGate — proteção visual para rotas privadas enquanto a
- * autenticação segue mockada. Não implementa redirect: apenas
+ * autenticação usa a API real. Proteção real e autorização pertencem ao backend; este gate apenas
  * bloqueia visualmente o conteúdo e sugere login/cadastro.
  */
 export function AuthGate({
@@ -24,8 +24,14 @@ export function AuthGate({
   description = "Você precisa estar logado na LIT Buy para acessar esta área. Faça login ou crie sua conta em segundos.",
   className,
 }: AuthGateProps) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, initializing } = useAuth();
 
+  if (initializing)
+    return (
+      <div className="container-lit py-12 text-center text-sm text-muted-foreground">
+        Carregando sessão segura...
+      </div>
+    );
   if (isAuthenticated) return <>{children}</>;
 
   return (
@@ -42,12 +48,8 @@ export function AuthGate({
         >
           <ShieldCheck className="h-7 w-7 text-primary-foreground" />
         </div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">
-          {title}
-        </h1>
-        <p className="mt-3 text-sm text-muted-foreground md:text-base">
-          {description}
-        </p>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">{title}</h1>
+        <p className="mt-3 text-sm text-muted-foreground md:text-base">{description}</p>
         <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
           <Button asChild size="lg">
             <Link to="/login">

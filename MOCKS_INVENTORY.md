@@ -117,3 +117,7 @@ Criticidade: **baixa / média / alta / crítica**.
 - Nenhum dado real deve ser inserido enquanto backend não existir.
 - Todo item marcado **crítica** exige desenvolvedor sênior + revisão
   de segurança antes de produção.
+
+## Sprint 2C2B1 — autenticação removida dos mocks centrais
+
+`AuthProvider`, `/login`, `/cadastro`, `/verificar-email`, `/verificacao-login`, `/recuperar-senha` e `/redefinir-senha` foram integrados à API NestJS real. `src/services/authMock.ts` permanece apenas como inventário legado sem fallback de produção. Mocks de catálogo, carrinho, vendedor, admin visual e outros domínios seguem fora do escopo desta sprint.

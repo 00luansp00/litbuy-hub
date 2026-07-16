@@ -482,3 +482,7 @@ Docs de suporte atualizados: `DATABASE_SCHEMA.md`, `ENTITY_RELATIONSHIP.md`, `SU
 - README profissional atualizado.
 - Typecheck limpo.
 - Próxima fase: backend (ver `BACKEND_ROADMAP.md`).
+
+## Sprint 2C2B1 — status
+
+Autenticação central do frontend integrada à API NestJS real. Tokens não são persistidos pelo frontend. CI frontend agora inclui instalação congelada, lint, testes, typecheck e build. Ainda permanecem mockados os domínios de catálogo, carrinho, vendedor, admin visual, pagamentos, wallet e KYC.

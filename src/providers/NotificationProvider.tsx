@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { notificationService } from "@/services/notificationService";
-import { useAuth } from "@/providers/AuthProvider";
+import { useAuth } from "@/providers/AuthContext";
 import type {
   Notification,
   NotificationFilter,
