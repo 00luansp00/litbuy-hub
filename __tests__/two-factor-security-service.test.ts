@@ -282,6 +282,11 @@ const stepUpGrant = {
   scope: stepUpRecoveryRegenerateScope,
   expiresAt: "2027-07-16T12:00:00.000Z",
 };
+const nextStepUpChallenge = {
+  ...stepUpChallenge,
+  challengeId: "223e4567-e89b-42d3-a456-826614174001",
+  method: "SMS" as const,
+};
 
 describe("stepUpSecurityService", () => {
   it("requests, verifies, resends and regenerates with exact contracts", async () => {
@@ -317,6 +322,108 @@ describe("stepUpSecurityService", () => {
     );
     expect(fetchMock.mock.calls[3][1].headers.get("Authorization")).toBe("Bearer access-token");
     expect(fetchMock.mock.calls[3][1].headers.get("X-CSRF-Token")).toBe("csrf-token");
+  });
+
+  it("covers request EMAIL/SMS, malformed transport, refresh and refresh failure", async () => {
+    fetchMock
+      .mockResolvedValueOnce(await ok(stepUpChallenge))
+      .mockResolvedValueOnce(await ok({ ...stepUpChallenge, method: "SMS" }));
+    await expect(stepUpSecurityService.requestStepUp("secret-email")).resolves.toMatchObject({
+      method: "EMAIL",
+    });
+    await expect(stepUpSecurityService.requestStepUp("secret-sms")).resolves.toMatchObject({
+      method: "SMS",
+    });
+    for (const response of [
+      new Response(null, { status: 200 }),
+      new Response("<html></html>", { status: 200 }),
+      new Response("{", { status: 200 }),
+    ]) {
+      fetchMock.mockResolvedValueOnce(response);
+      await expect(stepUpSecurityService.requestStepUp("secret")).rejects.toMatchObject({
+        code: "MALFORMED_RESPONSE",
+      });
+    }
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ code: "INVALID_SESSION" }), { status: 401 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ accessToken: "fresh-step-up" }), { status: 200 }),
+      )
+      .mockResolvedValueOnce(await ok(stepUpChallenge));
+    await stepUpSecurityService.requestStepUp("secret");
+    expect(getAccessToken()).toBe("fresh-step-up");
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ code: "INVALID_SESSION" }), { status: 401 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ code: "INVALID_SESSION" }), { status: 401 }),
+      );
+    await expect(stepUpSecurityService.requestStepUp("secret")).rejects.toBeInstanceOf(ApiError);
+    expect(getAccessToken()).toBeNull();
+  });
+
+  it("covers verify by code/recovery, resend errors and regenerate error contracts", async () => {
+    fetchMock
+      .mockResolvedValueOnce(await ok(stepUpGrant))
+      .mockResolvedValueOnce(await ok(stepUpGrant))
+      .mockResolvedValueOnce(await ok(nextStepUpChallenge))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ code: "RATE_LIMITED" }), { status: 429 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ code: "STEP_UP_DELIVERY_UNAVAILABLE" }), { status: 503 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ code: "INVALID_OR_EXPIRED_STEP_UP_CODE" }), { status: 400 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ code: "INVALID_OR_EXPIRED_STEP_UP_GRANT" }), { status: 400 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ code: "STEP_UP_SCOPE_MISMATCH" }), { status: 400 }),
+      )
+      .mockResolvedValueOnce(await ok({ recoveryCodes }));
+    await stepUpSecurityService.verifyStepUp({
+      challengeId: stepUpChallenge.challengeId,
+      code: "123456",
+    });
+    await stepUpSecurityService.verifyStepUp({
+      challengeId: stepUpChallenge.challengeId,
+      recoveryCode: "ABCDE-12345-FGHIJ",
+    });
+    await expect(stepUpSecurityService.resendStepUp(stepUpChallenge.challengeId)).resolves.toEqual(
+      nextStepUpChallenge,
+    );
+    await expect(
+      stepUpSecurityService.resendStepUp(stepUpChallenge.challengeId),
+    ).rejects.toMatchObject({ code: "RATE_LIMITED" });
+    await expect(
+      stepUpSecurityService.resendStepUp(stepUpChallenge.challengeId),
+    ).rejects.toMatchObject({ code: "STEP_UP_DELIVERY_UNAVAILABLE" });
+    await expect(
+      stepUpSecurityService.resendStepUp(stepUpChallenge.challengeId),
+    ).rejects.toMatchObject({ code: "INVALID_OR_EXPIRED_STEP_UP_CODE" });
+    await expect(
+      stepUpSecurityService.regenerateRecoveryCodes("opaque-token-value"),
+    ).rejects.toMatchObject({ code: "INVALID_OR_EXPIRED_STEP_UP_GRANT" });
+    await expect(
+      stepUpSecurityService.regenerateRecoveryCodes("opaque-token-value"),
+    ).rejects.toMatchObject({ code: "STEP_UP_SCOPE_MISMATCH" });
+    await stepUpSecurityService.regenerateRecoveryCodes("opaque-token-value");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      challengeId: stepUpChallenge.challengeId,
+      code: "123456",
+    });
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({
+      challengeId: stepUpChallenge.challengeId,
+      recoveryCode: "ABCDE-12345-FGHIJ",
+    });
+    const regenerateCall = fetchMock.mock.calls.at(-1);
+    expect(regenerateCall?.[1].headers.get("X-Step-Up-Token")).toBe("opaque-token-value");
+    expect(regenerateCall?.[1].body).toBeUndefined();
   });
 
   it("builds code or normalized recovery payloads, never both or neither", () => {

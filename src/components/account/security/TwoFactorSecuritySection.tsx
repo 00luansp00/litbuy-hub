@@ -59,14 +59,14 @@ export function TwoFactorSecuritySection({ smsAvailable }: { smsAvailable: boole
     !status.isFetching &&
     !status.error &&
     !reconcilingStatus;
-  const busy =
+  const ownTwoFactorBusy =
     actions.requestPending ||
     actions.confirmPending ||
     actions.disablePending ||
     actions.disableConfirmPending ||
-    regenerationExclusive ||
     inFlight.current ||
     reconcilingStatus;
+  const busy = ownTwoFactorBusy || regenerationExclusive;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -444,7 +444,7 @@ export function TwoFactorSecuritySection({ smsAvailable }: { smsAvailable: boole
         )}
         {statusReady && status.data?.enabled && !disableChallenge && (
           <RecoveryCodeRegeneration
-            disabled={busy || showingRecoveryCodes}
+            disabled={ownTwoFactorBusy || showingRecoveryCodes}
             onExclusiveChange={setRegenerationExclusive}
           />
         )}

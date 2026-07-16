@@ -6,11 +6,13 @@ export function RecoveryCodesDisplay({
   title,
   onClose,
   closing,
+  onClipboardReset,
 }: {
   recoveryCodes: string[];
   title: string;
   onClose: () => void;
   closing?: boolean;
+  onClipboardReset?: () => void;
 }) {
   const [acknowledged, setAcknowledged] = useState(false);
   const [clipboardState, setClipboardState] = useState("");
@@ -21,8 +23,12 @@ export function RecoveryCodesDisplay({
       mountedRef.current = false;
     };
   }, []);
-  const copy = async () => {
+  const resetClipboard = () => {
     setClipboardState("");
+    onClipboardReset?.();
+  };
+  const copy = async () => {
+    resetClipboard();
     try {
       if (!navigator.clipboard?.writeText) {
         if (mountedRef.current) setClipboardState("Clipboard indisponível neste navegador.");
