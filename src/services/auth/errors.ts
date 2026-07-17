@@ -24,6 +24,8 @@ const messages: Record<string, string> = {
   TWO_FACTOR_ALREADY_ENABLED: "O 2FA já está ativo nesta conta.",
   TWO_FACTOR_NOT_ENABLED: "O 2FA não está ativo nesta conta.",
   TWO_FACTOR_METHOD_UNAVAILABLE: "Método de 2FA indisponível no momento.",
+  TWO_FACTOR_METHOD_ALREADY_ACTIVE: "Este método de 2FA já está ativo.",
+  TWO_FACTOR_METHOD_CHANGE_CONFLICT: "A troca do método de 2FA expirou. Inicie novamente.",
   TWO_FACTOR_CHALLENGE_CONFLICT: "Há um desafio de 2FA em andamento. Solicite um novo código.",
   TWO_FACTOR_DELIVERY_UNAVAILABLE: "Entrega do código indisponível no momento.",
   OUTDATED_TERMS_OR_PRIVACY: "Atualize a página e aceite as versões atuais dos termos.",
@@ -40,6 +42,8 @@ const messages: Record<string, string> = {
   FORBIDDEN: "Você não tem permissão para concluir esta ação.",
   RECOVERY_REGENERATION_OUTCOME_UNKNOWN:
     "Não foi possível confirmar o resultado da regeneração dos recovery codes.",
+  TWO_FACTOR_METHOD_CHANGE_OUTCOME_UNKNOWN:
+    "Não foi possível confirmar o resultado da troca do método de 2FA.",
   MALFORMED_RESPONSE: "Resposta inválida da API.",
   HTTP_ERROR: "Não foi possível concluir a operação.",
   NETWORK_ERROR: "Não foi possível conectar à API.",

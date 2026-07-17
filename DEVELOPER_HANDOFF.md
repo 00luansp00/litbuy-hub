@@ -157,7 +157,7 @@ Ordem sugerida:
 - `/perfil/seguranca` segue como Central de Segurança e agora inclui cards dedicados para telefone e e-mail. Challenge de telefone, SMS code, senha, novo e-mail e token de confirmação não são persistidos.
 - `/confirmar-alteracao-email` remove imediatamente `token` da URL com navegação `replace`, exige o novo e-mail novamente para funcionar em nova aba, consome o token uma única vez e trata `PENDING` e `COMPLETED`.
 - `COMPLETED` de alteração de e-mail e sucesso de telefone encerram a autenticação local, removem queries privadas e direcionam para `/login`, alinhado à revogação de sessões e limpeza de cookies do backend.
-- Gerenciamento de 2FA continua fora de escopo e pendente para Sprint 2C2B2B2.
+- Naquela sprint, gerenciamento de 2FA continuava fora de escopo; no estado atual, ativação/desativação, step-up, regeneração de recovery codes e troca EMAIL/SMS estão implementados sem fallback para mock.
 
 ## Sprint 2C2B2B2A — status, ativação e desativação segura de 2FA
 
@@ -167,12 +167,21 @@ Ordem sugerida:
 - Desativação usa `POST /auth/2fa/disable/request` e `POST /auth/2fa/disable/confirm`, por código de seis dígitos ou recovery code normalizado, nunca ambos.
 - Após desativação confirmada, o frontend limpa access token em memória, cancela/remove queries privadas, limpa autenticação local e navega para `/login`, sem tentar refresh posterior.
 - A ativação invalida status de 2FA e lista real de sessões em background; falhas auxiliares não impedem a exibição dos recovery codes.
-- Step-up, troca de método e regeneração de recovery codes continuam pendentes para sprints futuras.
+- Naquele momento, step-up, troca de método e regeneração de recovery codes continuavam pendentes; as sprints posteriores registram o estado atual desses fluxos.
 
 ## Sprint 2C2B2B2B1 — step-up recovery regeneration
+
 - Frontend integrates real step-up endpoints for `TWO_FACTOR_RECOVERY_REGENERATE`: `POST /auth/step-up/request`, `POST /auth/step-up/verify`, `POST /auth/step-up/resend`, and `POST /auth/2fa/recovery/regenerate`.
 - Recovery-code regeneration confirms by six-digit 2FA code or a normalized 5-5-5 recovery code; the recovery confirmation code is sent only in the verify payload.
-- The opaque `stepUpToken` is validated defensively, kept only in the local Promise scope, and immediately sent as `X-Step-Up-Token` to regenerate recovery codes.
+- O grant opaco de step-up é validado defensivamente, mantido apenas no escopo local da Promise e enviado imediatamente como `X-Step-Up-Token` para regenerar recovery codes.
 - Regeneration expects exactly 10 unique uppercase 5-5-5 codes, treats malformed responses as `MALFORMED_RESPONSE`, warns that old codes may have been invalidated, and reconciles status/sessions without logging out.
 - Successful regeneration invalidates old recovery codes and visually refreshes the real sessions list while preserving the current session; new codes are shown once in an exclusive screen.
-- 2FA method change remains pending for Sprint 2C2B2B2B2; no method-change UI was added.
+- Naquele momento, a troca de método 2FA ainda estava pendente para a Sprint 2C2B2B2B2; o estado atual está documentado na seção da Sprint 2C2B2B2B2.
+
+## Sprint 2C2B2B2B2 — troca segura do método 2FA
+
+- Frontend integrado aos endpoints reais `POST /auth/2fa/method/change/request` e `POST /auth/2fa/method/change/confirm`, sempre após step-up com scope `TWO_FACTOR_METHOD_CHANGE`.
+- Contratos do backend: request `{ newMethod: "EMAIL" | "SMS" }` com header `X-Step-Up-Token`, resposta `{ challengeId, expiresAt }`; confirm `{ challengeId, code }` com o mesmo header, resposta `{ methodChanged: true }`.
+- O grant opaco de step-up é mantido somente em `useRef` local transitório no hook específico, nunca em provider, cache, storage, URL, body, toast ou log, e é apagado em sucesso, cancelamento, desmontagem, erro terminal ou resultado ambíguo.
+- O backend consome o grant somente na confirmação bem-sucedida, preserva a sessão atual e revoga outras sessões com motivo `TWO_FACTOR_METHOD_CHANGED`; o frontend reconcilia status 2FA e sessões reais com `throwOnError: true` antes de liberar ações após sucesso ou resultado desconhecido.
+- Disponibilidade: não oferece o método atual, só oferece SMS quando o telefone confirmado já está disponível no estado real do usuário, e não exibe endereço completo de e-mail ou telefone.

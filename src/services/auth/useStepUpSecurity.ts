@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { accountSecurityQueryKeys } from "./useAccountSecurity";
 import { twoFactorStatusQueryKey } from "./useTwoFactorSecurity";
 import { stepUpSecurityService, type StepUpVerifyPayload } from "./stepUpSecurity";
+import { twoFactorSecurityService, type TwoFactorStatus } from "./twoFactorSecurity";
 
 function useMountedRef() {
   const mountedRef = useRef(false);
@@ -31,7 +32,7 @@ export function useStepUpSecurity() {
     ]).catch(() => undefined);
   };
 
-  const reconcileStepUpRelatedData = async () => {
+  const reconcileStepUpRelatedData = async (): Promise<TwoFactorStatus> => {
     if (inFlight.current.reconcile) throw new Error("STEP_UP_RECONCILE_IN_FLIGHT");
     inFlight.current.reconcile = true;
     setReconcilePending(true);
@@ -43,6 +44,12 @@ export function useStepUpSecurity() {
           { throwOnError: true },
         ),
       ]);
+      const cachedStatus = queryClient.getQueryData<TwoFactorStatus>(twoFactorStatusQueryKey);
+      if (cachedStatus) return cachedStatus;
+      return await queryClient.fetchQuery({
+        queryKey: twoFactorStatusQueryKey,
+        queryFn: twoFactorSecurityService.getStatus,
+      });
     } finally {
       inFlight.current.reconcile = false;
       if (mountedRef.current) setReconcilePending(false);

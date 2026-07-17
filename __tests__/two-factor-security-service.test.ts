@@ -1,4 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  parseMethodChangeChallenge,
+  parseMethodChangeConfirmResponse,
+  twoFactorMethodChangeService,
+} from "@/services/auth/twoFactorMethodChange";
 import { ApiError, getAccessToken, setAccessToken } from "@/lib/api/client";
 import {
   normalizeRecoveryCode,
@@ -13,8 +18,8 @@ const fetchMock = vi.fn();
 Object.defineProperty(globalThis, "fetch", { value: fetchMock, writable: true });
 
 const challenge = {
-  challengeId: "123e4567-e89b-42d3-a456-426614174000",
-  expiresAt: "2026-07-16T12:00:00.000Z",
+  challengeId: "123e4567-e89b-42d3-8456-426614174000",
+  expiresAt: "2027-07-16T12:00:00.000Z",
   message: "sent",
 };
 const recoveryCodes = [
@@ -273,7 +278,7 @@ import {
 } from "@/services/auth/stepUpSecurity";
 
 const stepUpChallenge = {
-  challengeId: "123e4567-e89b-42d3-a456-426614174000",
+  challengeId: "123e4567-e89b-42d3-8456-426614174000",
   scope: stepUpRecoveryRegenerateScope,
   method: "EMAIL",
   expiresAt: "2027-07-16T12:00:00.000Z",
@@ -540,5 +545,106 @@ describe("stepUpSecurityService", () => {
         code: "MALFORMED_RESPONSE",
       });
     }
+  });
+});
+
+describe("twoFactorMethodChangeService", () => {
+  it("uses exact step-up and method-change contracts without placing token in bodies", async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        await ok({
+          challengeId: challenge.challengeId,
+          scope: "TWO_FACTOR_METHOD_CHANGE",
+          method: "EMAIL",
+          expiresAt: "2027-07-16T12:00:00.000Z",
+        }),
+      )
+      .mockResolvedValueOnce(
+        await ok({
+          stepUpToken: "opaque-step-up-token-value",
+          scope: "TWO_FACTOR_METHOD_CHANGE",
+          expiresAt: "2027-07-16T12:05:00.000Z",
+        }),
+      )
+      .mockResolvedValueOnce(
+        await ok({ challengeId: challenge.challengeId, expiresAt: challenge.expiresAt }),
+      )
+      .mockResolvedValueOnce(await ok({ methodChanged: true }));
+
+    await stepUpSecurityService.requestMethodChangeStepUp("secret");
+    await stepUpSecurityService.verifyMethodChangeStepUp({
+      challengeId: challenge.challengeId,
+      recoveryCode: "ABCDE-12345-FGHIJ",
+    });
+    await twoFactorMethodChangeService.request({ newMethod: "SMS" }, "opaque-step-up-token-value");
+    await twoFactorMethodChangeService.confirm(
+      { challengeId: challenge.challengeId, code: "123456" },
+      "opaque-step-up-token-value",
+    );
+
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      scope: "TWO_FACTOR_METHOD_CHANGE",
+      currentPassword: "secret",
+    });
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({
+      challengeId: challenge.challengeId,
+      recoveryCode: "ABCDE-12345-FGHIJ",
+    });
+    expect(fetchMock.mock.calls[2][1].headers.get("Authorization")).toBe("Bearer access-token");
+    expect(fetchMock.mock.calls[2][1].headers.get("X-CSRF-Token")).toBe("csrf-token");
+    expect(fetchMock.mock.calls[2][1].headers.get("X-Step-Up-Token")).toBe(
+      "opaque-step-up-token-value",
+    );
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({ newMethod: "SMS" });
+    expect(JSON.stringify(JSON.parse(fetchMock.mock.calls[2][1].body))).not.toContain(
+      "opaque-step-up-token-value",
+    );
+    expect(fetchMock.mock.calls[3][1].headers.get("X-Step-Up-Token")).toBe(
+      "opaque-step-up-token-value",
+    );
+    expect(JSON.parse(fetchMock.mock.calls[3][1].body)).toEqual({
+      challengeId: challenge.challengeId,
+      code: "123456",
+    });
+  });
+
+  it("defensively rejects malformed method-change responses and classifies ambiguous confirm", async () => {
+    expect(
+      parseMethodChangeChallenge({
+        challengeId: challenge.challengeId,
+        expiresAt: challenge.expiresAt,
+      }),
+    ).toEqual({
+      challengeId: challenge.challengeId,
+      expiresAt: challenge.expiresAt,
+    });
+    expect(parseMethodChangeConfirmResponse({ methodChanged: true })).toEqual({
+      methodChanged: true,
+    });
+    for (const body of [
+      undefined,
+      "<html></html>",
+      { challengeId: "bad", expiresAt: challenge.expiresAt },
+      { challengeId: challenge.challengeId, expiresAt: "bad" },
+      { challengeId: challenge.challengeId, expiresAt: challenge.expiresAt, token: "leak" },
+    ]) {
+      expect(() => parseMethodChangeChallenge(body)).toThrow(ApiError);
+    }
+    for (const body of [{ methodChanged: false }, { methodChanged: true, extra: true }]) {
+      expect(() => parseMethodChangeConfirmResponse(body)).toThrow(ApiError);
+    }
+    fetchMock.mockResolvedValueOnce(new Response("<html></html>", { status: 200 }));
+    await expect(
+      twoFactorMethodChangeService.confirm(
+        { challengeId: challenge.challengeId, code: "123456" },
+        "opaque-step-up-token-value",
+      ),
+    ).rejects.toMatchObject({ code: "TWO_FACTOR_METHOD_CHANGE_OUTCOME_UNKNOWN" });
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ code: "INVALID_OR_EXPIRED_STEP_UP_GRANT" }), { status: 400 }),
+    );
+    await expect(
+      twoFactorMethodChangeService.request({ newMethod: "EMAIL" }, "opaque-step-up-token-value"),
+    ).rejects.toMatchObject({ code: "INVALID_OR_EXPIRED_STEP_UP_GRANT" });
   });
 });

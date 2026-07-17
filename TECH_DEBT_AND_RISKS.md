@@ -165,19 +165,26 @@ O lint raiz legado (`eslint .`) ainda varre todo o monorepo, incluindo backend e
 
 - O frontend bloqueia entradas obviamente inválidas, mas o backend continua autoridade para normalização de telefone, cooldown, rate limit, expiração e disponibilidade.
 - A rota de confirmação de e-mail depende de o usuário informar novamente o novo e-mail; isso evita colocar e-mail completo na URL e mantém funcionamento em nova aba.
-- 2FA, recovery codes e step-up permanecem pendentes para sprint futura.
+- Naquela sprint, 2FA, recovery codes e step-up permaneciam pendentes; no estado atual, ativação/desativação, step-up, regeneração e troca EMAIL/SMS estão implementados sem fallback para mock.
 
 ## Sprint 2C2B2B2A
 
-- 2FA de gerenciamento foi integrado, mas step-up, troca de método e regeneração de recovery codes permanecem deliberadamente fora do escopo.
+- Naquela sprint, 2FA de gerenciamento foi integrado e step-up, troca de método e regeneração permaneceram fora do escopo; no estado atual, esses fluxos foram adicionados sem mock.
 - Usuários com `recoveryCodesRemaining` igual a 0 ou muito baixo recebem alerta; a UI não oferece regeneração falsa e informa que a regeneração será integrada na Sprint 2C2B2B2B.
 - A segurança dos challenges, expiração, rate limit, entrega EMAIL/SMS e revogação de sessões continua sob autoridade do backend NestJS.
 - Recovery codes são segredo crítico: devem continuar fora de QueryCache, MutationCache, storage, URL, provider, logs, analytics, toast e snapshots.
 
 ## Sprint 2C2B2B2B1 — step-up recovery regeneration
+
 - Frontend integrates real step-up endpoints for `TWO_FACTOR_RECOVERY_REGENERATE`: `POST /auth/step-up/request`, `POST /auth/step-up/verify`, `POST /auth/step-up/resend`, and `POST /auth/2fa/recovery/regenerate`.
 - Recovery-code regeneration confirms by six-digit 2FA code or a normalized 5-5-5 recovery code; the recovery confirmation code is sent only in the verify payload.
-- The opaque `stepUpToken` is validated defensively, kept only in the local Promise scope, and immediately sent as `X-Step-Up-Token` to regenerate recovery codes.
+- O grant opaco de step-up é validado defensivamente, mantido apenas no escopo local da Promise e enviado imediatamente como `X-Step-Up-Token` para regenerar recovery codes.
 - Regeneration expects exactly 10 unique uppercase 5-5-5 codes, treats malformed responses as `MALFORMED_RESPONSE`, warns that old codes may have been invalidated, and reconciles status/sessions without logging out.
 - Successful regeneration invalidates old recovery codes and visually refreshes the real sessions list while preserving the current session; new codes are shown once in an exclusive screen.
-- 2FA method change remains pending for Sprint 2C2B2B2B2; no method-change UI was added.
+- Naquele momento, a troca de método 2FA ainda estava pendente para a Sprint 2C2B2B2B2; o estado atual está documentado na seção da Sprint 2C2B2B2B2.
+
+## Sprint 2C2B2B2B2 — riscos e garantias
+
+- Garantia: o mesmo `X-Step-Up-Token` é reutilizado em request e confirm e fica somente em memória transitória local.
+- Garantia: resultado ambíguo após confirm limpa segredo/challenge, bloqueia ações e exige reconciliação real de status e sessões com erro propagado.
+- Risco operacional: a criação do PR depende da integração do ambiente Codex, pois o remote público não aceita fetch/push neste checkout.

@@ -8,9 +8,10 @@ import {
 const json = (body: unknown) => JSON.stringify(body);
 const uuidV4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export const stepUpRecoveryRegenerateScope = "TWO_FACTOR_RECOVERY_REGENERATE" as const;
+export const stepUpMethodChangeScope = "TWO_FACTOR_METHOD_CHANGE" as const;
 export const recoveryRegenerationOutcomeUnknownCode =
   "RECOVERY_REGENERATION_OUTCOME_UNKNOWN" as const;
-type StepUpScope = typeof stepUpRecoveryRegenerateScope;
+type StepUpScope = typeof stepUpRecoveryRegenerateScope | typeof stepUpMethodChangeScope;
 type RecordValue = Record<string, unknown>;
 
 export type StepUpChallenge = {
@@ -38,25 +39,31 @@ function validDateString(value: unknown, future = false): value is string {
   if (Number.isNaN(time)) return false;
   return !future || time > Date.now();
 }
-function parseChallenge(value: unknown): StepUpChallenge {
+function parseChallenge(
+  value: unknown,
+  expectedScope: StepUpScope = stepUpRecoveryRegenerateScope,
+): StepUpChallenge {
   const body = asRecord(value);
   if (typeof body.challengeId !== "string" || !uuidV4.test(body.challengeId)) malformed();
-  if (body.scope !== stepUpRecoveryRegenerateScope) malformed();
+  if (body.scope !== expectedScope) malformed();
   if (body.method !== "EMAIL" && body.method !== "SMS") malformed();
-  if (!validDateString(body.expiresAt)) malformed();
+  if (!validDateString(body.expiresAt, true)) malformed();
   return {
     challengeId: body.challengeId,
-    scope: body.scope,
+    scope: expectedScope,
     method: body.method,
     expiresAt: body.expiresAt,
   };
 }
-function parseGrant(value: unknown): StepUpGrant {
+function parseGrant(
+  value: unknown,
+  expectedScope: StepUpScope = stepUpRecoveryRegenerateScope,
+): StepUpGrant {
   const body = asRecord(value);
   if (typeof body.stepUpToken !== "string" || body.stepUpToken.trim().length < 16) malformed();
-  if (body.scope !== stepUpRecoveryRegenerateScope) malformed();
+  if (body.scope !== expectedScope) malformed();
   if (!validDateString(body.expiresAt, true)) malformed();
-  return { stepUpToken: body.stepUpToken, scope: body.scope, expiresAt: body.expiresAt };
+  return { stepUpToken: body.stepUpToken, scope: expectedScope, expiresAt: body.expiresAt };
 }
 function parseRecoveryCodes(value: unknown): RecoveryCodesResponse {
   const body = asRecord(value);
@@ -117,6 +124,27 @@ export const stepUpSecurityService = {
   verifyStepUp: async (payload: StepUpVerifyPayload) =>
     parseGrant(
       await apiFetch<unknown>("/auth/step-up/verify", { method: "POST", body: json(payload) }),
+    ),
+  requestMethodChangeStepUp: async (currentPassword: string) =>
+    parseChallenge(
+      await apiFetch<unknown>("/auth/step-up/request", {
+        method: "POST",
+        body: json({ scope: stepUpMethodChangeScope, currentPassword }),
+      }),
+      stepUpMethodChangeScope,
+    ),
+  verifyMethodChangeStepUp: async (payload: StepUpVerifyPayload) =>
+    parseGrant(
+      await apiFetch<unknown>("/auth/step-up/verify", { method: "POST", body: json(payload) }),
+      stepUpMethodChangeScope,
+    ),
+  resendMethodChangeStepUp: async (challengeId: string) =>
+    parseChallenge(
+      await apiFetch<unknown>("/auth/step-up/resend", {
+        method: "POST",
+        body: json({ challengeId }),
+      }),
+      stepUpMethodChangeScope,
     ),
   resendStepUp: async (challengeId: string) =>
     parseChallenge(

@@ -9,3 +9,5 @@ export * from "./twoFactorSecurity";
 export * from "./useTwoFactorSecurity";
 export * from "./stepUpSecurity";
 export * from "./useStepUpSecurity";
+export * from "./twoFactorMethodChange";
+export * from "./useTwoFactorMethodChange";

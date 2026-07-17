@@ -129,12 +129,17 @@ Legenda:
 | ------------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `/perfil/seguranca` | `src/routes/perfil.seguranca.tsx` | Central real de segurança com sessões, dispositivos, senha, telefone, e-mail e 2FA: status real, ativação EMAIL/SMS, exibição única de recovery codes `XXXXX-XXXXX-XXXXX`, desativação e revogação segura de sessões. |
 
-Step-up, troca de método 2FA e regeneração de recovery codes não foram adicionados nesta rota.
+Naquela sprint, step-up, troca de método 2FA e regeneração de recovery codes ainda não tinham sido adicionados nesta rota; no estado atual, a rota integra step-up, regeneração e troca EMAIL/SMS sem fallback para mock.
 
 ## Sprint 2C2B2B2B1 — step-up recovery regeneration
+
 - Frontend integrates real step-up endpoints for `TWO_FACTOR_RECOVERY_REGENERATE`: `POST /auth/step-up/request`, `POST /auth/step-up/verify`, `POST /auth/step-up/resend`, and `POST /auth/2fa/recovery/regenerate`.
 - Recovery-code regeneration confirms by six-digit 2FA code or a normalized 5-5-5 recovery code; the recovery confirmation code is sent only in the verify payload.
-- The opaque `stepUpToken` is validated defensively, kept only in the local Promise scope, and immediately sent as `X-Step-Up-Token` to regenerate recovery codes.
+- O grant opaco de step-up é validado defensivamente, mantido apenas no escopo local da Promise e enviado imediatamente como `X-Step-Up-Token` para regenerar recovery codes.
 - Regeneration expects exactly 10 unique uppercase 5-5-5 codes, treats malformed responses as `MALFORMED_RESPONSE`, warns that old codes may have been invalidated, and reconciles status/sessions without logging out.
 - Successful regeneration invalidates old recovery codes and visually refreshes the real sessions list while preserving the current session; new codes are shown once in an exclusive screen.
-- 2FA method change remains pending for Sprint 2C2B2B2B2; no method-change UI was added.
+- Naquele momento, a troca de método 2FA ainda estava pendente para a Sprint 2C2B2B2B2; o estado atual está documentado na seção da Sprint 2C2B2B2B2.
+
+### Sprint 2C2B2B2B2 — `/perfil/seguranca`
+
+A rota `/perfil/seguranca` agora expõe a troca segura de método 2FA apenas quando `GET /auth/2fa/status` indica 2FA ativo. O fluxo usa step-up `TWO_FACTOR_METHOD_CHANGE`, chama `POST /auth/2fa/method/change/request` e `POST /auth/2fa/method/change/confirm`, bloqueia desativação/regeneração durante a troca e reconcilia status e sessões reais ao final.
