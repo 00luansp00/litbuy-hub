@@ -7,7 +7,6 @@ import {
   buildStepUpVerifyPayload,
   friendlyAuthError,
   normalizeRecoveryCode,
-  recoveryCodePattern,
   useTwoFactorMethodChange,
   type TwoFactorMethod,
   type TwoFactorStatus,
@@ -54,8 +53,10 @@ export function TwoFactorMethodChange({
   const [newMethod, setNewMethod] = useState<TwoFactorMethod>("EMAIL");
   const [changeChallenge, setChangeChallenge] = useState<ChangeChallenge | null>(null);
   const [changeCode, setChangeCode] = useState("");
-  const [message, setMessage] = useState("");
+  const [criticalWarning, setCriticalWarning] = useState("");
   const [reconciliationError, setReconciliationError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+  const [reconciling, setReconciling] = useState(false);
   const methods = nextMethods(status.method ?? "EMAIL", smsAvailable);
   const busy =
     disabled ||
@@ -63,7 +64,8 @@ export function TwoFactorMethodChange({
     actions.verifyPending ||
     actions.resendPending ||
     actions.changePending ||
-    actions.confirmPending;
+    actions.confirmPending ||
+    reconciling;
   const exclusive = step !== "idle";
 
   useEffect(() => {
@@ -83,7 +85,15 @@ export function TwoFactorMethodChange({
     if (methods[0] && !methods.includes(newMethod)) setNewMethod(methods[0]);
   }, [methods, newMethod]);
 
-  const fail = (error: unknown) => setMessage(friendlyAuthError(error).message);
+  const clearMessages = () => {
+    setCriticalWarning("");
+    setReconciliationError("");
+    setSuccessMessage("");
+  };
+  const fail = (error: unknown) => {
+    setCriticalWarning(friendlyAuthError(error).message);
+    setSuccessMessage("");
+  };
   const cancel = () => {
     actions.clearGrant();
     setStep("idle");
@@ -94,24 +104,32 @@ export function TwoFactorMethodChange({
     setStepUpRecovery("");
     setChangeChallenge(null);
     setChangeCode("");
-    setMessage("");
-    setReconciliationError("");
+    clearMessages();
   };
   const reconcile = async () => {
     setReconciliationError("");
+    setSuccessMessage("");
+    setReconciling(true);
     try {
       await onReconcile();
-      if (mountedRef.current) cancel();
+      if (mountedRef.current) {
+        cancel();
+        setSuccessMessage("Método de 2FA atualizado com segurança.");
+      }
+      return true;
     } catch (error) {
       if (mountedRef.current) setReconciliationError(friendlyAuthError(error).message);
+      return false;
+    } finally {
+      if (mountedRef.current) setReconciling(false);
     }
   };
 
   const requestStepUp = async (event: FormEvent) => {
     event.preventDefault();
     if (busy || !accepted) return;
-    if (!password) return setMessage("Informe a senha atual.");
-    setMessage("");
+    if (!password) return setCriticalWarning("Informe a senha atual.");
+    clearMessages();
     try {
       const challenge = await actions.requestStepUp(password);
       if (!mountedRef.current) return;
@@ -124,7 +142,7 @@ export function TwoFactorMethodChange({
   };
   const resendStepUp = async () => {
     if (busy || !stepUpChallenge) return;
-    setMessage("");
+    clearMessages();
     try {
       const challenge = await actions.resendStepUp(stepUpChallenge.challengeId);
       if (!mountedRef.current) return;
@@ -138,7 +156,7 @@ export function TwoFactorMethodChange({
   const verifyStepUp = async (event: FormEvent) => {
     event.preventDefault();
     if (busy || !stepUpChallenge) return;
-    setMessage("");
+    clearMessages();
     try {
       const payload = buildStepUpVerifyPayload(
         stepUpChallenge.challengeId,
@@ -171,8 +189,9 @@ export function TwoFactorMethodChange({
   const requestChange = async (event: FormEvent) => {
     event.preventDefault();
     if (busy || methods.length === 0) return;
-    if (newMethod === status.method) return setMessage("Escolha um método diferente do atual.");
-    setMessage("");
+    if (newMethod === status.method)
+      return setCriticalWarning("Escolha um método diferente do atual.");
+    clearMessages();
     try {
       const challenge = await actions.requestMethodChange({ newMethod });
       if (!mountedRef.current) return;
@@ -196,8 +215,8 @@ export function TwoFactorMethodChange({
   const confirmChange = async (event: FormEvent) => {
     event.preventDefault();
     if (busy || !changeChallenge) return;
-    if (!/^\d{6}$/.test(changeCode)) return setMessage("Informe o código de seis dígitos.");
-    setMessage("");
+    if (!/^\d{6}$/.test(changeCode)) return setCriticalWarning("Informe o código de seis dígitos.");
+    clearMessages();
     try {
       await actions.confirmMethodChange({
         challengeId: changeChallenge.challengeId,
@@ -207,7 +226,6 @@ export function TwoFactorMethodChange({
       setChangeChallenge(null);
       setChangeCode("");
       await reconcile();
-      setMessage("Método de 2FA atualizado com segurança.");
     } catch (error) {
       if (!mountedRef.current) return;
       if (error instanceof ApiError && error.code === "TWO_FACTOR_METHOD_CHANGE_OUTCOME_UNKNOWN") {
@@ -215,10 +233,11 @@ export function TwoFactorMethodChange({
         setChangeChallenge(null);
         setChangeCode("");
         setStep("unknown");
-        setMessage(
+        setCriticalWarning(
           "A troca pode ter sido aplicada. Vamos consultar o status real antes de liberar ações.",
         );
-        await reconcile();
+        const reconciled = await reconcile();
+        if (!reconciled && mountedRef.current) setStep("unknown");
         return;
       }
       fail(error);
@@ -247,14 +266,26 @@ export function TwoFactorMethodChange({
       <div className="space-y-1">
         <h3 className="font-semibold">Trocar método de 2FA</h3>
         <p className="text-sm text-muted-foreground">
-          Use step-up com escopo TWO_FACTOR_METHOD_CHANGE. O grant opaco fica apenas em memória
-          local transitória.
+          Confirme sua identidade, escolha o novo método disponível e valide o código enviado.
         </p>
       </div>
-      {(message || reconciliationError) && (
-        <p role="alert" className="text-sm text-destructive">
-          {reconciliationError || message}
+      {criticalWarning && (
+        <p role="alert" className="text-sm text-amber-600">
+          {criticalWarning}
         </p>
+      )}
+      {reconciliationError && (
+        <p role="alert" className="text-sm text-destructive">
+          {reconciliationError}
+        </p>
+      )}
+      {successMessage && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {successMessage}
+        </p>
+      )}
+      {reconciling && (
+        <p className="text-sm text-muted-foreground">Atualizando status e sessões reais...</p>
       )}
       {step === "idle" && (
         <div className="space-y-3">
@@ -316,8 +347,7 @@ export function TwoFactorMethodChange({
             />
           </div>
           <p className="text-xs text-muted-foreground">
-            Use código de seis dígitos ou recovery code no formato{" "}
-            {recoveryCodePattern.source.replace(/\\/g, "")}.
+            Use um código de seis dígitos ou um recovery code completo.
           </p>
           <Button type="submit" disabled={busy}>
             {actions.verifyPending ? "Confirmando..." : "Confirmar step-up"}

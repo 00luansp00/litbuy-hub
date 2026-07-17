@@ -353,7 +353,7 @@ export function TwoFactorSecuritySection({ smsAvailable }: { smsAvailable: boole
         {reconcilingStatus && (
           <p className="text-sm text-muted-foreground">Verificando o status real do 2FA...</p>
         )}
-        {status.error && (
+        {status.error && !methodChangeExclusive && (
           <div role="alert" className="space-y-2 text-sm text-destructive">
             <p>{friendlyAuthError(status.error).message}</p>
             <Button type="button" variant="outline" onClick={() => void retryStatus()}>
@@ -451,15 +451,18 @@ export function TwoFactorSecuritySection({ smsAvailable }: { smsAvailable: boole
             </Button>
           </form>
         )}
-        {statusReady && status.data?.enabled && !regenerationExclusive && !disableChallenge && (
-          <TwoFactorMethodChange
-            status={status.data}
-            smsAvailable={smsAvailable}
-            disabled={ownTwoFactorBusy || showingRecoveryCodes || methodChangeExclusive}
-            onExclusiveChange={setMethodChangeExclusive}
-            onReconcile={stepUpActions.reconcileStepUpRelatedData}
-          />
-        )}
+        {(statusReady || methodChangeExclusive) &&
+          status.data?.enabled &&
+          !regenerationExclusive &&
+          !disableChallenge && (
+            <TwoFactorMethodChange
+              status={status.data}
+              smsAvailable={smsAvailable}
+              disabled={ownTwoFactorBusy || showingRecoveryCodes}
+              onExclusiveChange={setMethodChangeExclusive}
+              onReconcile={stepUpActions.reconcileStepUpRelatedData}
+            />
+          )}
         {canShowRecoveryRegeneration && (
           <RecoveryCodeRegeneration
             disabled={ownTwoFactorBusy || showingRecoveryCodes || methodChangeExclusive}

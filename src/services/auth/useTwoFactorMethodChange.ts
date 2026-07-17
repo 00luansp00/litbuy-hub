@@ -70,6 +70,10 @@ export function useTwoFactorMethodChange() {
     setVerifyPending(true);
     try {
       const grant = await stepUpSecurityService.verifyMethodChangeStepUp(payload);
+      if (!mountedRef.current) {
+        clearGrant();
+        return grant;
+      }
       stepUpTokenRef.current = grant.stepUpToken;
       return grant;
     } finally {

@@ -19,7 +19,7 @@ Object.defineProperty(globalThis, "fetch", { value: fetchMock, writable: true })
 
 const challenge = {
   challengeId: "123e4567-e89b-42d3-8456-426614174000",
-  expiresAt: "2026-07-16T12:00:00.000Z",
+  expiresAt: "2027-07-16T12:00:00.000Z",
   message: "sent",
 };
 const recoveryCodes = [

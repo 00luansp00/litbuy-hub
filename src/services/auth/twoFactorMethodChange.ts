@@ -31,7 +31,7 @@ export function parseMethodChangeChallenge(value: unknown): TwoFactorMethodChang
   const body = asRecord(value);
   exactKeys(body, ["challengeId", "expiresAt"]);
   if (typeof body.challengeId !== "string" || !uuidV4.test(body.challengeId)) malformed();
-  if (!validDateString(body.expiresAt)) malformed();
+  if (!validDateString(body.expiresAt, true)) malformed();
   return { challengeId: body.challengeId, expiresAt: body.expiresAt };
 }
 export function parseMethodChangeConfirmResponse(
@@ -48,8 +48,8 @@ function withStepUpToken(stepUpToken: string) {
 }
 function isAmbiguousConfirmFailure(error: unknown): boolean {
   if (!(error instanceof ApiError)) return true;
-  if (error.code === "MALFORMED_RESPONSE") return true;
-  return error.code === "HTTP_ERROR" && error.status >= 500;
+  if (error.code === "MALFORMED_RESPONSE" || error.code === "NETWORK_ERROR") return true;
+  return error.status >= 500;
 }
 export function unknownMethodChangeOutcome(error: unknown): ApiError {
   return new ApiError(

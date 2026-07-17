@@ -47,7 +47,7 @@ function parseChallenge(
   if (typeof body.challengeId !== "string" || !uuidV4.test(body.challengeId)) malformed();
   if (body.scope !== expectedScope) malformed();
   if (body.method !== "EMAIL" && body.method !== "SMS") malformed();
-  if (!validDateString(body.expiresAt)) malformed();
+  if (!validDateString(body.expiresAt, true)) malformed();
   return {
     challengeId: body.challengeId,
     scope: expectedScope,
