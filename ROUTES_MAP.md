@@ -9,11 +9,11 @@ Legenda:
 - **Auth**: público / usuário / vendedor / admin.
 - **Gate**: componente que protege visualmente (nenhuma proteção real).
 - **Service**: service principal consumido.
-- **Backend futuro**: o que precisará ser criado.
+- **Backend / situação**: o que precisará ser criado.
 
 ## 1. Rotas públicas
 
-| Rota                     | Finalidade             | Auth    | Gate | Service                  | Backend futuro                          |
+| Rota                     | Finalidade             | Auth    | Gate | Service                  | Backend / situação                      |
 | ------------------------ | ---------------------- | ------- | ---- | ------------------------ | --------------------------------------- |
 | `/`                      | Home / landing         | público | —    | product, category        | listagem paginada + destaques + SEO SSR |
 | `/buscar`                | Busca de produtos      | público | —    | searchService            | busca full-text, ranking, filtros       |
@@ -42,7 +42,7 @@ Legenda:
 
 ## 2. Rotas do usuário / comprador
 
-| Rota                   | Finalidade               | Auth | Gate     | Service                           | Backend futuro           |
+| Rota                   | Finalidade               | Auth | Gate     | Service                           | Backend / situação       |
 | ---------------------- | ------------------------ | ---- | -------- | --------------------------------- | ------------------------ |
 | `/perfil`              | Painel do usuário        | user | AuthGate | accountService                    | Perfil real              |
 | `/perfil/verificacao`  | KYC visual               | user | AuthGate | verificationService               | KYC (Idwall/Unico/Jumio) |
@@ -60,7 +60,7 @@ Legenda:
 
 ## 3. Rotas do vendedor
 
-| Rota                      | Finalidade          | Auth   | Gate     | Service                            | Backend futuro            |
+| Rota                      | Finalidade          | Auth   | Gate     | Service                            | Backend / situação        |
 | ------------------------- | ------------------- | ------ | -------- | ---------------------------------- | ------------------------- |
 | `/vendedor`               | Dashboard vendedor  | seller | AuthGate | sellerDashboardService             | Métricas reais            |
 | `/vendedor/anuncios`      | Meus anúncios       | seller | AuthGate | sellerService, listingDraftService | CRUD + aprovação          |
@@ -75,7 +75,7 @@ Legenda:
 
 **`/admin/denuncias` é oficial** — não usar `/admin/reclamacoes`.
 
-| Rota                   | Finalidade            | Auth  | Gate      | Service                                | Backend futuro             |
+| Rota                   | Finalidade            | Auth  | Gate      | Service                                | Backend / situação         |
 | ---------------------- | --------------------- | ----- | --------- | -------------------------------------- | -------------------------- |
 | `/admin`               | Dashboard admin       | admin | AdminGate | adminService                           | Métricas                   |
 | `/admin/usuarios`      | Usuários              | admin | AdminGate | adminService                           | Search + audit             |

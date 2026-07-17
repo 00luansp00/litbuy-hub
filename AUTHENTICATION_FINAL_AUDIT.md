@@ -1,6 +1,6 @@
 # AUTHENTICATION_FINAL_AUDIT.md — auditoria final de autenticação LIT Buy
 
-Data da auditoria: 2026-07-17. Branch: `codex/authentication-final-audit-handoff`. Base local auditada: `b38c95ad32b31b835f2a798c12b7b283bee3de11`, contendo os merges dos PRs #13, #14 e #15 no histórico local.
+Data da auditoria: 2026-07-17. Base local auditada: `b38c95ad32b31b835f2a798c12b7b283bee3de11`, contendo os merges dos PRs #13, #14 e #15.
 
 ## 1. Resumo executivo
 

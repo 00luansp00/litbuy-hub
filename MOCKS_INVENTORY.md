@@ -27,7 +27,7 @@ Criticidade: **baixa / média / alta / crítica**.
 
 ## 2. Marketplace
 
-| Item                       | Criticidade | Backend futuro                 |
+| Item                       | Criticidade | Necessidade real               |
 | -------------------------- | ----------- | ------------------------------ |
 | Produtos                   | alta        | Tabela `products` + validação  |
 | Categorias / subcategorias | média       | CMS admin                      |
@@ -40,7 +40,7 @@ Criticidade: **baixa / média / alta / crítica**.
 
 ## 3. Carrinho / Checkout
 
-| Item         | Criticidade | Backend futuro                      |
+| Item         | Criticidade | Necessidade real                    |
 | ------------ | ----------- | ----------------------------------- |
 | Carrinho     | crítica     | Cart server-side, preço recalculado |
 | Cupom        | alta        | Ledger de cupons + antifraude       |
@@ -53,7 +53,7 @@ Criticidade: **baixa / média / alta / crítica**.
 
 ## 4. Pedidos
 
-| Item                       | Criticidade | Backend futuro             |
+| Item                       | Criticidade | Necessidade real           |
 | -------------------------- | ----------- | -------------------------- |
 | Pedido                     | crítica     | `orders` + auditoria       |
 | Timeline                   | alta        | Máquina de estados         |
@@ -66,7 +66,7 @@ Criticidade: **baixa / média / alta / crítica**.
 
 ## 5. Vendedor
 
-| Item         | Criticidade | Backend futuro      |
+| Item         | Criticidade | Necessidade real    |
 | ------------ | ----------- | ------------------- |
 | Anúncios     | alta        | CRUD + aprovação    |
 | Vendas       | crítica     | Escrow              |
@@ -78,7 +78,7 @@ Criticidade: **baixa / média / alta / crítica**.
 
 ## 6. Admin
 
-| Item          | Criticidade | Backend futuro   |
+| Item          | Criticidade | Necessidade real |
 | ------------- | ----------- | ---------------- |
 | Usuários      | crítica     | RBAC + audit     |
 | Permissões    | crítica     | RBAC + RLS       |
@@ -91,7 +91,7 @@ Criticidade: **baixa / média / alta / crítica**.
 
 ## 7. Segurança
 
-| Item                | Criticidade | Backend futuro              |
+| Item                | Criticidade | Necessidade real            |
 | ------------------- | ----------- | --------------------------- |
 | KYC                 | crítica     | Idwall / Unico / Jumio      |
 | SMS                 | crítica     | Twilio / Zenvia             |
@@ -104,7 +104,7 @@ Criticidade: **baixa / média / alta / crítica**.
 
 ## 8. Afiliados
 
-| Item             | Criticidade | Backend futuro          |
+| Item             | Criticidade | Necessidade real        |
 | ---------------- | ----------- | ----------------------- |
 | Link de afiliado | alta        | Tracking real           |
 | Tracking         | crítica     | Atribuição + antifraude |
@@ -114,7 +114,7 @@ Criticidade: **baixa / média / alta / crítica**.
 
 ## 9. Notificações / e-mails
 
-| Item                      | Criticidade | Backend futuro          |
+| Item                      | Criticidade | Necessidade real        |
 | ------------------------- | ----------- | ----------------------- |
 | notificationService       | alta        | Fila + push + realtime  |
 | transactionalEmailService | alta        | Provedor real           |
@@ -124,7 +124,7 @@ Criticidade: **baixa / média / alta / crítica**.
 
 ## 10. Páginas públicas
 
-| Item                   | Criticidade | Backend futuro         |
+| Item                   | Criticidade | Necessidade real       |
 | ---------------------- | ----------- | ---------------------- |
 | Conteúdo institucional | média       | CMS                    |
 | Termos                 | crítica     | Revisão jurídica       |

@@ -97,7 +97,7 @@ e consome dados fictícios de `src/data/`.
 - i18n (todo o texto está em pt-BR hardcoded).
 - Ampliar testes automatizados para domínios de marketplace.
 - Observabilidade / logs de produção.
-- CI/CD e proteção de branches (a ser configurado no GitHub).
+- CI já existe; deploy automatizado/CD e proteção de branches ainda precisam ser configurados ou revisados.
 
 ---
 
@@ -135,18 +135,15 @@ Menções antigas a auth terceirizada, funções de borda ou storage de forneced
 ## 6. Recomendação para GitHub / Cursor / desenvolvedor
 
 1. Fazer o push inicial preservando a estrutura atual.
-2. Habilitar Lovable Cloud e criar as migrations (products, sellers,
-   categories, reviews, orders, order_items, favorites, messages,
-   coupons, user_roles, disputes, reports) com GRANTs + RLS.
+2. Criar migrations Prisma para novos domínios (products, sellers, categories, reviews, orders, order_items, favorites, messages, coupons, user_roles, disputes, reports).
 3. Substituir cada `*Service` mockado por consultas reais, mantendo a
    assinatura pública para não quebrar as páginas.
 4. Manter `AuthProvider` integrado ao backend real NestJS e criar
    integrações server-side reais quando necessário.
-5. Trocar `AdminGate` para checar `has_role` server-side além do
-   visual.
-6. Integrar gateway de pagamento e webhook em `/api/public/*`.
+5. Implementar guards/RBAC e policies/checks server-side no NestJS para admin, seller e marketplace.
+6. Integrar gateway de pagamento, endpoints e webhooks dentro da API `/api/v1`.
 7. Ligar storage S3-compatible futuro no `ImageUploader` e no wizard de anúncio.
-8. Adicionar testes e CI.
+8. Adicionar testes e ampliar os jobs de CI existentes para cada novo domínio.
 9. Remover `src/data/*` no final; `src/services/authMock.ts` já foi removido no bloco de autenticação real.
 
 Documentos de apoio: `ARCHITECTURE.md`, `PROJECT_RULES.md`,
