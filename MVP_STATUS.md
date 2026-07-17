@@ -49,7 +49,7 @@ e consome dados fictícios de `src/data/`.
 
 ### Arquitetura
 
-- TanStack Start + file-based routing.
+- Vite + TanStack Router com file-based routing.
 - Services intermediando páginas e mocks (`src/services/*`).
 - Tipos centralizados em `src/types/index.ts`.
 - Providers globais em `src/providers/` (`AuthProvider`, `CartProvider`).
@@ -59,29 +59,29 @@ e consome dados fictícios de `src/data/`.
 
 ## 2. O que está mockado (precisa virar real depois)
 
-| Área                | Estado atual                                 | Precisa de                                                       |
-| ------------------- | -------------------------------------------- | ---------------------------------------------------------------- |
-| Autenticação        | `authMock.ts` in-memory                      | Supabase Auth (email/senha, Google, Apple)                       |
-| Sessão              | Não persiste; some no F5                     | Supabase session + middleware SSR                                |
-| Roles / admin       | Flag `isAdmin` no user mock                  | Tabela `user_roles` + `has_role()` + RLS                         |
-| Produtos            | `src/data/products.ts`                       | Tabela `products` + Data API                                     |
-| Vendedores          | `src/data/sellers.ts`                        | Tabela `sellers`                                                 |
-| Categorias          | `src/data/categories.ts`                     | Tabela `categories`                                              |
-| Reviews             | `reviewService` mock                         | Tabela `reviews`                                                 |
-| Carrinho            | `CartProvider` em memória (sem localStorage) | Persistir server-side por usuário                                |
-| Cupom               | Regra fictícia em `cartService`              | Tabela `coupons` + validação backend                             |
-| Checkout / pedido   | `checkoutService.createOrder` gera id fake   | Integração com gateway + tabela `orders`                         |
-| Pagamento           | Seleção visual apenas                        | Stripe/Paddle (edge function)                                    |
-| Carteira            | Saldo mockado                                | Ledger real com movimentações                                    |
-| Upload de imagem    | `ImageUploader` só usa File API              | Supabase Storage                                                 |
-| Publicar anúncio    | Wizard visual sem persistência               | INSERT em `products` + storage                                   |
-| Mensagens           | Conversas fixas em mock                      | Tabela `messages` + realtime                                     |
-| Favoritos           | Estático (não persiste)                      | Tabela `favorites`                                               |
-| Pedidos             | Lista fixa                                   | Tabela `orders` filtrada por `user_id`                           |
-| Admin actions       | Só toast                                     | Server functions com `requireSupabaseAuth` + `has_role('admin')` |
-| Disputas            | Estado visual                                | Tabela `disputes` + workflow                                     |
-| Denúncias           | Estado visual                                | Tabela `reports`                                                 |
-| SEO leaf `og:image` | Placeholders                                 | Imagens hero reais                                               |
+| Área                | Estado atual                                      | Precisa de                               |
+| ------------------- | ------------------------------------------------- | ---------------------------------------- |
+| Autenticação        | Real no escopo de `AUTHENTICATION_FINAL_AUDIT.md` | Staging/hardening/providers reais        |
+| Sessão              | Real no escopo de auth documentado                | Homologação staging/browser real         |
+| Roles / admin       | Flag `isAdmin` no user mock                       | Tabela `user_roles` + `has_role()` + RLS |
+| Produtos            | `src/data/products.ts`                            | Tabela `products` + Data API             |
+| Vendedores          | `src/data/sellers.ts`                             | Tabela `sellers`                         |
+| Categorias          | `src/data/categories.ts`                          | Tabela `categories`                      |
+| Reviews             | `reviewService` mock                              | Tabela `reviews`                         |
+| Carrinho            | `CartProvider` em memória (sem localStorage)      | Persistir server-side por usuário        |
+| Cupom               | Regra fictícia em `cartService`                   | Tabela `coupons` + validação backend     |
+| Checkout / pedido   | `checkoutService.createOrder` gera id fake        | Integração com gateway + tabela `orders` |
+| Pagamento           | Seleção visual apenas                             | Stripe/Paddle (edge function)            |
+| Carteira            | Saldo mockado                                     | Ledger real com movimentações            |
+| Upload de imagem    | `ImageUploader` só usa File API                   | Supabase Storage                         |
+| Publicar anúncio    | Wizard visual sem persistência                    | INSERT em `products` + storage           |
+| Mensagens           | Conversas fixas em mock                           | Tabela `messages` + realtime             |
+| Favoritos           | Estático (não persiste)                           | Tabela `favorites`                       |
+| Pedidos             | Lista fixa                                        | Tabela `orders` filtrada por `user_id`   |
+| Admin actions       | Só toast                                          | Endpoints server-side com RBAC real      |
+| Disputas            | Estado visual                                     | Tabela `disputes` + workflow             |
+| Denúncias           | Estado visual                                     | Tabela `reports`                         |
+| SEO leaf `og:image` | Placeholders                                      | Imagens hero reais                       |
 
 ---
 
@@ -107,9 +107,7 @@ Estas áreas foram construídas apenas visualmente e **precisam ser
 reimplementadas com cuidado** antes de qualquer produção:
 
 1. **Autenticação e sessão** — nada em `authMock.ts` deve sobreviver ao
-   `git switch` para o backend real. Migrar para Supabase Auth e
-   substituir `AuthProvider` mantendo a mesma API pública (`user`,
-   `activeRole`, `switchToBuyer`, `switchToSeller`, `isAdmin`, `logout`).
+   `git switch` para o backend real. Plano histórico de migrar para auth terceirizada foi descontinuado; manter a arquitetura real NestJS/PostgreSQL/Redis e a API pública do `AuthProvider` (`user`, `activeRole`, `switchToBuyer`, `switchToSeller`, `isAdmin`, `logout`).
 2. **RBAC do admin** — `AdminGate` é UI. A proteção real precisa vir de
    `has_role(auth.uid(), 'admin')` em RLS e em toda server function
    admin.
@@ -149,14 +147,14 @@ reimplementadas com cuidado** antes de qualquer produção:
    coupons, user_roles, disputes, reports) com GRANTs + RLS.
 3. Substituir cada `*Service` mockado por consultas reais, mantendo a
    assinatura pública para não quebrar as páginas.
-4. Migrar `AuthProvider` para Supabase Auth e criar
-   `attachSupabaseAuth` no `src/start.ts`.
+4. Manter `AuthProvider` integrado ao backend real NestJS e criar
+   integrações server-side reais quando necessário.
 5. Trocar `AdminGate` para checar `has_role` server-side além do
    visual.
 6. Integrar gateway de pagamento e webhook em `/api/public/*`.
 7. Ligar Supabase Storage no `ImageUploader` e no wizard de anúncio.
 8. Adicionar testes e CI.
-9. Remover `src/data/*` e `src/services/authMock.ts` no final.
+9. Remover `src/data/*` no final; `src/services/authMock.ts` já foi removido no bloco de autenticação real.
 
 Documentos de apoio: `ARCHITECTURE.md`, `PROJECT_RULES.md`,
 `ROUTE_AUDIT.md`, `QA_CHECKLIST.md`, `DATABASE_SCHEMA.md`,

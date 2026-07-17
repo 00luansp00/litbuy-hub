@@ -1,20 +1,31 @@
 # BACKEND_ROADMAP.md — LIT Buy
 
-Roadmap recomendado para transformar o MVP visual em produto real.
-Stack assumida: **Supabase** (Postgres + Auth + Storage + Realtime +
-Edge Functions), TanStack Start como frontend.
+Roadmap recomendado para transformar o MVP visual em produto real, considerando a arquitetura real atual.
 
-## Fase 1 — Fundação técnica (dev experiente obrigatório)
+## Stack atual autoritativa
 
-- Escolher backend (Supabase recomendado — ver `SUPABASE_RLS_PLAN.md`).
-- Configurar banco Postgres + migrations.
-- Autenticação: Supabase Auth (e-mail + OAuth futuro).
-- Modelo `users` + `profiles`.
-- Papéis (roles) em tabela separada + `has_role()` security definer.
-- **RLS obrigatório** em todas as tabelas públicas.
-- Logs de auditoria (`audit_logs` append-only).
-- Storage buckets (produtos, KYC, evidências, cofre).
-- Variáveis de ambiente + secrets (LOVABLE_API_KEY, gateway keys).
+- Frontend React + TypeScript + Vite.
+- Backend NestJS.
+- PostgreSQL + Prisma.
+- Redis.
+- API REST `/api/v1`.
+- Arquitetura modular monolith.
+- Storage S3-compatible futuro conforme domínio.
+- Sem dependência obrigatória de Supabase.
+
+A fundação real de autenticação já existe em NestJS/PostgreSQL/Redis e está documentada em `AUTHENTICATION_FINAL_AUDIT.md`; não tratar escolha de backend ou implementação de auth terceirizada como trabalho futuro de autenticação.
+
+## Fase 1 — Fundação técnica remanescente (dev experiente obrigatório)
+
+- Completar RBAC/autorização server-side para marketplace, vendedor e admin.
+- Definir políticas server-side equivalentes a RLS/checks por domínio sensível.
+- Consolidar logs de auditoria append-only para eventos financeiros, seller/admin e moderação.
+- Definir storage S3-compatible para produtos, KYC, evidências e cofre conforme cada domínio entrar no escopo.
+- Consolidar variáveis de ambiente e secrets por ambiente.
+
+## Plano histórico descontinuado / não autoritativo
+
+As versões iniciais deste roadmap assumiam Supabase, auth gerenciada e Edge Functions. Esse plano é histórico e não é autoritativo para a arquitetura atual, que usa backend NestJS, PostgreSQL/Prisma, Redis e API REST `/api/v1`.
 
 ## Fase 2 — Catálogo
 
@@ -85,7 +96,7 @@ Edge Functions), TanStack Start como frontend.
 ## Fase 9 — Produção
 
 - Deploy frontend (Cloudflare Pages / Vercel / Netlify).
-- Backend gerenciado (Supabase Cloud).
+- Backend gerenciado para a API NestJS atual (provedor a definir sem dependência obrigatória de Supabase).
 - Monitoramento (Sentry / Logtail / Better Stack).
 - Logs centralizados + retenção.
 - Backups automatizados + testes de restore.
@@ -97,7 +108,7 @@ Edge Functions), TanStack Start como frontend.
 
 ## Fases críticas (exigem dev sênior + revisão externa)
 
-- Fase 1 (fundação, RLS).
+- Fundação de autorização/RBAC, auditoria e políticas server-side para domínios de marketplace.
 - Fase 5 (pagamentos, escrow, PCI).
 - Fase 6 (mediação, antifraude, KYC).
 - Fase 9 (LGPD, jurídico, deploy).
@@ -107,4 +118,4 @@ plataforma a fraude financeira, vazamento de dados e sanções jurídicas.
 
 ## Atualização — autenticação real auditada (2026-07-17)
 
-A fundação de autenticação NestJS/PostgreSQL/Redis para cadastro, sessão, dispositivo, senha, e-mail, telefone, 2FA, step-up e recovery codes foi auditada e documentada em `AUTHENTICATION_FINAL_AUDIT.md`. Antes de avançar para pagamentos, seller/admin, wallet ou KYC, executar CI/staging e hardening operacional de auth.
+A fundação de autenticação NestJS/PostgreSQL/Redis para cadastro, sessão, dispositivo, senha, e-mail, telefone, 2FA, step-up e recovery codes foi auditada e documentada em `AUTHENTICATION_FINAL_AUDIT.md`. Antes de avançar para pagamentos, seller/admin, wallet ou KYC, executar staging, homologação e hardening operacional de auth.

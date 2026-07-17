@@ -191,4 +191,4 @@ O lint raiz legado (`eslint .`) ainda varre todo o monorepo, incluindo backend e
 
 ## Atualização — riscos remanescentes de autenticação (2026-07-17)
 
-A dívida de "auth mockado" foi encerrada para o bloco coberto por `AUTHENTICATION_FINAL_AUDIT.md`. Riscos remanescentes: homologação em staging, CI completo, provedores reais de e-mail/SMS, hardening de cookies em produção, rate limits sob tráfego real, observabilidade segura, LGPD e pentest externo.
+A dívida de "auth mockado" foi encerrada para o bloco coberto por `AUTHENTICATION_FINAL_AUDIT.md`. Riscos remanescentes: staging/homologação, provedores reais de e-mail/SMS, cookies de produção, observabilidade, rate limit sob tráfego real, LGPD e pentest.

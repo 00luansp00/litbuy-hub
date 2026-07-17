@@ -5,14 +5,14 @@ Criticidade: **baixa / média / alta / crítica**.
 
 ## 1. Autenticação
 
-| Item                            | Criticidade | Backend futuro                  |
-| ------------------------------- | ----------- | ------------------------------- |
-| Login                           | crítica     | Auth real (Supabase Auth)       |
-| Cadastro                        | crítica     | Verificação de e-mail + captcha |
-| Recuperação de senha            | crítica     | Token seguro + expiração        |
-| Admin                           | crítica     | RBAC + RLS                      |
-| activeRole (buyer/seller)       | média       | Sessão + claims                 |
-| Verificação de novo dispositivo | alta        | Device fingerprint + código     |
+| Item                            | Criticidade | Backend futuro                    |
+| ------------------------------- | ----------- | --------------------------------- |
+| Login                           | crítica     | Auth real NestJS/PostgreSQL/Redis |
+| Cadastro                        | crítica     | Verificação de e-mail + captcha   |
+| Recuperação de senha            | crítica     | Token seguro + expiração          |
+| Admin                           | crítica     | RBAC + RLS                        |
+| activeRole (buyer/seller)       | média       | Sessão + claims                   |
+| Verificação de novo dispositivo | alta        | Device fingerprint + código       |
 
 ## 2. Marketplace
 

@@ -37,9 +37,9 @@ Funcionalidades presentes visualmente:
 ## 2. Estado atual
 
 - Frontend avançado, MVP visual/mockado.
-- **Sem backend real.**
-- **Sem banco de dados.**
-- **Sem autenticação real** (login demo em memória).
+- Backend NestJS/PostgreSQL/Redis real existe para autenticação conforme `AUTHENTICATION_FINAL_AUDIT.md`.
+- Banco real existe para autenticação; domínios de marketplace ainda dependem de modelagem/persistência própria.
+- Autenticação real existe para cadastro, login, sessão, dispositivos, senha, e-mail, telefone, 2FA, step-up e recovery codes.
 - **Sem pagamento real** (Pix/boleto/cartão gerados como mock).
 - **Sem persistência** (nada em LocalStorage/Cookies).
 - Pronto para iniciar a fase backend (ver `BACKEND_ROADMAP.md`).
@@ -47,7 +47,7 @@ Funcionalidades presentes visualmente:
 ## 3. Stack
 
 - **React 19** + **TypeScript** (strict).
-- **Vite 7** + **TanStack Start / Router** (file-based).
+- **Vite** + **TanStack Router** (file-based).
 - **Tailwind v4** + **shadcn/ui** (Radix).
 - **Framer Motion** para animações leves.
 - **Lucide Icons** para iconografia.
@@ -73,16 +73,13 @@ bunx tsgo --noEmit # typecheck (sem script dedicado)
 bun run format     # Prettier
 ```
 
-## 5. Login demo
+## 5. Autenticação real e papéis visuais
 
-Autenticação é **mockada em memória** (`AuthProvider` + `authMock`).
+Autenticação não usa mais `authMock`: o bloco real está documentado em `AUTHENTICATION_FINAL_AUDIT.md`.
 
-- Qualquer e-mail/senha loga como usuário comum.
-- Para acessar o painel admin, use o e-mail **`admin@litbuy.com`**
-  (senha qualquer). O `AdminGate` é apenas visual.
-- Todo usuário comum pode **comprar e vender** — os papéis "comprador"
-  e "vendedor" são apenas contexto visual (`activeRole`).
-- Nenhum dado real é coletado ou persistido.
+- Cadastro, login, refresh, logout, senha, e-mail, telefone, dispositivos, sessões, 2FA, step-up e recovery codes usam a API NestJS `/api/v1`.
+- Papéis comprador/vendedor/admin no frontend continuam contexto visual quando `VITE_ENABLE_DEMO_ROLES=true`; autorização real de marketplace ainda precisa ser server-side.
+- Não inserir dados reais em domínios de marketplace ainda mockados, como pagamentos, pedidos, seller/admin, KYC e wallet.
 
 ## 6. Regra principal
 
@@ -100,23 +97,20 @@ Ordem sugerida:
 
 1. Revisar o projeto no **Cursor** (ou IDE preferida).
 2. Subir para o **GitHub**.
-3. Definir backend (assumido: **Supabase** — ver `SUPABASE_RLS_PLAN.md`
-   e `DATABASE_SCHEMA.md`).
-4. Implementar banco conforme `DATABASE_IMPLEMENTATION_NOTES.md`.
-5. Implementar **autenticação real** (Supabase Auth + verificação de
-   e-mail + 2FA).
-6. Implementar **RBAC + RLS** (`SUPABASE_RLS_PLAN.md`).
-7. Implementar catálogo real (produtos, categorias, imagens, aprovação).
-8. Implementar pedidos, chat, mediação real.
-9. Implementar **pagamento e escrow** (`PAYMENT_AND_ESCROW_IMPLEMENTATION_PLAN.md`)
+3. Usar a arquitetura real atual: frontend React/Vite, backend NestJS, PostgreSQL/Prisma, Redis e API REST `/api/v1`.
+4. Autenticação real já existe em NestJS/PostgreSQL/Redis para o bloco documentado em `AUTHENTICATION_FINAL_AUDIT.md`; não reabrir plano histórico de auth terceirizada.
+5. Implementar autorização/RBAC server-side para marketplace, vendedor e admin.
+6. Implementar catálogo real (produtos, categorias, imagens, aprovação).
+7. Implementar pedidos, chat, mediação real.
+8. Implementar **pagamento e escrow** (`PAYMENT_AND_ESCROW_IMPLEMENTATION_PLAN.md`)
    — parte mais crítica.
-10. Implementar wallet real, saques e KYC real.
-11. Implementar admin real com auditoria imutável.
-12. Implementar e-mails transacionais reais (Resend/SendGrid/SES).
-13. Reforçar segurança (`SECURITY_IMPLEMENTATION_PLAN.md`).
-14. Avaliar SSR/SSG para SEO das rotas públicas.
-15. Configurar monitoramento, backups, LGPD, termos jurídicos.
-16. **Deploy** (Cloudflare/Vercel/Netlify + Supabase managed).
+9. Implementar wallet real, saques e KYC real.
+10. Implementar admin real com auditoria imutável.
+11. Implementar e-mails transacionais reais (Resend/SendGrid/SES).
+12. Reforçar segurança (`SECURITY_IMPLEMENTATION_PLAN.md`).
+13. Avaliar SSR/SSG para SEO das rotas públicas.
+14. Configurar monitoramento, backups, LGPD, termos jurídicos.
+15. **Deploy** do frontend e backend NestJS em provedores definidos pelo time, sem dependência obrigatória de Supabase.
 
 ## Documentos relacionados
 

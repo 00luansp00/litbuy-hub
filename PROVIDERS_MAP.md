@@ -12,7 +12,7 @@ apenas em memória.
 - **Mock**: qualquer e-mail loga; `admin@litbuy.com` recebe papel admin.
 - **Limitações**: sem token, sem refresh, sem RBAC real, sem sessão
   persistida. Recarregar a página desloga.
-- **Substituição futura**: Supabase Auth (ou equivalente) com
+- **Estado atual**: autenticação real via backend NestJS/PostgreSQL/Redis, com
   verificação de e-mail, 2FA, roles server-side, tokens JWT httpOnly.
 - **Riscos**: `AuthGate`/`AdminGate` são apenas visuais. Qualquer
   proteção real precisa RLS/checks no backend.

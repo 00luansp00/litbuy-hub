@@ -9,15 +9,7 @@ autenticados usam `Authorization: Bearer <token>` (JWT). Endpoints
 
 ## Auth
 
-- `POST /auth/register` — body `{ email, password, name }`. Retorna
-  usuário + envio de e-mail de verificação. Rate-limit por IP.
-- `POST /auth/login` — body `{ email, password }`. Retorna sessão.
-- `POST /auth/logout` — invalida token.
-- `POST /auth/forgot-password` — body `{ email }`. Sempre 200
-  (não vaza existência).
-- `POST /auth/reset-password` — body `{ token, password }`.
-- `POST /auth/verify-email` — body `{ token }`.
-- `POST /auth/verify-device` — body `{ code }` para novo dispositivo.
+O contrato real de autenticação está documentado em `AUTHENTICATION_FINAL_AUDIT.md` e nos DTOs/controller do backend (`backend/src/auth/dto.ts` e `backend/src/auth/auth.controller.ts`). Os contratos abaixo dos demais domínios são propostas históricas e não representam APIs implementadas.
 
 ## Users / Profile
 

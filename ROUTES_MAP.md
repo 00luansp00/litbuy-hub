@@ -17,8 +17,8 @@ Legenda:
 | ------------------------ | ----------------------- | ------- | ---- | ------------------------- | --------------------------------------- |
 | `/`                      | Home / landing          | público | —    | product, category         | listagem paginada + destaques + SEO SSR |
 | `/buscar`                | Busca de produtos       | público | —    | searchService             | busca full-text, ranking, filtros       |
-| `/login`                 | Login demo              | público | —    | authMock                  | Auth real                               |
-| `/cadastro`              | Cadastro demo           | público | —    | authMock                  | Auth real + verificação e-mail          |
+| `/login`                 | Login real              | público | —    | authService               | API NestJS `/auth/login`                |
+| `/cadastro`              | Cadastro real           | público | —    | authService               | API NestJS `/auth/register`             |
 | `/recuperar-senha`       | Solicitar reset         | público | —    | transactionalEmailService | Token seguro + e-mail                   |
 | `/redefinir-senha`       | Definir nova senha      | público | —    | transactionalEmailService | Validar token, expiração                |
 | `/verificar-email`       | Confirmação de e-mail   | público | —    | transactionalEmailService | Token de verificação                    |

@@ -8,7 +8,7 @@ A autenticação real do LIT Buy está integrada entre frontend React/TanStack e
 
 O frontend usa `src/lib/api/client.ts` como cliente único da API, mantém access token apenas em memória e envia cookies controlados pelo backend com `credentials: "include"`. O backend concentra controles de cookies, CSRF, refresh token rotation, revogação de sessão, guards, rate limits Redis, eventos de segurança e persistência PostgreSQL/Prisma no módulo de autenticação.
 
-Resultado: **AUDITORIA FINAL DE AUTENTICAÇÃO INCOMPLETA — AGUARDANDO CI E REVISÃO.** A documentação foi consolidada para handoff e a homologação final depende da execução completa do CI obrigatório em ambiente com serviços externos necessários.
+Resultado: **auditoria documental e técnica concluída para handoff do PR #17.** Os checks remotos Frontend validation, Backend validation e Backend integration passaram no PR #17. A homologação em staging segue pendente; produção ainda depende de providers reais de e-mail/SMS, hardening de cookies, revisão LGPD e pentest externo.
 
 ## 2. Fluxos reais concluídos
 
@@ -36,42 +36,42 @@ Resultado: **AUDITORIA FINAL DE AUTENTICAÇÃO INCOMPLETA — AGUARDANDO CI E RE
 
 Todos os endpoints frontend usam base `VITE_API_BASE_URL`, esperada como `/api/v1` no backend.
 
-| Método | Endpoint                        | Uso                                  |
-| ------ | ------------------------------- | ------------------------------------ |
-| POST   | `/auth/register`                | Cadastro                             |
-| POST   | `/auth/email/verify`            | Verificação de e-mail                |
-| POST   | `/auth/email/resend`            | Reenvio de verificação               |
-| POST   | `/auth/login`                   | Login                                |
-| POST   | `/auth/device/approve`          | Aprovação de dispositivo             |
-| POST   | `/auth/device/resend`           | Reenvio de aprovação                 |
-| POST   | `/auth/2fa/login/verify`        | Verificação 2FA no login             |
-| POST   | `/auth/2fa/login/resend`        | Reenvio 2FA no login                 |
-| POST   | `/auth/password/forgot`         | Solicitação de reset                 |
-| POST   | `/auth/password/reset`          | Redefinição de senha                 |
-| POST   | `/auth/refresh`                 | Refresh de access token              |
-| POST   | `/auth/logout`                  | Logout da sessão atual               |
-| GET    | `/auth/me`                      | Usuário autenticado                  |
-| GET    | `/auth/sessions`                | Sessões reais                        |
-| DELETE | `/auth/sessions/:sessionId`     | Revogar sessão                       |
-| POST   | `/auth/sessions/logout-all`     | Logout global                        |
-| GET    | `/auth/devices`                 | Dispositivos reais                   |
-| DELETE | `/auth/devices/:deviceId`       | Revogar dispositivo                  |
-| POST   | `/auth/password/change`         | Alteração de senha                   |
-| POST   | `/auth/email/change/request`    | Iniciar alteração segura de e-mail   |
-| POST   | `/auth/email/change/confirm`    | Confirmar alteração segura de e-mail |
-| POST   | `/auth/phone/request`           | Iniciar alteração segura de telefone |
-| POST   | `/auth/phone/verify`            | Confirmar telefone                   |
-| GET    | `/auth/2fa/status`              | Status de 2FA                        |
-| POST   | `/auth/2fa/enroll/request`      | Iniciar ativação 2FA                 |
-| POST   | `/auth/2fa/enroll/confirm`      | Confirmar ativação 2FA               |
-| POST   | `/auth/2fa/disable/request`     | Iniciar desativação 2FA              |
-| POST   | `/auth/2fa/disable/confirm`     | Confirmar desativação 2FA            |
-| POST   | `/auth/step-up/request`         | Solicitar step-up                    |
-| POST   | `/auth/step-up/verify`          | Verificar step-up                    |
-| POST   | `/auth/step-up/resend`          | Reenviar step-up                     |
-| POST   | `/auth/2fa/recovery/regenerate` | Regenerar recovery codes             |
-| POST   | `/auth/2fa/method/request`      | Solicitar troca de método            |
-| POST   | `/auth/2fa/method/confirm`      | Confirmar troca de método            |
+| Método | Endpoint                          | Uso                                  |
+| ------ | --------------------------------- | ------------------------------------ |
+| POST   | `/auth/register`                  | Cadastro                             |
+| POST   | `/auth/email/verify`              | Verificação de e-mail                |
+| POST   | `/auth/email/resend`              | Reenvio de verificação               |
+| POST   | `/auth/login`                     | Login                                |
+| POST   | `/auth/device/approve`            | Aprovação de dispositivo             |
+| POST   | `/auth/device/resend`             | Reenvio de aprovação                 |
+| POST   | `/auth/2fa/login/verify`          | Verificação 2FA no login             |
+| POST   | `/auth/2fa/login/resend`          | Reenvio 2FA no login                 |
+| POST   | `/auth/password/forgot`           | Solicitação de reset                 |
+| POST   | `/auth/password/reset`            | Redefinição de senha                 |
+| POST   | `/auth/refresh`                   | Refresh de access token              |
+| POST   | `/auth/logout`                    | Logout da sessão atual               |
+| GET    | `/auth/me`                        | Usuário autenticado                  |
+| GET    | `/auth/sessions`                  | Sessões reais                        |
+| DELETE | `/auth/sessions/:sessionId`       | Revogar sessão                       |
+| POST   | `/auth/sessions/logout-all`       | Logout global                        |
+| GET    | `/auth/devices`                   | Dispositivos reais                   |
+| DELETE | `/auth/devices/:deviceId`         | Revogar dispositivo                  |
+| POST   | `/auth/password/change`           | Alteração de senha                   |
+| POST   | `/auth/email/change/request`      | Iniciar alteração segura de e-mail   |
+| POST   | `/auth/email/change/confirm`      | Confirmar alteração segura de e-mail |
+| POST   | `/auth/phone/request`             | Iniciar alteração segura de telefone |
+| POST   | `/auth/phone/verify`              | Confirmar telefone                   |
+| GET    | `/auth/2fa/status`                | Status de 2FA                        |
+| POST   | `/auth/2fa/enroll/request`        | Iniciar ativação 2FA                 |
+| POST   | `/auth/2fa/enroll/confirm`        | Confirmar ativação 2FA               |
+| POST   | `/auth/2fa/disable/request`       | Iniciar desativação 2FA              |
+| POST   | `/auth/2fa/disable/confirm`       | Confirmar desativação 2FA            |
+| POST   | `/auth/step-up/request`           | Solicitar step-up                    |
+| POST   | `/auth/step-up/verify`            | Verificar step-up                    |
+| POST   | `/auth/step-up/resend`            | Reenviar step-up                     |
+| POST   | `/auth/2fa/recovery/regenerate`   | Regenerar recovery codes             |
+| POST   | `/auth/2fa/method/change/request` | Solicitar troca de método            |
+| POST   | `/auth/2fa/method/change/confirm` | Confirmar troca de método            |
 
 ## 4. Cookies e tokens
 
@@ -127,7 +127,6 @@ Backend: testes Jest cobrem utilitários, ambiente, controller/service via unit/
 - Provedores reais de e-mail/SMS ainda precisam ser configurados e auditados; adaptadores de memória são apenas desenvolvimento/teste.
 - A revisão jurídica de termos, privacidade, idade mínima, retenção e LGPD continua pendente.
 - O frontend ainda mantém papéis visuais para buyer/seller/admin quando `VITE_ENABLE_DEMO_ROLES=true`; isso não concede permissão backend real.
-- CI e integração dependem de serviços externos e variáveis de ambiente corretas.
 - Segurança profissional externa ainda é necessária antes de produção.
 
 ## 10. Limitações
@@ -135,7 +134,7 @@ Backend: testes Jest cobrem utilitários, ambiente, controller/service via unit/
 - Esta auditoria não implementou novas funcionalidades.
 - Pagamentos, produtos, pedidos, vendedor, admin, KYC, wallet e permissões de marketplace ficaram fora de escopo.
 - Não houve alteração de contratos backend sem bug comprovado.
-- A conclusão final depende dos checks obrigatórios e do CI remoto.
+- A homologação final depende de staging/browser real e providers transacionais reais.
 
 ## 11. Pontos que exigem revisão profissional
 
@@ -163,8 +162,10 @@ Backend: testes Jest cobrem utilitários, ambiente, controller/service via unit/
 
 ## 13. Checklist para homologação
 
-- [ ] Executar todos os comandos obrigatórios frontend e backend.
-- [ ] Confirmar CI: Frontend validation, Backend validation e Backend integration.
+- [x] Frontend validation passou no PR #17.
+- [x] Backend validation passou no PR #17.
+- [x] Backend integration passou no PR #17.
+- [ ] Executar homologação manual em staging com browser real e providers configurados.
 - [ ] Validar login completo com e-mail verificado e device aprovado em ambiente staging.
 - [ ] Validar login 2FA EMAIL e SMS com expiração e rate limit.
 - [ ] Validar recovery code único e consumo/redução de saldo.
@@ -179,7 +180,7 @@ Backend: testes Jest cobrem utilitários, ambiente, controller/service via unit/
 ## 14. Checklist para entrega ao desenvolvedor
 
 - [ ] Ler este arquivo antes de alterar auth.
-- [ ] Conferir `API_CONTRACTS_DRAFT.md` para contratos reais de auth.
+- [ ] Conferir `AUTHENTICATION_FINAL_AUDIT.md`, `backend/src/auth/dto.ts` e `backend/src/auth/auth.controller.ts` para contratos reais de auth.
 - [ ] Conferir `PROVIDERS_MAP.md` para responsabilidades de AuthProvider.
 - [ ] Conferir `ROUTES_MAP.md` para rotas públicas e privadas de auth.
 - [ ] Conferir `MOCKS_INVENTORY.md` antes de tocar domínios fora de auth.
@@ -190,7 +191,7 @@ Backend: testes Jest cobrem utilitários, ambiente, controller/service via unit/
 
 ## 15. Recomendação da próxima sprint
 
-Próxima sprint recomendada: **CI/staging e hardening operacional de autenticação**. Subir ambiente staging com PostgreSQL/Redis reais, provedores transacionais controlados, cookies de produção, observabilidade segura e execução completa dos checks obrigatórios. Não iniciar pagamentos, seller/admin ou wallet antes de fechar homologação de autenticação.
+Próxima sprint recomendada: **Staging, homologação e hardening operacional de autenticação**. Subir ambiente staging com PostgreSQL/Redis reais, provedores transacionais controlados, cookies de produção e observabilidade segura. Não iniciar pagamentos, seller/admin ou wallet antes de fechar homologação de autenticação.
 
 ## Matriz consolidada
 
