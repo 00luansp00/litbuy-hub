@@ -515,3 +515,10 @@ Autenticação central do frontend integrada à API NestJS real. Tokens não sã
 - Fluxos que revogam sessões limpam autenticação local e direcionam para login.
 - Senha, telefone, novo e-mail, challengeId, código SMS e token não são persistidos em storage.
 - Gestão de 2FA permanece pendente para Sprint 2C2B2B2.
+
+## Sprint 2C2B2B2A
+
+- Integrados ao frontend: status real de 2FA, ativação por EMAIL/SMS, confirmação por código, exibição única de 10 recovery codes `XXXXX-XXXXX-XXXXX`, quantidade restante de recovery codes, solicitação/confirmação de desativação e logout seguro após revogação de sessões.
+- Segurança: senha, challengeId, códigos e recovery codes permanecem apenas em memória local transitória; não há persistência em storage, URL, contexto ou caches de mutation.
+- Ativação atualiza status de 2FA e lista de sessões em background sem bloquear a exibição dos recovery codes.
+- Pendente: step-up, troca de método de 2FA e regeneração de recovery codes para sprints futuras.

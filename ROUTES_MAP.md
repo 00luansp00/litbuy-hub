@@ -118,7 +118,15 @@ Legenda:
 
 ## Sprint 2C2B2B1
 
-| Rota | Arquivo | Estado |
-|---|---|---|
-| `/perfil/seguranca` | `src/routes/perfil.seguranca.tsx` | Central real de segurança com sessões, dispositivos, senha, telefone e solicitação de alteração de e-mail. |
+| Rota                         | Arquivo                                    | Estado                                                                                                                |
+| ---------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `/perfil/seguranca`          | `src/routes/perfil.seguranca.tsx`          | Central real de segurança com sessões, dispositivos, senha, telefone e solicitação de alteração de e-mail.            |
 | `/confirmar-alteracao-email` | `src/routes/confirmar-alteracao-email.tsx` | Rota pública para dupla confirmação de alteração de e-mail; remove `token` da URL e solicita o novo e-mail novamente. |
+
+## Sprint 2C2B2B2A — 2FA na Central de Segurança
+
+| Rota                | Arquivo                           | Estado                                                                                                                                                                                                                |
+| ------------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/perfil/seguranca` | `src/routes/perfil.seguranca.tsx` | Central real de segurança com sessões, dispositivos, senha, telefone, e-mail e 2FA: status real, ativação EMAIL/SMS, exibição única de recovery codes `XXXXX-XXXXX-XXXXX`, desativação e revogação segura de sessões. |
+
+Step-up, troca de método 2FA e regeneração de recovery codes não foram adicionados nesta rota.

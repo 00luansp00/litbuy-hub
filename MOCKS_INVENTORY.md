@@ -140,3 +140,10 @@ Sessões, dispositivos aprovados e alteração autenticada de senha usam somente
 
 - Telefone seguro e alteração de e-mail não usam fallback mockado no frontend.
 - Services reais adicionados em `src/services/auth/phoneEmailSecurity.ts` para os endpoints `/auth/phone/request`, `/auth/phone/verify`, `/auth/email/change/request` e `/auth/email/change/confirm`.
+
+## Sprint 2C2B2B2A
+
+- O gerenciamento de 2FA da Central de Segurança não usa mock ou fallback local.
+- Endpoints reais integrados: `/auth/2fa/status`, `/auth/2fa/enroll/request`, `/auth/2fa/enroll/confirm`, `/auth/2fa/disable/request` e `/auth/2fa/disable/confirm`.
+- Recovery codes reais têm formato `XXXXX-XXXXX-XXXXX`, são exibidos uma única vez e nunca são salvos em QueryCache, MutationCache, storage, URL, provider, logs ou toast.
+- Step-up, troca de método e regeneração de recovery codes seguem sem mock e sem implementação no frontend.
