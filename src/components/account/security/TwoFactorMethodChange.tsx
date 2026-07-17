@@ -12,7 +12,14 @@ import {
   type TwoFactorStatus,
 } from "@/services/auth";
 
-type Step = "idle" | "password" | "step-up" | "select" | "confirm" | "unknown";
+type Step =
+  | "idle"
+  | "password"
+  | "step-up"
+  | "select"
+  | "confirm"
+  | "reconcile-confirmed"
+  | "reconcile-unknown";
 type StepUpChallenge = { challengeId: string; method: TwoFactorMethod; expiresAt: string };
 type ChangeChallenge = { challengeId: string; expiresAt: string; newMethod: TwoFactorMethod };
 
@@ -21,7 +28,7 @@ type Props = {
   smsAvailable: boolean;
   disabled: boolean;
   onExclusiveChange: (exclusive: boolean) => void;
-  onReconcile: () => Promise<void>;
+  onReconcile: () => Promise<TwoFactorStatus>;
 };
 
 function formatDate(value: string) {
@@ -57,6 +64,9 @@ export function TwoFactorMethodChange({
   const [reconciliationError, setReconciliationError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [reconciling, setReconciling] = useState(false);
+  const [reconcileExpectedMethod, setReconcileExpectedMethod] = useState<TwoFactorMethod | null>(
+    null,
+  );
   const methods = nextMethods(status.method ?? "EMAIL", smsAvailable);
   const busy =
     disabled ||
@@ -94,7 +104,7 @@ export function TwoFactorMethodChange({
     setCriticalWarning(friendlyAuthError(error).message);
     setSuccessMessage("");
   };
-  const cancel = () => {
+  const resetFlow = () => {
     actions.clearGrant();
     setStep("idle");
     setAccepted(false);
@@ -104,18 +114,37 @@ export function TwoFactorMethodChange({
     setStepUpRecovery("");
     setChangeChallenge(null);
     setChangeCode("");
+    setReconcileExpectedMethod(null);
+  };
+  const cancel = () => {
+    resetFlow();
     clearMessages();
   };
-  const reconcile = async () => {
+  const reconcile = async (
+    mode: "confirmed" | "unknown",
+    expectedMethod: TwoFactorMethod | null,
+  ) => {
     setReconciliationError("");
     setSuccessMessage("");
     setReconciling(true);
     try {
-      await onReconcile();
-      if (mountedRef.current) {
-        cancel();
+      const reconciledStatus = await onReconcile();
+      if (!mountedRef.current) return false;
+      if (mode === "confirmed") {
+        const methodToConfirm = expectedMethod ?? reconcileExpectedMethod;
+        if (!reconciledStatus.enabled || reconciledStatus.method !== methodToConfirm) {
+          setReconciliationError(
+            "O status ainda não confirmou a troca. Tente atualizar novamente.",
+          );
+          setStep("reconcile-confirmed");
+          return false;
+        }
+        resetFlow();
         setSuccessMessage("Método de 2FA atualizado com segurança.");
+        return true;
       }
+      resetFlow();
+      setSuccessMessage("Status da segurança atualizado. Confira o método de 2FA exibido.");
       return true;
     } catch (error) {
       if (mountedRef.current) setReconciliationError(friendlyAuthError(error).message);
@@ -150,7 +179,23 @@ export function TwoFactorMethodChange({
       setStepUpCode("");
       setStepUpRecovery("");
     } catch (error) {
-      if (mountedRef.current) fail(error);
+      if (!mountedRef.current) return;
+      fail(error);
+      if (
+        error instanceof ApiError &&
+        [
+          "STEP_UP_DELIVERY_UNAVAILABLE",
+          "INVALID_OR_EXPIRED_STEP_UP_CODE",
+          "STEP_UP_CHALLENGE_LOCKED",
+          "INVALID_SESSION",
+          "FORBIDDEN",
+        ].includes(error.code)
+      ) {
+        setStepUpChallenge(null);
+        setStepUpCode("");
+        setStepUpRecovery("");
+        setStep("password");
+      }
     }
   };
   const verifyStepUp = async (event: FormEvent) => {
@@ -203,9 +248,14 @@ export function TwoFactorMethodChange({
       fail(error);
       if (
         error instanceof ApiError &&
-        ["INVALID_OR_EXPIRED_STEP_UP_GRANT", "STEP_UP_SCOPE_MISMATCH", "STEP_UP_REQUIRED"].includes(
-          error.code,
-        )
+        [
+          "STEP_UP_REQUIRED",
+          "INVALID_OR_EXPIRED_STEP_UP_GRANT",
+          "STEP_UP_SCOPE_MISMATCH",
+          "INVALID_SESSION",
+          "FORBIDDEN",
+          "TWO_FACTOR_METHOD_CHANGE_CONFLICT",
+        ].includes(error.code)
       ) {
         actions.clearGrant();
         setStep("password");
@@ -218,6 +268,7 @@ export function TwoFactorMethodChange({
     if (!/^\d{6}$/.test(changeCode)) return setCriticalWarning("Informe o código de seis dígitos.");
     clearMessages();
     try {
+      const confirmedMethod = changeChallenge.newMethod;
       await actions.confirmMethodChange({
         challengeId: changeChallenge.challengeId,
         code: changeCode,
@@ -225,27 +276,32 @@ export function TwoFactorMethodChange({
       if (!mountedRef.current) return;
       setChangeChallenge(null);
       setChangeCode("");
-      await reconcile();
+      setReconcileExpectedMethod(confirmedMethod);
+      setStep("reconcile-confirmed");
+      await reconcile("confirmed", confirmedMethod);
     } catch (error) {
       if (!mountedRef.current) return;
       if (error instanceof ApiError && error.code === "TWO_FACTOR_METHOD_CHANGE_OUTCOME_UNKNOWN") {
         actions.clearGrant();
         setChangeChallenge(null);
         setChangeCode("");
-        setStep("unknown");
+        setStep("reconcile-unknown");
         setCriticalWarning(
           "A troca pode ter sido aplicada. Vamos consultar o status real antes de liberar ações.",
         );
-        const reconciled = await reconcile();
-        if (!reconciled && mountedRef.current) setStep("unknown");
+        const reconciled = await reconcile("unknown", null);
+        if (!reconciled && mountedRef.current) setStep("reconcile-unknown");
         return;
       }
       fail(error);
       if (
         error instanceof ApiError &&
         [
+          "STEP_UP_REQUIRED",
           "INVALID_OR_EXPIRED_STEP_UP_GRANT",
           "STEP_UP_SCOPE_MISMATCH",
+          "INVALID_SESSION",
+          "FORBIDDEN",
           "TWO_FACTOR_METHOD_CHANGE_CONFLICT",
         ].includes(error.code)
       ) {
@@ -414,14 +470,25 @@ export function TwoFactorMethodChange({
           </Button>
         </form>
       )}
-      {step === "unknown" && (
+      {step === "reconcile-confirmed" && (
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">
+            A troca foi confirmada pelo servidor. As ações permanecem bloqueadas até atualizarmos o
+            status e as sessões reais.
+          </p>
+          <Button type="button" disabled={busy} onClick={() => void reconcile("confirmed", null)}>
+            Tentar reconciliar novamente
+          </Button>
+        </div>
+      )}
+      {step === "reconcile-unknown" && (
         <div className="space-y-2">
           <p className="text-sm text-muted-foreground">
             Resultado desconhecido. As ações permanecem bloqueadas até a reconciliação real de
             status e sessões.
           </p>
-          <Button type="button" disabled={busy} onClick={() => void reconcile()}>
-            Tentar novamente
+          <Button type="button" disabled={busy} onClick={() => void reconcile("unknown", null)}>
+            Tentar reconciliar novamente
           </Button>
         </div>
       )}

@@ -93,9 +93,12 @@ export function useTwoFactorMethodChange() {
         const code = String(error.code);
         if (
           [
+            "STEP_UP_REQUIRED",
             "INVALID_OR_EXPIRED_STEP_UP_GRANT",
             "STEP_UP_SCOPE_MISMATCH",
-            "STEP_UP_REQUIRED",
+            "INVALID_SESSION",
+            "FORBIDDEN",
+            "TWO_FACTOR_METHOD_CHANGE_CONFLICT",
           ].includes(code)
         )
           clearGrant();
@@ -120,9 +123,13 @@ export function useTwoFactorMethodChange() {
         const code = String(error.code);
         if (
           [
+            "STEP_UP_REQUIRED",
             "INVALID_OR_EXPIRED_STEP_UP_GRANT",
             "STEP_UP_SCOPE_MISMATCH",
+            "INVALID_SESSION",
+            "FORBIDDEN",
             "TWO_FACTOR_METHOD_CHANGE_OUTCOME_UNKNOWN",
+            "TWO_FACTOR_METHOD_CHANGE_CONFLICT",
           ].includes(code)
         )
           clearGrant();

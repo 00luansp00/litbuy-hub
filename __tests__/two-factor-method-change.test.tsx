@@ -1,7 +1,7 @@
 import React from "react";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api/client";
 import { AuthContext, type AuthContextValue } from "@/providers/AuthContext";
 import { TwoFactorSecuritySection } from "@/components/account/security/TwoFactorSecuritySection";
@@ -9,6 +9,12 @@ import { accountSecurityQueryKeys } from "@/services/auth/useAccountSecurity";
 import { stepUpSecurityService } from "@/services/auth/stepUpSecurity";
 import { twoFactorMethodChangeService } from "@/services/auth/twoFactorMethodChange";
 import { twoFactorSecurityService } from "@/services/auth/twoFactorSecurity";
+
+const routerMocks = vi.hoisted(() => ({ navigate: vi.fn() }));
+vi.mock("@tanstack/react-router", async () => ({
+  ...(await vi.importActual<typeof import("@tanstack/react-router")>("@tanstack/react-router")),
+  useNavigate: () => routerMocks.navigate,
+}));
 
 const stepUpChallenge = {
   challengeId: "123e4567-e89b-42d3-8456-426614174000",
@@ -79,6 +85,8 @@ function setup(
 }
 
 beforeEach(() => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  vi.setSystemTime(new Date("2026-07-17T00:00:00.000Z"));
   vi.restoreAllMocks();
   vi.spyOn(twoFactorSecurityService, "getStatus").mockResolvedValue(enabledEmail);
   vi.spyOn(stepUpSecurityService, "requestMethodChangeStepUp").mockResolvedValue(stepUpChallenge);
@@ -96,6 +104,10 @@ beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
   window.history.replaceState(null, "", "/perfil/seguranca");
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 async function completeStepUp() {
@@ -187,9 +199,124 @@ describe("TwoFactorMethodChange", () => {
     expect(
       screen.queryByRole("button", { name: /Regenerar recovery codes/i }),
     ).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Tentar novamente/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Tentar reconciliar novamente/i }));
+    await screen.findByText(/Status da segurança atualizado/i);
+    await screen.findByText(/ativo por SMS/i);
+    expect(statusSpy).toHaveBeenCalledTimes(3);
+  });
+
+  it("keeps confirmed changes blocked when status reconciliation fails, then retries", async () => {
+    const statusSpy = vi
+      .spyOn(twoFactorSecurityService, "getStatus")
+      .mockResolvedValueOnce(enabledEmail)
+      .mockRejectedValueOnce(new ApiError(503, "HTTP_ERROR", "down"))
+      .mockResolvedValueOnce(enabledSms);
+    setup();
+    await completeStepUp();
+    fireEvent.click(screen.getByRole("button", { name: /Enviar código ao novo método/i }));
+    fireEvent.change(await screen.findByLabelText(/Código de seis dígitos/i), {
+      target: { value: "654321" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar troca/i }));
+    expect(await screen.findByText(/Não foi possível concluir/i)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Regenerar recovery codes/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Confirmar troca/i })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Tentar reconciliar novamente/i }));
     await screen.findByText(/Método de 2FA atualizado/i);
     expect(statusSpy).toHaveBeenCalledTimes(3);
+  });
+
+  it("keeps confirmed changes blocked when sessions reconciliation fails, then retries", async () => {
+    vi.spyOn(twoFactorSecurityService, "getStatus")
+      .mockResolvedValueOnce(enabledEmail)
+      .mockResolvedValue(enabledSms);
+    const sessionsQueryFn = vi
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockRejectedValueOnce(new ApiError(503, "HTTP_ERROR", "sessions down"))
+      .mockResolvedValueOnce([]);
+    setup({ sessionsQueryFn });
+    await completeStepUp();
+    fireEvent.click(screen.getByRole("button", { name: /Enviar código ao novo método/i }));
+    fireEvent.change(await screen.findByLabelText(/Código de seis dígitos/i), {
+      target: { value: "654321" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar troca/i }));
+    expect(await screen.findByText(/Não foi possível concluir/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Tentar reconciliar novamente/i }));
+    await screen.findByText(/Método de 2FA atualizado/i);
+    expect(sessionsQueryFn).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not declare success when confirmed status still shows the previous method", async () => {
+    vi.spyOn(twoFactorSecurityService, "getStatus").mockResolvedValue(enabledEmail);
+    setup();
+    await completeStepUp();
+    fireEvent.click(screen.getByRole("button", { name: /Enviar código ao novo método/i }));
+    fireEvent.change(await screen.findByLabelText(/Código de seis dígitos/i), {
+      target: { value: "654321" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar troca/i }));
+    expect(await screen.findByText(/status ainda não confirmou/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Método de 2FA atualizado/i)).not.toBeInTheDocument();
+  });
+
+  it("uses neutral copy after ambiguous reconciliation regardless of returned method", async () => {
+    vi.spyOn(twoFactorMethodChangeService, "confirm").mockRejectedValueOnce(
+      new ApiError(502, "TWO_FACTOR_METHOD_CHANGE_OUTCOME_UNKNOWN", "unknown"),
+    );
+    vi.spyOn(twoFactorSecurityService, "getStatus")
+      .mockResolvedValueOnce(enabledEmail)
+      .mockResolvedValueOnce(enabledEmail);
+    setup();
+    await completeStepUp();
+    fireEvent.click(screen.getByRole("button", { name: /Enviar código ao novo método/i }));
+    fireEvent.change(await screen.findByLabelText(/Código de seis dígitos/i), {
+      target: { value: "654321" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar troca/i }));
+    expect(await screen.findByText(/Status da segurança atualizado/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Método de 2FA atualizado/i)).not.toBeInTheDocument();
+    expect(await screen.findByText(/ativo por EMAIL/i)).toBeInTheDocument();
+  });
+
+  it("clears step-up challenge on resend delivery unavailable or expired challenge", async () => {
+    vi.spyOn(stepUpSecurityService, "resendMethodChangeStepUp")
+      .mockRejectedValueOnce(new ApiError(503, "STEP_UP_DELIVERY_UNAVAILABLE", "down"))
+      .mockRejectedValueOnce(new ApiError(400, "INVALID_OR_EXPIRED_STEP_UP_CODE", "expired"));
+    setup();
+    await screen.findByRole("button", { name: /Alterar método de 2FA/i });
+    fireEvent.click(screen.getByLabelText(/autorizo a troca segura/i));
+    fireEvent.click(screen.getByRole("button", { name: /Alterar método de 2FA/i }));
+    fireEvent.change(await screen.findByLabelText(/Senha atual/i), { target: { value: "secret" } });
+    fireEvent.click(screen.getByRole("button", { name: /Solicitar step-up/i }));
+    await screen.findByText(/Código enviado por e-mail/i);
+    fireEvent.click(screen.getByRole("button", { name: /Reenviar step-up/i }));
+    expect(await screen.findByLabelText(/Senha atual/i)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/Senha atual/i), { target: { value: "secret" } });
+    fireEvent.click(screen.getByRole("button", { name: /Solicitar step-up/i }));
+    await screen.findByText(/Código enviado por e-mail/i);
+    fireEvent.click(screen.getByRole("button", { name: /Reenviar step-up/i }));
+    expect(await screen.findByLabelText(/Senha atual/i)).toBeInTheDocument();
+  });
+
+  it("does not offer method change for inactive 2FA or unavailable SMS", async () => {
+    vi.spyOn(twoFactorSecurityService, "getStatus").mockResolvedValueOnce({
+      enabled: false,
+      method: null,
+      enabledAt: null,
+      recoveryCodesRemaining: 0,
+    });
+    setup();
+    await screen.findByText(/Status: inativo/i);
+    expect(screen.queryByRole("button", { name: /Alterar método/i })).not.toBeInTheDocument();
+
+    vi.spyOn(twoFactorSecurityService, "getStatus").mockResolvedValueOnce(enabledEmail);
+    setup({ smsAvailable: false });
+    await screen.findByText(/Nenhum método alternativo disponível/i);
   });
 
   it("does not expose technical scope, grant wording, regex text, or secrets in the UI/storage", async () => {
