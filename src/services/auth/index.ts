@@ -7,3 +7,5 @@ export * from "./phoneEmailSecurity";
 export * from "./usePhoneEmailSecurity";
 export * from "./twoFactorSecurity";
 export * from "./useTwoFactorSecurity";
+export * from "./stepUpSecurity";
+export * from "./useStepUpSecurity";

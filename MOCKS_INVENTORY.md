@@ -147,3 +147,11 @@ Sessões, dispositivos aprovados e alteração autenticada de senha usam somente
 - Endpoints reais integrados: `/auth/2fa/status`, `/auth/2fa/enroll/request`, `/auth/2fa/enroll/confirm`, `/auth/2fa/disable/request` e `/auth/2fa/disable/confirm`.
 - Recovery codes reais têm formato `XXXXX-XXXXX-XXXXX`, são exibidos uma única vez e nunca são salvos em QueryCache, MutationCache, storage, URL, provider, logs ou toast.
 - Step-up, troca de método e regeneração de recovery codes seguem sem mock e sem implementação no frontend.
+
+## Sprint 2C2B2B2B1 — step-up recovery regeneration
+- Frontend integrates real step-up endpoints for `TWO_FACTOR_RECOVERY_REGENERATE`: `POST /auth/step-up/request`, `POST /auth/step-up/verify`, `POST /auth/step-up/resend`, and `POST /auth/2fa/recovery/regenerate`.
+- Recovery-code regeneration confirms by six-digit 2FA code or a normalized 5-5-5 recovery code; the recovery confirmation code is sent only in the verify payload.
+- The opaque `stepUpToken` is validated defensively, kept only in the local Promise scope, and immediately sent as `X-Step-Up-Token` to regenerate recovery codes.
+- Regeneration expects exactly 10 unique uppercase 5-5-5 codes, treats malformed responses as `MALFORMED_RESPONSE`, warns that old codes may have been invalidated, and reconciles status/sessions without logging out.
+- Successful regeneration invalidates old recovery codes and visually refreshes the real sessions list while preserving the current session; new codes are shown once in an exclusive screen.
+- 2FA method change remains pending for Sprint 2C2B2B2B2; no method-change UI was added.

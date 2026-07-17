@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ShieldCheck } from "lucide-react";
 import { ApiError } from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
+import { RecoveryCodeRegeneration } from "./RecoveryCodeRegeneration";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -47,6 +48,7 @@ export function TwoFactorSecuritySection({ smsAvailable }: { smsAvailable: boole
   const [message, setMessage] = useState("");
   const [tone, setTone] = useState<Tone>("info");
   const [reconcilingStatus, setReconcilingStatus] = useState(false);
+  const [regenerationExclusive, setRegenerationExclusive] = useState(false);
   const mountedRef = useRef(false);
   const inFlight = useRef(false);
   const messageRef = useRef<HTMLParagraphElement>(null);
@@ -57,13 +59,16 @@ export function TwoFactorSecuritySection({ smsAvailable }: { smsAvailable: boole
     !status.isFetching &&
     !status.error &&
     !reconcilingStatus;
-  const busy =
+  const ownTwoFactorBusy =
     actions.requestPending ||
     actions.confirmPending ||
     actions.disablePending ||
     actions.disableConfirmPending ||
     inFlight.current ||
     reconcilingStatus;
+  const busy = ownTwoFactorBusy || regenerationExclusive;
+  const canShowRecoveryRegeneration =
+    (statusReady || regenerationExclusive) && Boolean(status.data?.enabled) && !disableChallenge;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -359,15 +364,14 @@ export function TwoFactorSecuritySection({ smsAvailable }: { smsAvailable: boole
             </p>
             {status.data.enabled && status.data.recoveryCodesRemaining === 0 && (
               <p className="font-medium text-destructive">
-                Você não possui recovery codes restantes. A regeneração será integrada na Sprint
-                2C2B2B2B.
+                Você não possui recovery codes restantes. Regenere um novo conjunto seguro.
               </p>
             )}
             {status.data.enabled &&
               status.data.recoveryCodesRemaining > 0 &&
               status.data.recoveryCodesRemaining <= 2 && (
                 <p className="font-medium text-amber-600">
-                  Restam poucos recovery codes. A regeneração será integrada na Sprint 2C2B2B2B.
+                  Restam poucos recovery codes. Considere regenerar um novo conjunto seguro.
                 </p>
               )}
           </div>
@@ -440,7 +444,13 @@ export function TwoFactorSecuritySection({ smsAvailable }: { smsAvailable: boole
             </Button>
           </form>
         )}
-        {statusReady && status.data?.enabled && !disableChallenge && (
+        {canShowRecoveryRegeneration && (
+          <RecoveryCodeRegeneration
+            disabled={ownTwoFactorBusy || showingRecoveryCodes}
+            onExclusiveChange={setRegenerationExclusive}
+          />
+        )}
+        {statusReady && status.data?.enabled && !disableChallenge && !regenerationExclusive && (
           <form onSubmit={requestDisable} className="space-y-3 rounded-2xl border p-4">
             <p className="text-sm text-destructive">
               Desativar o 2FA reduz a proteção da conta e revogará as sessões.
@@ -468,7 +478,7 @@ export function TwoFactorSecuritySection({ smsAvailable }: { smsAvailable: boole
             </Button>
           </form>
         )}
-        {statusReady && disableChallenge && (
+        {statusReady && disableChallenge && !regenerationExclusive && (
           <form onSubmit={confirmDisable} className="space-y-3 rounded-2xl border p-4">
             <p className="text-sm text-muted-foreground">
               Confirme com código de seis dígitos ou recovery code.

@@ -137,7 +137,7 @@ describe("TwoFactorSecuritySection", () => {
     await getStatus.mock.results[0].value;
   });
 
-  it("shows active EMAIL/SMS status and recovery-code warnings without offering regeneration", async () => {
+  it("shows active EMAIL/SMS status and recovery-code warnings with regeneration entrypoint", async () => {
     vi.spyOn(twoFactorSecurityService, "getStatus")
       .mockResolvedValueOnce({
         enabled: true,
@@ -154,7 +154,7 @@ describe("TwoFactorSecuritySection", () => {
     setup();
     expect(await screen.findByText(/ativo por EMAIL/i)).toBeInTheDocument();
     expect(screen.getByText(/não possui recovery codes restantes/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /regener/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Regenerar recovery codes/i })).toBeInTheDocument();
     setup();
     expect(await screen.findByText(/ativo por SMS/i)).toBeInTheDocument();
     expect(screen.getByText(/Restam poucos recovery codes/i)).toBeInTheDocument();

@@ -29,6 +29,17 @@ const messages: Record<string, string> = {
   OUTDATED_TERMS_OR_PRIVACY: "Atualize a página e aceite as versões atuais dos termos.",
   INVALID_REGISTRATION: "Revise os dados do cadastro.",
   INVALID_2FA_INPUT: "Informe código de seis dígitos ou recovery code, nunca ambos.",
+  STEP_UP_NOT_AVAILABLE: "Step-up indisponível para esta ação no momento.",
+  STEP_UP_DELIVERY_UNAVAILABLE: "Não foi possível enviar o código. Inicie novamente em instantes.",
+  STEP_UP_REQUIRED: "Confirme a ação sensível antes de continuar.",
+  INVALID_OR_EXPIRED_STEP_UP_CODE:
+    "Código inválido ou expirado. Corrija os dados ou solicite reenvio.",
+  STEP_UP_CHALLENGE_LOCKED: "Muitas tentativas. Inicie uma nova confirmação.",
+  INVALID_OR_EXPIRED_STEP_UP_GRANT: "A confirmação expirou. Inicie novamente.",
+  STEP_UP_SCOPE_MISMATCH: "A confirmação não corresponde a esta ação. Inicie novamente.",
+  FORBIDDEN: "Você não tem permissão para concluir esta ação.",
+  RECOVERY_REGENERATION_OUTCOME_UNKNOWN:
+    "Não foi possível confirmar o resultado da regeneração dos recovery codes.",
   MALFORMED_RESPONSE: "Resposta inválida da API.",
   HTTP_ERROR: "Não foi possível concluir a operação.",
   NETWORK_ERROR: "Não foi possível conectar à API.",
