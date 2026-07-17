@@ -5,14 +5,25 @@ Criticidade: **baixa / média / alta / crítica**.
 
 ## 1. Autenticação
 
-| Item                            | Criticidade | Backend futuro                    |
-| ------------------------------- | ----------- | --------------------------------- |
-| Login                           | crítica     | Auth real NestJS/PostgreSQL/Redis |
-| Cadastro                        | crítica     | Verificação de e-mail + captcha   |
-| Recuperação de senha            | crítica     | Token seguro + expiração          |
-| Admin                           | crítica     | RBAC + RLS                        |
-| activeRole (buyer/seller)       | média       | Sessão + claims                   |
-| Verificação de novo dispositivo | alta        | Device fingerprint + código       |
+### REAL no escopo auditado
+
+- Cadastro.
+- Login.
+- Verificação de e-mail.
+- Recuperação e redefinição de senha.
+- Sessões.
+- Dispositivos aprovados.
+- Alteração segura de telefone/e-mail.
+- 2FA, step-up e recovery codes.
+
+### AINDA VISUAL/MOCK fora do contrato real de auth
+
+| Item                      | Criticidade | Necessidade real pendente                    |
+| ------------------------- | ----------- | -------------------------------------------- |
+| activeRole buyer/seller   | média       | Autorização server-side por domínio          |
+| isAdmin/AdminGate         | crítica     | RBAC/guards server-side para admin           |
+| Permissões de marketplace | crítica     | Policies/checks backend por recurso          |
+| RBAC seller/admin         | crítica     | Modelo de papéis e auditoria no backend real |
 
 ## 2. Marketplace
 

@@ -57,13 +57,13 @@ e consome dados fictícios de `src/data/`.
 
 ---
 
-## 2. O que está mockado (precisa virar real depois)
+## 2. Estado atual por área
 
-| Área                | Estado atual                                      | Precisa de                               |
+| Área                | Estado atual                                      | Próxima necessidade                      |
 | ------------------- | ------------------------------------------------- | ---------------------------------------- |
 | Autenticação        | Real no escopo de `AUTHENTICATION_FINAL_AUDIT.md` | Staging/hardening/providers reais        |
 | Sessão              | Real no escopo de auth documentado                | Homologação staging/browser real         |
-| Roles / admin       | Flag `isAdmin` no user mock                       | Tabela `user_roles` + `has_role()` + RLS |
+| Roles / admin       | Visual no frontend                                | Guards/RBAC server-side no NestJS        |
 | Produtos            | `src/data/products.ts`                            | Tabela `products` + Data API             |
 | Vendedores          | `src/data/sellers.ts`                             | Tabela `sellers`                         |
 | Categorias          | `src/data/categories.ts`                          | Tabela `categories`                      |
@@ -71,9 +71,9 @@ e consome dados fictícios de `src/data/`.
 | Carrinho            | `CartProvider` em memória (sem localStorage)      | Persistir server-side por usuário        |
 | Cupom               | Regra fictícia em `cartService`                   | Tabela `coupons` + validação backend     |
 | Checkout / pedido   | `checkoutService.createOrder` gera id fake        | Integração com gateway + tabela `orders` |
-| Pagamento           | Seleção visual apenas                             | Stripe/Paddle (edge function)            |
+| Pagamento           | Seleção visual apenas                             | Integração pelo backend NestJS           |
 | Carteira            | Saldo mockado                                     | Ledger real com movimentações            |
-| Upload de imagem    | `ImageUploader` só usa File API                   | Supabase Storage                         |
+| Upload de imagem    | `ImageUploader` só usa File API                   | Storage S3-compatible futuro             |
 | Publicar anúncio    | Wizard visual sem persistência                    | INSERT em `products` + storage           |
 | Mensagens           | Conversas fixas em mock                           | Tabela `messages` + realtime             |
 | Favoritos           | Estático (não persiste)                           | Tabela `favorites`                       |
@@ -87,15 +87,15 @@ e consome dados fictícios de `src/data/`.
 
 ## 3. O que ainda falta (fora do escopo mockado)
 
-- Persistência real (nada usa `localStorage` ou cookies por design).
-- Backend / API / server functions com Lovable Cloud.
-- Schema Postgres + migrations + RLS + GRANTs.
-- Webhooks de pagamento em `src/routes/api/public/*`.
-- Emails transacionais (confirmação, recuperação, notificações).
+- Persistência real para domínios de marketplace; autenticação já usa PostgreSQL/Redis e cookies backend.
+- APIs NestJS para produtos, pedidos, pagamentos, seller/admin, KYC e wallet.
+- Schema/migrations/policies/checks server-side para domínios de marketplace.
+- Webhooks de pagamento no backend NestJS.
+- Provedores transacionais reais para e-mail/SMS e notificações fora do escopo atual de auth.
 - Realtime (mensagens, notificações do vendedor).
 - Busca (a busca da navbar é apenas visual).
 - i18n (todo o texto está em pt-BR hardcoded).
-- Testes automatizados (nenhum teste unit/e2e no repo).
+- Ampliar testes automatizados para domínios de marketplace.
 - Observabilidade / logs de produção.
 - CI/CD e proteção de branches (a ser configurado no GitHub).
 
@@ -103,24 +103,17 @@ e consome dados fictícios de `src/data/`.
 
 ## 4. Partes que exigem atenção profissional
 
-Estas áreas foram construídas apenas visualmente e **precisam ser
-reimplementadas com cuidado** antes de qualquer produção:
+Estas áreas de marketplace seguem visuais/mockadas e **precisam ser implementadas com cuidado** antes de qualquer produção:
 
-1. **Autenticação e sessão** — nada em `authMock.ts` deve sobreviver ao
-   `git switch` para o backend real. Plano histórico de migrar para auth terceirizada foi descontinuado; manter a arquitetura real NestJS/PostgreSQL/Redis e a API pública do `AuthProvider` (`user`, `activeRole`, `switchToBuyer`, `switchToSeller`, `isAdmin`, `logout`).
-2. **RBAC do admin** — `AdminGate` é UI. A proteção real precisa vir de
-   `has_role(auth.uid(), 'admin')` em RLS e em toda server function
-   admin.
-3. **Pagamentos e financeiro** — nunca reutilizar o fluxo de checkout
-   mockado para cobrar de verdade. Reescrever com o provider escolhido
-   (Stripe / Paddle) e um webhook verificado.
-4. **Publicação de anúncios e upload** — o wizard atual não valida
-   nada. Precisa de validação Zod server-side, Supabase Storage,
-   moderação e políticas RLS por `seller_id`.
-5. **Disputas / denúncias / moderação** — fluxos sensíveis; hoje só
-   exibem toast.
-6. **Carteira** — qualquer manipulação de saldo precisa ser server-side,
-   idempotente e auditável.
+1. **Autorização seller/admin** — `AdminGate` e papéis visuais não substituem guards/RBAC server-side no NestJS.
+2. **Pagamentos e financeiro** — nunca reutilizar o fluxo de checkout mockado para cobrar de verdade. Reescrever com o provider escolhido e webhooks verificados no backend NestJS.
+3. **Publicação de anúncios e upload** — o wizard atual não valida dados reais. Precisa de validação server-side, storage S3-compatible futuro, moderação e policies/checks por recurso.
+4. **Disputas / denúncias / moderação** — fluxos sensíveis; hoje só exibem toast.
+5. **Carteira** — qualquer manipulação de saldo precisa ser server-side, idempotente e auditável.
+
+### Plano histórico descontinuado / não autoritativo
+
+Menções antigas a auth terceirizada, funções de borda ou storage de fornecedor específico pertencem ao plano inicial e não são orientação atual. A arquitetura autoritativa para autenticação é NestJS, PostgreSQL/Prisma e Redis; storage futuro deve ser S3-compatible conforme domínio.
 
 ---
 
@@ -152,7 +145,7 @@ reimplementadas com cuidado** antes de qualquer produção:
 5. Trocar `AdminGate` para checar `has_role` server-side além do
    visual.
 6. Integrar gateway de pagamento e webhook em `/api/public/*`.
-7. Ligar Supabase Storage no `ImageUploader` e no wizard de anúncio.
+7. Ligar storage S3-compatible futuro no `ImageUploader` e no wizard de anúncio.
 8. Adicionar testes e CI.
 9. Remover `src/data/*` no final; `src/services/authMock.ts` já foi removido no bloco de autenticação real.
 
@@ -274,7 +267,7 @@ Docs de suporte atualizados: `DATABASE_SCHEMA.md`, `ENTITY_RELATIONSHIP.md`, `SU
 - Composer visual: envio simulado via `simulateSendMessage` adiciona a mensagem apenas em estado local (não persistido). Anexos e emojis exibem toast "Em breve".
 - Aviso de segurança: destaque de que a conversa deve ficar na plataforma e que mensagens podem ser evidência em disputa.
 - Integrações: `ContactSellerCard` (loja pública) e `OrderActionsCard` (pedido) agora linkam para `/mensagens`. `RecentMessagesCard` teve o botão "Abrir" convertido em Link para `/mensagens`.
-- Limitações: nenhum backend, nenhum WebSocket, nenhum chat real, nenhum upload real, nenhuma notificação real, nenhuma persistência, nada em LocalStorage/Cookies, nenhuma moderação real.
+- Limitações: nenhum backend, nenhum WebSocket, nenhum chat real, nenhum upload real, nenhuma notificação real, nenhuma persistência, sem persistência real de marketplace, nenhuma moderação real.
 
 ## QA final (Sprint 18.6)
 

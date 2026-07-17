@@ -13,32 +13,32 @@ Legenda:
 
 ## 1. Rotas públicas
 
-| Rota                     | Finalidade              | Auth    | Gate | Service                   | Backend futuro                          |
-| ------------------------ | ----------------------- | ------- | ---- | ------------------------- | --------------------------------------- |
-| `/`                      | Home / landing          | público | —    | product, category         | listagem paginada + destaques + SEO SSR |
-| `/buscar`                | Busca de produtos       | público | —    | searchService             | busca full-text, ranking, filtros       |
-| `/login`                 | Login real              | público | —    | authService               | API NestJS `/auth/login`                |
-| `/cadastro`              | Cadastro real           | público | —    | authService               | API NestJS `/auth/register`             |
-| `/recuperar-senha`       | Solicitar reset         | público | —    | transactionalEmailService | Token seguro + e-mail                   |
-| `/redefinir-senha`       | Definir nova senha      | público | —    | transactionalEmailService | Validar token, expiração                |
-| `/verificar-email`       | Confirmação de e-mail   | público | —    | transactionalEmailService | Token de verificação                    |
-| `/verificacao-login`     | Alerta novo dispositivo | público | —    | transactionalEmailService | Device fingerprint + código             |
-| `/categoria/$slug`       | Listagem por categoria  | público | —    | category, product         | filtros + paginação                     |
-| `/produto/$id`           | Detalhe do produto      | público | —    | productService            | Produto + variações + reviews + SEO     |
-| `/loja/$slug`            | Vitrine do vendedor     | público | —    | sellerService             | Perfil vendedor + produtos              |
-| `/lit-points`            | Landing LIT Points      | público | —    | litPointsService          | Regras, saldo                           |
-| `/taxas`                 | Taxas da plataforma     | público | —    | platformEconomicsService  | Config admin                            |
-| `/afiliados`             | Programa afiliados      | público | —    | affiliateService          | Tracking, comissão                      |
-| `/ajuda`                 | Central de ajuda        | público | —    | infoService               | CMS de FAQ                              |
-| `/como-comprar`          | Guia comprador          | público | —    | infoService               | CMS                                     |
-| `/como-vender`           | Guia vendedor           | público | —    | infoService               | CMS                                     |
-| `/seguranca`             | Segurança               | público | —    | infoService               | CMS                                     |
-| `/regras-da-plataforma`  | Regras                  | público | —    | infoService               | CMS + versão jurídica                   |
-| `/itens-proibidos`       | Lista proibidos         | público | —    | infoService               | CMS                                     |
-| `/politica-de-reembolso` | Política reembolso      | público | —    | infoService               | CMS jurídico                            |
-| `/termos`                | Termos de uso           | público | —    | infoService               | Rascunho — precisa jurídico             |
-| `/privacidade`           | Política LGPD           | público | —    | infoService               | Rascunho — precisa jurídico             |
-| `/contato`               | Formulário contato      | público | —    | infoService               | Backend + anti-spam + e-mail            |
+| Rota                     | Finalidade             | Auth    | Gate | Service                  | Backend futuro                          |
+| ------------------------ | ---------------------- | ------- | ---- | ------------------------ | --------------------------------------- |
+| `/`                      | Home / landing         | público | —    | product, category        | listagem paginada + destaques + SEO SSR |
+| `/buscar`                | Busca de produtos      | público | —    | searchService            | busca full-text, ranking, filtros       |
+| `/login`                 | Login real             | público | —    | authService              | API NestJS `/auth/login`                |
+| `/cadastro`              | Cadastro real          | público | —    | authService              | API NestJS `/auth/register`             |
+| `/recuperar-senha`       | Solicitar reset        | público | —    | authService              | API NestJS `/auth/password/forgot`      |
+| `/redefinir-senha`       | Definir nova senha     | público | —    | authService              | API NestJS `/auth/password/reset`       |
+| `/verificar-email`       | Confirmação de e-mail  | público | —    | authService              | API NestJS `/auth/email/verify`         |
+| `/verificacao-login`     | Dispositivo/2FA login  | público | —    | authService              | API NestJS device approval e 2FA login  |
+| `/categoria/$slug`       | Listagem por categoria | público | —    | category, product        | filtros + paginação                     |
+| `/produto/$id`           | Detalhe do produto     | público | —    | productService           | Produto + variações + reviews + SEO     |
+| `/loja/$slug`            | Vitrine do vendedor    | público | —    | sellerService            | Perfil vendedor + produtos              |
+| `/lit-points`            | Landing LIT Points     | público | —    | litPointsService         | Regras, saldo                           |
+| `/taxas`                 | Taxas da plataforma    | público | —    | platformEconomicsService | Config admin                            |
+| `/afiliados`             | Programa afiliados     | público | —    | affiliateService         | Tracking, comissão                      |
+| `/ajuda`                 | Central de ajuda       | público | —    | infoService              | CMS de FAQ                              |
+| `/como-comprar`          | Guia comprador         | público | —    | infoService              | CMS                                     |
+| `/como-vender`           | Guia vendedor          | público | —    | infoService              | CMS                                     |
+| `/seguranca`             | Segurança              | público | —    | infoService              | CMS                                     |
+| `/regras-da-plataforma`  | Regras                 | público | —    | infoService              | CMS + versão jurídica                   |
+| `/itens-proibidos`       | Lista proibidos        | público | —    | infoService              | CMS                                     |
+| `/politica-de-reembolso` | Política reembolso     | público | —    | infoService              | CMS jurídico                            |
+| `/termos`                | Termos de uso          | público | —    | infoService              | Rascunho — precisa jurídico             |
+| `/privacidade`           | Política LGPD          | público | —    | infoService              | Rascunho — precisa jurídico             |
+| `/contato`               | Formulário contato     | público | —    | infoService              | Backend + anti-spam + e-mail            |
 
 ## 2. Rotas do usuário / comprador
 

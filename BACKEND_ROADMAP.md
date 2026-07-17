@@ -25,7 +25,7 @@ A fundação real de autenticação já existe em NestJS/PostgreSQL/Redis e est�
 
 ## Plano histórico descontinuado / não autoritativo
 
-As versões iniciais deste roadmap assumiam Supabase, auth gerenciada e Edge Functions. Esse plano é histórico e não é autoritativo para a arquitetura atual, que usa backend NestJS, PostgreSQL/Prisma, Redis e API REST `/api/v1`.
+As versões iniciais deste roadmap assumiam Supabase, auth gerenciada e funções de borda. Esse plano é histórico e não é autoritativo para a arquitetura atual, que usa backend NestJS, PostgreSQL/Prisma, Redis e API REST `/api/v1`.
 
 ## Fase 2 — Catálogo
 

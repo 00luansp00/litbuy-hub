@@ -97,7 +97,7 @@ Todos os endpoints frontend usam base `VITE_API_BASE_URL`, esperada como `/api/v
 - Métodos reais suportados no contrato: `EMAIL` e `SMS`.
 - Challenges têm `challengeId`, TTL e tentativa limitada no backend.
 - Login 2FA aceita código de 6 dígitos ou recovery code normalizado, nunca ambos.
-- Recovery codes seguem formato `AAAAA-BBBBB-CCCCC`, são únicos no lote e retornam apenas em ativação/regeneração.
+- Recovery codes seguem formato `XXXXX-XXXXX-XXXXX`, com caracteres alfanuméricos maiúsculos, são únicos no lote e retornam apenas em ativação/regeneração.
 - Ativação, desativação, regeneração e troca de método reconciliam status real depois de respostas ambíguas.
 - Troca de método exige step-up e confirma disponibilidade do canal alvo.
 
@@ -168,7 +168,7 @@ Backend: testes Jest cobrem utilitários, ambiente, controller/service via unit/
 - [ ] Executar homologação manual em staging com browser real e providers configurados.
 - [ ] Validar login completo com e-mail verificado e device aprovado em ambiente staging.
 - [ ] Validar login 2FA EMAIL e SMS com expiração e rate limit.
-- [ ] Validar recovery code único e consumo/redução de saldo.
+- [ ] Validar recovery code único, consumo único e redução da quantidade restante de recovery codes.
 - [ ] Validar refresh token rotation e detecção de reuse.
 - [ ] Validar logout atual, logout global e revogação de dispositivo.
 - [ ] Validar alteração de senha revogando sessões antigas.

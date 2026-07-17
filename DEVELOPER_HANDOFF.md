@@ -41,8 +41,8 @@ Funcionalidades presentes visualmente:
 - Banco real existe para autenticação; domínios de marketplace ainda dependem de modelagem/persistência própria.
 - Autenticação real existe para cadastro, login, sessão, dispositivos, senha, e-mail, telefone, 2FA, step-up e recovery codes.
 - **Sem pagamento real** (Pix/boleto/cartão gerados como mock).
-- **Sem persistência** (nada em LocalStorage/Cookies).
-- Pronto para iniciar a fase backend (ver `BACKEND_ROADMAP.md`).
+- Domínios de marketplace ainda não têm persistência real. Autenticação usa PostgreSQL/Redis e cookies backend de refresh, dispositivo e CSRF; o access token fica somente em memória.
+- O backend de autenticação já existe; a próxima fase backend é para domínios de marketplace como catálogo, pedidos, pagamentos, seller/admin, KYC e wallet (ver `BACKEND_ROADMAP.md`).
 
 ## 3. Stack
 
@@ -182,4 +182,4 @@ Ordem sugerida:
 
 ## Auditoria final de autenticação — 2026-07-17
 
-A documentação consolidada do bloco real de autenticação está em `AUTHENTICATION_FINAL_AUDIT.md`. Ela substitui as afirmações antigas de que não havia backend/autenticação real para o escopo específico de auth. Permanecem mockados fora de autenticação: catálogo, carrinho, checkout, pagamentos, pedidos, vendedor, admin, KYC, wallet, afiliados, notificações de produto e CMS. Próxima sprint recomendada: CI/staging e hardening operacional de autenticação antes de iniciar domínios financeiros ou marketplace.
+A documentação consolidada do bloco real de autenticação está em `AUTHENTICATION_FINAL_AUDIT.md`. Ela substitui as afirmações antigas de que não havia backend/autenticação real para o escopo específico de auth. Permanecem mockados fora de autenticação: catálogo, carrinho, checkout, pagamentos, pedidos, vendedor, admin, KYC, wallet, afiliados, notificações de produto e CMS. Próxima sprint recomendada: Staging, homologação e hardening operacional de autenticação antes de iniciar domínios financeiros ou marketplace.

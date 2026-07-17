@@ -1,21 +1,21 @@
 # PROVIDERS_MAP.md — LIT Buy
 
-Providers globais em `src/providers/` embrulham a aplicação em
-`src/routes/__root.tsx`. Todos são **mockados** e mantêm estado
-apenas em memória.
+Providers globais em `src/providers/` embrulham a aplicação em `src/routes/__root.tsx`. O `AuthProvider` já usa autenticação real; outros providers e contextos de marketplace ainda podem manter estado visual/mockado em memória conforme indicado abaixo.
 
 ## AuthProvider (`src/providers/AuthProvider.tsx`)
 
-- **Responsabilidade**: expor usuário logado, `activeRole`
-  (buyer/seller/admin visual), login/logout demo.
-- **Estado**: usuário atual em memória (`useState`).
-- **Mock**: qualquer e-mail loga; `admin@litbuy.com` recebe papel admin.
-- **Limitações**: sem token, sem refresh, sem RBAC real, sem sessão
-  persistida. Recarregar a página desloga.
-- **Estado atual**: autenticação real via backend NestJS/PostgreSQL/Redis, com
-  verificação de e-mail, 2FA, roles server-side, tokens JWT httpOnly.
-- **Riscos**: `AuthGate`/`AdminGate` são apenas visuais. Qualquer
-  proteção real precisa RLS/checks no backend.
+### Estado atual autoritativo
+
+- Usa a API NestJS real em `/api/v1` para cadastro, login, refresh, logout, `/auth/me`, desafios de e-mail/dispositivo e 2FA.
+- Mantém o access token somente em memória via `src/lib/api/client.ts`.
+- Refresh token fica em cookie `HttpOnly` controlado pelo backend.
+- Device cookie e CSRF cookie são controlados pelo backend; o frontend apenas lê o CSRF legível para enviar `X-CSRF-Token` em mutações.
+- Papéis buyer/seller/admin continuam apenas visuais quando `VITE_ENABLE_DEMO_ROLES=true` e não concedem autorização backend real.
+- RBAC real de marketplace, seller e admin ainda é pendente e deve ser implementado em guards/checks server-side.
+
+### Histórico descontinuado / não autoritativo
+
+As regras simplificadas do MVP visual anterior foram descontinuadas e não representam o estado atual de autenticação.
 
 ## CartProvider (`src/providers/CartProvider.tsx`)
 
