@@ -5,18 +5,29 @@ Criticidade: **baixa / média / alta / crítica**.
 
 ## 1. Autenticação
 
-| Item                            | Criticidade | Backend futuro                  |
-| ------------------------------- | ----------- | ------------------------------- |
-| Login                           | crítica     | Auth real (Supabase Auth)       |
-| Cadastro                        | crítica     | Verificação de e-mail + captcha |
-| Recuperação de senha            | crítica     | Token seguro + expiração        |
-| Admin                           | crítica     | RBAC + RLS                      |
-| activeRole (buyer/seller)       | média       | Sessão + claims                 |
-| Verificação de novo dispositivo | alta        | Device fingerprint + código     |
+### REAL no escopo auditado
+
+- Cadastro.
+- Login.
+- Verificação de e-mail.
+- Recuperação e redefinição de senha.
+- Sessões.
+- Dispositivos aprovados.
+- Alteração segura de telefone/e-mail.
+- 2FA, step-up e recovery codes.
+
+### AINDA VISUAL/MOCK fora do contrato real de auth
+
+| Item                      | Criticidade | Necessidade real pendente                    |
+| ------------------------- | ----------- | -------------------------------------------- |
+| activeRole buyer/seller   | média       | Autorização server-side por domínio          |
+| isAdmin/AdminGate         | crítica     | RBAC/guards server-side para admin           |
+| Permissões de marketplace | crítica     | Policies/checks backend por recurso          |
+| RBAC seller/admin         | crítica     | Modelo de papéis e auditoria no backend real |
 
 ## 2. Marketplace
 
-| Item                       | Criticidade | Backend futuro                 |
+| Item                       | Criticidade | Necessidade real               |
 | -------------------------- | ----------- | ------------------------------ |
 | Produtos                   | alta        | Tabela `products` + validação  |
 | Categorias / subcategorias | média       | CMS admin                      |
@@ -29,7 +40,7 @@ Criticidade: **baixa / média / alta / crítica**.
 
 ## 3. Carrinho / Checkout
 
-| Item         | Criticidade | Backend futuro                      |
+| Item         | Criticidade | Necessidade real                    |
 | ------------ | ----------- | ----------------------------------- |
 | Carrinho     | crítica     | Cart server-side, preço recalculado |
 | Cupom        | alta        | Ledger de cupons + antifraude       |
@@ -42,7 +53,7 @@ Criticidade: **baixa / média / alta / crítica**.
 
 ## 4. Pedidos
 
-| Item                       | Criticidade | Backend futuro             |
+| Item                       | Criticidade | Necessidade real           |
 | -------------------------- | ----------- | -------------------------- |
 | Pedido                     | crítica     | `orders` + auditoria       |
 | Timeline                   | alta        | Máquina de estados         |
@@ -55,7 +66,7 @@ Criticidade: **baixa / média / alta / crítica**.
 
 ## 5. Vendedor
 
-| Item         | Criticidade | Backend futuro      |
+| Item         | Criticidade | Necessidade real    |
 | ------------ | ----------- | ------------------- |
 | Anúncios     | alta        | CRUD + aprovação    |
 | Vendas       | crítica     | Escrow              |
@@ -67,7 +78,7 @@ Criticidade: **baixa / média / alta / crítica**.
 
 ## 6. Admin
 
-| Item          | Criticidade | Backend futuro   |
+| Item          | Criticidade | Necessidade real |
 | ------------- | ----------- | ---------------- |
 | Usuários      | crítica     | RBAC + audit     |
 | Permissões    | crítica     | RBAC + RLS       |
@@ -80,7 +91,7 @@ Criticidade: **baixa / média / alta / crítica**.
 
 ## 7. Segurança
 
-| Item                | Criticidade | Backend futuro              |
+| Item                | Criticidade | Necessidade real            |
 | ------------------- | ----------- | --------------------------- |
 | KYC                 | crítica     | Idwall / Unico / Jumio      |
 | SMS                 | crítica     | Twilio / Zenvia             |
@@ -93,7 +104,7 @@ Criticidade: **baixa / média / alta / crítica**.
 
 ## 8. Afiliados
 
-| Item             | Criticidade | Backend futuro          |
+| Item             | Criticidade | Necessidade real        |
 | ---------------- | ----------- | ----------------------- |
 | Link de afiliado | alta        | Tracking real           |
 | Tracking         | crítica     | Atribuição + antifraude |
@@ -103,7 +114,7 @@ Criticidade: **baixa / média / alta / crítica**.
 
 ## 9. Notificações / e-mails
 
-| Item                      | Criticidade | Backend futuro          |
+| Item                      | Criticidade | Necessidade real        |
 | ------------------------- | ----------- | ----------------------- |
 | notificationService       | alta        | Fila + push + realtime  |
 | transactionalEmailService | alta        | Provedor real           |
@@ -113,7 +124,7 @@ Criticidade: **baixa / média / alta / crítica**.
 
 ## 10. Páginas públicas
 
-| Item                   | Criticidade | Backend futuro         |
+| Item                   | Criticidade | Necessidade real       |
 | ---------------------- | ----------- | ---------------------- |
 | Conteúdo institucional | média       | CMS                    |
 | Termos                 | crítica     | Revisão jurídica       |
@@ -160,3 +171,7 @@ Sessões, dispositivos aprovados e alteração autenticada de senha usam somente
 ## Sprint 2C2B2B2B2 — sem mock para troca de método 2FA
 
 Não há mock ou fallback silencioso para `POST /auth/2fa/method/change/request` ou `POST /auth/2fa/method/change/confirm`. A UI depende dos contratos reais do backend e da disponibilidade real de EMAIL/SMS já carregada no frontend.
+
+## Atualização — autenticação removida do inventário de mocks (2026-07-17)
+
+Autenticação não deve mais ser tratada como mock: os fluxos reais estão listados em `AUTHENTICATION_FINAL_AUDIT.md`. Continuam mockados fora de autenticação: catálogo, produtos, categorias, carrinho, checkout, pagamentos, pedidos, vendedor, admin, KYC, wallet, afiliados, notificações de produto, mensagens e CMS.

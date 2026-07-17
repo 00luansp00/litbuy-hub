@@ -37,17 +37,17 @@ Funcionalidades presentes visualmente:
 ## 2. Estado atual
 
 - Frontend avançado, MVP visual/mockado.
-- **Sem backend real.**
-- **Sem banco de dados.**
-- **Sem autenticação real** (login demo em memória).
+- Backend NestJS/PostgreSQL/Redis real existe para autenticação conforme `AUTHENTICATION_FINAL_AUDIT.md`.
+- Banco real existe para autenticação; domínios de marketplace ainda dependem de modelagem/persistência própria.
+- Autenticação real existe para cadastro, login, sessão, dispositivos, senha, e-mail, telefone, 2FA, step-up e recovery codes.
 - **Sem pagamento real** (Pix/boleto/cartão gerados como mock).
-- **Sem persistência** (nada em LocalStorage/Cookies).
-- Pronto para iniciar a fase backend (ver `BACKEND_ROADMAP.md`).
+- Domínios de marketplace ainda não têm persistência real. Autenticação usa PostgreSQL/Redis e cookies backend de refresh, dispositivo e CSRF; o access token fica somente em memória.
+- O backend de autenticação já existe; a próxima fase backend é para domínios de marketplace como catálogo, pedidos, pagamentos, seller/admin, KYC e wallet (ver `BACKEND_ROADMAP.md`).
 
 ## 3. Stack
 
 - **React 19** + **TypeScript** (strict).
-- **Vite 7** + **TanStack Start / Router** (file-based).
+- **Vite** + **TanStack Router** (file-based).
 - **Tailwind v4** + **shadcn/ui** (Radix).
 - **Framer Motion** para animações leves.
 - **Lucide Icons** para iconografia.
@@ -73,16 +73,13 @@ bunx tsgo --noEmit # typecheck (sem script dedicado)
 bun run format     # Prettier
 ```
 
-## 5. Login demo
+## 5. Autenticação real e papéis visuais
 
-Autenticação é **mockada em memória** (`AuthProvider` + `authMock`).
+Autenticação não usa mais `authMock`: o bloco real está documentado em `AUTHENTICATION_FINAL_AUDIT.md`.
 
-- Qualquer e-mail/senha loga como usuário comum.
-- Para acessar o painel admin, use o e-mail **`admin@litbuy.com`**
-  (senha qualquer). O `AdminGate` é apenas visual.
-- Todo usuário comum pode **comprar e vender** — os papéis "comprador"
-  e "vendedor" são apenas contexto visual (`activeRole`).
-- Nenhum dado real é coletado ou persistido.
+- Cadastro, login, refresh, logout, senha, e-mail, telefone, dispositivos, sessões, 2FA, step-up e recovery codes usam a API NestJS `/api/v1`.
+- Papéis comprador/vendedor/admin no frontend continuam contexto visual quando `VITE_ENABLE_DEMO_ROLES=true`; autorização real de marketplace ainda precisa ser server-side.
+- Não inserir dados reais em domínios de marketplace ainda mockados, como pagamentos, pedidos, seller/admin, KYC e wallet.
 
 ## 6. Regra principal
 
@@ -100,23 +97,20 @@ Ordem sugerida:
 
 1. Revisar o projeto no **Cursor** (ou IDE preferida).
 2. Subir para o **GitHub**.
-3. Definir backend (assumido: **Supabase** — ver `SUPABASE_RLS_PLAN.md`
-   e `DATABASE_SCHEMA.md`).
-4. Implementar banco conforme `DATABASE_IMPLEMENTATION_NOTES.md`.
-5. Implementar **autenticação real** (Supabase Auth + verificação de
-   e-mail + 2FA).
-6. Implementar **RBAC + RLS** (`SUPABASE_RLS_PLAN.md`).
-7. Implementar catálogo real (produtos, categorias, imagens, aprovação).
-8. Implementar pedidos, chat, mediação real.
-9. Implementar **pagamento e escrow** (`PAYMENT_AND_ESCROW_IMPLEMENTATION_PLAN.md`)
+3. Usar a arquitetura real atual: frontend React/Vite, backend NestJS, PostgreSQL/Prisma, Redis e API REST `/api/v1`.
+4. Autenticação real já existe em NestJS/PostgreSQL/Redis para o bloco documentado em `AUTHENTICATION_FINAL_AUDIT.md`; não reabrir plano histórico de auth terceirizada.
+5. Implementar autorização/RBAC server-side para marketplace, vendedor e admin.
+6. Implementar catálogo real (produtos, categorias, imagens, aprovação).
+7. Implementar pedidos, chat, mediação real.
+8. Implementar **pagamento e escrow** (`PAYMENT_AND_ESCROW_IMPLEMENTATION_PLAN.md`)
    — parte mais crítica.
-10. Implementar wallet real, saques e KYC real.
-11. Implementar admin real com auditoria imutável.
-12. Implementar e-mails transacionais reais (Resend/SendGrid/SES).
-13. Reforçar segurança (`SECURITY_IMPLEMENTATION_PLAN.md`).
-14. Avaliar SSR/SSG para SEO das rotas públicas.
-15. Configurar monitoramento, backups, LGPD, termos jurídicos.
-16. **Deploy** (Cloudflare/Vercel/Netlify + Supabase managed).
+9. Implementar wallet real, saques e KYC real.
+10. Implementar admin real com auditoria imutável.
+11. Implementar e-mails transacionais reais (Resend/SendGrid/SES).
+12. Reforçar segurança (`SECURITY_IMPLEMENTATION_PLAN.md`).
+13. Avaliar SSR/SSG para SEO das rotas públicas.
+14. Configurar monitoramento, backups, LGPD, termos jurídicos.
+15. **Deploy** do frontend e backend NestJS em provedores definidos pelo time, sem dependência obrigatória de Supabase.
 
 ## Documentos relacionados
 
@@ -185,3 +179,7 @@ Ordem sugerida:
 - O grant opaco de step-up é mantido somente em `useRef` local transitório no hook específico, nunca em provider, cache, storage, URL, body, toast ou log, e é apagado em sucesso, cancelamento, desmontagem, erro terminal ou resultado ambíguo.
 - O backend consome o grant somente na confirmação bem-sucedida, preserva a sessão atual e revoga outras sessões com motivo `TWO_FACTOR_METHOD_CHANGED`; o frontend reconcilia status 2FA e sessões reais com `throwOnError: true` antes de liberar ações após sucesso ou resultado desconhecido.
 - Disponibilidade: não oferece o método atual, só oferece SMS quando o telefone confirmado já está disponível no estado real do usuário, e não exibe endereço completo de e-mail ou telefone.
+
+## Auditoria final de autenticação — 2026-07-17
+
+A documentação consolidada do bloco real de autenticação está em `AUTHENTICATION_FINAL_AUDIT.md`. Ela substitui as afirmações antigas de que não havia backend/autenticação real para o escopo específico de auth. Permanecem mockados fora de autenticação: catálogo, carrinho, checkout, pagamentos, pedidos, vendedor, admin, KYC, wallet, afiliados, notificações de produto e CMS. Próxima sprint recomendada: Staging, homologação e hardening operacional de autenticação antes de iniciar domínios financeiros ou marketplace.

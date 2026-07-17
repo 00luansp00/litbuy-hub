@@ -9,40 +9,40 @@ Legenda:
 - **Auth**: público / usuário / vendedor / admin.
 - **Gate**: componente que protege visualmente (nenhuma proteção real).
 - **Service**: service principal consumido.
-- **Backend futuro**: o que precisará ser criado.
+- **Backend / situação**: o que precisará ser criado.
 
 ## 1. Rotas públicas
 
-| Rota                     | Finalidade              | Auth    | Gate | Service                   | Backend futuro                          |
-| ------------------------ | ----------------------- | ------- | ---- | ------------------------- | --------------------------------------- |
-| `/`                      | Home / landing          | público | —    | product, category         | listagem paginada + destaques + SEO SSR |
-| `/buscar`                | Busca de produtos       | público | —    | searchService             | busca full-text, ranking, filtros       |
-| `/login`                 | Login demo              | público | —    | authMock                  | Auth real                               |
-| `/cadastro`              | Cadastro demo           | público | —    | authMock                  | Auth real + verificação e-mail          |
-| `/recuperar-senha`       | Solicitar reset         | público | —    | transactionalEmailService | Token seguro + e-mail                   |
-| `/redefinir-senha`       | Definir nova senha      | público | —    | transactionalEmailService | Validar token, expiração                |
-| `/verificar-email`       | Confirmação de e-mail   | público | —    | transactionalEmailService | Token de verificação                    |
-| `/verificacao-login`     | Alerta novo dispositivo | público | —    | transactionalEmailService | Device fingerprint + código             |
-| `/categoria/$slug`       | Listagem por categoria  | público | —    | category, product         | filtros + paginação                     |
-| `/produto/$id`           | Detalhe do produto      | público | —    | productService            | Produto + variações + reviews + SEO     |
-| `/loja/$slug`            | Vitrine do vendedor     | público | —    | sellerService             | Perfil vendedor + produtos              |
-| `/lit-points`            | Landing LIT Points      | público | —    | litPointsService          | Regras, saldo                           |
-| `/taxas`                 | Taxas da plataforma     | público | —    | platformEconomicsService  | Config admin                            |
-| `/afiliados`             | Programa afiliados      | público | —    | affiliateService          | Tracking, comissão                      |
-| `/ajuda`                 | Central de ajuda        | público | —    | infoService               | CMS de FAQ                              |
-| `/como-comprar`          | Guia comprador          | público | —    | infoService               | CMS                                     |
-| `/como-vender`           | Guia vendedor           | público | —    | infoService               | CMS                                     |
-| `/seguranca`             | Segurança               | público | —    | infoService               | CMS                                     |
-| `/regras-da-plataforma`  | Regras                  | público | —    | infoService               | CMS + versão jurídica                   |
-| `/itens-proibidos`       | Lista proibidos         | público | —    | infoService               | CMS                                     |
-| `/politica-de-reembolso` | Política reembolso      | público | —    | infoService               | CMS jurídico                            |
-| `/termos`                | Termos de uso           | público | —    | infoService               | Rascunho — precisa jurídico             |
-| `/privacidade`           | Política LGPD           | público | —    | infoService               | Rascunho — precisa jurídico             |
-| `/contato`               | Formulário contato      | público | —    | infoService               | Backend + anti-spam + e-mail            |
+| Rota                     | Finalidade             | Auth    | Gate | Service                  | Backend / situação                      |
+| ------------------------ | ---------------------- | ------- | ---- | ------------------------ | --------------------------------------- |
+| `/`                      | Home / landing         | público | —    | product, category        | listagem paginada + destaques + SEO SSR |
+| `/buscar`                | Busca de produtos      | público | —    | searchService            | busca full-text, ranking, filtros       |
+| `/login`                 | Login real             | público | —    | authService              | API NestJS `/auth/login`                |
+| `/cadastro`              | Cadastro real          | público | —    | authService              | API NestJS `/auth/register`             |
+| `/recuperar-senha`       | Solicitar reset        | público | —    | authService              | API NestJS `/auth/password/forgot`      |
+| `/redefinir-senha`       | Definir nova senha     | público | —    | authService              | API NestJS `/auth/password/reset`       |
+| `/verificar-email`       | Confirmação de e-mail  | público | —    | authService              | API NestJS `/auth/email/verify`         |
+| `/verificacao-login`     | Dispositivo/2FA login  | público | —    | authService              | API NestJS device approval e 2FA login  |
+| `/categoria/$slug`       | Listagem por categoria | público | —    | category, product        | filtros + paginação                     |
+| `/produto/$id`           | Detalhe do produto     | público | —    | productService           | Produto + variações + reviews + SEO     |
+| `/loja/$slug`            | Vitrine do vendedor    | público | —    | sellerService            | Perfil vendedor + produtos              |
+| `/lit-points`            | Landing LIT Points     | público | —    | litPointsService         | Regras, saldo                           |
+| `/taxas`                 | Taxas da plataforma    | público | —    | platformEconomicsService | Config admin                            |
+| `/afiliados`             | Programa afiliados     | público | —    | affiliateService         | Tracking, comissão                      |
+| `/ajuda`                 | Central de ajuda       | público | —    | infoService              | CMS de FAQ                              |
+| `/como-comprar`          | Guia comprador         | público | —    | infoService              | CMS                                     |
+| `/como-vender`           | Guia vendedor          | público | —    | infoService              | CMS                                     |
+| `/seguranca`             | Segurança              | público | —    | infoService              | CMS                                     |
+| `/regras-da-plataforma`  | Regras                 | público | —    | infoService              | CMS + versão jurídica                   |
+| `/itens-proibidos`       | Lista proibidos        | público | —    | infoService              | CMS                                     |
+| `/politica-de-reembolso` | Política reembolso     | público | —    | infoService              | CMS jurídico                            |
+| `/termos`                | Termos de uso          | público | —    | infoService              | Rascunho — precisa jurídico             |
+| `/privacidade`           | Política LGPD          | público | —    | infoService              | Rascunho — precisa jurídico             |
+| `/contato`               | Formulário contato     | público | —    | infoService              | Backend + anti-spam + e-mail            |
 
 ## 2. Rotas do usuário / comprador
 
-| Rota                   | Finalidade               | Auth | Gate     | Service                           | Backend futuro           |
+| Rota                   | Finalidade               | Auth | Gate     | Service                           | Backend / situação       |
 | ---------------------- | ------------------------ | ---- | -------- | --------------------------------- | ------------------------ |
 | `/perfil`              | Painel do usuário        | user | AuthGate | accountService                    | Perfil real              |
 | `/perfil/verificacao`  | KYC visual               | user | AuthGate | verificationService               | KYC (Idwall/Unico/Jumio) |
@@ -60,7 +60,7 @@ Legenda:
 
 ## 3. Rotas do vendedor
 
-| Rota                      | Finalidade          | Auth   | Gate     | Service                            | Backend futuro            |
+| Rota                      | Finalidade          | Auth   | Gate     | Service                            | Backend / situação        |
 | ------------------------- | ------------------- | ------ | -------- | ---------------------------------- | ------------------------- |
 | `/vendedor`               | Dashboard vendedor  | seller | AuthGate | sellerDashboardService             | Métricas reais            |
 | `/vendedor/anuncios`      | Meus anúncios       | seller | AuthGate | sellerService, listingDraftService | CRUD + aprovação          |
@@ -75,7 +75,7 @@ Legenda:
 
 **`/admin/denuncias` é oficial** — não usar `/admin/reclamacoes`.
 
-| Rota                   | Finalidade            | Auth  | Gate      | Service                                | Backend futuro             |
+| Rota                   | Finalidade            | Auth  | Gate      | Service                                | Backend / situação         |
 | ---------------------- | --------------------- | ----- | --------- | -------------------------------------- | -------------------------- |
 | `/admin`               | Dashboard admin       | admin | AdminGate | adminService                           | Métricas                   |
 | `/admin/usuarios`      | Usuários              | admin | AdminGate | adminService                           | Search + audit             |
@@ -143,3 +143,7 @@ Naquela sprint, step-up, troca de método 2FA e regeneração de recovery codes 
 ### Sprint 2C2B2B2B2 — `/perfil/seguranca`
 
 A rota `/perfil/seguranca` agora expõe a troca segura de método 2FA apenas quando `GET /auth/2fa/status` indica 2FA ativo. O fluxo usa step-up `TWO_FACTOR_METHOD_CHANGE`, chama `POST /auth/2fa/method/change/request` e `POST /auth/2fa/method/change/confirm`, bloqueia desativação/regeneração durante a troca e reconcilia status e sessões reais ao final.
+
+## Atualização — rotas reais de autenticação (2026-07-17)
+
+As rotas `/login`, `/cadastro`, `/recuperar-senha`, `/redefinir-senha`, `/verificar-email`, `/verificacao-login`, `/confirmar-alteracao-email` e `/perfil/seguranca` usam os services reais de autenticação documentados em `AUTHENTICATION_FINAL_AUDIT.md`. As demais rotas de marketplace mantêm status mock/visual salvo indicação específica em documentação futura.

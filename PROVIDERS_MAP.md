@@ -1,21 +1,21 @@
 # PROVIDERS_MAP.md — LIT Buy
 
-Providers globais em `src/providers/` embrulham a aplicação em
-`src/routes/__root.tsx`. Todos são **mockados** e mantêm estado
-apenas em memória.
+Providers globais em `src/providers/` embrulham a aplicação em `src/routes/__root.tsx`. O `AuthProvider` já usa autenticação real; outros providers e contextos de marketplace ainda podem manter estado visual/mockado em memória conforme indicado abaixo.
 
 ## AuthProvider (`src/providers/AuthProvider.tsx`)
 
-- **Responsabilidade**: expor usuário logado, `activeRole`
-  (buyer/seller/admin visual), login/logout demo.
-- **Estado**: usuário atual em memória (`useState`).
-- **Mock**: qualquer e-mail loga; `admin@litbuy.com` recebe papel admin.
-- **Limitações**: sem token, sem refresh, sem RBAC real, sem sessão
-  persistida. Recarregar a página desloga.
-- **Substituição futura**: Supabase Auth (ou equivalente) com
-  verificação de e-mail, 2FA, roles server-side, tokens JWT httpOnly.
-- **Riscos**: `AuthGate`/`AdminGate` são apenas visuais. Qualquer
-  proteção real precisa RLS/checks no backend.
+### Estado atual autoritativo
+
+- Usa a API NestJS real em `/api/v1` para cadastro, login, refresh, logout, `/auth/me`, desafios de e-mail/dispositivo e 2FA.
+- Mantém o access token somente em memória via `src/lib/api/client.ts`.
+- Refresh token fica em cookie `HttpOnly` controlado pelo backend.
+- Device cookie e CSRF cookie são controlados pelo backend; o frontend apenas lê o CSRF legível para enviar `X-CSRF-Token` em mutações.
+- Papéis buyer/seller/admin continuam apenas visuais quando `VITE_ENABLE_DEMO_ROLES=true` e não concedem autorização backend real.
+- RBAC real de marketplace, seller e admin ainda é pendente e deve ser implementado em guards/checks server-side.
+
+### Histórico descontinuado / não autoritativo
+
+As regras simplificadas do MVP visual anterior foram descontinuadas e não representam o estado atual de autenticação.
 
 ## CartProvider (`src/providers/CartProvider.tsx`)
 
@@ -90,3 +90,7 @@ verdade para dinheiro, permissão, KYC ou notificação de segurança.
 ## Sprint 2C2B2B2B2 — segredo fora de providers
 
 A troca de método 2FA não adiciona estado sensível ao `AuthProvider` ou a qualquer context global. O step-up grant opaco permanece somente em `useRef` local do hook de troca, entre request e confirm, e nunca é persistido em cache ou storage.
+
+## Atualização — AuthProvider real (2026-07-17)
+
+`AuthProvider` usa API real, mantém access token somente em memória, remove queries privadas ao trocar estado de autenticação e não possui fallback silencioso para mock. O detalhe de cookies, CSRF, sessão e 2FA está consolidado em `AUTHENTICATION_FINAL_AUDIT.md`.

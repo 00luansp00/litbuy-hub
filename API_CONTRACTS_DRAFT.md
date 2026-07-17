@@ -8,17 +8,11 @@ autenticados usam `Authorization: Bearer <token>` (JWT). Endpoints
 `admin/*` exigem role admin.
 
 ## Auth
-- `POST /auth/register` — body `{ email, password, name }`. Retorna
-  usuário + envio de e-mail de verificação. Rate-limit por IP.
-- `POST /auth/login` — body `{ email, password }`. Retorna sessão.
-- `POST /auth/logout` — invalida token.
-- `POST /auth/forgot-password` — body `{ email }`. Sempre 200
-  (não vaza existência).
-- `POST /auth/reset-password` — body `{ token, password }`.
-- `POST /auth/verify-email` — body `{ token }`.
-- `POST /auth/verify-device` — body `{ code }` para novo dispositivo.
+
+O contrato real de autenticação está documentado em `AUTHENTICATION_FINAL_AUDIT.md` e nos DTOs/controller do backend (`backend/src/auth/dto.ts` e `backend/src/auth/auth.controller.ts`). Os contratos abaixo dos demais domínios são propostas históricas e não representam APIs implementadas.
 
 ## Users / Profile
+
 - `GET /me` — perfil atual.
 - `PATCH /me` — atualiza nome, avatar, bio.
 - `GET /me/preferences` — preferências de comunicação.
@@ -27,6 +21,7 @@ autenticados usam `Authorization: Bearer <token>` (JWT). Endpoints
 - `POST /me/kyc` — inicia KYC (integração com provedor).
 
 ## Products
+
 - `GET /products` — filtros: `q`, `category`, `sort`, `page`.
 - `GET /products/:id` — detalhes + variações + reviews.
 - `POST /products` — vendedor cria (vira `listing_draft` até aprovação).
@@ -35,6 +30,7 @@ autenticados usam `Authorization: Bearer <token>` (JWT). Endpoints
 - `GET /categories` — árvore de categorias.
 
 ## Cart
+
 - `GET /cart` — carrinho do usuário.
 - `POST /cart/items` — body `{ productId, variantId?, quantity }`.
 - `PATCH /cart/items/:id` — quantidade.
@@ -42,6 +38,7 @@ autenticados usam `Authorization: Bearer <token>` (JWT). Endpoints
 - `POST /cart/coupon` — aplica cupom.
 
 ## Checkout / Payments
+
 - `POST /checkout` — valida carrinho, cria intent, retorna `orderId`.
 - `POST /payments/pix` — retorna QR + copia-e-cola.
 - `POST /payments/boleto` — retorna código + linha digitável.
@@ -50,6 +47,7 @@ autenticados usam `Authorization: Bearer <token>` (JWT). Endpoints
 - `POST /payments/webhook` — **idempotente**, chamado pelo gateway.
 
 ## Orders
+
 - `GET /orders` — pedidos do usuário.
 - `GET /orders/:id` — detalhe + timeline.
 - `POST /orders/:id/confirm-delivery` — libera escrow.
@@ -57,11 +55,13 @@ autenticados usam `Authorization: Bearer <token>` (JWT). Endpoints
 - `POST /orders/:id/evidence` — upload de evidência (URL assinada).
 
 ## Messages
+
 - `GET /conversations` — lista.
 - `GET /conversations/:id` — mensagens paginadas.
 - `POST /conversations/:id/messages` — envia (moderação server-side).
 
 ## Seller
+
 - `GET /seller/dashboard` — métricas.
 - `GET /seller/listings` — anúncios do vendedor.
 - `POST /seller/listings` — novo (draft).
@@ -73,12 +73,14 @@ autenticados usam `Authorization: Bearer <token>` (JWT). Endpoints
 - `POST /seller/team/:id/role` — troca cargo.
 
 ## Wallet
+
 - `GET /wallet` — saldos.
 - `GET /wallet/transactions` — ledger paginado.
 - `POST /withdrawals` — solicita saque (exige KYC aprovado).
 - `GET /withdrawals` — histórico.
 
 ## Reports (denúncias)
+
 - `POST /reports` — body `{ targetType, targetId, reason, description }`.
 - `GET /reports` — reports do usuário.
 - `GET /reports/:id`.
@@ -86,6 +88,7 @@ autenticados usam `Authorization: Bearer <token>` (JWT). Endpoints
 - `PATCH /admin/reports/:id` — moderação (accept/reject/escalate).
 
 ## Admin
+
 - `GET /admin/dashboard` — métricas globais.
 - `GET /admin/users` — search + filtros.
 - `PATCH /admin/users/:id` — role, status.
@@ -97,17 +100,20 @@ autenticados usam `Authorization: Bearer <token>` (JWT). Endpoints
 - `PATCH /admin/kyc/:id` — aprova/rejeita.
 
 ## Affiliate
+
 - `GET /affiliate` — perfil do afiliado.
 - `GET /affiliate/conversions` — lista.
 - `GET /affiliate/commissions` — ledger.
 - `POST /affiliate/payout-request` — saque (KYC obrigatório).
 
 ## Notifications
+
 - `GET /notifications` — paginadas.
 - `PATCH /notifications/:id/read`.
 - `PATCH /notifications/read-all`.
 
 ## Emails
+
 - `GET /admin/email-templates` — lista.
 - `PATCH /admin/email-templates/:id` — edita.
 - `POST /admin/email-events/test` — envia teste.
@@ -123,3 +129,7 @@ autenticados usam `Authorization: Bearer <token>` (JWT). Endpoints
 - Todas as rotas admin/seller com **RLS + role check**.
 - Webhooks: verificar assinatura, logar payload, ser idempotente.
 - Logs financeiros: imutáveis, retenção mínima legal.
+
+## Contrato real de autenticação — consolidado em 2026-07-17
+
+O contrato real implementado para autenticação está documentado em `AUTHENTICATION_FINAL_AUDIT.md` e substitui o rascunho antigo desta seção para endpoints `/auth/*`. Não inferir contratos de pagamentos, pedidos, seller, admin, KYC ou wallet a partir do bloco de autenticação.

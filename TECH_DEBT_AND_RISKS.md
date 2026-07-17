@@ -187,4 +187,7 @@ O lint raiz legado (`eslint .`) ainda varre todo o monorepo, incluindo backend e
 
 - Garantia: o mesmo `X-Step-Up-Token` é reutilizado em request e confirm e fica somente em memória transitória local.
 - Garantia: resultado ambíguo após confirm limpa segredo/challenge, bloqueia ações e exige reconciliação real de status e sessões com erro propagado.
-- Risco operacional: a criação do PR depende da integração do ambiente Codex, pois o remote público não aceita fetch/push neste checkout.
+
+## Atualização — riscos remanescentes de autenticação (2026-07-17)
+
+A dívida de "auth mockado" foi encerrada para o bloco coberto por `AUTHENTICATION_FINAL_AUDIT.md`. Riscos remanescentes: staging/homologação, provedores reais de e-mail/SMS, cookies de produção, observabilidade, rate limit sob tráfego real, LGPD e pentest.
