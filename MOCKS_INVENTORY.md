@@ -146,7 +146,7 @@ Sessões, dispositivos aprovados e alteração autenticada de senha usam somente
 - O gerenciamento de 2FA da Central de Segurança não usa mock ou fallback local.
 - Endpoints reais integrados: `/auth/2fa/status`, `/auth/2fa/enroll/request`, `/auth/2fa/enroll/confirm`, `/auth/2fa/disable/request` e `/auth/2fa/disable/confirm`.
 - Recovery codes reais têm formato `XXXXX-XXXXX-XXXXX`, são exibidos uma única vez e nunca são salvos em QueryCache, MutationCache, storage, URL, provider, logs ou toast.
-- Step-up, troca de método e regeneração de recovery codes seguem sem mock e sem implementação no frontend.
+- Naquela sprint, step-up, troca de método e regeneração de recovery codes ainda não estavam implementados no frontend; no estado atual, step-up, regeneração e troca EMAIL/SMS estão implementados sem mock ou fallback local.
 
 ## Sprint 2C2B2B2B1 — step-up recovery regeneration
 

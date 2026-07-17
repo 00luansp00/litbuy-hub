@@ -129,7 +129,7 @@ Legenda:
 | ------------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `/perfil/seguranca` | `src/routes/perfil.seguranca.tsx` | Central real de segurança com sessões, dispositivos, senha, telefone, e-mail e 2FA: status real, ativação EMAIL/SMS, exibição única de recovery codes `XXXXX-XXXXX-XXXXX`, desativação e revogação segura de sessões. |
 
-Step-up, troca de método 2FA e regeneração de recovery codes não foram adicionados nesta rota.
+Naquela sprint, step-up, troca de método 2FA e regeneração de recovery codes ainda não tinham sido adicionados nesta rota; no estado atual, a rota integra step-up, regeneração e troca EMAIL/SMS sem fallback para mock.
 
 ## Sprint 2C2B2B2B1 — step-up recovery regeneration
 

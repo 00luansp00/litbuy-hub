@@ -196,13 +196,46 @@ describe("TwoFactorMethodChange", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /Confirmar troca/i }));
     expect(await screen.findByText(/pode ter sido aplicada/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Não foi possível concluir a operação/i)).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /Regenerar recovery codes/i }),
     ).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Tentar reconciliar novamente/i }));
     await screen.findByText(/Status da segurança atualizado/i);
     await screen.findByText(/ativo por SMS/i);
+    await waitFor(() =>
+      expect(screen.queryByText(/pode ter sido aplicada/i)).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByText(/Não foi possível concluir a operação/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Método de 2FA atualizado/i)).not.toBeInTheDocument();
     expect(statusSpy).toHaveBeenCalledTimes(3);
+  });
+
+  it("clears stale ambiguous warning after a successful reconciliation retry", async () => {
+    vi.spyOn(twoFactorMethodChangeService, "confirm").mockRejectedValueOnce(
+      new ApiError(502, "TWO_FACTOR_METHOD_CHANGE_OUTCOME_UNKNOWN", "unknown"),
+    );
+    vi.spyOn(twoFactorSecurityService, "getStatus")
+      .mockResolvedValueOnce(enabledEmail)
+      .mockRejectedValueOnce(new ApiError(503, "HTTP_ERROR", "down"))
+      .mockResolvedValueOnce(enabledSms);
+    setup();
+    await completeStepUp();
+    fireEvent.click(screen.getByRole("button", { name: /Enviar código ao novo método/i }));
+    fireEvent.change(await screen.findByLabelText(/Código de seis dígitos/i), {
+      target: { value: "654321" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar troca/i }));
+    expect(await screen.findByText(/pode ter sido aplicada/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Não foi possível concluir a operação/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Tentar reconciliar novamente/i }));
+    expect(await screen.findByText(/Status da segurança atualizado/i)).toBeInTheDocument();
+    expect(await screen.findByText(/ativo por SMS/i)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByText(/pode ter sido aplicada/i)).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByText(/Não foi possível concluir a operação/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Método de 2FA atualizado/i)).not.toBeInTheDocument();
   });
 
   it("keeps confirmed changes blocked when status reconciliation fails, then retries", async () => {

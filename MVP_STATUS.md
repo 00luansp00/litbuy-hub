@@ -506,7 +506,7 @@ Autenticação central do frontend integrada à API NestJS real. Tokens não sã
 
 - Integrado no frontend: sessões ativas, dispositivos aprovados e alteração autenticada de senha.
 - Rota: `/perfil/seguranca`.
-- Fora do escopo e pendente para próximas sprints: telefone, alteração de e-mail, gerenciamento de 2FA, recovery codes e demais áreas 2C2B2B.
+- Naquela sprint, telefone, alteração de e-mail, gerenciamento de 2FA, recovery codes e demais áreas 2C2B2B estavam fora do escopo; no estado atual, telefone/e-mail, ativação/desativação 2FA, step-up, regeneração de recovery codes e troca EMAIL/SMS estão implementados sem fallback para mock.
 - O frontend continua chamando exclusivamente a API NestJS; nenhum segredo, senha ou access token é persistido em storage.
 
 ## Sprint 2C2B2B1
@@ -514,14 +514,14 @@ Autenticação central do frontend integrada à API NestJS real. Tokens não sã
 - Integrados ao frontend: solicitação/confirmacão de telefone por SMS, solicitação de alteração de e-mail e dupla confirmação de e-mail.
 - Fluxos que revogam sessões limpam autenticação local e direcionam para login.
 - Senha, telefone, novo e-mail, challengeId, código SMS e token não são persistidos em storage.
-- Gestão de 2FA permanece pendente para Sprint 2C2B2B2.
+- Naquela sprint, gestão de 2FA permanecia pendente para Sprint 2C2B2B2; no estado atual, ativação/desativação 2FA, step-up, regeneração e troca EMAIL/SMS estão implementados.
 
 ## Sprint 2C2B2B2A
 
 - Integrados ao frontend: status real de 2FA, ativação por EMAIL/SMS, confirmação por código, exibição única de 10 recovery codes `XXXXX-XXXXX-XXXXX`, quantidade restante de recovery codes, solicitação/confirmação de desativação e logout seguro após revogação de sessões.
 - Segurança: senha, challengeId, códigos e recovery codes permanecem apenas em memória local transitória; não há persistência em storage, URL, contexto ou caches de mutation.
 - Ativação atualiza status de 2FA e lista de sessões em background sem bloquear a exibição dos recovery codes.
-- Pendente: step-up, troca de método de 2FA e regeneração de recovery codes para sprints futuras.
+- Naquela sprint, step-up, troca de método de 2FA e regeneração de recovery codes estavam pendentes; no estado atual, esses fluxos estão implementados sem fallback para mock.
 
 ## Sprint 2C2B2B2B1 — step-up recovery regeneration
 

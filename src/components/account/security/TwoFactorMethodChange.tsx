@@ -140,10 +140,14 @@ export function TwoFactorMethodChange({
           return false;
         }
         resetFlow();
+        setCriticalWarning("");
+        setReconciliationError("");
         setSuccessMessage("Método de 2FA atualizado com segurança.");
         return true;
       }
       resetFlow();
+      setCriticalWarning("");
+      setReconciliationError("");
       setSuccessMessage("Status da segurança atualizado. Confira o método de 2FA exibido.");
       return true;
     } catch (error) {

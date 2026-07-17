@@ -157,7 +157,7 @@ Ordem sugerida:
 - `/perfil/seguranca` segue como Central de Segurança e agora inclui cards dedicados para telefone e e-mail. Challenge de telefone, SMS code, senha, novo e-mail e token de confirmação não são persistidos.
 - `/confirmar-alteracao-email` remove imediatamente `token` da URL com navegação `replace`, exige o novo e-mail novamente para funcionar em nova aba, consome o token uma única vez e trata `PENDING` e `COMPLETED`.
 - `COMPLETED` de alteração de e-mail e sucesso de telefone encerram a autenticação local, removem queries privadas e direcionam para `/login`, alinhado à revogação de sessões e limpeza de cookies do backend.
-- Gerenciamento de 2FA continua fora de escopo e pendente para Sprint 2C2B2B2.
+- Naquela sprint, gerenciamento de 2FA continuava fora de escopo; no estado atual, ativação/desativação, step-up, regeneração de recovery codes e troca EMAIL/SMS estão implementados sem fallback para mock.
 
 ## Sprint 2C2B2B2A — status, ativação e desativação segura de 2FA
 
