@@ -3,11 +3,13 @@ import { ShieldCheck } from "lucide-react";
 import { ApiError } from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
 import { RecoveryCodeRegeneration } from "./RecoveryCodeRegeneration";
+import { TwoFactorMethodChange } from "./TwoFactorMethodChange";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   friendlyAuthError,
+  useStepUpSecurity,
   useTwoFactorSecurity,
   useTwoFactorStatus,
   normalizeRecoveryCode,
@@ -33,6 +35,7 @@ function formatDate(value: string | null) {
 export function TwoFactorSecuritySection({ smsAvailable }: { smsAvailable: boolean }) {
   const status = useTwoFactorStatus(true);
   const actions = useTwoFactorSecurity();
+  const stepUpActions = useStepUpSecurity();
   const [method, setMethod] = useState<TwoFactorMethod>("EMAIL");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
@@ -49,6 +52,7 @@ export function TwoFactorSecuritySection({ smsAvailable }: { smsAvailable: boole
   const [tone, setTone] = useState<Tone>("info");
   const [reconcilingStatus, setReconcilingStatus] = useState(false);
   const [regenerationExclusive, setRegenerationExclusive] = useState(false);
+  const [methodChangeExclusive, setMethodChangeExclusive] = useState(false);
   const mountedRef = useRef(false);
   const inFlight = useRef(false);
   const messageRef = useRef<HTMLParagraphElement>(null);
@@ -66,9 +70,12 @@ export function TwoFactorSecuritySection({ smsAvailable }: { smsAvailable: boole
     actions.disableConfirmPending ||
     inFlight.current ||
     reconcilingStatus;
-  const busy = ownTwoFactorBusy || regenerationExclusive;
+  const busy = ownTwoFactorBusy || regenerationExclusive || methodChangeExclusive;
   const canShowRecoveryRegeneration =
-    (statusReady || regenerationExclusive) && Boolean(status.data?.enabled) && !disableChallenge;
+    (statusReady || regenerationExclusive) &&
+    Boolean(status.data?.enabled) &&
+    !disableChallenge &&
+    !methodChangeExclusive;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -444,41 +451,54 @@ export function TwoFactorSecuritySection({ smsAvailable }: { smsAvailable: boole
             </Button>
           </form>
         )}
+        {statusReady && status.data?.enabled && !regenerationExclusive && !disableChallenge && (
+          <TwoFactorMethodChange
+            status={status.data}
+            smsAvailable={smsAvailable}
+            disabled={ownTwoFactorBusy || showingRecoveryCodes || methodChangeExclusive}
+            onExclusiveChange={setMethodChangeExclusive}
+            onReconcile={stepUpActions.reconcileStepUpRelatedData}
+          />
+        )}
         {canShowRecoveryRegeneration && (
           <RecoveryCodeRegeneration
-            disabled={ownTwoFactorBusy || showingRecoveryCodes}
+            disabled={ownTwoFactorBusy || showingRecoveryCodes || methodChangeExclusive}
             onExclusiveChange={setRegenerationExclusive}
           />
         )}
-        {statusReady && status.data?.enabled && !disableChallenge && !regenerationExclusive && (
-          <form onSubmit={requestDisable} className="space-y-3 rounded-2xl border p-4">
-            <p className="text-sm text-destructive">
-              Desativar o 2FA reduz a proteção da conta e revogará as sessões.
-            </p>
-            <div>
-              <Label htmlFor="disable-two-factor-password">Senha da conta</Label>
-              <Input
-                id="disable-two-factor-password"
-                type="password"
-                autoComplete="current-password"
-                value={disablePassword}
-                onChange={(e) => setDisablePassword(e.target.value)}
-              />
-            </div>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={disableAccepted}
-                onChange={(e) => setDisableAccepted(e.target.checked)}
-              />{" "}
-              Entendo o risco de desativar o 2FA
-            </label>
-            <Button type="submit" variant="destructive" disabled={busy}>
-              {actions.disablePending ? "Solicitando..." : "Solicitar desativação"}
-            </Button>
-          </form>
-        )}
-        {statusReady && disableChallenge && !regenerationExclusive && (
+        {statusReady &&
+          status.data?.enabled &&
+          !disableChallenge &&
+          !regenerationExclusive &&
+          !methodChangeExclusive && (
+            <form onSubmit={requestDisable} className="space-y-3 rounded-2xl border p-4">
+              <p className="text-sm text-destructive">
+                Desativar o 2FA reduz a proteção da conta e revogará as sessões.
+              </p>
+              <div>
+                <Label htmlFor="disable-two-factor-password">Senha da conta</Label>
+                <Input
+                  id="disable-two-factor-password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={disablePassword}
+                  onChange={(e) => setDisablePassword(e.target.value)}
+                />
+              </div>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={disableAccepted}
+                  onChange={(e) => setDisableAccepted(e.target.checked)}
+                />{" "}
+                Entendo o risco de desativar o 2FA
+              </label>
+              <Button type="submit" variant="destructive" disabled={busy}>
+                {actions.disablePending ? "Solicitando..." : "Solicitar desativação"}
+              </Button>
+            </form>
+          )}
+        {statusReady && disableChallenge && !regenerationExclusive && !methodChangeExclusive && (
           <form onSubmit={confirmDisable} className="space-y-3 rounded-2xl border p-4">
             <p className="text-sm text-muted-foreground">
               Confirme com código de seis dígitos ou recovery code.

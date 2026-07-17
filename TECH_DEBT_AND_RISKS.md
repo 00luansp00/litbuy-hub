@@ -175,9 +175,16 @@ O lint raiz legado (`eslint .`) ainda varre todo o monorepo, incluindo backend e
 - Recovery codes são segredo crítico: devem continuar fora de QueryCache, MutationCache, storage, URL, provider, logs, analytics, toast e snapshots.
 
 ## Sprint 2C2B2B2B1 — step-up recovery regeneration
+
 - Frontend integrates real step-up endpoints for `TWO_FACTOR_RECOVERY_REGENERATE`: `POST /auth/step-up/request`, `POST /auth/step-up/verify`, `POST /auth/step-up/resend`, and `POST /auth/2fa/recovery/regenerate`.
 - Recovery-code regeneration confirms by six-digit 2FA code or a normalized 5-5-5 recovery code; the recovery confirmation code is sent only in the verify payload.
-- The opaque `stepUpToken` is validated defensively, kept only in the local Promise scope, and immediately sent as `X-Step-Up-Token` to regenerate recovery codes.
+- The opaque `grant opaco de step-up` is validated defensively, kept only in the local Promise scope, and immediately sent as `X-Step-Up-Token` to regenerate recovery codes.
 - Regeneration expects exactly 10 unique uppercase 5-5-5 codes, treats malformed responses as `MALFORMED_RESPONSE`, warns that old codes may have been invalidated, and reconciles status/sessions without logging out.
 - Successful regeneration invalidates old recovery codes and visually refreshes the real sessions list while preserving the current session; new codes are shown once in an exclusive screen.
 - 2FA method change remains pending for Sprint 2C2B2B2B2; no method-change UI was added.
+
+## Sprint 2C2B2B2B2 — riscos e garantias
+
+- Garantia: o mesmo `X-Step-Up-Token` é reutilizado em request e confirm e fica somente em memória transitória local.
+- Garantia: resultado ambíguo após confirm limpa segredo/challenge, bloqueia ações e exige reconciliação real de status e sessões com erro propagado.
+- Risco operacional: a criação do PR depende da integração do ambiente Codex, pois o remote público não aceita fetch/push neste checkout.
