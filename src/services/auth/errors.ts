@@ -38,6 +38,8 @@ const messages: Record<string, string> = {
   INVALID_OR_EXPIRED_STEP_UP_GRANT: "A confirmação expirou. Inicie novamente.",
   STEP_UP_SCOPE_MISMATCH: "A confirmação não corresponde a esta ação. Inicie novamente.",
   FORBIDDEN: "Você não tem permissão para concluir esta ação.",
+  RECOVERY_REGENERATION_OUTCOME_UNKNOWN:
+    "Não foi possível confirmar o resultado da regeneração dos recovery codes.",
   MALFORMED_RESPONSE: "Resposta inválida da API.",
   HTTP_ERROR: "Não foi possível concluir a operação.",
   NETWORK_ERROR: "Não foi possível conectar à API.",

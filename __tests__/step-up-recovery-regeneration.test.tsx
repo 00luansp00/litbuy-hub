@@ -1,11 +1,12 @@
 import React, { StrictMode } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api/client";
 import { AuthContext, type AuthContextValue } from "@/providers/AuthContext";
 import { TwoFactorSecuritySection } from "@/components/account/security/TwoFactorSecuritySection";
 import { stepUpSecurityService } from "@/services/auth/stepUpSecurity";
+import { accountSecurityQueryKeys } from "@/services/auth/useAccountSecurity";
 import { twoFactorSecurityService } from "@/services/auth/twoFactorSecurity";
 
 const mocks = vi.hoisted(() => ({
@@ -86,25 +87,42 @@ function auth(): AuthContextValue {
     toggleRole: vi.fn(() => ({ ok: true, needsOnboarding: false, role: "buyer" })),
   };
 }
-function setup(strict = false) {
+type SetupOptions = {
+  strict?: boolean;
+  statusQueryFn?: ReturnType<typeof vi.fn>;
+  sessionsQueryFn?: ReturnType<typeof vi.fn>;
+};
+const enabledStatus = {
+  enabled: true,
+  method: "EMAIL" as const,
+  enabledAt: "2026-07-16T12:00:00.000Z",
+  recoveryCodesRemaining: 3,
+};
+function SessionsProbe({ queryFn }: { queryFn: ReturnType<typeof vi.fn> }) {
+  useQuery({ queryKey: accountSecurityQueryKeys.sessions, queryFn, retry: false });
+  return null;
+}
+function setup(options: boolean | SetupOptions = false) {
   cleanup();
-  vi.spyOn(twoFactorSecurityService, "getStatus").mockResolvedValue({
-    enabled: true,
-    method: "EMAIL",
-    enabledAt: "2026-07-16T12:00:00.000Z",
-    recoveryCodesRemaining: 3,
-  });
+  const normalized = typeof options === "boolean" ? { strict: options } : options;
+  const statusQueryFn = normalized.statusQueryFn ?? vi.fn().mockResolvedValue(enabledStatus);
+  vi.spyOn(twoFactorSecurityService, "getStatus").mockImplementation(statusQueryFn);
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const authValue = auth();
-  const ui = <TwoFactorSecuritySection smsAvailable />;
+  const ui = (
+    <>
+      {normalized.sessionsQueryFn ? <SessionsProbe queryFn={normalized.sessionsQueryFn} /> : null}
+      <TwoFactorSecuritySection smsAvailable />
+    </>
+  );
   const view = render(
     <QueryClientProvider client={queryClient}>
       <AuthContext.Provider value={authValue}>
-        {strict ? <StrictMode>{ui}</StrictMode> : ui}
+        {normalized.strict ? <StrictMode>{ui}</StrictMode> : ui}
       </AuthContext.Provider>
     </QueryClientProvider>,
   );
-  return { queryClient, authValue, ...view };
+  return { queryClient, authValue, statusQueryFn, ...view };
 }
 async function startFlow() {
   await screen.findByRole("button", { name: /Regenerar recovery codes/i });
@@ -159,7 +177,7 @@ describe("step-up recovery regeneration UI", () => {
     const request = vi
       .spyOn(stepUpSecurityService, "requestStepUp")
       .mockReturnValue(pending.promise);
-    setup(true);
+    setup({ strict: true });
     await startFlow();
     fireEvent.click(screen.getByRole("button", { name: /Solicitar código/i }));
     expect(await screen.findByText(/Informe a senha atual/i)).toBeInTheDocument();
@@ -309,6 +327,65 @@ describe("step-up recovery regeneration UI", () => {
       challengeId: challenge.challengeId,
       recoveryCode: codes[0],
     });
+  });
+
+  it("keeps the UI blocked when the real status query refetch fails, then releases after retry", async () => {
+    vi.spyOn(stepUpSecurityService, "requestStepUp").mockResolvedValue(challenge);
+    vi.spyOn(stepUpSecurityService, "verifyStepUpAndRegenerateRecoveryCodes").mockRejectedValue(
+      new ApiError(0, "RECOVERY_REGENERATION_OUTCOME_UNKNOWN", "unknown"),
+    );
+    const statusQueryFn = vi.fn().mockResolvedValue(enabledStatus);
+    const sessionsQueryFn = vi.fn().mockResolvedValue({ sessions: [] });
+    const { authValue } = setup({ statusQueryFn, sessionsQueryFn });
+    await requestChallenge();
+    statusQueryFn
+      .mockRejectedValueOnce(new Error("status failed"))
+      .mockResolvedValue(enabledStatus);
+    fireEvent.change(screen.getByLabelText(/Código de seis dígitos/i), {
+      target: { value: "123456" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar e regenerar/i }));
+    expect(await screen.findByText(/não foi possível confirmar ou exibir/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Não foi possível atualizar o status/i)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Solicitar desativação/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(codes[0])).not.toBeInTheDocument();
+    expect(authValue.clearAuthentication).not.toHaveBeenCalled();
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /Tentar reconciliar novamente/i }));
+    const startButton = await screen.findByRole("button", { name: /Regenerar recovery codes/i });
+    expect(startButton).toBeDisabled();
+    expect(screen.getByText(/não foi possível confirmar ou exibir/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Não foi possível atualizar o status/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Senha atual/i)).not.toBeInTheDocument();
+  });
+
+  it("keeps the UI blocked when the real sessions query refetch fails, then releases after retry", async () => {
+    vi.spyOn(stepUpSecurityService, "requestStepUp").mockResolvedValue(challenge);
+    vi.spyOn(stepUpSecurityService, "verifyStepUpAndRegenerateRecoveryCodes").mockRejectedValue(
+      new ApiError(502, "MALFORMED_RESPONSE", "bad"),
+    );
+    const statusQueryFn = vi.fn().mockResolvedValue(enabledStatus);
+    const sessionsQueryFn = vi.fn().mockResolvedValue({ sessions: [] });
+    setup({ statusQueryFn, sessionsQueryFn });
+    await requestChallenge();
+    sessionsQueryFn
+      .mockRejectedValueOnce(new Error("sessions failed"))
+      .mockResolvedValue({ sessions: [] });
+    fireEvent.change(screen.getByLabelText(/Código de seis dígitos/i), {
+      target: { value: "123456" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Confirmar e regenerar/i }));
+    expect(await screen.findByText(/não foi possível confirmar ou exibir/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Não foi possível atualizar o status/i)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Solicitar desativação/i }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Tentar reconciliar novamente/i }));
+    const startButton = await screen.findByRole("button", { name: /Regenerar recovery codes/i });
+    expect(startButton).toBeDisabled();
+    expect(screen.queryByText(/Não foi possível atualizar o status/i)).not.toBeInTheDocument();
   });
 
   it("handles clipboard outcomes and keeps secrets out of caches, storage, URL, toast and console", async () => {

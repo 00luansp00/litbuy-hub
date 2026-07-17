@@ -267,6 +267,7 @@ describe("twoFactorSecurityService", () => {
 
 import {
   buildStepUpVerifyPayload,
+  recoveryRegenerationOutcomeUnknownCode,
   stepUpRecoveryRegenerateScope,
   stepUpSecurityService,
 } from "@/services/auth/stepUpSecurity";
@@ -424,6 +425,57 @@ describe("stepUpSecurityService", () => {
     const regenerateCall = fetchMock.mock.calls.at(-1);
     expect(regenerateCall?.[1].headers.get("X-Step-Up-Token")).toBe("opaque-token-value");
     expect(regenerateCall?.[1].body).toBeUndefined();
+  });
+
+  it("classifies only ambiguous failures after a valid grant", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ code: "INVALID_OR_EXPIRED_STEP_UP_CODE" }), { status: 400 }),
+    );
+    await expect(
+      stepUpSecurityService.verifyStepUpAndRegenerateRecoveryCodes({
+        challengeId: stepUpChallenge.challengeId,
+        code: "123456",
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_OR_EXPIRED_STEP_UP_CODE" });
+
+    for (const response of [
+      new Response(null, { status: 200 }),
+      Promise.reject(new TypeError("network failed")),
+      new Response(JSON.stringify({ code: "HTTP_ERROR" }), { status: 503 }),
+    ]) {
+      fetchMock.mockResolvedValueOnce(await ok(stepUpGrant));
+      if (response instanceof Promise)
+        fetchMock.mockRejectedValueOnce(await response.catch((e) => e));
+      else fetchMock.mockResolvedValueOnce(response);
+      await expect(
+        stepUpSecurityService.verifyStepUpAndRegenerateRecoveryCodes({
+          challengeId: stepUpChallenge.challengeId,
+          code: "123456",
+        }),
+      ).rejects.toMatchObject({ code: recoveryRegenerationOutcomeUnknownCode });
+    }
+  });
+
+  it("preserves explicit regeneration rejections after a valid grant", async () => {
+    for (const code of [
+      "INVALID_OR_EXPIRED_STEP_UP_GRANT",
+      "STEP_UP_SCOPE_MISMATCH",
+      "INVALID_SESSION",
+      "FORBIDDEN",
+      "RATE_LIMITED",
+    ]) {
+      fetchMock.mockResolvedValueOnce(await ok(stepUpGrant));
+      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ code }), { status: 400 }));
+      await expect(
+        stepUpSecurityService.verifyStepUpAndRegenerateRecoveryCodes({
+          challengeId: stepUpChallenge.challengeId,
+          recoveryCode: "ABCDE-12345-FGHIJ",
+        }),
+      ).rejects.toMatchObject({ code });
+    }
+    expect(JSON.stringify(localStorage)).not.toContain("opaque-step-up-token-value");
+    expect(JSON.stringify(sessionStorage)).not.toContain("opaque-step-up-token-value");
+    expect(location.href).not.toContain("opaque-step-up-token-value");
   });
 
   it("builds code or normalized recovery payloads, never both or neither", () => {

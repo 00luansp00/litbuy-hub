@@ -37,8 +37,11 @@ export function useStepUpSecurity() {
     setReconcilePending(true);
     try {
       await Promise.all([
-        queryClient.refetchQueries({ queryKey: twoFactorStatusQueryKey }),
-        queryClient.refetchQueries({ queryKey: accountSecurityQueryKeys.sessions }),
+        queryClient.refetchQueries({ queryKey: twoFactorStatusQueryKey }, { throwOnError: true }),
+        queryClient.refetchQueries(
+          { queryKey: accountSecurityQueryKeys.sessions },
+          { throwOnError: true },
+        ),
       ]);
     } finally {
       inFlight.current.reconcile = false;

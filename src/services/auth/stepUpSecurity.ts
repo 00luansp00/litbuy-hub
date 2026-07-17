@@ -8,6 +8,8 @@ import {
 const json = (body: unknown) => JSON.stringify(body);
 const uuidV4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export const stepUpRecoveryRegenerateScope = "TWO_FACTOR_RECOVERY_REGENERATE" as const;
+export const recoveryRegenerationOutcomeUnknownCode =
+  "RECOVERY_REGENERATION_OUTCOME_UNKNOWN" as const;
 type StepUpScope = typeof stepUpRecoveryRegenerateScope;
 type RecordValue = Record<string, unknown>;
 
@@ -68,6 +70,20 @@ function parseRecoveryCodes(value: unknown): RecoveryCodesResponse {
   return { recoveryCodes };
 }
 
+function isAmbiguousRegenerationFailure(error: unknown): boolean {
+  if (!(error instanceof ApiError)) return true;
+  if (error.code === "MALFORMED_RESPONSE") return true;
+  return error.code === "HTTP_ERROR" && error.status >= 500;
+}
+function unknownRegenerationOutcome(error: unknown): ApiError {
+  return new ApiError(
+    error instanceof ApiError ? error.status : 0,
+    recoveryRegenerationOutcomeUnknownCode,
+    "Não foi possível confirmar o resultado da regeneração dos recovery codes.",
+    error instanceof ApiError ? error.requestId : undefined,
+  );
+}
+
 export function buildStepUpVerifyPayload(
   challengeId: string,
   code: string,
@@ -121,7 +137,12 @@ export const stepUpSecurityService = {
     try {
       const grant = await stepUpSecurityService.verifyStepUp(payload);
       token = grant.stepUpToken;
-      return await stepUpSecurityService.regenerateRecoveryCodes(token);
+      try {
+        return await stepUpSecurityService.regenerateRecoveryCodes(token);
+      } catch (error) {
+        if (isAmbiguousRegenerationFailure(error)) throw unknownRegenerationOutcome(error);
+        throw error;
+      }
     } finally {
       token = "";
     }

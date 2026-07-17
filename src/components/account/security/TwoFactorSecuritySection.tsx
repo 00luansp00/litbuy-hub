@@ -67,6 +67,8 @@ export function TwoFactorSecuritySection({ smsAvailable }: { smsAvailable: boole
     inFlight.current ||
     reconcilingStatus;
   const busy = ownTwoFactorBusy || regenerationExclusive;
+  const canShowRecoveryRegeneration =
+    (statusReady || regenerationExclusive) && Boolean(status.data?.enabled) && !disableChallenge;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -442,7 +444,7 @@ export function TwoFactorSecuritySection({ smsAvailable }: { smsAvailable: boole
             </Button>
           </form>
         )}
-        {statusReady && status.data?.enabled && !disableChallenge && (
+        {canShowRecoveryRegeneration && (
           <RecoveryCodeRegeneration
             disabled={ownTwoFactorBusy || showingRecoveryCodes}
             onExclusiveChange={setRegenerationExclusive}

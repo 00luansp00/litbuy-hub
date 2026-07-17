@@ -15,10 +15,11 @@ import {
 import { RecoveryCodesDisplay } from "./RecoveryCodesDisplay";
 
 type Props = { disabled: boolean; onExclusiveChange?: (exclusive: boolean) => void };
-type BlockReason = "malformed" | "closing" | null;
+type BlockReason = "ambiguous" | "closing" | null;
 
-const malformedRecoveryMessage =
-  "Os recovery codes podem ter sido regenerados, mas não foi possível exibi-los. Inicie uma nova regeneração para criar outro conjunto seguro.";
+const ambiguousRecoveryMessage =
+  "Os recovery codes podem ter sido regenerados, mas não foi possível confirmar ou exibir o novo conjunto. Inicie uma nova regeneração para criar códigos seguros.";
+const reconciliationFailureMessage = "Não foi possível atualizar o status da segurança.";
 
 function formatDate(value: string) {
   const date = new Date(value);
@@ -61,6 +62,8 @@ export function RecoveryCodeRegeneration({ disabled, onExclusiveChange }: Props)
   const [newRecoveryCodes, setNewRecoveryCodes] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
+  const [criticalWarning, setCriticalWarning] = useState("");
+  const [reconciliationError, setReconciliationError] = useState("");
   const [blockReason, setBlockReason] = useState<BlockReason>(null);
   const [closingReconciliation, setClosingReconciliation] = useState(false);
   const mountedRef = useRef(false);
@@ -110,20 +113,31 @@ export function RecoveryCodeRegeneration({ disabled, onExclusiveChange }: Props)
     setClosingReconciliation(false);
     clearTransientInputs();
   };
+  const clearMessages = () => {
+    setError("");
+    setInfo("");
+    setReconciliationError("");
+    setCriticalWarning("");
+  };
   const reconcileAndRelease = async (releaseOnSuccess: () => void) => {
     try {
       await actions.reconcileStepUpRelatedData();
       if (!mountedRef.current) return;
       releaseOnSuccess();
-    } catch (error) {
-      if (mountedRef.current) fail(friendlyAuthError(error).message);
+    } catch {
+      if (mountedRef.current) setReconciliationError(reconciliationFailureMessage);
     }
   };
-  const reconcileAfterMalformed = async () => {
-    setBlockReason("malformed");
+  const reconcileAfterAmbiguousOutcome = async () => {
+    setBlockReason("ambiguous");
+    setCriticalWarning(ambiguousRecoveryMessage);
+    setReconciliationError("");
     await reconcileAndRelease(() => {
       resetFlow();
-      setError(malformedRecoveryMessage);
+      setCriticalWarning(ambiguousRecoveryMessage);
+      setError("");
+      setInfo("");
+      setReconciliationError("");
     });
   };
   const request = async (event: FormEvent) => {
@@ -132,6 +146,7 @@ export function RecoveryCodeRegeneration({ disabled, onExclusiveChange }: Props)
     if (!password) return fail("Informe a senha atual.");
     setError("");
     setInfo("");
+    setReconciliationError("");
     try {
       const response = await actions.requestStepUp(password);
       if (!mountedRef.current) return;
@@ -189,13 +204,19 @@ export function RecoveryCodeRegeneration({ disabled, onExclusiveChange }: Props)
       clearTransientInputs();
       setAccepted(false);
       setStarted(false);
+      clearMessages();
       void actions.refreshStepUpRelatedData();
     } catch (error) {
       if (!mountedRef.current) return;
-      if (error instanceof ApiError && error.code === "MALFORMED_RESPONSE") {
+      if (
+        error instanceof ApiError &&
+        ["MALFORMED_RESPONSE", "RECOVERY_REGENERATION_OUTCOME_UNKNOWN"].includes(error.code)
+      ) {
         clearTransientInputs();
-        fail(malformedRecoveryMessage);
-        void reconcileAfterMalformed();
+        setError("");
+        setInfo("");
+        setCriticalWarning(ambiguousRecoveryMessage);
+        void reconcileAfterAmbiguousOutcome();
         return;
       }
       if (isRecoverableVerifyError(error)) {
@@ -224,15 +245,29 @@ export function RecoveryCodeRegeneration({ disabled, onExclusiveChange }: Props)
     setNewRecoveryCodes([]);
     setAccepted(false);
     setStarted(false);
-    setError("");
-    setInfo("");
+    clearMessages();
     clearTransientInputs();
-    await reconcileAndRelease(() => resetFlow());
+    await reconcileAndRelease(() => {
+      resetFlow();
+      clearMessages();
+    });
     if (mountedRef.current) setClosingReconciliation(false);
   };
   const retryReconcile = async () => {
+    const retryReason = blockReason;
     setClosingReconciliation(true);
-    await reconcileAndRelease(() => resetFlow());
+    setReconciliationError("");
+    await reconcileAndRelease(() => {
+      resetFlow();
+      if (retryReason === "ambiguous") {
+        setCriticalWarning(ambiguousRecoveryMessage);
+        setError("");
+        setInfo("");
+        setReconciliationError("");
+      } else {
+        clearMessages();
+      }
+    });
     if (mountedRef.current) setClosingReconciliation(false);
   };
   const start = () => {
@@ -240,12 +275,12 @@ export function RecoveryCodeRegeneration({ disabled, onExclusiveChange }: Props)
     setStarted(true);
     setError("");
     setInfo("");
+    setReconciliationError("");
   };
   const cancel = () => {
     if (busy) return;
     resetFlow();
-    setError("");
-    setInfo("");
+    clearMessages();
   };
 
   if (showingCodes) {
@@ -262,9 +297,18 @@ export function RecoveryCodeRegeneration({ disabled, onExclusiveChange }: Props)
   if (blockReason) {
     return (
       <div className="space-y-3 rounded-2xl border p-4">
-        <p role="alert" className="text-sm text-destructive">
-          {error || "Não foi possível reconciliar o status da segurança. Tente novamente."}
-        </p>
+        {criticalWarning && (
+          <p role="alert" className="text-sm text-destructive">
+            {criticalWarning}
+          </p>
+        )}
+        {(reconciliationError || error || !criticalWarning) && (
+          <p className="text-sm text-destructive">
+            {reconciliationError ||
+              error ||
+              "Não foi possível reconciliar o status da segurança. Tente novamente."}
+          </p>
+        )}
         <Button
           type="button"
           variant="outline"
@@ -286,8 +330,13 @@ export function RecoveryCodeRegeneration({ disabled, onExclusiveChange }: Props)
         Todos os recovery codes antigos serão invalidados, outras sessões serão encerradas, a sessão
         atual será preservada e os novos códigos serão exibidos apenas uma vez.
       </p>
-      {error && (
+      {criticalWarning && (
         <p role="alert" className="text-sm text-destructive">
+          {criticalWarning}
+        </p>
+      )}
+      {error && (
+        <p role={criticalWarning ? undefined : "alert"} className="text-sm text-destructive">
           {error}
         </p>
       )}
