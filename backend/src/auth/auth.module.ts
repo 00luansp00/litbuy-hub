@@ -24,6 +24,7 @@ import { AuthMailer, AuthService, DisabledAuthSmsPort, MemoryAuthSmsPort } from 
           }
           return memory;
         }
+        if (mode === 'external') return memory;
         if (mode === 'disabled') return disabled;
         throw new ServiceUnavailableException({ code: 'SMS_DELIVERY_UNAVAILABLE' });
       },

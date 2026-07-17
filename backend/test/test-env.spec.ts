@@ -9,6 +9,8 @@ const managedEnvKeys = [
   'CORS_ORIGINS',
   'LOG_LEVEL',
   'SWAGGER_ENABLED',
+  'TRUST_PROXY',
+  'SERVER_REQUEST_TIMEOUT_MS',
 ] as const;
 
 describe('applyTestEnv', () => {
@@ -61,6 +63,8 @@ describe('applyTestEnv', () => {
     expect(process.env.REDIS_URL).toBe('redis://localhost:6379');
     expect(process.env.CORS_ORIGINS).toBe('http://localhost:3000');
     expect(process.env.LOG_LEVEL).toBe('silent');
+    expect(process.env.TRUST_PROXY).toBe('false');
+    expect(process.env.SERVER_REQUEST_TIMEOUT_MS).toBe('60000');
   });
 
   it('preserves SWAGGER_ENABLED="false" from process.env', () => {

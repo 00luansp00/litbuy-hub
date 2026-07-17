@@ -21,7 +21,8 @@
     "prisma:migrate": "prisma migrate dev",
     "test:integration": "jest --config ./test/jest-integration.json --runInBand --detectOpenHandles",
     "prisma:migrate:deploy": "prisma migrate deploy",
-    "prisma:migrate:status": "prisma migrate status"
+    "prisma:migrate:status": "prisma migrate status",
+    "smoke:auth": "node ../scripts/auth-smoke.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.9",

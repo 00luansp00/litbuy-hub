@@ -93,7 +93,7 @@ Para desenvolvedor entrar rápido no projeto:
 6. [`BACKEND_ROADMAP.md`](./BACKEND_ROADMAP.md)
 7. [`API_CONTRACTS_DRAFT.md`](./API_CONTRACTS_DRAFT.md)
 8. [`DATABASE_SCHEMA.md`](./DATABASE_SCHEMA.md)
-   + [`DATABASE_IMPLEMENTATION_NOTES.md`](./DATABASE_IMPLEMENTATION_NOTES.md)
+   - [`DATABASE_IMPLEMENTATION_NOTES.md`](./DATABASE_IMPLEMENTATION_NOTES.md)
 9. [`SECURITY_IMPLEMENTATION_PLAN.md`](./SECURITY_IMPLEMENTATION_PLAN.md)
 10. [`PAYMENT_AND_ESCROW_IMPLEMENTATION_PLAN.md`](./PAYMENT_AND_ESCROW_IMPLEMENTATION_PLAN.md)
 11. [`TECH_DEBT_AND_RISKS.md`](./TECH_DEBT_AND_RISKS.md)
@@ -117,3 +117,13 @@ auditoria e testes. Ver `SECURITY_IMPLEMENTATION_PLAN.md` e
 Enquanto o backend não existir, **não insira dados reais** (cartão,
 CPF, documento, selfie, senha, Pix, credenciais de jogo). Todas as
 telas sensíveis exibem aviso de demonstração.
+
+## Authentication staging readiness
+
+A staging simulation is available through `docker-compose.staging.yml` for frontend, backend, PostgreSQL and Redis. It is only for local homologation/staging rehearsal, not a public deployment blueprint.
+
+1. Copy and review `backend/.env.staging.example` for real staging or use `backend/.env.staging.local.example` only for isolated local smoke tests.
+2. Run backend migrations with `cd backend && bun run prisma:generate && bun run prisma:migrate:deploy`.
+3. Start local staging simulation with `docker compose -f docker-compose.staging.yml up --build`.
+4. Validate `GET /api/v1/health/live`, `GET /api/v1/health/ready`, and `bun run smoke:auth`.
+5. Follow `AUTH_STAGING_HOMOLOGATION_RUNBOOK.md` before considering staging approved.

@@ -7,6 +7,8 @@ type ManagedEnvKey =
   | 'CORS_ORIGINS'
   | 'LOG_LEVEL'
   | 'SWAGGER_ENABLED'
+  | 'TRUST_PROXY'
+  | 'SERVER_REQUEST_TIMEOUT_MS'
   | 'AUTH_ACCESS_TOKEN_SECRET'
   | 'AUTH_ACCESS_TOKEN_TTL_SECONDS'
   | 'AUTH_REFRESH_TOKEN_TTL_DAYS'
@@ -53,6 +55,8 @@ const defaultTestEnv: Record<ManagedEnvKey, string> = {
   CORS_ORIGINS: 'http://localhost:3000',
   LOG_LEVEL: 'silent',
   SWAGGER_ENABLED: 'false',
+  TRUST_PROXY: 'false',
+  SERVER_REQUEST_TIMEOUT_MS: '60000',
   AUTH_ACCESS_TOKEN_SECRET: 'test_auth_access_token_secret',
   AUTH_ACCESS_TOKEN_TTL_SECONDS: '600',
   AUTH_REFRESH_TOKEN_TTL_DAYS: '30',
@@ -104,6 +108,11 @@ export function applyTestEnv(overrides: Partial<NodeJS.ProcessEnv> = {}): void {
   process.env.CORS_ORIGINS = resolveTestEnvValue('CORS_ORIGINS', overrides);
   process.env.LOG_LEVEL = resolveTestEnvValue('LOG_LEVEL', overrides);
   process.env.SWAGGER_ENABLED = resolveTestEnvValue('SWAGGER_ENABLED', overrides);
+  process.env.TRUST_PROXY = resolveTestEnvValue('TRUST_PROXY', overrides);
+  process.env.SERVER_REQUEST_TIMEOUT_MS = resolveTestEnvValue(
+    'SERVER_REQUEST_TIMEOUT_MS',
+    overrides,
+  );
   process.env.AUTH_ACCESS_TOKEN_SECRET = resolveTestEnvValue('AUTH_ACCESS_TOKEN_SECRET', overrides);
   process.env.AUTH_ACCESS_TOKEN_TTL_SECONDS = resolveTestEnvValue(
     'AUTH_ACCESS_TOKEN_TTL_SECONDS',

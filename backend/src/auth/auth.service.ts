@@ -131,7 +131,7 @@ export class AuthMailer implements AuthEmailPort, OnModuleInit {
   onModuleInit(): void {
     if (
       process.env.NODE_ENV === 'production' &&
-      process.env.AUTH_EMAIL_DELIVERY_MODE !== 'disabled'
+      process.env.AUTH_EMAIL_DELIVERY_MODE !== 'external'
     ) {
       throw new ServiceUnavailableException('Auth email provider unavailable');
     }
@@ -153,7 +153,10 @@ export class AuthMailer implements AuthEmailPort, OnModuleInit {
       | 'TWO_FACTOR_RECOVERY_CODES_REGENERATED_NOTICE',
     token?: string,
   ): void {
-    if (process.env.NODE_ENV === 'production') {
+    if (
+      process.env.NODE_ENV === 'production' &&
+      process.env.AUTH_EMAIL_DELIVERY_MODE !== 'external'
+    ) {
       throw new ServiceUnavailableException('Auth email provider unavailable');
     }
     if (process.env.AUTH_EMAIL_DELIVERY_MODE === 'memory') {
@@ -183,14 +186,21 @@ export class DisabledAuthSmsPort implements AuthSmsPort {
 export class MemoryAuthSmsPort implements AuthSmsPort, OnModuleInit {
   readonly sent: { to: string; purpose: AuthSmsPurpose; code?: string }[] = [];
   onModuleInit(): void {
-    if (process.env.NODE_ENV === 'production' && process.env.AUTH_SMS_DELIVERY_MODE === 'memory') {
+    if (
+      process.env.NODE_ENV === 'production' &&
+      process.env.AUTH_SMS_DELIVERY_MODE !== 'external'
+    ) {
       throw new ServiceUnavailableException('Auth SMS memory adapter unavailable in production');
     }
   }
   send(to: string, purpose: AuthSmsPurpose, code?: string): void {
-    if (process.env.NODE_ENV === 'production') {
+    if (
+      process.env.NODE_ENV === 'production' &&
+      process.env.AUTH_SMS_DELIVERY_MODE !== 'external'
+    ) {
       throw new ServiceUnavailableException('Auth SMS provider unavailable');
     }
+    if (process.env.AUTH_SMS_DELIVERY_MODE === 'external') return;
     if (process.env.AUTH_SMS_DELIVERY_MODE !== 'memory') {
       throw new AppError(
         'SMS_DELIVERY_UNAVAILABLE',

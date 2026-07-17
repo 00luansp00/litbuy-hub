@@ -10,16 +10,18 @@ describe('validateEnvironment', () => {
     CORS_ORIGINS: 'http://localhost:3000',
     LOG_LEVEL: 'silent',
     SWAGGER_ENABLED: 'false',
-    AUTH_ACCESS_TOKEN_SECRET: 'test_access_secret',
+    TRUST_PROXY: 'false',
+    SERVER_REQUEST_TIMEOUT_MS: '60000',
+    AUTH_ACCESS_TOKEN_SECRET: 'test_access_secret_32_chars_long',
     AUTH_ACCESS_TOKEN_TTL_SECONDS: '600',
     AUTH_REFRESH_TOKEN_TTL_DAYS: '30',
-    AUTH_REFRESH_TOKEN_PEPPER: 'test_refresh',
-    AUTH_VERIFICATION_TOKEN_PEPPER: 'test_verification',
-    AUTH_DEVICE_TOKEN_PEPPER: 'test_device',
-    AUTH_CSRF_TOKEN_PEPPER: 'test_csrf',
-    AUTH_IP_HASH_PEPPER: 'test_ip',
-    AUTH_2FA_RECOVERY_PEPPER: 'test_2fa_recovery',
-    AUTH_STEP_UP_TOKEN_PEPPER: 'test_step_up_token_pepper',
+    AUTH_REFRESH_TOKEN_PEPPER: 'test_refresh_pepper_32_chars_long',
+    AUTH_VERIFICATION_TOKEN_PEPPER: 'test_verification_pepper_32_chars_long',
+    AUTH_DEVICE_TOKEN_PEPPER: 'test_device_pepper_32_chars_long',
+    AUTH_CSRF_TOKEN_PEPPER: 'test_csrf_pepper_32_chars_long',
+    AUTH_IP_HASH_PEPPER: 'test_ip_hash_pepper_32_chars_long',
+    AUTH_2FA_RECOVERY_PEPPER: 'test_2fa_recovery_pepper_32_chars_long',
+    AUTH_STEP_UP_TOKEN_PEPPER: 'test_step_up_token_pepper_32_chars_long',
     AUTH_STEP_UP_GRANT_TTL_MINUTES: '10',
     AUTH_STEP_UP_RESEND_COOLDOWN_SECONDS: '60',
     AUTH_STEP_UP_MAX_ATTEMPTS: '5',
@@ -61,5 +63,23 @@ describe('validateEnvironment', () => {
     expect(() => validateEnvironment({ ...validConfig, PORT: 'invalid' })).toThrow(
       'Invalid environment configuration',
     );
+  });
+
+  it('rejects wildcard CORS with credentials', () => {
+    expect(() => validateEnvironment({ ...validConfig, CORS_ORIGINS: '*' })).toThrow(
+      'Invalid environment configuration',
+    );
+  });
+
+  it('fails closed for unsafe staging settings without leaking values', () => {
+    expect(() =>
+      validateEnvironment({
+        ...validConfig,
+        NODE_ENV: 'staging',
+        TRUST_PROXY: 'false',
+        AUTH_COOKIE_SECURE: 'false',
+        AUTH_ACCESS_TOKEN_SECRET: 'local_access_token_secret_change_me_32_chars',
+      }),
+    ).toThrow(/AUTH_COOKIE_SECURE/);
   });
 });
