@@ -185,3 +185,7 @@ Ordem sugerida:
 - O grant opaco de step-up é mantido somente em `useRef` local transitório no hook específico, nunca em provider, cache, storage, URL, body, toast ou log, e é apagado em sucesso, cancelamento, desmontagem, erro terminal ou resultado ambíguo.
 - O backend consome o grant somente na confirmação bem-sucedida, preserva a sessão atual e revoga outras sessões com motivo `TWO_FACTOR_METHOD_CHANGED`; o frontend reconcilia status 2FA e sessões reais com `throwOnError: true` antes de liberar ações após sucesso ou resultado desconhecido.
 - Disponibilidade: não oferece o método atual, só oferece SMS quando o telefone confirmado já está disponível no estado real do usuário, e não exibe endereço completo de e-mail ou telefone.
+
+## Auditoria final de autenticação — 2026-07-17
+
+A documentação consolidada do bloco real de autenticação está em `AUTHENTICATION_FINAL_AUDIT.md`. Ela substitui as afirmações antigas de que não havia backend/autenticação real para o escopo específico de auth. Permanecem mockados fora de autenticação: catálogo, carrinho, checkout, pagamentos, pedidos, vendedor, admin, KYC, wallet, afiliados, notificações de produto e CMS. Próxima sprint recomendada: CI/staging e hardening operacional de autenticação antes de iniciar domínios financeiros ou marketplace.

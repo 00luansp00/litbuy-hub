@@ -143,3 +143,7 @@ Naquela sprint, step-up, troca de método 2FA e regeneração de recovery codes 
 ### Sprint 2C2B2B2B2 — `/perfil/seguranca`
 
 A rota `/perfil/seguranca` agora expõe a troca segura de método 2FA apenas quando `GET /auth/2fa/status` indica 2FA ativo. O fluxo usa step-up `TWO_FACTOR_METHOD_CHANGE`, chama `POST /auth/2fa/method/change/request` e `POST /auth/2fa/method/change/confirm`, bloqueia desativação/regeneração durante a troca e reconcilia status e sessões reais ao final.
+
+## Atualização — rotas reais de autenticação (2026-07-17)
+
+As rotas `/login`, `/cadastro`, `/recuperar-senha`, `/redefinir-senha`, `/verificar-email`, `/verificacao-login`, `/confirmar-alteracao-email` e `/perfil/seguranca` usam os services reais de autenticação documentados em `AUTHENTICATION_FINAL_AUDIT.md`. As demais rotas de marketplace mantêm status mock/visual salvo indicação específica em documentação futura.

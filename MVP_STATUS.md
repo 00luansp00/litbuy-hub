@@ -535,3 +535,7 @@ Autenticação central do frontend integrada à API NestJS real. Tokens não sã
 ## Sprint 2C2B2B2B2 — status
 
 Implementada no frontend a troca segura do método 2FA na Central de Segurança. O fluxo exige confirmação explícita, senha atual, step-up `TWO_FACTOR_METHOD_CHANGE`, seleção de EMAIL/SMS conforme disponibilidade real, confirmação do código enviado ao novo método, reconciliação real de status e sessões, e tratamento de resultado ambíguo.
+
+## Atualização — auditoria final de autenticação (2026-07-17)
+
+O bloco de autenticação deixou de ser mock no escopo descrito em `AUTHENTICATION_FINAL_AUDIT.md`: cadastro, login, e-mail, dispositivo, 2FA, recovery codes, step-up, sessões, dispositivos, senha, telefone e e-mail seguro usam frontend e backend reais. O restante do marketplace continua visual/mockado conforme inventário.

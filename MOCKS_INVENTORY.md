@@ -160,3 +160,7 @@ Sessões, dispositivos aprovados e alteração autenticada de senha usam somente
 ## Sprint 2C2B2B2B2 — sem mock para troca de método 2FA
 
 Não há mock ou fallback silencioso para `POST /auth/2fa/method/change/request` ou `POST /auth/2fa/method/change/confirm`. A UI depende dos contratos reais do backend e da disponibilidade real de EMAIL/SMS já carregada no frontend.
+
+## Atualização — autenticação removida do inventário de mocks (2026-07-17)
+
+Autenticação não deve mais ser tratada como mock: os fluxos reais estão listados em `AUTHENTICATION_FINAL_AUDIT.md`. Continuam mockados fora de autenticação: catálogo, produtos, categorias, carrinho, checkout, pagamentos, pedidos, vendedor, admin, KYC, wallet, afiliados, notificações de produto, mensagens e CMS.
