@@ -1,12 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AdminLayout } from "@/components/admin/AdminLayout";
 import { AdminFilters } from "@/components/admin/AdminFilters";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -55,11 +54,27 @@ function AdminSellersPage() {
   const [code, setCode] = useState("INCOMPLETE_INFORMATION");
   const [reason, setReason] = useState("");
   const qc = useQueryClient();
-  const query = useQuery({
+  const query = useInfiniteQuery({
     queryKey: ["admin", "seller-applications", status, search],
-    queryFn: () => sellerOnboardingService.adminList({ status, search }),
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam }) =>
+      sellerOnboardingService.adminList({
+        status,
+        search,
+        limit: 20,
+        cursor: pageParam ?? undefined,
+      }),
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
   });
+  const items = useMemo(() => {
+    const map = new Map<string, AdminSellerApplication>();
+    for (const page of query.data?.pages ?? [])
+      for (const item of page.items) map.set(item.id, item);
+    return [...map.values()];
+  }, [query.data?.pages]);
   const invalidate = () => qc.invalidateQueries({ queryKey: ["admin", "seller-applications"] });
+  const actionPending = (id: string) =>
+    start.variables === id || approve.variables === id || reject.variables?.id === id;
   const start = useMutation({
     mutationFn: sellerOnboardingService.adminStartReview,
     onSuccess: () => {
@@ -106,79 +121,115 @@ function AdminSellersPage() {
         <p className="mb-4 text-sm text-muted-foreground">
           Esta tela não usa métricas fictícias: lista apenas solicitações persistidas no backend.
         </p>
-        {query.data?.items.length === 0 ? (
+        {query.isLoading ? (
+          <p className="text-sm text-muted-foreground">Carregando solicitações...</p>
+        ) : query.isError ? (
+          <div className="space-y-3">
+            <p className="text-sm text-destructive">
+              Não foi possível carregar solicitações: {(query.error as Error).message}
+            </p>
+            <Button variant="outline" onClick={() => void query.refetch()}>
+              Tentar novamente
+            </Button>
+          </div>
+        ) : items.length === 0 ? (
           <EmptyState icon="Store" title="Nenhuma solicitação encontrada" />
         ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Loja</TableHead>
-                  <TableHead>Slug</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Envio</TableHead>
-                  <TableHead>Requisitos</TableHead>
-                  <TableHead>Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {query.data?.items.map((a) => (
-                  <TableRow key={a.id}>
-                    <TableCell className="font-medium">
-                      {a.storeName}
-                      <p className="max-w-xs truncate text-xs text-muted-foreground">
-                        {a.description}
-                      </p>
-                    </TableCell>
-                    <TableCell>{a.requestedSlug}</TableCell>
-                    <TableCell>{label(a.status)}</TableCell>
-                    <TableCell>
-                      {a.submittedAt ? new Date(a.submittedAt).toLocaleString("pt-BR") : "—"}
-                    </TableCell>
-                    <TableCell className="text-xs">
-                      E-mail {a.requirements.emailVerified ? "✓" : "!"} · Tel{" "}
-                      {a.requirements.phoneVerified ? "✓" : "!"} · 18+{" "}
-                      {a.requirements.ageEligible ? "✓" : "!"}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => start.mutate(a.id)}
-                          disabled={a.status !== "submitted"}
-                        >
-                          Iniciar análise
-                        </Button>
-                        <Button
-                          size="sm"
-                          onClick={() => {
-                            if (
-                              confirm(
-                                `Aprovar ${a.storeName}? O perfil será criado e SELLER concedido.`,
-                              )
-                            )
-                              approve.mutate(a.id);
-                          }}
-                          disabled={!["submitted", "under_review"].includes(a.status)}
-                        >
-                          Aprovar
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => setRejecting(a)}
-                          disabled={!["submitted", "under_review"].includes(a.status)}
-                        >
-                          Rejeitar
-                        </Button>
-                      </div>
-                    </TableCell>
+          <>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Loja</TableHead>
+                    <TableHead>Slug</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Envio</TableHead>
+                    <TableHead>Requisitos</TableHead>
+                    <TableHead>Acordo</TableHead>
+                    <TableHead>Ações</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                </TableHeader>
+                <TableBody>
+                  {items.map((a) => (
+                    <TableRow key={a.id}>
+                      <TableCell className="font-medium">
+                        {a.storeName}
+                        <p className="max-w-xs truncate text-xs text-muted-foreground">
+                          {a.description}
+                        </p>
+                      </TableCell>
+                      <TableCell>{a.requestedSlug}</TableCell>
+                      <TableCell>{label(a.status)}</TableCell>
+                      <TableCell>
+                        {a.submittedAt ? new Date(a.submittedAt).toLocaleString("pt-BR") : "—"}
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        E-mail {a.requirements.emailVerified ? "✓" : "!"} · Tel{" "}
+                        {a.requirements.phoneVerified ? "✓" : "!"} · 18+{" "}
+                        {a.requirements.ageEligible ? "✓" : "!"}
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        {a.requirements.sellerAgreementCurrent
+                          ? "Vigente aceito"
+                          : "Pendente/desatualizado"}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => start.mutate(a.id)}
+                            disabled={a.status !== "submitted" || actionPending(a.id)}
+                          >
+                            Iniciar análise
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              if (
+                                confirm(
+                                  `Aprovar ${a.storeName}? O perfil será criado e SELLER concedido.`,
+                                )
+                              )
+                                approve.mutate(a.id);
+                            }}
+                            disabled={
+                              !["submitted", "under_review"].includes(a.status) ||
+                              actionPending(a.id)
+                            }
+                          >
+                            Aprovar
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => setRejecting(a)}
+                            disabled={
+                              !["submitted", "under_review"].includes(a.status) ||
+                              actionPending(a.id)
+                            }
+                          >
+                            Rejeitar
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            {query.hasNextPage && (
+              <div className="mt-4 flex justify-center">
+                <Button
+                  variant="outline"
+                  onClick={() => void query.fetchNextPage()}
+                  disabled={query.isFetchingNextPage}
+                >
+                  {query.isFetchingNextPage ? "Carregando mais..." : "Carregar mais"}
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </div>
       {rejecting && (
@@ -208,7 +259,11 @@ function AdminSellersPage() {
               <Button variant="outline" onClick={() => setRejecting(null)}>
                 Cancelar
               </Button>
-              <Button variant="destructive" onClick={() => reject.mutate({ id: rejecting.id })}>
+              <Button
+                variant="destructive"
+                onClick={() => reject.mutate({ id: rejecting.id })}
+                disabled={reject.isPending}
+              >
                 Confirmar rejeição
               </Button>
             </div>

@@ -228,7 +228,7 @@ describe('SellerOnboardingService', () => {
     ]);
     expect(ctx.roles).toEqual([expect.objectContaining({ role: PlatformRole.SELLER })]);
   });
-  it('rolls back transaction errors surfaced by profile/role/audit failures', async () => {
+  it('propagates profile creation, role grant, and audit failures from the unit fake', async () => {
     const ctx = makeService(
       application({
         status: SellerApplicationStatus.SUBMITTED,
@@ -253,6 +253,16 @@ describe('SellerOnboardingService', () => {
     ]);
     await expect(
       ctx.service.listAdmin({ status: 'draft', search: ' loja ', limit: 1 }),
-    ).resolves.toMatchObject({ nextCursor: '55555555-5555-4555-8555-555555555555' });
+    ).resolves.toMatchObject({
+      nextCursor: appId,
+      items: [
+        expect.objectContaining({
+          requirements: expect.objectContaining({
+            sellerAgreementAccepted: false,
+            sellerAgreementCurrent: false,
+          }),
+        }),
+      ],
+    });
   });
 });

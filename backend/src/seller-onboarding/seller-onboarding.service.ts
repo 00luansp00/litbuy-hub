@@ -290,9 +290,12 @@ export class SellerOnboardingService {
     return {
       items: items.map((a: ApplicationWithRequirementUser) => ({
         ...this.mapApp(a),
-        requirements: requirementsFor(a.user, this.version()),
+        requirements: {
+          ...requirementsFor(a.user, this.version()),
+          ...this.agreementState(a, this.version()),
+        },
       })),
-      nextCursor: rows.length > take ? (rows[take]?.id ?? null) : null,
+      nextCursor: rows.length > take && items.length > 0 ? items[items.length - 1].id : null,
     };
   }
   async getAdmin(id: string) {
@@ -305,7 +308,13 @@ export class SellerOnboardingService {
       },
     });
     if (!app) throw new NotFoundException({ code: 'SELLER_APPLICATION_NOT_FOUND' });
-    return { ...this.mapApp(app), requirements: requirementsFor(app.user, this.version()) };
+    return {
+      ...this.mapApp(app),
+      requirements: {
+        ...requirementsFor(app.user, this.version()),
+        ...this.agreementState(app, this.version()),
+      },
+    };
   }
   async startReview(id: string, adminUserId: string): Promise<ApplicationPublic> {
     return serializableTransactionWithRetry(this.prisma, async (tx) => {

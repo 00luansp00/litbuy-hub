@@ -71,9 +71,50 @@ describe("sellerOnboardingService defensive parser", () => {
   });
   it("parses admin pagination", async () => {
     const { sellerOnboardingService } = await import("@/services/sellerOnboardingService");
-    apiFetch.mockResolvedValueOnce({ items: [], nextCursor: null });
+    apiFetch.mockResolvedValueOnce({
+      items: [],
+      nextCursor: "11111111-1111-4111-8111-111111111111",
+    });
     await expect(
       sellerOnboardingService.adminList({ status: "submitted", limit: 20 }),
-    ).resolves.toEqual({ items: [], nextCursor: null });
+    ).resolves.toEqual({ items: [], nextCursor: "11111111-1111-4111-8111-111111111111" });
+  });
+});
+
+it("rejects malformed admin nextCursor", async () => {
+  const { sellerOnboardingService } = await import("@/services/sellerOnboardingService");
+  apiFetch.mockResolvedValueOnce({ items: [], nextCursor: "qualquer-coisa" });
+  await expect(sellerOnboardingService.adminList()).rejects.toMatchObject({
+    code: "SELLER_ONBOARDING_RESPONSE_INVALID",
+  });
+});
+
+it("parses admin item with current agreement requirements", async () => {
+  const { sellerOnboardingService } = await import("@/services/sellerOnboardingService");
+  apiFetch.mockResolvedValueOnce({
+    items: [
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        storeName: "Loja",
+        requestedSlug: "loja",
+        description: null,
+        status: "submitted",
+        submittedAt: null,
+        rejectionCode: null,
+        rejectionReason: null,
+        requirements: {
+          emailVerified: true,
+          phoneVerified: true,
+          ageEligible: true,
+          sellerAgreementVersion: "2026-test",
+          sellerAgreementAccepted: true,
+          sellerAgreementCurrent: true,
+        },
+      },
+    ],
+    nextCursor: null,
+  });
+  await expect(sellerOnboardingService.adminList()).resolves.toMatchObject({
+    items: [{ requirements: { sellerAgreementCurrent: true } }],
   });
 });

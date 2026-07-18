@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Clock, Store, XCircle } from "lucide-react";
@@ -41,6 +41,7 @@ function SellerProfileOnboardingPage() {
   const [requestedSlug, setRequestedSlug] = useState("");
   const [description, setDescription] = useState("");
   const [accepted, setAccepted] = useState(false);
+  const autoReloadedApprovedRef = useRef(false);
   useEffect(() => {
     if (data?.application) {
       setStoreName(data.application.storeName);
@@ -50,7 +51,10 @@ function SellerProfileOnboardingPage() {
         data.requirements.sellerAgreementAccepted && data.requirements.sellerAgreementCurrent,
       );
     }
-    if (data?.application?.status === "approved") void reloadCurrentUser();
+    if (data?.application?.status === "approved" && !autoReloadedApprovedRef.current) {
+      autoReloadedApprovedRef.current = true;
+      void reloadCurrentUser();
+    }
   }, [data?.application?.id, data?.application?.status, reloadCurrentUser]);
   const save = useMutation({
     mutationFn: () =>
@@ -222,10 +226,18 @@ function SellerProfileOnboardingPage() {
                 </div>
               </form>
             )}
-            {app?.status === "approved" && (
+            {app?.status === "approved" && hasSellerAccess && (
               <Button asChild>
                 <Link to="/vendedor">Ir para o painel do vendedor</Link>
               </Button>
+            )}
+            {app?.status === "approved" && !hasSellerAccess && (
+              <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-4 text-sm text-muted-foreground">
+                <span>Atualizando acesso…</span>
+                <Button type="button" variant="outline" onClick={() => void reloadCurrentUser()}>
+                  Atualizar acesso
+                </Button>
+              </div>
             )}
           </>
         )}

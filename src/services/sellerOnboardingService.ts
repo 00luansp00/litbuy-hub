@@ -139,10 +139,9 @@ function adminItem(v: unknown): AdminSellerApplication {
 function page(v: unknown): AdminSellerApplicationsPage {
   const o = obj(v);
   if (!Array.isArray(o.items)) malformed();
-  return {
-    items: o.items.map(adminItem),
-    nextCursor: o.nextCursor === null ? null : str(o.nextCursor),
-  };
+  const nextCursor = o.nextCursor === null ? null : str(o.nextCursor);
+  if (nextCursor !== null && !uuid.test(nextCursor)) malformed();
+  return { items: o.items.map(adminItem), nextCursor };
 }
 function availability(v: unknown) {
   const o = obj(v);
