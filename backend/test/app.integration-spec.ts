@@ -55,6 +55,23 @@ async function redisKeys(redis: RedisService): Promise<string[]> {
   return client.keys('*');
 }
 
+async function cleanAuthIntegrationData(prisma: PrismaService): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    await tx.securityEvent.deleteMany();
+    await tx.stepUpGrant.deleteMany();
+    await tx.sessionRefreshToken.deleteMany();
+    await tx.verificationChallenge.deleteMany();
+    await tx.emailChangeRequest.deleteMany();
+    await tx.twoFactorRecoveryCode.deleteMany();
+    await tx.twoFactorSettings.deleteMany();
+    await tx.userRoleAssignment.deleteMany();
+    await tx.session.deleteMany();
+    await tx.device.deleteMany();
+    await tx.passwordCredential.deleteMany();
+    await tx.user.deleteMany();
+  });
+}
+
 describe('App foundation with real PostgreSQL and Redis (integration)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
@@ -94,17 +111,7 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
     await redisClient.flushdb();
     mailer.send = AuthMailer.prototype.send.bind(mailer);
     sms.send = MemoryAuthSmsPort.prototype.send.bind(sms);
-    await prisma.securityEvent.deleteMany();
-    await prisma.stepUpGrant.deleteMany();
-    await prisma.sessionRefreshToken.deleteMany();
-    await prisma.verificationChallenge.deleteMany();
-    await prisma.twoFactorRecoveryCode.deleteMany();
-    await prisma.twoFactorSettings.deleteMany();
-    await prisma.emailChangeRequest.deleteMany();
-    await prisma.session.deleteMany();
-    await prisma.device.deleteMany();
-    await prisma.passwordCredential.deleteMany();
-    await prisma.user.deleteMany();
+    await cleanAuthIntegrationData(prisma);
     mailer.sent.splice(0);
     sms.sent.splice(0);
   });
@@ -2333,14 +2340,7 @@ describe('Marketplace RBAC with real PostgreSQL (integration)', () => {
   beforeEach(async () => {
     const redisClient = await redis.getClient();
     await redisClient.flushdb();
-    await prisma.securityEvent.deleteMany();
-    await prisma.userRoleAssignment.deleteMany();
-    await prisma.sessionRefreshToken.deleteMany();
-    await prisma.verificationChallenge.deleteMany();
-    await prisma.session.deleteMany();
-    await prisma.device.deleteMany();
-    await prisma.passwordCredential.deleteMany();
-    await prisma.user.deleteMany();
+    await cleanAuthIntegrationData(prisma);
     mailer.sent.splice(0);
   });
 
