@@ -1210,10 +1210,10 @@ describe('Auth HTTP e2e flows', () => {
     const auth = `Bearer ${login.body.accessToken}`;
     const originalSend = mailer.send.bind(mailer);
     let sends = 0;
-    const failingSend: AuthMailer['send'] = (to, purpose, token) => {
+    const failingSend: AuthMailer['send'] = async (to, purpose, token) => {
       sends += 1;
       if (purpose === 'EMAIL_CHANGE_CONFIRM_NEW') throw new Error('simulated email outage');
-      originalSend(to, purpose, token);
+      await originalSend(to, purpose, token);
     };
     mailer.send = failingSend;
     await request(app.getHttpServer())
@@ -2043,10 +2043,10 @@ describe('Auth HTTP e2e flows', () => {
         .set('X-Step-Up-Token', notificationGrant.body.stepUpToken)
         .send({ newMethod: 'SMS' })
         .expect(HttpStatus.OK);
-      mailer.send = (_to, purpose) => {
+      mailer.send = async (_to, purpose) => {
         if (purpose === 'TWO_FACTOR_METHOD_CHANGED_NOTICE')
           throw new Error('simulated notice failure');
-        originalMailSend(_to, purpose);
+        await originalMailSend(_to, purpose);
       };
       await request(app.getHttpServer())
         .post('/api/v1/auth/2fa/method/change/confirm')

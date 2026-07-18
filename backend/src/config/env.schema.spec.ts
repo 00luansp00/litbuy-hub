@@ -51,6 +51,7 @@ describe('validateEnvironment', () => {
     PUBLIC_FRONTEND_ORIGIN: 'http://localhost:3000',
     PUBLIC_API_ORIGIN: 'http://localhost:3001',
     AUTH_COOKIE_TOPOLOGY: 'same-host',
+    AUTH_EXTERNAL_DELIVERY_TIMEOUT_MS: '5000',
   };
 
   it('accepts the required backend environment variables', () => {
@@ -92,15 +93,26 @@ describe('validateEnvironment', () => {
     ).toThrow(/AUTH_COOKIE_SECURE/);
   });
 
-  it('rejects staging external providers until concrete implementations exist', () => {
-    expect(() =>
+  it('accepts staging external Resend and Twilio providers when complete', () => {
+    expect(
       validateEnvironment({
         ...validConfig,
         NODE_ENV: 'staging',
         TRUST_PROXY: '1',
         AUTH_COOKIE_SECURE: 'true',
+        PUBLIC_FRONTEND_ORIGIN: 'https://app.example.test',
+        PUBLIC_API_ORIGIN: 'https://app.example.test',
+        CORS_ORIGINS: 'https://app.example.test',
         AUTH_EMAIL_DELIVERY_MODE: 'external',
+        AUTH_EMAIL_PROVIDER: 'resend',
+        RESEND_API_KEY: 're_live_configured_secret',
+        RESEND_FROM_EMAIL: 'auth@litbuy.invalid',
+        RESEND_FROM_NAME: 'LIT Buy',
         AUTH_SMS_DELIVERY_MODE: 'external',
+        AUTH_SMS_PROVIDER: 'twilio',
+        TWILIO_ACCOUNT_SID: 'AC1234567890abcdef',
+        TWILIO_AUTH_TOKEN: 'twilio_configured_secret',
+        TWILIO_MESSAGING_SERVICE_SID: 'MG1234567890abcdef',
         AUTH_ACCESS_TOKEN_SECRET: 'staging_access_secret_32_chars_long',
         AUTH_REFRESH_TOKEN_PEPPER: 'staging_refresh_pepper_32_chars_long',
         AUTH_VERIFICATION_TOKEN_PEPPER: 'staging_verification_pepper_32_chars',
@@ -110,7 +122,52 @@ describe('validateEnvironment', () => {
         AUTH_2FA_RECOVERY_PEPPER: 'staging_2fa_recovery_pepper_32_chars',
         AUTH_STEP_UP_TOKEN_PEPPER: 'staging_step_up_token_pepper_32_chars',
       }),
-    ).toThrow(/AUTH_EXTERNAL_PROVIDER_IMPLEMENTATION/);
+    ).toMatchObject({ AUTH_EMAIL_PROVIDER: 'resend', AUTH_SMS_PROVIDER: 'twilio' });
+  });
+
+  it.each([
+    ['Resend sem API key', { AUTH_EMAIL_PROVIDER: 'resend', RESEND_API_KEY: '' }, /RESEND_API_KEY/],
+    [
+      'Resend sem remetente',
+      { AUTH_EMAIL_PROVIDER: 'resend', RESEND_FROM_EMAIL: '' },
+      /RESEND_FROM_EMAIL/,
+    ],
+    ['provider email desconhecido', { AUTH_EMAIL_PROVIDER: 'unknown' }, /AUTH_EMAIL_PROVIDER/],
+    ['Twilio sem Account SID', { TWILIO_ACCOUNT_SID: '' }, /TWILIO_ACCOUNT_SID/],
+    ['Twilio sem Auth Token', { TWILIO_AUTH_TOKEN: '' }, /TWILIO_AUTH_TOKEN/],
+    [
+      'Twilio sem remetente',
+      { TWILIO_MESSAGING_SERVICE_SID: '', TWILIO_FROM_NUMBER: '' },
+      /TWILIO_SENDER/,
+    ],
+    ['Twilio com dois remetentes', { TWILIO_FROM_NUMBER: '+15551234567' }, /TWILIO_SENDER/],
+    ['provider SMS desconhecido', { AUTH_SMS_PROVIDER: 'unknown' }, /AUTH_SMS_PROVIDER/],
+  ])('rejects incomplete external config: %s', (_name, overrides, pattern) => {
+    const external = {
+      ...validConfig,
+      NODE_ENV: 'staging',
+      TRUST_PROXY: '1',
+      AUTH_COOKIE_SECURE: 'true',
+      AUTH_EMAIL_DELIVERY_MODE: 'external',
+      AUTH_EMAIL_PROVIDER: 'resend',
+      RESEND_API_KEY: 're_live_configured_secret',
+      RESEND_FROM_EMAIL: 'auth@litbuy.invalid',
+      RESEND_FROM_NAME: 'LIT Buy',
+      AUTH_SMS_DELIVERY_MODE: 'external',
+      AUTH_SMS_PROVIDER: 'twilio',
+      TWILIO_ACCOUNT_SID: 'AC1234567890abcdef',
+      TWILIO_AUTH_TOKEN: 'twilio_configured_secret',
+      TWILIO_MESSAGING_SERVICE_SID: 'MG1234567890abcdef',
+      AUTH_ACCESS_TOKEN_SECRET: 'staging_access_secret_32_chars_long',
+      AUTH_REFRESH_TOKEN_PEPPER: 'staging_refresh_pepper_32_chars_long',
+      AUTH_VERIFICATION_TOKEN_PEPPER: 'staging_verification_pepper_32_chars',
+      AUTH_DEVICE_TOKEN_PEPPER: 'staging_device_pepper_32_chars_long',
+      AUTH_CSRF_TOKEN_PEPPER: 'staging_csrf_pepper_32_chars_long',
+      AUTH_IP_HASH_PEPPER: 'staging_ip_hash_pepper_32_chars_long',
+      AUTH_2FA_RECOVERY_PEPPER: 'staging_2fa_recovery_pepper_32_chars',
+      AUTH_STEP_UP_TOKEN_PEPPER: 'staging_step_up_token_pepper_32_chars',
+    };
+    expect(() => validateEnvironment({ ...external, ...(overrides as object) })).toThrow(pattern);
   });
 
   it('rejects staging memory providers even when CI-like flags are present', () => {
@@ -192,7 +249,7 @@ describe('validateEnvironment', () => {
         PUBLIC_API_ORIGIN: 'https://api-staging.example.test',
         CORS_ORIGINS: 'https://frontend-staging.example.test',
       }),
-    ).toThrow(/AUTH_EXTERNAL_PROVIDER_IMPLEMENTATION/);
+    ).toThrow(/AUTH_EMAIL_PROVIDER/);
   });
 
   it('rejects incompatible shared cookie domain for subdomains', () => {
@@ -227,7 +284,7 @@ describe('validateEnvironment', () => {
         PUBLIC_API_ORIGIN: 'https://app.example.test',
         CORS_ORIGINS: 'https://app.example.test/',
       }),
-    ).toThrow(/AUTH_EXTERNAL_PROVIDER_IMPLEMENTATION/);
+    ).toThrow(/AUTH_EMAIL_PROVIDER/);
   });
 
   it('rejects remote HTTP public origins without leaking the URL', () => {
@@ -305,6 +362,7 @@ describe('validateEnvironment', () => {
         TRUST_PROXY: '1',
         AUTH_COOKIE_SECURE: 'true',
         AUTH_COOKIE_TOPOLOGY: 'same-host',
+        AUTH_EXTERNAL_DELIVERY_TIMEOUT_MS: '5000',
         AUTH_COOKIE_DOMAIN: 'example.test',
         AUTH_EMAIL_DELIVERY_MODE: 'external',
         AUTH_SMS_DELIVERY_MODE: 'external',

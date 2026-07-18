@@ -5,6 +5,7 @@ import {
   IsIn,
   IsInt,
   IsNotEmpty,
+  IsOptional,
   IsString,
   IsUrl,
   Max,
@@ -23,6 +24,8 @@ const cookieTopologies = [
 ] as const;
 const emailModes = ['memory', 'disabled', 'external'] as const;
 const smsModes = ['memory', 'disabled', 'external'] as const;
+const emailProviders = ['resend'] as const;
+const smsProviders = ['twilio'] as const;
 const logLevels = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const;
 const hardenedEnvironments = new Set(['staging', 'production']);
 const secretNames = [
@@ -92,6 +95,22 @@ export class EnvironmentVariables {
   @IsString() AUTH_COOKIE_DOMAIN!: string;
   @IsIn(emailModes) AUTH_EMAIL_DELIVERY_MODE!: (typeof emailModes)[number];
   @IsIn(smsModes) AUTH_SMS_DELIVERY_MODE!: (typeof smsModes)[number];
+  @IsOptional() @IsIn(emailProviders) AUTH_EMAIL_PROVIDER?: (typeof emailProviders)[number];
+  @IsOptional() @IsString() RESEND_API_KEY?: string;
+  @IsOptional() @IsString() RESEND_FROM_EMAIL?: string;
+  @IsOptional() @IsString() RESEND_FROM_NAME?: string;
+  @IsOptional() @IsString() RESEND_REPLY_TO?: string;
+  @IsOptional() @IsIn(smsProviders) AUTH_SMS_PROVIDER?: (typeof smsProviders)[number];
+  @IsOptional() @IsString() TWILIO_ACCOUNT_SID?: string;
+  @IsOptional() @IsString() TWILIO_AUTH_TOKEN?: string;
+  @IsOptional() @IsString() TWILIO_MESSAGING_SERVICE_SID?: string;
+  @IsOptional() @IsString() TWILIO_FROM_NUMBER?: string;
+  @IsOptional()
+  @Transform(({ value }) => Number(value ?? 5000))
+  @IsInt()
+  @Min(1000)
+  @Max(30000)
+  AUTH_EXTERNAL_DELIVERY_TIMEOUT_MS?: number;
   @Transform(({ value }) => Number(value ?? 10))
   @IsInt()
   @Min(1)
@@ -207,13 +226,7 @@ function validateHardening(
     issues.push(
       issue('AUTH_DELIVERY_MODE', 'real staging requires external email and SMS providers'),
     );
-  if (hardened)
-    issues.push(
-      issue(
-        'AUTH_EXTERNAL_PROVIDER_IMPLEMENTATION',
-        'external email/SMS provider implementation is not installed in this sprint',
-      ),
-    );
+  validateExternalDelivery(env, issues, hardened);
   validateCookieTopology(env, normalizedCorsOrigins, issues, hardened);
   for (const name of secretNames) {
     const value = env[name];
@@ -228,6 +241,61 @@ function validateHardening(
       issues.push(issue(name, 'placeholder secret is forbidden'));
   }
   return issues;
+}
+
+function looksPlaceholder(value: string | undefined): boolean {
+  const v = (value ?? '').trim().toLowerCase();
+  return (
+    !v ||
+    v.includes('change_me') ||
+    v.includes('placeholder') ||
+    v.includes('example') ||
+    v.includes('<') ||
+    v.includes('test_') ||
+    v === 'dummy' ||
+    v === 'secret'
+  );
+}
+
+function requireNonPlaceholder(
+  issues: Array<{ property: string; constraints: Record<string, string> }>,
+  property: string,
+  value: string | undefined,
+): void {
+  if (looksPlaceholder(value))
+    issues.push(issue(property, 'valid external provider value is required'));
+}
+
+function validateExternalDelivery(
+  env: EnvironmentVariables,
+  issues: Array<{ property: string; constraints: Record<string, string> }>,
+  hardened: boolean,
+): void {
+  if (env.AUTH_EMAIL_DELIVERY_MODE === 'memory' && hardened)
+    issues.push(
+      issue('AUTH_EMAIL_DELIVERY_MODE', 'memory is allowed only in development and test'),
+    );
+  if (env.AUTH_SMS_DELIVERY_MODE === 'memory' && hardened)
+    issues.push(issue('AUTH_SMS_DELIVERY_MODE', 'memory is allowed only in development and test'));
+  if (env.AUTH_EMAIL_DELIVERY_MODE === 'external') {
+    if (env.AUTH_EMAIL_PROVIDER !== 'resend')
+      issues.push(issue('AUTH_EMAIL_PROVIDER', 'external email delivery requires resend'));
+    requireNonPlaceholder(issues, 'RESEND_API_KEY', env.RESEND_API_KEY);
+    requireNonPlaceholder(issues, 'RESEND_FROM_EMAIL', env.RESEND_FROM_EMAIL);
+    requireNonPlaceholder(issues, 'RESEND_FROM_NAME', env.RESEND_FROM_NAME);
+  }
+  if (env.AUTH_SMS_DELIVERY_MODE === 'external') {
+    if (env.AUTH_SMS_PROVIDER !== 'twilio')
+      issues.push(issue('AUTH_SMS_PROVIDER', 'external SMS delivery requires twilio'));
+    requireNonPlaceholder(issues, 'TWILIO_ACCOUNT_SID', env.TWILIO_ACCOUNT_SID);
+    requireNonPlaceholder(issues, 'TWILIO_AUTH_TOKEN', env.TWILIO_AUTH_TOKEN);
+    const hasMessagingService = !looksPlaceholder(env.TWILIO_MESSAGING_SERVICE_SID);
+    const hasFromNumber = !looksPlaceholder(env.TWILIO_FROM_NUMBER);
+    if (hasMessagingService === hasFromNumber)
+      issues.push(issue('TWILIO_SENDER', 'configure exactly one Twilio sender strategy'));
+    if (env.TWILIO_FROM_NUMBER && !/^\+[1-9]\d{7,14}$/.test(env.TWILIO_FROM_NUMBER))
+      issues.push(issue('TWILIO_FROM_NUMBER', 'must be E.164'));
+  }
 }
 
 function validateCorsOrigins(

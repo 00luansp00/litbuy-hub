@@ -79,3 +79,11 @@ O envio de e-mail fica atrás de `AuthMailer`; `memory` é usado apenas em teste
 Novas variáveis: `AUTH_ACCESS_TOKEN_SECRET`, `AUTH_ACCESS_TOKEN_TTL_SECONDS`, `AUTH_REFRESH_TOKEN_TTL_DAYS`, peppers de refresh/verificação/dispositivo/CSRF/IP, TTLs de confirmação e aprovação, limites de tentativas, nomes/configuração de cookies, `AUTH_EMAIL_DELIVERY_MODE`, `CURRENT_TERMS_VERSION` e `CURRENT_PRIVACY_VERSION`.
 
 Prisma agora contém `User`, `PasswordCredential`, `Device`, `Session`, `VerificationChallenge` e `SecurityEvent`. Use `bun run prisma:migrate:deploy` em CI/produção e `bun run prisma:migrate:status` para inspeção.
+
+### External authentication delivery providers
+
+`AUTH_EMAIL_DELIVERY_MODE=external` now selects the `resend` auth e-mail adapter through `AUTH_EMAIL_PROVIDER=resend`. Configure `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_FROM_NAME`, optional `RESEND_REPLY_TO`, and `AUTH_EXTERNAL_DELIVERY_TIMEOUT_MS` in the runtime secret store.
+
+`AUTH_SMS_DELIVERY_MODE=external` now selects Twilio Programmable Messaging through `AUTH_SMS_PROVIDER=twilio`. Configure `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and exactly one sender strategy: `TWILIO_MESSAGING_SERVICE_SID` or `TWILIO_FROM_NUMBER` in E.164 format.
+
+Development and test may continue using `memory`; `disabled` starts where allowed but every delivery attempt fails explicitly. Staging and production require complete external provider configuration and reject placeholders during environment validation. Secrets, recipients, tokens, codes, and message bodies must never be logged or committed.
