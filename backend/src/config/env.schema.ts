@@ -125,9 +125,6 @@ export class EnvironmentVariables {
   @Transform(({ value }) => Number(value ?? 5)) @IsInt() @Min(1) AUTH_STEP_UP_MAX_ATTEMPTS!: number;
   @IsString() @IsNotEmpty() CURRENT_TERMS_VERSION!: string;
   @IsString() @IsNotEmpty() CURRENT_PRIVACY_VERSION!: string;
-  @Transform(({ value }) => value === true || value === 'true')
-  @IsBoolean()
-  AUTH_EXTERNAL_PROVIDERS_CONFIGURED!: boolean;
 }
 
 export function validateEnvironment(config: Record<string, unknown>): EnvironmentVariables {
@@ -190,11 +187,11 @@ function validateHardening(
     issues.push(
       issue('AUTH_DELIVERY_MODE', 'real staging requires external email and SMS providers'),
     );
-  if (hardened && !env.AUTH_EXTERNAL_PROVIDERS_CONFIGURED)
+  if (hardened)
     issues.push(
       issue(
-        'AUTH_EXTERNAL_PROVIDERS_CONFIGURED',
-        'external provider implementation must be configured before real staging/production startup',
+        'AUTH_EXTERNAL_PROVIDER_IMPLEMENTATION',
+        'external email/SMS provider implementation is not installed in this sprint',
       ),
     );
   for (const name of secretNames) {

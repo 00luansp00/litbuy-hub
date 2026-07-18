@@ -246,13 +246,23 @@ jobs:
       - name: Build backend for infrastructure smoke tests
         run: bun run build
 
+      - name: Verify backend production entrypoint
+        run: bun run check:prod-entrypoint
+
       - name: Start backend for infrastructure smoke tests
         run: |
           set -euo pipefail
           bun run start:prod > /tmp/litbuy-backend.log 2>&1 &
           echo "$!" > /tmp/litbuy-backend.pid
           sleep 1
-          kill -0 "$(cat /tmp/litbuy-backend.pid)"
+          if ! kill -0 "$(cat /tmp/litbuy-backend.pid)" 2>/dev/null; then
+            echo "Backend process exited before liveness. Expected entrypoint: dist/main.js"
+            echo "--- dist files ---"
+            find dist -maxdepth 5 -type f -print | sort || true
+            echo "--- backend log ---"
+            cat /tmp/litbuy-backend.log || true
+            exit 1
+          fi
 
       - name: Wait for backend liveness and readiness
         run: node ../scripts/wait-backend.mjs

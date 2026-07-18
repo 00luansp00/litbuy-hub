@@ -39,7 +39,7 @@ Validar `litbuy_refresh` e `litbuy_device` como `HttpOnly`; `litbuy_csrf` legív
 
 ## 9. E-mail/SMS futuros
 
-Não há fornecedor definitivo nesta sprint. Staging real deve configurar providers externos por integração futura e marcar `AUTH_EXTERNAL_PROVIDERS_CONFIGURED=true` somente quando existir implementação real. Memory só é permitido com `NODE_ENV=test` em CI/e2e/local rehearsal isolado.
+Não há fornecedor definitivo nesta sprint. Staging real deve configurar providers externos por integração futura. Memory só é permitido com `NODE_ENV=test` em CI/e2e/local rehearsal isolado.
 
 ## 10. Checklist de browser
 

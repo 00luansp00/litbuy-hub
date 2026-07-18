@@ -101,6 +101,19 @@ describe('auth delivery providers', () => {
     await moduleRef.close();
   });
 
+  it('staging and production external providers fail during module initialization', () => {
+    for (const nodeEnv of ['staging', 'production']) {
+      process.env.NODE_ENV = nodeEnv;
+      process.env.AUTH_EMAIL_DELIVERY_MODE = 'external';
+      process.env.AUTH_SMS_DELIVERY_MODE = 'external';
+
+      expect(() => new AuthMailer().onModuleInit()).toThrow(ServiceUnavailableException);
+      expect(() => new ExternalUnavailableAuthSmsPort().onModuleInit()).toThrow(
+        ServiceUnavailableException,
+      );
+    }
+  });
+
   it('production rejects memory providers on module init', () => {
     process.env.NODE_ENV = 'production';
     process.env.AUTH_EMAIL_DELIVERY_MODE = 'memory';

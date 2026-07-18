@@ -48,7 +48,6 @@ describe('validateEnvironment', () => {
     AUTH_2FA_RECOVERY_CODE_COUNT: '10',
     CURRENT_TERMS_VERSION: '2026-test',
     CURRENT_PRIVACY_VERSION: '2026-test',
-    AUTH_EXTERNAL_PROVIDERS_CONFIGURED: 'false',
   };
 
   it('accepts the required backend environment variables', () => {
@@ -84,8 +83,8 @@ describe('validateEnvironment', () => {
     ).toThrow(/AUTH_COOKIE_SECURE/);
   });
 
-  it('accepts explicit staging only when external providers and trusted proxy hops are configured', () => {
-    expect(
+  it('rejects staging external providers until concrete implementations exist', () => {
+    expect(() =>
       validateEnvironment({
         ...validConfig,
         NODE_ENV: 'staging',
@@ -93,7 +92,6 @@ describe('validateEnvironment', () => {
         AUTH_COOKIE_SECURE: 'true',
         AUTH_EMAIL_DELIVERY_MODE: 'external',
         AUTH_SMS_DELIVERY_MODE: 'external',
-        AUTH_EXTERNAL_PROVIDERS_CONFIGURED: 'true',
         AUTH_ACCESS_TOKEN_SECRET: 'staging_access_secret_32_chars_long',
         AUTH_REFRESH_TOKEN_PEPPER: 'staging_refresh_pepper_32_chars_long',
         AUTH_VERIFICATION_TOKEN_PEPPER: 'staging_verification_pepper_32_chars',
@@ -103,7 +101,7 @@ describe('validateEnvironment', () => {
         AUTH_2FA_RECOVERY_PEPPER: 'staging_2fa_recovery_pepper_32_chars',
         AUTH_STEP_UP_TOKEN_PEPPER: 'staging_step_up_token_pepper_32_chars',
       }),
-    ).toMatchObject({ NODE_ENV: 'staging', TRUST_PROXY: '1' });
+    ).toThrow(/AUTH_EXTERNAL_PROVIDER_IMPLEMENTATION/);
   });
 
   it('rejects staging memory providers even when CI-like flags are present', () => {
@@ -116,9 +114,22 @@ describe('validateEnvironment', () => {
         AUTH_COOKIE_SECURE: 'true',
         AUTH_EMAIL_DELIVERY_MODE: 'memory',
         AUTH_SMS_DELIVERY_MODE: 'memory',
-        AUTH_EXTERNAL_PROVIDERS_CONFIGURED: 'true',
       }),
     ).toThrow(/AUTH_DELIVERY_MODE/);
+  });
+
+  it('does not allow a boolean flag to claim external providers are installed', () => {
+    expect(() =>
+      validateEnvironment({
+        ...validConfig,
+        NODE_ENV: 'production',
+        TRUST_PROXY: '1',
+        AUTH_COOKIE_SECURE: 'true',
+        AUTH_EMAIL_DELIVERY_MODE: 'external',
+        AUTH_SMS_DELIVERY_MODE: 'external',
+        AUTH_EXTERNAL_PROVIDERS_CONFIGURED: 'true',
+      }),
+    ).toThrow(/AUTH_EXTERNAL_PROVIDER_IMPLEMENTATION/);
   });
 
   it('rejects generic true trust proxy in staging', () => {
@@ -130,7 +141,6 @@ describe('validateEnvironment', () => {
         AUTH_COOKIE_SECURE: 'true',
         AUTH_EMAIL_DELIVERY_MODE: 'external',
         AUTH_SMS_DELIVERY_MODE: 'external',
-        AUTH_EXTERNAL_PROVIDERS_CONFIGURED: 'true',
       }),
     ).toThrow(/TRUST_PROXY/);
   });

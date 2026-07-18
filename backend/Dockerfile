@@ -9,6 +9,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN bun run prisma:generate
 RUN bun run build
+RUN bun run check:prod-entrypoint
 
 FROM node:22.11.0-slim AS runner
 RUN useradd --system --uid 10001 litbuy
