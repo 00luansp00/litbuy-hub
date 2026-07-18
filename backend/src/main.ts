@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
+import express, { type Express, type NextFunction, type Request, type Response } from 'express';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
@@ -24,9 +25,20 @@ export async function bootstrap(): Promise<void> {
   app.setGlobalPrefix(appConfig.apiPrefix);
   app.enableVersioning({ type: VersioningType.URI });
   app.enableShutdownHooks();
-  app.use(helmet());
+  const httpAdapter = app.getHttpAdapter().getInstance() as Express;
+  httpAdapter.disable('x-powered-by');
+  httpAdapter.set('trust proxy', appConfig.trustProxy);
+  httpAdapter.set('json spaces', 0);
+  httpAdapter.use((req: Request, res: Response, next: NextFunction) => {
+    req.setTimeout(appConfig.requestTimeoutMs);
+    res.setTimeout(appConfig.requestTimeoutMs);
+    next();
+  });
+  app.use(helmet({ contentSecurityPolicy: false }));
   app.use(compression());
   app.use(cookieParser());
+  app.use(express.json({ limit: '256kb' }));
+  app.use(express.urlencoded({ limit: '64kb', extended: false }));
   app.enableCors({
     origin: appConfig.corsOrigins.length > 0 ? appConfig.corsOrigins : false,
     credentials: true,

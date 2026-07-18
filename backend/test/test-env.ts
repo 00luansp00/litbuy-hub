@@ -7,6 +7,8 @@ type ManagedEnvKey =
   | 'CORS_ORIGINS'
   | 'LOG_LEVEL'
   | 'SWAGGER_ENABLED'
+  | 'TRUST_PROXY'
+  | 'SERVER_REQUEST_TIMEOUT_MS'
   | 'AUTH_ACCESS_TOKEN_SECRET'
   | 'AUTH_ACCESS_TOKEN_TTL_SECONDS'
   | 'AUTH_REFRESH_TOKEN_TTL_DAYS'
@@ -42,7 +44,10 @@ type ManagedEnvKey =
   | 'AUTH_2FA_MAX_ATTEMPTS'
   | 'AUTH_2FA_RECOVERY_CODE_COUNT'
   | 'CURRENT_TERMS_VERSION'
-  | 'CURRENT_PRIVACY_VERSION';
+  | 'CURRENT_PRIVACY_VERSION'
+  | 'PUBLIC_FRONTEND_ORIGIN'
+  | 'PUBLIC_API_ORIGIN'
+  | 'AUTH_COOKIE_TOPOLOGY';
 
 const defaultTestEnv: Record<ManagedEnvKey, string> = {
   NODE_ENV: 'test',
@@ -53,6 +58,8 @@ const defaultTestEnv: Record<ManagedEnvKey, string> = {
   CORS_ORIGINS: 'http://localhost:3000',
   LOG_LEVEL: 'silent',
   SWAGGER_ENABLED: 'false',
+  TRUST_PROXY: 'false',
+  SERVER_REQUEST_TIMEOUT_MS: '60000',
   AUTH_ACCESS_TOKEN_SECRET: 'test_auth_access_token_secret',
   AUTH_ACCESS_TOKEN_TTL_SECONDS: '600',
   AUTH_REFRESH_TOKEN_TTL_DAYS: '30',
@@ -89,6 +96,9 @@ const defaultTestEnv: Record<ManagedEnvKey, string> = {
   AUTH_2FA_RECOVERY_CODE_COUNT: '10',
   CURRENT_TERMS_VERSION: '2026-test',
   CURRENT_PRIVACY_VERSION: '2026-test',
+  PUBLIC_FRONTEND_ORIGIN: 'http://localhost:3000',
+  PUBLIC_API_ORIGIN: 'http://localhost:3001',
+  AUTH_COOKIE_TOPOLOGY: 'same-host',
 };
 
 function resolveTestEnvValue(key: ManagedEnvKey, overrides: Partial<NodeJS.ProcessEnv>): string {
@@ -104,6 +114,11 @@ export function applyTestEnv(overrides: Partial<NodeJS.ProcessEnv> = {}): void {
   process.env.CORS_ORIGINS = resolveTestEnvValue('CORS_ORIGINS', overrides);
   process.env.LOG_LEVEL = resolveTestEnvValue('LOG_LEVEL', overrides);
   process.env.SWAGGER_ENABLED = resolveTestEnvValue('SWAGGER_ENABLED', overrides);
+  process.env.TRUST_PROXY = resolveTestEnvValue('TRUST_PROXY', overrides);
+  process.env.SERVER_REQUEST_TIMEOUT_MS = resolveTestEnvValue(
+    'SERVER_REQUEST_TIMEOUT_MS',
+    overrides,
+  );
   process.env.AUTH_ACCESS_TOKEN_SECRET = resolveTestEnvValue('AUTH_ACCESS_TOKEN_SECRET', overrides);
   process.env.AUTH_ACCESS_TOKEN_TTL_SECONDS = resolveTestEnvValue(
     'AUTH_ACCESS_TOKEN_TTL_SECONDS',
@@ -194,6 +209,9 @@ export function applyTestEnv(overrides: Partial<NodeJS.ProcessEnv> = {}): void {
   );
   process.env.CURRENT_TERMS_VERSION = resolveTestEnvValue('CURRENT_TERMS_VERSION', overrides);
   process.env.CURRENT_PRIVACY_VERSION = resolveTestEnvValue('CURRENT_PRIVACY_VERSION', overrides);
+  process.env.PUBLIC_FRONTEND_ORIGIN = resolveTestEnvValue('PUBLIC_FRONTEND_ORIGIN', overrides);
+  process.env.PUBLIC_API_ORIGIN = resolveTestEnvValue('PUBLIC_API_ORIGIN', overrides);
+  process.env.AUTH_COOKIE_TOPOLOGY = resolveTestEnvValue('AUTH_COOKIE_TOPOLOGY', overrides);
 }
 
 applyTestEnv();

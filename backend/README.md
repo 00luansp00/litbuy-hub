@@ -74,7 +74,7 @@ A API expõe `/api/v1/auth/register`, `/email/verify`, `/email/resend`, `/login`
 
 A implementação usa senha Argon2id, JWT de acesso curto, refresh token opaco rotacionado e armazenado somente como HMAC, dispositivo opaco em cookie HttpOnly, CSRF double-submit para refresh/logout, sessões persistidas no PostgreSQL e eventos de segurança sanitizados. O rate limit usa Redis e falha aberto em indisponibilidade temporária para preservar disponibilidade local, sem armazenar senha ou token nas chaves.
 
-O envio de e-mail fica atrás de `AuthMailer`; `memory` é usado em testes/desenvolvimento e `console` é bloqueado em produção sem provedor comercial real.
+O envio de e-mail fica atrás de `AuthMailer`; `memory` é usado apenas em testes/desenvolvimento controlados; `disabled` falha de forma segura e `external` fica fail-closed até existir provider real.
 
 Novas variáveis: `AUTH_ACCESS_TOKEN_SECRET`, `AUTH_ACCESS_TOKEN_TTL_SECONDS`, `AUTH_REFRESH_TOKEN_TTL_DAYS`, peppers de refresh/verificação/dispositivo/CSRF/IP, TTLs de confirmação e aprovação, limites de tentativas, nomes/configuração de cookies, `AUTH_EMAIL_DELIVERY_MODE`, `CURRENT_TERMS_VERSION` e `CURRENT_PRIVACY_VERSION`.
 

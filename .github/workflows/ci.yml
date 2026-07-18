@@ -64,14 +64,16 @@ jobs:
       CORS_ORIGINS: http://localhost:3000
       LOG_LEVEL: silent
       SWAGGER_ENABLED: "false"
-      AUTH_ACCESS_TOKEN_SECRET: test_access_secret_for_ci_only
+      TRUST_PROXY: "false"
+      SERVER_REQUEST_TIMEOUT_MS: "60000"
+      AUTH_ACCESS_TOKEN_SECRET: test_long_access_secret_for_ci_only
       AUTH_ACCESS_TOKEN_TTL_SECONDS: "600"
       AUTH_REFRESH_TOKEN_TTL_DAYS: "30"
-      AUTH_REFRESH_TOKEN_PEPPER: test_refresh_pepper
-      AUTH_VERIFICATION_TOKEN_PEPPER: test_verification_pepper
-      AUTH_DEVICE_TOKEN_PEPPER: test_device_pepper
-      AUTH_CSRF_TOKEN_PEPPER: test_csrf_pepper
-      AUTH_IP_HASH_PEPPER: test_ip_hash_pepper
+      AUTH_REFRESH_TOKEN_PEPPER: test_long_refresh_pepper
+      AUTH_VERIFICATION_TOKEN_PEPPER: test_long_verification_pepper
+      AUTH_DEVICE_TOKEN_PEPPER: test_long_device_pepper
+      AUTH_CSRF_TOKEN_PEPPER: test_long_csrf_pepper
+      AUTH_IP_HASH_PEPPER: test_long_ip_hash_pepper
       AUTH_EMAIL_VERIFICATION_TTL_MINUTES: "30"
       AUTH_DEVICE_APPROVAL_TTL_MINUTES: "30"
       AUTH_MAX_ATTEMPTS: "5"
@@ -83,8 +85,26 @@ jobs:
       AUTH_COOKIE_SAME_SITE: lax
       AUTH_COOKIE_DOMAIN: ""
       AUTH_EMAIL_DELIVERY_MODE: memory
+      AUTH_2FA_RECOVERY_PEPPER: test_long_2fa_recovery_pepper_32_chars
+      AUTH_STEP_UP_TOKEN_PEPPER: test_long_step_up_token_pepper_32_chars
+      AUTH_PASSWORD_RESET_TTL_MINUTES: "30"
+      AUTH_SMS_DELIVERY_MODE: memory
+      AUTH_PHONE_VERIFICATION_TTL_MINUTES: "10"
+      AUTH_PHONE_RESEND_COOLDOWN_SECONDS: "60"
+      AUTH_EMAIL_CHANGE_TTL_MINUTES: "30"
+      AUTH_SENSITIVE_CHANGE_HOLD_HOURS: "48"
+      AUTH_2FA_CODE_TTL_MINUTES: "10"
+      AUTH_2FA_RESEND_COOLDOWN_SECONDS: "60"
+      AUTH_2FA_MAX_ATTEMPTS: "5"
+      AUTH_2FA_RECOVERY_CODE_COUNT: "10"
+      AUTH_STEP_UP_GRANT_TTL_MINUTES: "10"
+      AUTH_STEP_UP_RESEND_COOLDOWN_SECONDS: "60"
+      AUTH_STEP_UP_MAX_ATTEMPTS: "5"
       CURRENT_TERMS_VERSION: "2026-test"
       CURRENT_PRIVACY_VERSION: "2026-test"
+      PUBLIC_FRONTEND_ORIGIN: http://localhost:3000
+      PUBLIC_API_ORIGIN: http://localhost:3001
+      AUTH_COOKIE_TOPOLOGY: same-host
     defaults:
       run:
         working-directory: backend
@@ -159,14 +179,16 @@ jobs:
       CORS_ORIGINS: http://localhost:3000
       LOG_LEVEL: silent
       SWAGGER_ENABLED: "false"
-      AUTH_ACCESS_TOKEN_SECRET: test_access_secret_for_ci_only
+      TRUST_PROXY: "false"
+      SERVER_REQUEST_TIMEOUT_MS: "60000"
+      AUTH_ACCESS_TOKEN_SECRET: test_long_access_secret_for_ci_only
       AUTH_ACCESS_TOKEN_TTL_SECONDS: "600"
       AUTH_REFRESH_TOKEN_TTL_DAYS: "30"
-      AUTH_REFRESH_TOKEN_PEPPER: test_refresh_pepper
-      AUTH_VERIFICATION_TOKEN_PEPPER: test_verification_pepper
-      AUTH_DEVICE_TOKEN_PEPPER: test_device_pepper
-      AUTH_CSRF_TOKEN_PEPPER: test_csrf_pepper
-      AUTH_IP_HASH_PEPPER: test_ip_hash_pepper
+      AUTH_REFRESH_TOKEN_PEPPER: test_long_refresh_pepper
+      AUTH_VERIFICATION_TOKEN_PEPPER: test_long_verification_pepper
+      AUTH_DEVICE_TOKEN_PEPPER: test_long_device_pepper
+      AUTH_CSRF_TOKEN_PEPPER: test_long_csrf_pepper
+      AUTH_IP_HASH_PEPPER: test_long_ip_hash_pepper
       AUTH_EMAIL_VERIFICATION_TTL_MINUTES: "30"
       AUTH_DEVICE_APPROVAL_TTL_MINUTES: "30"
       AUTH_MAX_ATTEMPTS: "5"
@@ -178,8 +200,26 @@ jobs:
       AUTH_COOKIE_SAME_SITE: lax
       AUTH_COOKIE_DOMAIN: ""
       AUTH_EMAIL_DELIVERY_MODE: memory
+      AUTH_2FA_RECOVERY_PEPPER: test_long_2fa_recovery_pepper_32_chars
+      AUTH_STEP_UP_TOKEN_PEPPER: test_long_step_up_token_pepper_32_chars
+      AUTH_PASSWORD_RESET_TTL_MINUTES: "30"
+      AUTH_SMS_DELIVERY_MODE: memory
+      AUTH_PHONE_VERIFICATION_TTL_MINUTES: "10"
+      AUTH_PHONE_RESEND_COOLDOWN_SECONDS: "60"
+      AUTH_EMAIL_CHANGE_TTL_MINUTES: "30"
+      AUTH_SENSITIVE_CHANGE_HOLD_HOURS: "48"
+      AUTH_2FA_CODE_TTL_MINUTES: "10"
+      AUTH_2FA_RESEND_COOLDOWN_SECONDS: "60"
+      AUTH_2FA_MAX_ATTEMPTS: "5"
+      AUTH_2FA_RECOVERY_CODE_COUNT: "10"
+      AUTH_STEP_UP_GRANT_TTL_MINUTES: "10"
+      AUTH_STEP_UP_RESEND_COOLDOWN_SECONDS: "60"
+      AUTH_STEP_UP_MAX_ATTEMPTS: "5"
       CURRENT_TERMS_VERSION: "2026-test"
       CURRENT_PRIVACY_VERSION: "2026-test"
+      PUBLIC_FRONTEND_ORIGIN: http://localhost:3000
+      PUBLIC_API_ORIGIN: http://localhost:3001
+      AUTH_COOKIE_TOPOLOGY: same-host
     defaults:
       run:
         working-directory: backend
@@ -203,3 +243,62 @@ jobs:
 
       - name: Run real infrastructure integration tests
         run: bun run test:integration
+
+      - name: Verify staging files referenced by compose and runbook
+        run: test -f ../docker-compose.staging.yml && test -f .env.staging.example && test -f .env.staging.local.example && test -f ../frontend/.env.staging.example
+
+      - name: Validate staging compose config
+        working-directory: ${{ github.workspace }}
+        run: docker compose -f docker-compose.staging.yml config
+
+      - name: Build staging compose images
+        working-directory: ${{ github.workspace }}
+        run: docker compose -f docker-compose.staging.yml build
+
+      - name: Build backend for infrastructure smoke tests
+        run: bun run build
+
+      - name: Verify backend production entrypoint
+        run: bun run check:prod-entrypoint
+
+      - name: Start backend for infrastructure smoke tests
+        run: |
+          set -euo pipefail
+          bun run start:prod > /tmp/litbuy-backend.log 2>&1 &
+          echo "$!" > /tmp/litbuy-backend.pid
+          sleep 1
+          if ! kill -0 "$(cat /tmp/litbuy-backend.pid)" 2>/dev/null; then
+            echo "Backend process exited before liveness. Expected entrypoint: dist/main.js"
+            echo "--- dist files ---"
+            find dist -maxdepth 5 -type f -print | sort || true
+            echo "--- backend log ---"
+            cat /tmp/litbuy-backend.log || true
+            exit 1
+          fi
+
+      - name: Wait for backend liveness and readiness
+        run: node ../scripts/wait-backend.mjs
+        env:
+          WAIT_BACKEND_BASE_URL: http://localhost:3001/api/v1
+          WAIT_BACKEND_PID_FILE: /tmp/litbuy-backend.pid
+          WAIT_BACKEND_LOG_FILE: /tmp/litbuy-backend.log
+          WAIT_BACKEND_TIMEOUT_MS: "90000"
+
+      - name: Run infrastructure smoke tests
+        run: bun run smoke:infra
+        env:
+          INFRA_SMOKE_BASE_URL: http://localhost:3001/api/v1
+          INFRA_SMOKE_ORIGIN: http://localhost:3000
+
+      - name: Show backend smoke logs
+        if: always()
+        run: |
+          if [ -f /tmp/litbuy-backend.log ]; then cat /tmp/litbuy-backend.log; else echo "No backend log file"; fi
+
+      - name: Stop backend smoke process
+        if: always()
+        run: |
+          if [ -f /tmp/litbuy-backend.pid ] && kill -0 "$(cat /tmp/litbuy-backend.pid)" 2>/dev/null; then
+            kill "$(cat /tmp/litbuy-backend.pid)"
+            wait "$(cat /tmp/litbuy-backend.pid)" 2>/dev/null || true
+          fi

@@ -1,0 +1,64 @@
+# Local staging rehearsal only. Do not expose this Compose project on a public network.
+# Published ports bind to loopback; services communicate internally on the Docker network.
+services:
+  postgres:
+    image: postgres:16.6-alpine
+    environment:
+      POSTGRES_DB: litbuy_staging_local
+      POSTGRES_USER: litbuy
+      POSTGRES_PASSWORD: litbuy_local_staging_password_not_for_production
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litbuy -d litbuy_staging_local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - litbuy_staging_postgres:/var/lib/postgresql/data
+    ports: ["127.0.0.1:5432:5432"]
+  redis:
+    image: redis:7.4.2-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - litbuy_staging_redis:/data
+    ports: ["127.0.0.1:6379:6379"]
+  migrate:
+    build: ./backend
+    env_file: ./backend/.env.staging.local.example
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    command: ["./node_modules/.bin/prisma", "migrate", "deploy"]
+    restart: "no"
+  backend:
+    build: ./backend
+    env_file: ./backend/.env.staging.local.example
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    ports: ["127.0.0.1:3001:3001"]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'node -e "fetch(''http://localhost:3001/api/v1/health/ready'').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+  frontend:
+    build:
+      context: .
+      args:
+        VITE_API_BASE_URL: http://localhost:3001/api/v1
+    depends_on:
+      backend: { condition: service_healthy }
+    ports: ["127.0.0.1:3000:3000"]
+volumes:
+  litbuy_staging_postgres:
+  litbuy_staging_redis:
