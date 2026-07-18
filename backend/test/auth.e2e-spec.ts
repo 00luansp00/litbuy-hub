@@ -336,17 +336,19 @@ class FakePrisma {
         null
       );
     },
-    create: async (a: { data: Row }) => {
+    createMany: async (a: { data: Row[]; skipDuplicates?: boolean }) => {
       await Promise.resolve();
-      if (
-        this.userRoleAssignments.some((r) => r.userId === a.data.userId && r.role === a.data.role)
-      ) {
-        const error = new Error('Unique constraint') as Error & { code: string };
-        error.code = 'P2002';
-        throw error;
+      let count = 0;
+      for (const data of a.data) {
+        if (
+          this.userRoleAssignments.some((r) => r.userId === data.userId && r.role === data.role)
+        ) {
+          continue;
+        }
+        this.userRoleAssignments.push({ ...data, grantedAt: now() });
+        count += 1;
       }
-      this.userRoleAssignments.push({ ...a.data, grantedAt: now() });
-      return a.data;
+      return { count };
     },
     deleteMany: (a: { where?: Row } = {}) => this.roleDelegate.deleteMany(a),
   };

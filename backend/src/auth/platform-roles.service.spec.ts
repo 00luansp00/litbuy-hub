@@ -3,9 +3,13 @@ import { ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PlatformRole, SecurityEventOutcome, SecurityEventType, UserStatus } from '@prisma/client';
 import { PlatformRolesGuard } from './platform-roles.guard';
-import { RequireRoles, PLATFORM_ROLES_KEY, toPlatformRoleApiValues } from './platform-roles';
+import { RequireRoles, toPlatformRoleApiValues } from './platform-roles';
 import { PlatformRolesService } from './platform-roles.service';
-import { grantPlatformRole, revokePlatformRole } from './platform-role-operations';
+import {
+  grantPlatformRole,
+  revokePlatformRole,
+  serializableTransactionWithRetry,
+} from './platform-role-operations';
 
 type Assignment = { userId: string; role: PlatformRole; user?: { status: UserStatus } };
 type Event = {
@@ -17,7 +21,14 @@ class FakePrisma {
   events: Event[] = [];
   failAudit = false;
   failCount = false;
+  serializationFailures = 0;
   async $transaction<T>(fn: (tx: this) => Promise<T>) {
+    if (this.serializationFailures > 0) {
+      this.serializationFailures -= 1;
+      const error = new Error('serializable conflict') as Error & { code: string };
+      error.code = 'P2034';
+      throw error;
+    }
     const beforeAssignments = structuredClone(this.assignments) as Assignment[];
     const beforeEvents = structuredClone(this.events) as Event[];
     try {
@@ -28,6 +39,10 @@ class FakePrisma {
       throw error;
     }
   }
+  user = {
+    findUnique: async ({ where }: { where: { id: string } }) =>
+      this.assignments.find((a) => a.userId === where.id)?.user ?? null,
+  };
   userRoleAssignment = {
     findMany: async ({ where }: { where?: { userId?: string } }) =>
       this.assignments.filter((a) => !where?.userId || a.userId === where.userId),
@@ -54,14 +69,16 @@ class FakePrisma {
       this.assignments.find(
         (a) => a.userId === where.userId_role.userId && a.role === where.userId_role.role,
       ) ?? null,
-    create: async ({ data }: { data: Assignment }) => {
-      if (this.assignments.some((a) => a.userId === data.userId && a.role === data.role)) {
-        const error = new Error('Unique constraint') as Error & { code: string };
-        error.code = 'P2002';
-        throw error;
+    createMany: async ({ data }: { data: Assignment[]; skipDuplicates?: boolean }) => {
+      let count = 0;
+      for (const row of data) {
+        const exists = this.assignments.some((a) => a.userId === row.userId && a.role === row.role);
+        if (!exists) {
+          this.assignments.push({ ...row, user: { status: UserStatus.ACTIVE } });
+          count += 1;
+        }
       }
-      this.assignments.push({ ...data, user: { status: UserStatus.ACTIVE } });
-      return data;
+      return { count };
     },
     deleteMany: async ({ where }: { where: { userId: string; role: PlatformRole } }) => {
       const before = this.assignments.length;
@@ -111,6 +128,7 @@ describe('platform role helpers and service', () => {
       true,
     );
     expect(await service.userHasAnyRole('u1', [PlatformRole.ADMIN])).toBe(false);
+    expect(await service.userHasAnyRole('u1', [])).toBe(false);
   });
 
   it('grants new roles and audits granted', async () => {
@@ -172,6 +190,45 @@ describe('platform role helpers and service', () => {
     ).resolves.toEqual({ changed: true, result: 'revoked' });
   });
 
+  it('allows suspended ADMIN removal when another active admin remains and target without ADMIN is unchanged', async () => {
+    const prisma = new FakePrisma();
+    prisma.assignments.push(
+      { userId: 'active', role: PlatformRole.ADMIN, user: { status: UserStatus.ACTIVE } },
+      { userId: 'suspended', role: PlatformRole.ADMIN, user: { status: UserStatus.SUSPENDED } },
+    );
+    await expect(
+      revokePlatformRole(prisma as any, 'suspended', PlatformRole.ADMIN, 'test'),
+    ).resolves.toEqual({ changed: true, result: 'revoked' });
+    await expect(
+      revokePlatformRole(prisma as any, 'missing', PlatformRole.ADMIN, 'test'),
+    ).resolves.toEqual({ changed: false, result: 'unchanged' });
+  });
+
+  it('retries serializable conflicts and does not duplicate audit events', async () => {
+    const prisma = new FakePrisma();
+    let calls = 0;
+    prisma.serializationFailures = 1;
+    await expect(
+      serializableTransactionWithRetry(prisma as any, async (tx) => {
+        calls += 1;
+        await tx.securityEvent.create({
+          data: {
+            eventType: SecurityEventType.ROLE_GRANTED,
+            outcome: SecurityEventOutcome.SUCCESS,
+            metadata: { result: 'granted' },
+          },
+        });
+        return 'ok';
+      }),
+    ).resolves.toBe('ok');
+    expect(calls).toBe(1);
+    expect(prisma.events).toHaveLength(1);
+    prisma.serializationFailures = 3;
+    await expect(
+      serializableTransactionWithRetry(prisma as any, async () => 'never'),
+    ).rejects.toMatchObject({ code: 'SERIALIZABLE_TRANSACTION_RETRY_EXHAUSTED' });
+  });
+
   it('rolls back assignment when audit fails and propagates database failures', async () => {
     const prisma = new FakePrisma();
     prisma.failAudit = true;
@@ -188,14 +245,11 @@ describe('platform role helpers and service', () => {
 });
 
 describe('RequireRoles and PlatformRolesGuard', () => {
-  it('stores metadata including explicit empty metadata', () => {
-    const decorator = RequireRoles();
-    class Example {}
-    decorator(Example);
-    expect(Reflect.getMetadata(PLATFORM_ROLES_KEY, Example)).toEqual([]);
+  it('rejects empty decorator metadata at declaration time', () => {
+    expect(() => RequireRoles()).toThrow('RequireRoles requires at least one role');
   });
 
-  it('does not interfere without metadata or empty metadata', async () => {
+  it('does not interfere without metadata but fails closed for manipulated empty metadata', async () => {
     const guard = new PlatformRolesGuard(
       { getAllAndOverride: () => undefined } as unknown as Reflector,
       { userHasAnyRole: jest.fn() } as any,
@@ -205,7 +259,9 @@ describe('RequireRoles and PlatformRolesGuard', () => {
       { getAllAndOverride: () => [] } as unknown as Reflector,
       { userHasAnyRole: jest.fn() } as any,
     );
-    await expect(empty.canActivate(context())).resolves.toBe(true);
+    await expect(empty.canActivate(context({ userId: 'u1' }))).rejects.toMatchObject({
+      response: { code: 'INSUFFICIENT_ROLE' },
+    });
   });
 
   it('uses any-role semantics and ignores header/body/query roles', async () => {

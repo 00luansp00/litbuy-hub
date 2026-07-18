@@ -4,7 +4,10 @@ import { PlatformRole } from '@prisma/client';
 export const PLATFORM_ROLES_KEY = 'platformRoles:any';
 
 /** Requires the authenticated user to have at least one of the provided roles. */
-export const RequireRoles = (...roles: PlatformRole[]) => SetMetadata(PLATFORM_ROLES_KEY, roles);
+export const RequireRoles = (...roles: PlatformRole[]) => {
+  if (roles.length === 0) throw new Error('RequireRoles requires at least one role');
+  return SetMetadata(PLATFORM_ROLES_KEY, roles);
+};
 
 export const PLATFORM_ROLE_API_VALUES = ['buyer', 'seller', 'admin'] as const;
 export type PlatformRoleApi = (typeof PLATFORM_ROLE_API_VALUES)[number];

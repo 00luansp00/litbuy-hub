@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import cookieParser from 'cookie-parser';
 import { HttpStatus, ValidationPipe, VersioningType } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -2346,16 +2348,45 @@ describe('Marketplace RBAC with real PostgreSQL (integration)', () => {
     await app.close();
   });
 
-  it('has migrated enum/table and enforces composite uniqueness/backfill semantics', async () => {
-    const enumRows = await prisma.$queryRaw<
-      Array<{ enumlabel: string }>
-    >`SELECT enumlabel FROM pg_enum WHERE enumtypid = 'PlatformRole'::regtype ORDER BY enumsortorder`;
-    expect(enumRows.map((r) => r.enumlabel)).toEqual(['BUYER', 'SELLER', 'ADMIN']);
-    const tableRows = await prisma.$queryRaw<
-      Array<{ table_name: string }>
-    >`SELECT table_name FROM information_schema.tables WHERE table_name = 'UserRoleAssignment'`;
-    expect(tableRows).toHaveLength(1);
+  it('applies the RBAC migration to a pre-RBAC schema and backfills only BUYER', async () => {
+    const schema = `rbac_upgrade_${crypto.randomUUID().replaceAll('-', '_')}`;
+    const migration = readFileSync(
+      join(
+        process.cwd(),
+        'prisma/migrations/20260718120000_marketplace_rbac_foundation/migration.sql',
+      ),
+      'utf8',
+    );
+    try {
+      await prisma.$executeRawUnsafe(`CREATE SCHEMA "${schema}"`);
+      await prisma.$executeRawUnsafe(`SET search_path TO "${schema}"`);
+      await prisma.$executeRawUnsafe(`CREATE TYPE "SecurityEventType" AS ENUM ('REGISTERED')`);
+      await prisma.$executeRawUnsafe(`CREATE TABLE "User" ("id" uuid PRIMARY KEY)`);
+      const existingUserId = crypto.randomUUID();
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO "User" ("id") VALUES ('${existingUserId}'::uuid)`,
+      );
+      for (const statement of migration
+        .split(';')
+        .map((rawStatement) => rawStatement.trim())
+        .filter(Boolean)) {
+        await prisma.$executeRawUnsafe(`${statement};`);
+      }
+      const roles = await prisma.$queryRawUnsafe<Array<{ role: string }>>(
+        `SELECT "role"::text AS role FROM "${schema}"."UserRoleAssignment" WHERE "userId" = '${existingUserId}'::uuid ORDER BY "role"::text`,
+      );
+      expect(roles.map((row) => row.role)).toEqual(['BUYER']);
+      const enumRows = await prisma.$queryRawUnsafe<Array<{ enumlabel: string }>>(
+        `SELECT enumlabel FROM pg_enum WHERE enumtypid = '"${schema}"."PlatformRole"'::regtype ORDER BY enumsortorder`,
+      );
+      expect(enumRows.map((r) => r.enumlabel)).toEqual(['BUYER', 'SELLER', 'ADMIN']);
+    } finally {
+      await prisma.$executeRawUnsafe('SET search_path TO public');
+      await prisma.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+    }
+  });
 
+  it('enforces composite uniqueness without assigning SELLER or ADMIN implicitly', async () => {
     const user = await prisma.user.create({
       data: {
         email: 'pre-rbac@example.com',
@@ -2368,10 +2399,7 @@ describe('Marketplace RBAC with real PostgreSQL (integration)', () => {
         passwordCredential: { create: { passwordHash: 'hash' } },
       },
     });
-    await prisma.$executeRaw`INSERT INTO "UserRoleAssignment" ("userId", "role") SELECT ${user.id}::uuid, 'BUYER'::"PlatformRole" ON CONFLICT ("userId", "role") DO NOTHING`;
-    expect(await prisma.userRoleAssignment.findMany({ where: { userId: user.id } })).toHaveLength(
-      1,
-    );
+    await prisma.userRoleAssignment.create({ data: { userId: user.id, role: 'BUYER' } });
     await expect(
       prisma.userRoleAssignment.create({ data: { userId: user.id, role: 'BUYER' } }),
     ).rejects.toThrow();

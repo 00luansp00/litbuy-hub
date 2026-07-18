@@ -22,7 +22,7 @@ export class PlatformRolesService {
   }
 
   async userHasAnyRole(userId: string, required: PlatformRole[]): Promise<boolean> {
-    if (required.length === 0) return true;
+    if (required.length === 0) return false;
     const count = await this.prisma.userRoleAssignment.count({
       where: { userId, role: { in: required } },
     });

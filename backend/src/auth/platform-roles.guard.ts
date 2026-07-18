@@ -17,7 +17,8 @@ export class PlatformRolesGuard implements CanActivate {
       ctx.getHandler(),
       ctx.getClass(),
     ]);
-    if (!required || required.length === 0) return true;
+    if (!required) return true;
+    if (required.length === 0) throw new ForbiddenException({ code: 'INSUFFICIENT_ROLE' });
     const req = ctx.switchToHttp().getRequest<AuthenticatedRequest>();
     const userId = req.auth?.userId;
     if (!userId) throw new ForbiddenException({ code: 'INSUFFICIENT_ROLE' });
