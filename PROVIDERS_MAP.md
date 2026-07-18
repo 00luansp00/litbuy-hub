@@ -10,7 +10,7 @@ Providers globais em `src/providers/` embrulham a aplicação em `src/routes/__r
 - Mantém o access token somente em memória via `src/lib/api/client.ts`.
 - Refresh token fica em cookie `HttpOnly` controlado pelo backend.
 - Device cookie e CSRF cookie são controlados pelo backend; o frontend apenas lê o CSRF legível para enviar `X-CSRF-Token` em mutações.
-- Papéis buyer/seller/admin continuam apenas visuais quando `VITE_ENABLE_DEMO_ROLES=true` e não concedem autorização backend real.
+- Papéis buyer/seller/admin são persistidos no backend; `VITE_ENABLE_DEMO_ROLES` não concede autorização.
 - RBAC real de marketplace, seller e admin ainda é pendente e deve ser implementado em guards/checks server-side.
 
 ### Histórico descontinuado / não autoritativo
@@ -60,7 +60,7 @@ verdade para dinheiro, permissão, KYC ou notificação de segurança.
 
 ## Sprint 2C2B1 — AuthProvider real
 
-`src/providers/AuthProvider.tsx` não depende mais de `authMock`. Ele inicializa de forma segura no cliente, tenta `/auth/refresh`, carrega `/auth/me`, mantém access token em memória via `src/lib/api/client.ts` e expõe estados `initializing`, `anonymous`, `authenticated`, `emailVerificationRequired`, `deviceApprovalRequired` e `twoFactorRequired`. Papéis comprador/vendedor seguem apenas como contexto visual; `VITE_ENABLE_DEMO_ROLES=false` por padrão e não concede autorização real.
+`src/providers/AuthProvider.tsx` não depende mais de `authMock`. Ele inicializa de forma segura no cliente, tenta `/auth/refresh`, carrega `/auth/me`, mantém access token em memória via `src/lib/api/client.ts` e expõe estados `initializing`, `anonymous`, `authenticated`, `emailVerificationRequired`, `deviceApprovalRequired` e `twoFactorRequired`. `activeRole` segue apenas como contexto visual comprador/vendedor; `isAdmin` e `hasSellerAccess` derivam de `/auth/me.roles`.
 
 ## Sprint 2C2B2A
 
@@ -94,3 +94,7 @@ A troca de método 2FA não adiciona estado sensível ao `AuthProvider` ou a qua
 ## Atualização — AuthProvider real (2026-07-17)
 
 `AuthProvider` usa API real, mantém access token somente em memória, remove queries privadas ao trocar estado de autenticação e não possui fallback silencioso para mock. O detalhe de cookies, CSRF, sessão e 2FA está consolidado em `AUTHENTICATION_FINAL_AUDIT.md`.
+
+## Marketplace RBAC foundation update
+
+The marketplace authorization foundation is now persistent: `BUYER`, `SELLER` and `ADMIN` live in the backend database, `/auth/me` returns real lowercase roles, and the frontend derives `isAdmin`/`hasSellerAccess` only from that response. Demo role flags no longer grant access. Seller/admin page content remains mock-oriented; only gates and future server-side authorization primitives were added. See `MARKETPLACE_RBAC_FOUNDATION.md`.

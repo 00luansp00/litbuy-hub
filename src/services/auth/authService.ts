@@ -1,6 +1,25 @@
 import { apiFetch } from "@/lib/api/client";
-import type { AuthMe, AuthSuccess, LoginPayload, LoginResponse, RegisterPayload } from "./types";
+import type {
+  AuthMe,
+  AuthSuccess,
+  LoginPayload,
+  LoginResponse,
+  PlatformRole,
+  RegisterPayload,
+} from "./types";
 const json = (body: unknown) => JSON.stringify(body);
+const validRoles = new Set<PlatformRole>(["buyer", "seller", "admin"]);
+export function parseAuthMe(raw: AuthMe): AuthMe {
+  if (!Array.isArray(raw.roles)) throw new Error("Resposta de autenticação malformada.");
+  const roles = [
+    ...new Set(
+      raw.roles.filter((role): role is PlatformRole => validRoles.has(role as PlatformRole)),
+    ),
+  ];
+  const order: Record<PlatformRole, number> = { buyer: 0, seller: 1, admin: 2 };
+  roles.sort((a, b) => order[a] - order[b]);
+  return { ...raw, roles };
+}
 export const authService = {
   register: (payload: RegisterPayload) =>
     apiFetch<{ message: string }>("/auth/register", {
@@ -62,7 +81,7 @@ export const authService = {
     apiFetch<{ accessToken: string }>("/auth/refresh", { method: "POST", skipAuthRefresh: true }),
   logout: () =>
     apiFetch<{ message: string }>("/auth/logout", { method: "POST", skipAuthRefresh: true }),
-  me: () => apiFetch<AuthMe>("/auth/me"),
+  me: () => apiFetch<AuthMe>("/auth/me").then(parseAuthMe),
 };
 export function toDisplayUser(user: AuthMe) {
   const displayName = user.email.split("@")[0];

@@ -119,3 +119,7 @@ plataforma a fraude financeira, vazamento de dados e sanções jurídicas.
 ## Atualização — autenticação real auditada (2026-07-17)
 
 A fundação de autenticação NestJS/PostgreSQL/Redis para cadastro, sessão, dispositivo, senha, e-mail, telefone, 2FA, step-up e recovery codes foi auditada e documentada em `AUTHENTICATION_FINAL_AUDIT.md`. Antes de avançar para pagamentos, seller/admin, wallet ou KYC, executar staging, homologação e hardening operacional de auth.
+
+## Marketplace RBAC foundation update
+
+The marketplace authorization foundation is now persistent: `BUYER`, `SELLER` and `ADMIN` live in the backend database, `/auth/me` returns real lowercase roles, and the frontend derives `isAdmin`/`hasSellerAccess` only from that response. Demo role flags no longer grant access. Seller/admin page content remains mock-oriented; only gates and future server-side authorization primitives were added. See `MARKETPLACE_RBAC_FOUNDATION.md`.

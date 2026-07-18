@@ -14,6 +14,7 @@ const me = {
   birthDate: "2000-01-01T00:00:00.000Z",
   status: "ACTIVE",
   createdAt: "2026-01-01T00:00:00.000Z",
+  roles: ["buyer"],
 };
 
 let ctx: AuthContextValue;
@@ -308,4 +309,37 @@ describe("AuthProvider", () => {
     expect(ctx.user).toBeNull();
     expect(localSpy).not.toHaveBeenCalledWith(expect.stringMatching(/token/i), expect.anything());
   });
+});
+
+it("derives RBAC only from backend roles and blocks seller switch without SELLER", async () => {
+  vi.stubEnv("VITE_ENABLE_DEMO_ROLES", "true");
+  vi.spyOn(authService, "refresh").mockResolvedValue({ accessToken: "token" });
+  vi.spyOn(authService, "me").mockResolvedValue(me);
+  setup();
+  await screen.findByText("authenticated");
+  expect(ctx.isAdmin).toBe(false);
+  expect(ctx.hasSellerAccess).toBe(false);
+  expect(ctx.hasSellerProfile).toBe(false);
+  expect(ctx.switchToSeller()).toEqual({ ok: false, needsOnboarding: true });
+  expect(ctx.activeRole).toBe("buyer");
+});
+
+it("allows seller presentation mode only with SELLER role", async () => {
+  vi.spyOn(authService, "refresh").mockResolvedValue({ accessToken: "token" });
+  vi.spyOn(authService, "me").mockResolvedValue({ ...me, roles: ["buyer", "seller"] });
+  setup();
+  await screen.findByText("authenticated");
+  expect(ctx.hasSellerAccess).toBe(true);
+  await act(async () => {
+    expect(ctx.switchToSeller()).toEqual({ ok: true, needsOnboarding: false });
+  });
+  expect(ctx.activeRole).toBe("seller");
+});
+
+it("derives admin only from ADMIN role", async () => {
+  vi.spyOn(authService, "refresh").mockResolvedValue({ accessToken: "token" });
+  vi.spyOn(authService, "me").mockResolvedValue({ ...me, roles: ["buyer", "admin"] });
+  setup();
+  await screen.findByText("authenticated");
+  expect(ctx.isAdmin).toBe(true);
 });

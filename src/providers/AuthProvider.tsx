@@ -15,12 +15,12 @@ import {
   type UserRole,
 } from "@/services/auth";
 
-const demoRoles =
-  import.meta.env.MODE !== "production" && import.meta.env.VITE_ENABLE_DEMO_ROLES === "true";
 const uuidV4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function withPresentation(u: AuthMe, activeRole: UserRole = "buyer"): AuthUser {
-  return { ...toDisplayUser(u), activeRole };
+  const safeRole: UserRole =
+    activeRole === "seller" && u.roles.includes("seller") ? "seller" : "buyer";
+  return { ...toDisplayUser(u), activeRole: safeRole };
 }
 
 function isAuthSuccess(response: LoginResponse | AuthSuccess): response is AuthSuccess {
@@ -305,8 +305,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       status,
       activeRole: user?.activeRole ?? "buyer",
-      hasSellerProfile: demoRoles && !!user,
-      isAdmin: demoRoles && !!user,
+      hasSellerProfile: !!user?.roles.includes("seller"),
+      hasSellerAccess: !!user?.roles.includes("seller"),
+      isAdmin: !!user?.roles.includes("admin"),
       twoFactorChallenge,
       login,
       register,
@@ -323,18 +324,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearAuthentication: clear,
       switchToBuyer: () => setUser((p) => (p ? { ...p, activeRole: "buyer" } : p)),
       switchToSeller: () => {
-        // Apenas contexto visual: não representa perfil de vendedor real nem autorização.
+        if (!user?.roles.includes("seller")) return { ok: false, needsOnboarding: true };
         setUser((p) => (p ? { ...p, activeRole: "seller" } : p));
         return { ok: true, needsOnboarding: false };
       },
       toggleRole: () => {
-        let role: UserRole = "buyer";
-        setUser((p) => {
-          if (!p) return p;
-          role = (p.activeRole ?? "buyer") === "buyer" ? "seller" : "buyer";
-          return { ...p, activeRole: role };
-        });
-        return { ok: true, needsOnboarding: false, role };
+        if ((user?.activeRole ?? "buyer") === "seller") {
+          setUser((p) => (p ? { ...p, activeRole: "buyer" } : p));
+          return { ok: true, needsOnboarding: false, role: "buyer" };
+        }
+        if (!user?.roles.includes("seller"))
+          return { ok: false, needsOnboarding: true, role: "buyer" };
+        setUser((p) => (p ? { ...p, activeRole: "seller" } : p));
+        return { ok: true, needsOnboarding: false, role: "seller" };
       },
     }),
     [

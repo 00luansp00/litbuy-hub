@@ -126,7 +126,7 @@ Backend: testes Jest cobrem utilitários, ambiente, controller/service via unit/
 
 - Provedores reais de e-mail/SMS ainda precisam ser configurados e auditados; adaptadores de memória são apenas desenvolvimento/teste.
 - A revisão jurídica de termos, privacidade, idade mínima, retenção e LGPD continua pendente.
-- O frontend ainda mantém papéis visuais para buyer/seller/admin quando `VITE_ENABLE_DEMO_ROLES=true`; isso não concede permissão backend real.
+- O frontend deriva papéis de marketplace de `/auth/me.roles`; `VITE_ENABLE_DEMO_ROLES` não concede mais acesso visual ou real.
 - Segurança profissional externa ainda é necessária antes de produção.
 
 ## 10. Limitações
@@ -217,3 +217,7 @@ Próxima sprint recomendada: **Staging, homologação e hardening operacional de
 | Step-up                          | Sim           | Sim          | Sim    | Entrega provider não produtiva    | Alto  | Concluído para handoff técnico |
 | Regeneração recovery codes       | Sim           | Sim          | Sim    | Não                               | Alto  | Concluído para handoff         |
 | Troca EMAIL/SMS                  | Sim           | Sim          | Sim    | SMS/e-mail provider não produtivo | Alto  | Concluído para handoff técnico |
+
+## Marketplace RBAC foundation update
+
+The marketplace authorization foundation is now persistent: `BUYER`, `SELLER` and `ADMIN` live in the backend database, `/auth/me` returns real lowercase roles, and the frontend derives `isAdmin`/`hasSellerAccess` only from that response. Demo role flags no longer grant access. Seller/admin page content remains mock-oriented; only gates and future server-side authorization primitives were added. See `MARKETPLACE_RBAC_FOUNDATION.md`.

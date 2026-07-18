@@ -175,3 +175,7 @@ Não há mock ou fallback silencioso para `POST /auth/2fa/method/change/request`
 ## Atualização — autenticação removida do inventário de mocks (2026-07-17)
 
 Autenticação não deve mais ser tratada como mock: os fluxos reais estão listados em `AUTHENTICATION_FINAL_AUDIT.md`. Continuam mockados fora de autenticação: catálogo, produtos, categorias, carrinho, checkout, pagamentos, pedidos, vendedor, admin, KYC, wallet, afiliados, notificações de produto, mensagens e CMS.
+
+## Marketplace RBAC foundation update
+
+The marketplace authorization foundation is now persistent: `BUYER`, `SELLER` and `ADMIN` live in the backend database, `/auth/me` returns real lowercase roles, and the frontend derives `isAdmin`/`hasSellerAccess` only from that response. Demo role flags no longer grant access. Seller/admin page content remains mock-oriented; only gates and future server-side authorization primitives were added. See `MARKETPLACE_RBAC_FOUNDATION.md`.

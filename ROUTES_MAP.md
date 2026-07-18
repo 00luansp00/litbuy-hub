@@ -147,3 +147,7 @@ A rota `/perfil/seguranca` agora expõe a troca segura de método 2FA apenas qua
 ## Atualização — rotas reais de autenticação (2026-07-17)
 
 As rotas `/login`, `/cadastro`, `/recuperar-senha`, `/redefinir-senha`, `/verificar-email`, `/verificacao-login`, `/confirmar-alteracao-email` e `/perfil/seguranca` usam os services reais de autenticação documentados em `AUTHENTICATION_FINAL_AUDIT.md`. As demais rotas de marketplace mantêm status mock/visual salvo indicação específica em documentação futura.
+
+## Marketplace RBAC foundation update
+
+The marketplace authorization foundation is now persistent: `BUYER`, `SELLER` and `ADMIN` live in the backend database, `/auth/me` returns real lowercase roles, and the frontend derives `isAdmin`/`hasSellerAccess` only from that response. Demo role flags no longer grant access. Seller/admin page content remains mock-oriented; only gates and future server-side authorization primitives were added. See `MARKETPLACE_RBAC_FOUNDATION.md`.
