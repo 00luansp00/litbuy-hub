@@ -1,5 +1,13 @@
 import cookieParser from 'cookie-parser';
-import { HttpStatus, ValidationPipe, VersioningType } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  HttpStatus,
+  Post,
+  UseGuards,
+  ValidationPipe,
+  VersioningType,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
@@ -7,11 +15,16 @@ import { AppModule } from '../src/app.module';
 import { GlobalExceptionFilter } from '../src/common/filters/global-exception.filter';
 import { PrismaService } from '../src/database/prisma.service';
 import { RedisService } from '../src/redis/redis.service';
-import { JwtService } from '@nestjs/jwt';
+import { JwtModule, JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { AuthMailer } from '../src/auth/auth.service';
 import type { AuthRuntimeConfig } from '../src/auth/auth.types';
 import { hashPassword, randomToken } from '../src/auth/auth.utils';
+import { AccessTokenGuard } from '../src/auth/access-token.guard';
+import { RequireRoles } from '../src/auth/platform-roles';
+import { PlatformRolesGuard } from '../src/auth/platform-roles.guard';
+import { PlatformRolesService } from '../src/auth/platform-roles.service';
+import { PlatformRole } from '@prisma/client';
 
 type Row = Record<string, unknown>;
 const id = () => crypto.randomUUID();
@@ -23,6 +36,22 @@ function isoDateYearsAgo(years: number, dayOffset = 0): string {
     Date.UTC(today.getUTCFullYear() - years, today.getUTCMonth(), today.getUTCDate() + dayOffset),
   );
   return utc.toISOString().slice(0, 10);
+}
+
+@Controller('test-rbac')
+@UseGuards(AccessTokenGuard, PlatformRolesGuard)
+class TestRbacController {
+  @Get('seller')
+  @RequireRoles(PlatformRole.SELLER)
+  seller() {
+    return { ok: true, area: 'seller' };
+  }
+
+  @Post('admin')
+  @RequireRoles(PlatformRole.ADMIN)
+  admin() {
+    return { ok: true, area: 'admin' };
+  }
 }
 
 const SENSITIVE_RESPONSE_PROPERTY_NAMES = new Set([
@@ -173,6 +202,7 @@ class FakePrisma {
   twoFactorSettingsRows: Row[] = [];
   twoFactorRecoveryCodeRows: Row[] = [];
   stepUpGrantRows: Row[] = [];
+  userRoleAssignments: Row[] = [];
   user = {
     create: async (a: { data: Row }) => {
       await Promise.resolve();
@@ -204,6 +234,8 @@ class FakePrisma {
         updatedAt: now(),
       });
       const d = (a.data.devices as Row).create as Row;
+      const role = (a.data.roleAssignments as Row | undefined)?.create as Row | undefined;
+      if (role) this.userRoleAssignments.push({ userId: u.id, role: role.role, grantedAt: now() });
       this.devices.push({
         id: id(),
         userId: u.id,
@@ -220,9 +252,16 @@ class FakePrisma {
       await Promise.resolve();
       const u = this.users.find((x) => x.email === a.where.email || x.id === a.where.id);
       if (!u) return null;
-      return a.include?.passwordCredential
-        ? { ...u, passwordCredential: this.credentials.find((c) => c.userId === u.id) ?? null }
-        : u;
+      if (!a.include) return u;
+      return {
+        ...u,
+        passwordCredential: a.include.passwordCredential
+          ? (this.credentials.find((c) => c.userId === u.id) ?? null)
+          : undefined,
+        roleAssignments: a.include.roleAssignments
+          ? this.userRoleAssignments.filter((r) => r.userId === u.id).map((r) => ({ role: r.role }))
+          : undefined,
+      };
     },
     update: async (a: { where: Row; data: Row }) => {
       await Promise.resolve();
@@ -267,6 +306,49 @@ class FakePrisma {
         device: this.devices.find((d) => d.id === ch.deviceId),
       };
     },
+  };
+  private roleDelegate = new Delegate(this.userRoleAssignments);
+  userRoleAssignment = {
+    findMany: (a: { where?: Row; select?: Row; orderBy?: Row } = {}) =>
+      this.roleDelegate.findMany(a),
+    count: async (a: { where?: Row } = {}) => {
+      await Promise.resolve();
+      return this.userRoleAssignments.filter((r) => {
+        const where = a.where ?? {};
+        if (where.userId && r.userId !== where.userId) return false;
+        if (where.role) {
+          if (typeof where.role === 'object' && 'in' in where.role) {
+            if (!(where.role.in as unknown[]).includes(r.role)) return false;
+          } else if (r.role !== where.role) return false;
+        }
+        if (where.user && typeof where.user === 'object' && 'status' in where.user) {
+          const u = this.users.find((user) => user.id === r.userId);
+          if (u?.status !== (where.user as Row).status) return false;
+        }
+        return true;
+      }).length;
+    },
+    findUnique: async (a: { where: Row }) => {
+      await Promise.resolve();
+      const key = a.where.userId_role as Row | undefined;
+      return (
+        this.userRoleAssignments.find((r) => r.userId === key?.userId && r.role === key?.role) ??
+        null
+      );
+    },
+    create: async (a: { data: Row }) => {
+      await Promise.resolve();
+      if (
+        this.userRoleAssignments.some((r) => r.userId === a.data.userId && r.role === a.data.role)
+      ) {
+        const error = new Error('Unique constraint') as Error & { code: string };
+        error.code = 'P2002';
+        throw error;
+      }
+      this.userRoleAssignments.push({ ...a.data, grantedAt: now() });
+      return a.data;
+    },
+    deleteMany: (a: { where?: Row } = {}) => this.roleDelegate.deleteMany(a),
   };
   securityEvent = new Delegate(this.events);
   emailChangeRequest = new Delegate(this.emailChanges);
@@ -413,7 +495,16 @@ describe('Auth HTTP e2e flows', () => {
   };
   beforeEach(async () => {
     prisma = new FakePrisma();
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+    const moduleRef = await Test.createTestingModule({
+      imports: [AppModule, JwtModule.register({})],
+      controllers: [TestRbacController],
+      providers: [
+        AccessTokenGuard,
+        PlatformRolesGuard,
+        PlatformRolesService,
+        { provide: PrismaService, useValue: prisma },
+      ],
+    })
       .overrideProvider(PrismaService)
       .useValue(prisma)
       .overrideProvider(RedisService)
@@ -434,7 +525,9 @@ describe('Auth HTTP e2e flows', () => {
     jwt = app.get(JwtService);
     authSecret = app.get(ConfigService).getOrThrow<AuthRuntimeConfig>('auth').accessSecret;
   });
-  afterEach(async () => app.close());
+  afterEach(async () => {
+    if (app) await app.close();
+  });
   function register(email = base.email) {
     return request(app.getHttpServer())
       .post('/api/v1/auth/register')
@@ -480,6 +573,18 @@ describe('Auth HTTP e2e flows', () => {
       .expect(HttpStatus.CREATED)
       .expect((r: request.Response) => expect(r.body).not.toHaveProperty('tokenHash'));
   });
+  async function authenticated(email: string) {
+    const reg = await register(email);
+    await verifyLatest();
+    const login = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', reg.headers['set-cookie'])
+      .send({ email, password: base.password })
+      .expect(HttpStatus.OK);
+    const user = prisma.users.find((u) => u.email === email)!;
+    return { user, token: login.body.accessToken as string };
+  }
+
   it('executes verification challenge scenarios through HTTP', async () => {
     await register();
     const challenge = prisma.challenges[0];
@@ -506,6 +611,54 @@ describe('Auth HTTP e2e flows', () => {
       .send({ token: mailer.sent[0].token })
       .expect(400);
   });
+  it('enforces test RBAC routes with current database roles', async () => {
+    const buyer = await authenticated('buyer@example.com');
+    await request(app.getHttpServer())
+      .get('/api/v1/test-rbac/seller')
+      .expect(HttpStatus.UNAUTHORIZED);
+    await request(app.getHttpServer())
+      .get('/api/v1/test-rbac/seller')
+      .set('Authorization', `Bearer ${buyer.token}`)
+      .set('X-Role', 'SELLER')
+      .expect(HttpStatus.FORBIDDEN)
+      .expect((r) => expect(r.body.code).toBe('INSUFFICIENT_ROLE'));
+    await request(app.getHttpServer())
+      .post('/api/v1/test-rbac/admin?role=ADMIN')
+      .set('Authorization', `Bearer ${buyer.token}`)
+      .send({ role: 'ADMIN' })
+      .expect(HttpStatus.FORBIDDEN);
+
+    prisma.userRoleAssignments.push({ userId: buyer.user.id, role: PlatformRole.SELLER });
+    await request(app.getHttpServer())
+      .get('/api/v1/test-rbac/seller')
+      .set('Authorization', `Bearer ${buyer.token}`)
+      .expect(HttpStatus.OK);
+    await request(app.getHttpServer())
+      .get('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${buyer.token}`)
+      .expect(HttpStatus.OK)
+      .expect((r) => expect(r.body.roles).toEqual(['buyer', 'seller']));
+    await prisma.userRoleAssignment.deleteMany({
+      where: { userId: buyer.user.id as string, role: PlatformRole.SELLER },
+    });
+    await request(app.getHttpServer())
+      .get('/api/v1/test-rbac/seller')
+      .set('Authorization', `Bearer ${buyer.token}`)
+      .expect(HttpStatus.FORBIDDEN);
+
+    const admin = await authenticated('admin@example.com');
+    prisma.userRoleAssignments.push({ userId: admin.user.id, role: PlatformRole.ADMIN });
+    await request(app.getHttpServer())
+      .post('/api/v1/test-rbac/admin')
+      .set('Authorization', `Bearer ${admin.token}`)
+      .expect(HttpStatus.CREATED);
+    admin.user.status = 'SUSPENDED';
+    await request(app.getHttpServer())
+      .post('/api/v1/test-rbac/admin')
+      .set('Authorization', `Bearer ${admin.token}`)
+      .expect(HttpStatus.UNAUTHORIZED);
+  });
+
   it('executes login, device, me, refresh and logout scenarios through HTTP', async () => {
     const reg = await register();
     const deviceCookie = reg.headers['set-cookie'];

@@ -1,80 +1,62 @@
-import {
-  PrismaClient,
-  PlatformRole,
-  SecurityEventOutcome,
-  SecurityEventType,
-} from '@prisma/client';
+import { PrismaClient, PlatformRole } from '@prisma/client';
 import { normalizeEmail } from '../src/auth/auth.utils';
+import { grantPlatformRole, revokePlatformRole } from '../src/auth/platform-role-operations';
+
+export type ParsedRoleCommand = {
+  action: 'grant' | 'revoke';
+  role: PlatformRole;
+  userId?: string;
+  email?: string;
+};
 
 const prisma = new PrismaClient();
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-function arg(name: string): string | undefined {
+function arg(args: string[], name: string): string | undefined {
   const prefix = `--${name}=`;
-  return process.argv.find((value) => value.startsWith(prefix))?.slice(prefix.length);
+  return args.find((value) => value.startsWith(prefix))?.slice(prefix.length);
+}
+
+export function parseRoleCommand(args: string[]): ParsedRoleCommand {
+  const action = args[0];
+  const roleRaw = arg(args, 'role');
+  const userId = arg(args, 'user-id');
+  const email = arg(args, 'email');
+  if (action !== 'grant' && action !== 'revoke') throw new Error('INVALID_ACTION');
+  if (!args.includes('--confirm')) throw new Error('CONFIRMATION_REQUIRED');
+  if (!roleRaw || !(roleRaw in PlatformRole)) throw new Error('INVALID_ROLE');
+  const role = roleRaw as PlatformRole;
+  if (action === 'revoke' && role === PlatformRole.BUYER)
+    throw new Error('BUYER_ROLE_REVOKE_DISABLED');
+  if (!!userId === !!email) throw new Error('EXACTLY_ONE_USER_IDENTIFIER_REQUIRED');
+  if (userId && !uuid.test(userId)) throw new Error('INVALID_USER_ID');
+  return { action, role, userId, email: email ? normalizeEmail(email) : undefined };
+}
+
+export async function executeRoleCommand(parsed: ParsedRoleCommand) {
+  const user = await prisma.user.findUnique({
+    where: parsed.userId ? { id: parsed.userId } : { email: parsed.email! },
+    select: { id: true },
+  });
+  if (!user) throw new Error('USER_NOT_FOUND');
+  const operation =
+    parsed.action === 'grant'
+      ? await grantPlatformRole(prisma, user.id, parsed.role, 'cli')
+      : await revokePlatformRole(prisma, user.id, parsed.role, 'cli');
+  return { ok: true, action: parsed.action, role: parsed.role, userId: user.id, ...operation };
 }
 
 async function main() {
-  const action = process.argv[2];
-  const roleRaw = arg('role');
-  const userId = arg('user-id');
-  const email = arg('email');
-  const confirmed = process.argv.includes('--confirm');
-  if (action !== 'grant' && action !== 'revoke') throw new Error('Use grant ou revoke.');
-  if (!confirmed) throw new Error('Inclua --confirm para executar.');
-  if (!roleRaw || !(roleRaw in PlatformRole))
-    throw new Error('Role inválido. Use BUYER, SELLER ou ADMIN.');
-  const role = roleRaw as PlatformRole;
-  if (action === 'revoke' && role === PlatformRole.BUYER)
-    throw new Error('Revogação de BUYER está desabilitada.');
-  if (!!userId === !!email)
-    throw new Error('Informe exatamente --user-id=<uuid> ou --email=<email>.');
-  if (userId && !uuid.test(userId)) throw new Error('UUID inválido.');
-  const user = await prisma.user.findUnique({
-    where: userId ? { id: userId } : { email: normalizeEmail(email!) },
-    select: { id: true },
-  });
-  if (!user) throw new Error('Usuário não encontrado.');
-  if (action === 'grant') {
-    await prisma.$transaction(async (tx) => {
-      await tx.userRoleAssignment.upsert({
-        where: { userId_role: { userId: user.id, role } },
-        create: { userId: user.id, role },
-        update: {},
-      });
-      await tx.securityEvent.create({
-        data: {
-          userId: user.id,
-          eventType: SecurityEventType.ROLE_GRANTED,
-          outcome: SecurityEventOutcome.SUCCESS,
-          metadata: { role, origin: 'cli', result: 'granted', targetUserId: user.id },
-        },
-      });
-    });
-  } else {
-    await prisma.$transaction(async (tx) => {
-      const result = await tx.userRoleAssignment.deleteMany({ where: { userId: user.id, role } });
-      await tx.securityEvent.create({
-        data: {
-          userId: user.id,
-          eventType: SecurityEventType.ROLE_REVOKED,
-          outcome: SecurityEventOutcome.SUCCESS,
-          metadata: {
-            role,
-            origin: 'cli',
-            result: result.count > 0 ? 'revoked' : 'unchanged',
-            targetUserId: user.id,
-          },
-        },
-      });
-    });
-  }
-  console.log(JSON.stringify({ ok: true, action, role, userId: user.id }));
+  const parsed = parseRoleCommand(process.argv.slice(2));
+  const result = await executeRoleCommand(parsed);
+  console.log(JSON.stringify(result));
 }
 
-main()
-  .finally(() => prisma.$disconnect())
-  .catch((error) => {
-    console.error(error instanceof Error ? error.message : 'Erro ao gerenciar papel.');
-    process.exit(1);
-  });
+if (require.main === module) {
+  main()
+    .finally(() => prisma.$disconnect())
+    .catch((error) => {
+      console.error(error instanceof Error ? error.message : 'ROLE_OPERATION_FAILED');
+      process.exit(1);
+    });
+}

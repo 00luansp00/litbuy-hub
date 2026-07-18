@@ -17,6 +17,7 @@ const authUser: AuthUser = {
   birthDate: "2000-01-01T00:00:00.000Z",
   status: "ACTIVE",
   createdAt: "2026-01-01T00:00:00.000Z",
+  roles: ["buyer"],
   displayName: "user",
   name: "user",
 };
@@ -30,6 +31,7 @@ function value(overrides: Partial<AuthContextValue>): AuthContextValue {
     status: "anonymous",
     activeRole: "buyer",
     hasSellerProfile: false,
+    hasSellerAccess: false,
     isAdmin: false,
     twoFactorChallenge: null,
     login: async () => ({ status: "deviceApprovalRequired" }),

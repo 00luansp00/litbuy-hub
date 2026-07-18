@@ -1,8 +1,12 @@
 import { Injectable } from '@nestjs/common';
-import { PlatformRole, SecurityEventOutcome, SecurityEventType } from '@prisma/client';
+import { PlatformRole } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
-
-export type RoleOperationOrigin = 'cli' | 'system' | 'test';
+import {
+  grantPlatformRole,
+  revokePlatformRole,
+  type RoleOperationOrigin,
+  type RoleOperationResult,
+} from './platform-role-operations';
 
 @Injectable()
 export class PlatformRolesService {
@@ -29,49 +33,15 @@ export class PlatformRolesService {
     userId: string,
     role: PlatformRole,
     origin: RoleOperationOrigin,
-  ): Promise<boolean> {
-    const created = await this.prisma.$transaction(async (tx) => {
-      const assignment = await tx.userRoleAssignment.upsert({
-        where: { userId_role: { userId, role } },
-        create: { userId, role },
-        update: {},
-      });
-      await tx.securityEvent.create({
-        data: {
-          userId,
-          eventType: SecurityEventType.ROLE_GRANTED,
-          outcome: SecurityEventOutcome.SUCCESS,
-          metadata: { role, origin, result: 'granted', targetUserId: userId },
-        },
-      });
-      return assignment;
-    });
-    return !!created;
+  ): Promise<RoleOperationResult> {
+    return grantPlatformRole(this.prisma, userId, role, origin);
   }
 
   async revokeRole(
     userId: string,
     role: PlatformRole,
     origin: RoleOperationOrigin,
-  ): Promise<boolean> {
-    if (role === PlatformRole.BUYER) throw new Error('BUYER_ROLE_REVOKE_DISABLED');
-    const deleted = await this.prisma.$transaction(async (tx) => {
-      const result = await tx.userRoleAssignment.deleteMany({ where: { userId, role } });
-      await tx.securityEvent.create({
-        data: {
-          userId,
-          eventType: SecurityEventType.ROLE_REVOKED,
-          outcome: SecurityEventOutcome.SUCCESS,
-          metadata: {
-            role,
-            origin,
-            result: result.count > 0 ? 'revoked' : 'unchanged',
-            targetUserId: userId,
-          },
-        },
-      });
-      return result.count > 0;
-    });
-    return deleted;
+  ): Promise<RoleOperationResult> {
+    return revokePlatformRole(this.prisma, userId, role, origin);
   }
 }
