@@ -7,6 +7,7 @@ import { AuthController } from './auth.controller';
 import {
   AuthMailer,
   AuthService,
+  ResendAuthEmailAdapter,
   DisabledAuthSmsPort,
   ExternalUnavailableAuthSmsPort,
   MemoryAuthSmsPort,
@@ -19,6 +20,7 @@ import {
   providers: [
     AuthService,
     AuthMailer,
+    ResendAuthEmailAdapter,
     MemoryAuthSmsPort,
     DisabledAuthSmsPort,
     ExternalUnavailableAuthSmsPort,
@@ -40,7 +42,7 @@ import {
         }
         if (mode === 'external') {
           if (process.env.AUTH_SMS_PROVIDER === 'twilio') return twilio;
-          return external;
+          throw new ServiceUnavailableException({ code: 'SMS_DELIVERY_UNAVAILABLE' });
         }
         if (mode === 'disabled') return disabled;
         throw new ServiceUnavailableException({ code: 'SMS_DELIVERY_UNAVAILABLE' });

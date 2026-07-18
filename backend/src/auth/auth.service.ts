@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Inject,
   Injectable,
+  Optional,
   OnModuleInit,
   ServiceUnavailableException,
   UnauthorizedException,
@@ -127,6 +128,29 @@ function publicFrontendOrigin(): string {
   return (process.env.PUBLIC_FRONTEND_ORIGIN ?? 'http://localhost:3000').replace(/\/+$/, '');
 }
 
+function requireEmailPayload(purpose: AuthEmailPurpose, token?: string): void {
+  const tokenPurposes: AuthEmailPurpose[] = [
+    'EMAIL_VERIFICATION',
+    'DEVICE_APPROVAL',
+    'PASSWORD_RESET',
+    'EMAIL_CHANGE_CONFIRM_CURRENT',
+    'EMAIL_CHANGE_CONFIRM_NEW',
+  ];
+  if (tokenPurposes.includes(purpose) && !token?.trim()) throw emailDeliveryUnavailable();
+  if (purpose === 'TWO_FACTOR_CODE' && !/^[0-9]{6}$/.test(token ?? '')) {
+    throw emailDeliveryUnavailable();
+  }
+}
+
+function requireSmsPayload(purpose: AuthSmsPurpose, code?: string): void {
+  if (
+    (purpose === 'PHONE_VERIFICATION' || purpose === 'TWO_FACTOR_CODE') &&
+    !/^[0-9]{6}$/.test(code ?? '')
+  ) {
+    throw smsDeliveryUnavailable();
+  }
+}
+
 function authLink(path: string, token: string): string {
   const url = new URL(path, `${publicFrontendOrigin()}/`);
   url.searchParams.set('token', token);
@@ -240,20 +264,83 @@ function emailTemplate(purpose: AuthEmailPurpose, token?: string): AuthEmailMess
   }
 }
 
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-  let timer: NodeJS.Timeout | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error('AUTH_DELIVERY_TIMEOUT')), timeoutMs);
-  });
+async function fetchWithTimeout(
+  input: Parameters<typeof fetch>[0],
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<globalThis.Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await Promise.race([promise, timeout]);
+    return await fetch(input, { ...init, signal: controller.signal });
   } finally {
-    if (timer) clearTimeout(timer);
+    clearTimeout(timer);
+  }
+}
+
+@Injectable()
+export class ResendAuthEmailAdapter implements AuthEmailPort, OnModuleInit {
+  onModuleInit(): void {
+    if (process.env.AUTH_EMAIL_DELIVERY_MODE !== 'external') return;
+    if (process.env.AUTH_EMAIL_PROVIDER !== 'resend') {
+      throw new ServiceUnavailableException({ code: 'EMAIL_DELIVERY_UNAVAILABLE' });
+    }
+    if (
+      !process.env.RESEND_API_KEY ||
+      !process.env.RESEND_FROM_EMAIL ||
+      !process.env.RESEND_FROM_NAME
+    ) {
+      throw new ServiceUnavailableException({ code: 'EMAIL_DELIVERY_UNAVAILABLE' });
+    }
+  }
+  async send(to: string, purpose: AuthEmailPurpose, token?: string): Promise<void> {
+    requireEmailPayload(purpose, token);
+    if (process.env.AUTH_EMAIL_PROVIDER !== 'resend') throw emailDeliveryUnavailable();
+    const apiKey = process.env.RESEND_API_KEY;
+    const fromEmail = process.env.RESEND_FROM_EMAIL;
+    const fromName = process.env.RESEND_FROM_NAME;
+    if (!apiKey || !fromEmail || !fromName) throw emailDeliveryUnavailable();
+    const message = emailTemplate(purpose, token);
+    const idempotencySeed = crypto
+      .createHash('sha256')
+      .update(
+        [
+          'litbuy-auth-email',
+          purpose,
+          token ? crypto.createHash('sha256').update(token).digest('hex') : crypto.randomUUID(),
+        ].join(':'),
+      )
+      .digest('hex');
+    const response = await fetchWithTimeout(
+      'https://api.resend.com/emails',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'Idempotency-Key': `auth-${idempotencySeed}`,
+        },
+        body: JSON.stringify({
+          from: `${fromName} <${fromEmail}>`,
+          to: [to],
+          subject: message.subject,
+          html: message.html,
+          text: message.text,
+          ...(process.env.RESEND_REPLY_TO ? { reply_to: process.env.RESEND_REPLY_TO } : {}),
+        }),
+      },
+      Number(process.env.AUTH_EXTERNAL_DELIVERY_TIMEOUT_MS ?? 5000),
+    ).catch(() => {
+      throw emailDeliveryUnavailable();
+    });
+    if (!response.ok) throw emailDeliveryUnavailable();
   }
 }
 
 @Injectable()
 export class AuthMailer implements AuthEmailPort, OnModuleInit {
+  constructor(@Optional() private readonly resend?: ResendAuthEmailAdapter) {}
+
   readonly sent: { to: string; purpose: AuthEmailPurpose; token?: string }[] = [];
 
   onModuleInit(): void {
@@ -274,53 +361,11 @@ export class AuthMailer implements AuthEmailPort, OnModuleInit {
       return;
     }
     if (mode === 'external') {
-      await new ResendAuthEmailAdapter().send(to, purpose, token);
+      if (!this.resend) throw emailDeliveryUnavailable();
+      await this.resend.send(to, purpose, token);
       return;
     }
     throw emailDeliveryUnavailable();
-  }
-}
-
-export class ResendAuthEmailAdapter implements AuthEmailPort {
-  async send(to: string, purpose: AuthEmailPurpose, token?: string): Promise<void> {
-    if (process.env.AUTH_EMAIL_PROVIDER !== 'resend') throw emailDeliveryUnavailable();
-    const apiKey = process.env.RESEND_API_KEY;
-    const fromEmail = process.env.RESEND_FROM_EMAIL;
-    const fromName = process.env.RESEND_FROM_NAME;
-    if (!apiKey || !fromEmail || !fromName) throw emailDeliveryUnavailable();
-    const message = emailTemplate(purpose, token);
-    const idempotencySeed = crypto
-      .createHash('sha256')
-      .update(
-        [
-          'litbuy-auth-email',
-          purpose,
-          token ? crypto.createHash('sha256').update(token).digest('hex') : crypto.randomUUID(),
-        ].join(':'),
-      )
-      .digest('hex');
-    const response = await withTimeout(
-      fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          'Idempotency-Key': `auth-${idempotencySeed}`,
-        },
-        body: JSON.stringify({
-          from: `${fromName} <${fromEmail}>`,
-          to: [to],
-          subject: message.subject,
-          html: message.html,
-          text: message.text,
-          ...(process.env.RESEND_REPLY_TO ? { reply_to: process.env.RESEND_REPLY_TO } : {}),
-        }),
-      }),
-      Number(process.env.AUTH_EXTERNAL_DELIVERY_TIMEOUT_MS ?? 5000),
-    ).catch(() => {
-      throw emailDeliveryUnavailable();
-    });
-    if (!response.ok) throw emailDeliveryUnavailable();
   }
 }
 
@@ -332,20 +377,20 @@ export interface AuthSmsPort {
 
 @Injectable()
 export class DisabledAuthSmsPort implements AuthSmsPort {
-  send(): Promise<void> {
+  send(to?: string, purpose?: AuthSmsPurpose, code?: string): Promise<void> {
+    void to;
+    void purpose;
+    void code;
     return Promise.reject(smsDeliveryUnavailable());
   }
 }
 
 @Injectable()
-export class ExternalUnavailableAuthSmsPort implements AuthSmsPort, OnModuleInit {
-  onModuleInit(): void {
-    if (process.env.NODE_ENV === 'staging' || process.env.NODE_ENV === 'production') {
-      throw new ServiceUnavailableException('Auth external SMS provider not configured');
-    }
-  }
-
-  send(): Promise<void> {
+export class ExternalUnavailableAuthSmsPort implements AuthSmsPort {
+  send(to?: string, purpose?: AuthSmsPurpose, code?: string): Promise<void> {
+    void to;
+    void purpose;
+    void code;
     return Promise.reject(smsDeliveryUnavailable('Provider externo de SMS não configurado.'));
   }
 }
@@ -375,8 +420,25 @@ function smsBody(purpose: AuthSmsPurpose, code?: string): string {
   return 'LIT Buy: alerta de seguranca da sua conta. Se nao reconhece, revise sua conta.';
 }
 
-export class TwilioAuthSmsAdapter implements AuthSmsPort {
+@Injectable()
+export class TwilioAuthSmsAdapter implements AuthSmsPort, OnModuleInit {
+  onModuleInit(): void {
+    if (process.env.AUTH_SMS_DELIVERY_MODE !== 'external') return;
+    if (process.env.AUTH_SMS_PROVIDER !== 'twilio') {
+      throw new ServiceUnavailableException({ code: 'SMS_DELIVERY_UNAVAILABLE' });
+    }
+    const hasMessagingService = Boolean(process.env.TWILIO_MESSAGING_SERVICE_SID);
+    const hasFrom = Boolean(process.env.TWILIO_FROM_NUMBER);
+    if (
+      !process.env.TWILIO_ACCOUNT_SID ||
+      !process.env.TWILIO_AUTH_TOKEN ||
+      hasMessagingService === hasFrom
+    ) {
+      throw new ServiceUnavailableException({ code: 'SMS_DELIVERY_UNAVAILABLE' });
+    }
+  }
   async send(to: string, purpose: AuthSmsPurpose, code?: string): Promise<void> {
+    requireSmsPayload(purpose, code);
     if (process.env.AUTH_SMS_PROVIDER !== 'twilio') throw smsDeliveryUnavailable();
     if (!/^\+[1-9]\d{7,14}$/.test(to)) throw smsDeliveryUnavailable();
     const accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -396,15 +458,16 @@ export class TwilioAuthSmsAdapter implements AuthSmsPort {
       Body: smsBody(purpose, code),
       ...(messagingServiceSid ? { MessagingServiceSid: messagingServiceSid } : { From: from! }),
     });
-    const response = await withTimeout(
-      fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
+    const response = await fetchWithTimeout(
+      `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+      {
         method: 'POST',
         headers: {
           Authorization: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString('base64')}`,
           'Content-Type': 'application/x-www-form-urlencoded',
         },
         body,
-      }),
+      },
       Number(process.env.AUTH_EXTERNAL_DELIVERY_TIMEOUT_MS ?? 5000),
     ).catch(() => {
       throw smsDeliveryUnavailable();

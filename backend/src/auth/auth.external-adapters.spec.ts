@@ -126,3 +126,108 @@ describe('external auth delivery adapters', () => {
     expect(consoleSpy).not.toHaveBeenCalled();
   });
 });
+
+describe('external auth delivery payload and timeout contracts', () => {
+  const originalEnv = { ...process.env };
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    process.env.AUTH_EMAIL_PROVIDER = 'resend';
+    process.env.RESEND_API_KEY = 'resend_secret_key';
+    process.env.RESEND_FROM_EMAIL = 'auth@litbuy.example';
+    process.env.RESEND_FROM_NAME = 'LIT Buy';
+    process.env.AUTH_SMS_PROVIDER = 'twilio';
+    process.env.TWILIO_ACCOUNT_SID = 'AC123456789';
+    process.env.TWILIO_AUTH_TOKEN = 'twilio_secret';
+    process.env.TWILIO_FROM_NUMBER = '+15551234567';
+    process.env.AUTH_EXTERNAL_DELIVERY_TIMEOUT_MS = '10';
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+    global.fetch = originalFetch;
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  it('rejects invalid email payloads before fetch', async () => {
+    const fetchMock: FetchMock = jest.fn<Promise<Response>, [RequestInfo | URL, RequestInit?]>();
+    global.fetch = fetchMock;
+
+    await expect(
+      new ResendAuthEmailAdapter().send('person@example.test', 'EMAIL_VERIFICATION'),
+    ).rejects.toMatchObject({ code: 'EMAIL_DELIVERY_UNAVAILABLE' });
+    await expect(
+      new ResendAuthEmailAdapter().send('person@example.test', 'PASSWORD_RESET', ''),
+    ).rejects.toMatchObject({ code: 'EMAIL_DELIVERY_UNAVAILABLE' });
+    await expect(
+      new ResendAuthEmailAdapter().send('person@example.test', 'TWO_FACTOR_CODE', 'abc'),
+    ).rejects.toMatchObject({ code: 'EMAIL_DELIVERY_UNAVAILABLE' });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid SMS payloads before fetch', async () => {
+    const fetchMock: FetchMock = jest.fn<Promise<Response>, [RequestInfo | URL, RequestInit?]>();
+    global.fetch = fetchMock;
+
+    await expect(
+      new TwilioAuthSmsAdapter().send('+5511999999999', 'PHONE_VERIFICATION'),
+    ).rejects.toMatchObject({ code: 'SMS_DELIVERY_UNAVAILABLE' });
+    await expect(
+      new TwilioAuthSmsAdapter().send('+5511999999999', 'TWO_FACTOR_CODE', ''),
+    ).rejects.toMatchObject({ code: 'SMS_DELIVERY_UNAVAILABLE' });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('aborts Resend fetch on timeout with sanitized failure', async () => {
+    jest.useFakeTimers();
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    let signal: AbortSignal | undefined;
+    global.fetch = jest.fn<Promise<Response>, [RequestInfo | URL, RequestInit?]>(
+      (_input, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          signal = init?.signal ?? undefined;
+          signal?.addEventListener('abort', () => reject(new Error('aborted secret-token')));
+        }),
+    );
+
+    const delivery = new ResendAuthEmailAdapter().send(
+      'person@example.test',
+      'PASSWORD_RESET',
+      'secret-token',
+    );
+    const assertion = expect(delivery).rejects.toMatchObject({
+      code: 'EMAIL_DELIVERY_UNAVAILABLE',
+    });
+    await jest.advanceTimersByTimeAsync(10);
+
+    await assertion;
+    expect(signal?.aborted).toBe(true);
+    expect(consoleSpy).not.toHaveBeenCalled();
+  });
+
+  it('aborts Twilio fetch on timeout with sanitized failure', async () => {
+    jest.useFakeTimers();
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    let signal: AbortSignal | undefined;
+    global.fetch = jest.fn<Promise<Response>, [RequestInfo | URL, RequestInit?]>(
+      (_input, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          signal = init?.signal ?? undefined;
+          signal?.addEventListener('abort', () =>
+            reject(new Error('aborted +5511999999999 123456')),
+          );
+        }),
+    );
+
+    const delivery = new TwilioAuthSmsAdapter().send('+5511999999999', 'TWO_FACTOR_CODE', '123456');
+    const assertion = expect(delivery).rejects.toMatchObject({ code: 'SMS_DELIVERY_UNAVAILABLE' });
+    await jest.advanceTimersByTimeAsync(10);
+
+    await assertion;
+    expect(signal?.aborted).toBe(true);
+    expect(consoleSpy).not.toHaveBeenCalled();
+  });
+});

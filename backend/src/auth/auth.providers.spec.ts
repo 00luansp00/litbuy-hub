@@ -5,6 +5,7 @@ import {
   DisabledAuthSmsPort,
   ExternalUnavailableAuthSmsPort,
   MemoryAuthSmsPort,
+  ResendAuthEmailAdapter,
   TwilioAuthSmsAdapter,
 } from './auth.service';
 import type { AuthSmsPort } from './auth.service';
@@ -198,17 +199,15 @@ describe('auth delivery providers', () => {
     await moduleRef.close();
   });
 
-  it('staging and production external providers fail during module initialization', () => {
-    for (const nodeEnv of ['staging', 'production']) {
-      process.env.NODE_ENV = nodeEnv;
-      process.env.AUTH_EMAIL_DELIVERY_MODE = 'external';
-      process.env.AUTH_SMS_DELIVERY_MODE = 'external';
+  it('external unavailable SMS fallback fails on send but does not throw on bootstrap by itself', async () => {
+    process.env.NODE_ENV = 'staging';
+    process.env.AUTH_SMS_DELIVERY_MODE = 'external';
 
-      expect(() => new AuthMailer().onModuleInit()).toThrow(ServiceUnavailableException);
-      expect(() => new ExternalUnavailableAuthSmsPort().onModuleInit()).toThrow(
-        ServiceUnavailableException,
-      );
-    }
+    const fallback = new ExternalUnavailableAuthSmsPort();
+
+    await expect(fallback.send('+5511999999999', 'TWO_FACTOR_CODE', '123456')).rejects.toThrow(
+      AppError,
+    );
   });
 
   it('production rejects memory providers on module init', () => {
@@ -218,5 +217,95 @@ describe('auth delivery providers', () => {
 
     expect(() => new AuthMailer().onModuleInit()).toThrow(ServiceUnavailableException);
     expect(() => new MemoryAuthSmsPort().onModuleInit()).toThrow(ServiceUnavailableException);
+  });
+
+  describe('staging external provider bootstrap', () => {
+    const validExternalEnv = {
+      NODE_ENV: 'staging',
+      AUTH_EMAIL_DELIVERY_MODE: 'external',
+      AUTH_EMAIL_PROVIDER: 'resend',
+      RESEND_API_KEY: 're_live_configured_secret',
+      RESEND_FROM_EMAIL: 'auth@litbuy.invalid',
+      RESEND_FROM_NAME: 'LIT Buy',
+      AUTH_SMS_DELIVERY_MODE: 'external',
+      AUTH_SMS_PROVIDER: 'twilio',
+      TWILIO_ACCOUNT_SID: 'AC1234567890abcdef',
+      TWILIO_AUTH_TOKEN: 'twilio_configured_secret',
+      TWILIO_MESSAGING_SERVICE_SID: 'MG1234567890abcdef',
+      TWILIO_FROM_NUMBER: '',
+    };
+
+    async function compileDeliveryModule() {
+      return Test.createTestingModule({
+        providers: [
+          AuthMailer,
+          ResendAuthEmailAdapter,
+          MemoryAuthSmsPort,
+          DisabledAuthSmsPort,
+          ExternalUnavailableAuthSmsPort,
+          TwilioAuthSmsAdapter,
+          {
+            provide: 'AuthSmsPort',
+            useFactory: smsProviderFactory,
+            inject: [
+              MemoryAuthSmsPort,
+              DisabledAuthSmsPort,
+              ExternalUnavailableAuthSmsPort,
+              TwilioAuthSmsAdapter,
+            ],
+          },
+        ],
+      }).compile();
+    }
+
+    beforeEach(() => {
+      Object.assign(process.env, validExternalEnv);
+    });
+
+    it('initializes staging with Resend and Twilio without fallback bootstrap failure', async () => {
+      const moduleRef = await compileDeliveryModule();
+      await expect(moduleRef.init()).resolves.toBeDefined();
+
+      expect(moduleRef.get<AuthSmsPort>('AuthSmsPort')).toBeInstanceOf(TwilioAuthSmsAdapter);
+      await moduleRef.close();
+    });
+
+    it('uses the injected Resend adapter instead of direct construction', async () => {
+      const injected = {
+        send: jest
+          .fn<Promise<void>, Parameters<ResendAuthEmailAdapter['send']>>()
+          .mockResolvedValue(undefined),
+      };
+      const moduleRef = await Test.createTestingModule({
+        providers: [{ provide: ResendAuthEmailAdapter, useValue: injected }, AuthMailer],
+      }).compile();
+      const mailer = moduleRef.get(AuthMailer);
+
+      await mailer.send('person@example.test', 'PASSWORD_RESET', 'opaque-token');
+
+      expect(injected.send).toHaveBeenCalledWith(
+        'person@example.test',
+        'PASSWORD_RESET',
+        'opaque-token',
+      );
+      await moduleRef.close();
+    });
+
+    it.each([
+      ['missing Twilio provider', { AUTH_SMS_PROVIDER: '' }],
+      ['unknown Twilio provider', { AUTH_SMS_PROVIDER: 'unknown' }],
+      ['incomplete Twilio credentials', { TWILIO_AUTH_TOKEN: '' }],
+      ['staging memory', { AUTH_SMS_DELIVERY_MODE: 'memory' }],
+    ])('fails closed for %s', async (_caseName, overrides) => {
+      Object.assign(process.env, overrides);
+      await expect(async () => {
+        const moduleRef = await compileDeliveryModule();
+        try {
+          await moduleRef.init();
+        } finally {
+          await moduleRef.close();
+        }
+      }).rejects.toThrow(ServiceUnavailableException);
+    });
   });
 });
