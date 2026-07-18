@@ -98,7 +98,7 @@ const defaultTestEnv: Record<ManagedEnvKey, string> = {
   CURRENT_PRIVACY_VERSION: '2026-test',
   PUBLIC_FRONTEND_ORIGIN: 'http://localhost:3000',
   PUBLIC_API_ORIGIN: 'http://localhost:3001',
-  AUTH_COOKIE_TOPOLOGY: 'same-origin',
+  AUTH_COOKIE_TOPOLOGY: 'same-host',
 };
 
 function resolveTestEnvValue(key: ManagedEnvKey, overrides: Partial<NodeJS.ProcessEnv>): string {

@@ -12,16 +12,46 @@ describe('RequestLoggingMiddleware', () => {
     ).toBe('/api/v1/auth/sessions/:id');
   });
 
-  it('normalizes dynamic fallback paths without query strings or secrets', () => {
+  it.each([
+    '/api/v1/auth/sessions/550e8400-e29b-41d4-a716-446655440000?token=secret',
+    '/api/v1/auth/sessions/123456',
+    '/api/v1/auth/reset/token_abcdefghijklmnopqrstuvwxyz',
+    '/api/v1/auth/reset/abc123',
+    '/api/v1/auth/recovery/ABCDE-FGHIJ-KLMNO',
+    '/api/v1/auth/email/person@example.test',
+    '/api/v1/auth/phone/+5511999999999',
+    '/api/v1/auth/arbitrary-user-text',
+    '/api/v1/auth/%0Aencoded-secret',
+  ])('uses a conservative fallback for unmatched auth path %s', (path) => {
     const route = normalizeRoute({
-      path: '/api/v1/auth/sessions/550e8400-e29b-41d4-a716-446655440000/reset/token_abcdefghijklmnopqrstuvwxyz?code=secret',
-      originalUrl:
-        '/api/v1/auth/sessions/550e8400-e29b-41d4-a716-446655440000/reset/token_abcdefghijklmnopqrstuvwxyz?code=secret',
-      url: '/api/v1/auth/sessions/550e8400-e29b-41d4-a716-446655440000/reset/token_abcdefghijklmnopqrstuvwxyz?code=secret',
+      path,
+      originalUrl: `${path}?query=secret`,
+      url: path,
     } as unknown as Request);
-    expect(route).toBe('/api/v1/auth/sessions/:id/reset/:token');
-    expect(route).not.toContain('550e8400');
-    expect(route).not.toContain('secret');
+    expect(route).toBe('/api/v1/auth/:unmatched');
+    const payload = JSON.stringify({ route });
+    for (const forbidden of [
+      '550e8400',
+      '123456',
+      'token_',
+      'abc123',
+      'ABCDE',
+      'person@example.test',
+      '+5511999999999',
+      'arbitrary-user-text',
+      '%0Aencoded-secret',
+      'query=secret',
+    ])
+      expect(payload).not.toContain(forbidden);
+  });
+
+  it('uses a stable fallback for completely unrecognized routes', () => {
+    expect(
+      normalizeRoute({
+        path: '/unexpected/secret-value',
+        originalUrl: '/unexpected/secret-value?token=secret',
+      } as unknown as Request),
+    ).toBe('/:unmatched');
   });
 
   it('logs request metadata with redacted headers and without body', () => {

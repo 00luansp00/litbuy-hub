@@ -104,7 +104,7 @@ jobs:
       CURRENT_PRIVACY_VERSION: "2026-test"
       PUBLIC_FRONTEND_ORIGIN: http://localhost:3000
       PUBLIC_API_ORIGIN: http://localhost:3001
-      AUTH_COOKIE_TOPOLOGY: same-origin
+      AUTH_COOKIE_TOPOLOGY: same-host
     defaults:
       run:
         working-directory: backend
@@ -219,7 +219,7 @@ jobs:
       CURRENT_PRIVACY_VERSION: "2026-test"
       PUBLIC_FRONTEND_ORIGIN: http://localhost:3000
       PUBLIC_API_ORIGIN: http://localhost:3001
-      AUTH_COOKIE_TOPOLOGY: same-origin
+      AUTH_COOKIE_TOPOLOGY: same-host
     defaults:
       run:
         working-directory: backend

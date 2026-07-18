@@ -50,7 +50,7 @@ describe('validateEnvironment', () => {
     CURRENT_PRIVACY_VERSION: '2026-test',
     PUBLIC_FRONTEND_ORIGIN: 'http://localhost:3000',
     PUBLIC_API_ORIGIN: 'http://localhost:3001',
-    AUTH_COOKIE_TOPOLOGY: 'same-origin',
+    AUTH_COOKIE_TOPOLOGY: 'same-host',
   };
 
   it('accepts the required backend environment variables', () => {
@@ -66,6 +66,12 @@ describe('validateEnvironment', () => {
     expect(() => validateEnvironment({ ...validConfig, PORT: 'invalid' })).toThrow(
       'Invalid environment configuration',
     );
+  });
+
+  it('rejects removed console email delivery mode', () => {
+    expect(() =>
+      validateEnvironment({ ...validConfig, AUTH_EMAIL_DELIVERY_MODE: 'console' }),
+    ).toThrow(/AUTH_EMAIL_DELIVERY_MODE/);
   });
 
   it('rejects wildcard CORS with credentials', () => {
@@ -163,6 +169,7 @@ describe('validateEnvironment', () => {
         AUTH_COOKIE_SECURE: 'true',
         AUTH_EMAIL_DELIVERY_MODE: 'external',
         AUTH_SMS_DELIVERY_MODE: 'external',
+        AUTH_COOKIE_TOPOLOGY: 'same-origin',
         PUBLIC_FRONTEND_ORIGIN: 'https://app.example.test',
         PUBLIC_API_ORIGIN: 'https://api.example.test',
         CORS_ORIGINS: 'https://app.example.test',
@@ -206,6 +213,108 @@ describe('validateEnvironment', () => {
     ).toThrow(/AUTH_COOKIE_DOMAIN/);
   });
 
+  it('accepts HTTPS public origins up to missing external provider implementation', () => {
+    expect(() =>
+      validateEnvironment({
+        ...validConfig,
+        NODE_ENV: 'staging',
+        TRUST_PROXY: '1',
+        AUTH_COOKIE_SECURE: 'true',
+        AUTH_COOKIE_TOPOLOGY: 'same-origin',
+        AUTH_EMAIL_DELIVERY_MODE: 'external',
+        AUTH_SMS_DELIVERY_MODE: 'external',
+        PUBLIC_FRONTEND_ORIGIN: 'https://app.example.test',
+        PUBLIC_API_ORIGIN: 'https://app.example.test',
+        CORS_ORIGINS: 'https://app.example.test/',
+      }),
+    ).toThrow(/AUTH_EXTERNAL_PROVIDER_IMPLEMENTATION/);
+  });
+
+  it('rejects remote HTTP public origins without leaking the URL', () => {
+    expectInvalidConfigDoesNotLeak(
+      {
+        ...validConfig,
+        NODE_ENV: 'test',
+        PUBLIC_FRONTEND_ORIGIN: 'http://frontend.private.example.test',
+      },
+      ['frontend.private.example.test'],
+    );
+  });
+
+  it('accepts localhost HTTP public origins in development and test', () => {
+    expect(validateEnvironment(validConfig)).toMatchObject({ AUTH_COOKIE_TOPOLOGY: 'same-host' });
+    expect(validateEnvironment({ ...validConfig, NODE_ENV: 'development' })).toMatchObject({
+      AUTH_COOKIE_TOPOLOGY: 'same-host',
+    });
+  });
+
+  it.each([
+    ['path', 'https://app.example.test/api'],
+    ['query', 'https://app.example.test?token=secret'],
+    ['fragment', 'https://app.example.test#secret'],
+    ['credentials', 'https://user:password@app.example.test'],
+    ['null', 'null'],
+    ['javascript protocol', 'javascript:alert(1)'],
+    ['file protocol', 'file:///tmp/secret'],
+    ['ftp protocol', 'ftp://app.example.test'],
+  ])('rejects public origin with %s without leaking input', (_caseName, origin) => {
+    const forbidden = origin === 'null' ? [] : [origin, 'password'];
+    expectInvalidConfigDoesNotLeak(
+      { ...validConfig, NODE_ENV: 'staging', PUBLIC_FRONTEND_ORIGIN: origin },
+      forbidden,
+    );
+  });
+
+  it('rejects invalid entries in CORS_ORIGINS without leaking private origins', () => {
+    expectInvalidConfigDoesNotLeak(
+      {
+        ...validConfig,
+        NODE_ENV: 'test',
+        CORS_ORIGINS: 'http://localhost:3000,https://user:password@private.example.test',
+      },
+      ['user:password', 'private.example.test'],
+    );
+  });
+
+  it('rejects staging when the frontend origin is absent from CORS', () => {
+    expect(() =>
+      validateEnvironment({
+        ...validConfig,
+        NODE_ENV: 'staging',
+        TRUST_PROXY: '1',
+        AUTH_COOKIE_SECURE: 'true',
+        AUTH_COOKIE_TOPOLOGY: 'same-origin',
+        AUTH_EMAIL_DELIVERY_MODE: 'external',
+        AUTH_SMS_DELIVERY_MODE: 'external',
+        PUBLIC_FRONTEND_ORIGIN: 'https://app.example.test',
+        PUBLIC_API_ORIGIN: 'https://app.example.test',
+        CORS_ORIGINS: 'https://other.example.test',
+      }),
+    ).toThrow(/CORS_ORIGINS/);
+  });
+
+  it('accepts same-host cookie topology with different localhost ports in tests', () => {
+    expect(validateEnvironment(validConfig)).toMatchObject({ AUTH_COOKIE_TOPOLOGY: 'same-host' });
+  });
+
+  it('rejects same-host when hosts differ or cookie domain is set', () => {
+    expect(() =>
+      validateEnvironment({
+        ...validConfig,
+        NODE_ENV: 'staging',
+        TRUST_PROXY: '1',
+        AUTH_COOKIE_SECURE: 'true',
+        AUTH_COOKIE_TOPOLOGY: 'same-host',
+        AUTH_COOKIE_DOMAIN: 'example.test',
+        AUTH_EMAIL_DELIVERY_MODE: 'external',
+        AUTH_SMS_DELIVERY_MODE: 'external',
+        PUBLIC_FRONTEND_ORIGIN: 'https://frontend.example.test',
+        PUBLIC_API_ORIGIN: 'https://api.example.test',
+        CORS_ORIGINS: 'https://frontend.example.test',
+      }),
+    ).toThrow(/same-host/);
+  });
+
   it('rejects generic true trust proxy in staging', () => {
     expect(() =>
       validateEnvironment({
@@ -219,3 +328,14 @@ describe('validateEnvironment', () => {
     ).toThrow(/TRUST_PROXY/);
   });
 });
+
+function expectInvalidConfigDoesNotLeak(config: Record<string, unknown>, forbidden: string[]) {
+  try {
+    validateEnvironment(config);
+    throw new Error('Expected invalid environment configuration');
+  } catch (error) {
+    const message = (error as Error).message;
+    expect(message).toContain('Invalid environment configuration');
+    for (const value of forbidden) expect(message).not.toContain(value);
+  }
+}

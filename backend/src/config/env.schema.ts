@@ -15,7 +15,13 @@ import {
 
 const nodeEnvironments = ['development', 'test', 'staging', 'production'] as const;
 const sameSites = ['lax', 'strict', 'none'] as const;
-const emailModes = ['memory', 'console', 'disabled', 'external'] as const;
+const cookieTopologies = [
+  'same-origin',
+  'same-host',
+  'same-site-subdomains',
+  'cross-site',
+] as const;
+const emailModes = ['memory', 'disabled', 'external'] as const;
 const smsModes = ['memory', 'disabled', 'external'] as const;
 const logLevels = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const;
 const hardenedEnvironments = new Set(['staging', 'production']);
@@ -128,8 +134,8 @@ export class EnvironmentVariables {
   @IsString() @IsNotEmpty() CURRENT_PRIVACY_VERSION!: string;
   @IsString() @IsNotEmpty() PUBLIC_FRONTEND_ORIGIN!: string;
   @IsString() @IsNotEmpty() PUBLIC_API_ORIGIN!: string;
-  @IsIn(['same-origin', 'same-site-subdomains', 'cross-site'])
-  AUTH_COOKIE_TOPOLOGY!: 'same-origin' | 'same-site-subdomains' | 'cross-site';
+  @IsIn(cookieTopologies)
+  AUTH_COOKIE_TOPOLOGY!: (typeof cookieTopologies)[number];
 }
 
 export function validateEnvironment(config: Record<string, unknown>): EnvironmentVariables {
@@ -163,6 +169,7 @@ function validateHardening(
     .map((origin) => origin.trim())
     .filter(Boolean);
   const hardened = hardenedEnvironments.has(env.NODE_ENV);
+  const normalizedCorsOrigins = validateCorsOrigins(env, origins, issues);
   if (!isValidTrustProxy(env.TRUST_PROXY))
     issues.push(
       issue(
@@ -207,7 +214,7 @@ function validateHardening(
         'external email/SMS provider implementation is not installed in this sprint',
       ),
     );
-  if (hardened) validateCookieTopology(env, origins, issues);
+  validateCookieTopology(env, normalizedCorsOrigins, issues, hardened);
   for (const name of secretNames) {
     const value = env[name];
     if (hardened && value.length < 32) issues.push(issue(name, 'must be at least 32 characters'));
@@ -223,24 +230,83 @@ function validateHardening(
   return issues;
 }
 
-function validateCookieTopology(
+function validateCorsOrigins(
   env: EnvironmentVariables,
   origins: string[],
   issues: Array<{ property: string; constraints: Record<string, string> }>,
 ) {
-  const frontend = safeUrl(env.PUBLIC_FRONTEND_ORIGIN);
-  const api = safeUrl(env.PUBLIC_API_ORIGIN);
-  if (!frontend) issues.push(issue('PUBLIC_FRONTEND_ORIGIN', 'must be a valid public origin'));
-  if (!api) issues.push(issue('PUBLIC_API_ORIGIN', 'must be a valid public origin'));
-  if (!frontend || !api) return;
-  if (!origins.includes(env.PUBLIC_FRONTEND_ORIGIN))
-    issues.push(issue('CORS_ORIGINS', 'must include the configured frontend public origin'));
-  if (env.AUTH_COOKIE_TOPOLOGY === 'same-origin' && frontend.origin !== api.origin)
+  const normalized: string[] = [];
+  for (const origin of origins) {
+    const parsed = safeOrigin(origin, env.NODE_ENV);
+    if (!parsed) {
+      issues.push(
+        issue(
+          'CORS_ORIGINS',
+          'must contain only valid HTTP/HTTPS origins without credentials, path, query, fragment, wildcard, or null',
+        ),
+      );
+      continue;
+    }
+    normalized.push(parsed.origin);
+  }
+  return normalized;
+}
+
+function validateCookieTopology(
+  env: EnvironmentVariables,
+  normalizedCorsOrigins: string[],
+  issues: Array<{ property: string; constraints: Record<string, string> }>,
+  hardened: boolean,
+) {
+  const frontend = safeOrigin(env.PUBLIC_FRONTEND_ORIGIN, env.NODE_ENV);
+  const api = safeOrigin(env.PUBLIC_API_ORIGIN, env.NODE_ENV);
+  if (!frontend)
     issues.push(
-      issue('AUTH_COOKIE_TOPOLOGY', 'same-origin requires identical frontend and API origins'),
+      issue(
+        'PUBLIC_FRONTEND_ORIGIN',
+        'must be a valid HTTP/HTTPS origin without credentials, path, query, or fragment',
+      ),
     );
+  if (!api)
+    issues.push(
+      issue(
+        'PUBLIC_API_ORIGIN',
+        'must be a valid HTTP/HTTPS origin without credentials, path, query, or fragment',
+      ),
+    );
+  if (!frontend || !api) return;
+  if (hardened && frontend.protocol !== 'https:')
+    issues.push(
+      issue('PUBLIC_FRONTEND_ORIGIN', 'staging and production require HTTPS public origins'),
+    );
+  if (hardened && api.protocol !== 'https:')
+    issues.push(issue('PUBLIC_API_ORIGIN', 'staging and production require HTTPS public origins'));
+  if (!normalizedCorsOrigins.includes(frontend.origin))
+    issues.push(issue('CORS_ORIGINS', 'must include the configured frontend public origin'));
+  if (env.AUTH_COOKIE_TOPOLOGY === 'same-origin') {
+    if (frontend.origin !== api.origin)
+      issues.push(
+        issue('AUTH_COOKIE_TOPOLOGY', 'same-origin requires identical scheme, hostname, and port'),
+      );
+    if (env.AUTH_COOKIE_DOMAIN.trim() !== '')
+      issues.push(issue('AUTH_COOKIE_DOMAIN', 'same-origin requires host-only cookies'));
+  }
+  if (env.AUTH_COOKIE_TOPOLOGY === 'same-host') {
+    if (frontend.hostname !== api.hostname)
+      issues.push(
+        issue('AUTH_COOKIE_TOPOLOGY', 'same-host requires identical frontend and API hostnames'),
+      );
+    if (env.AUTH_COOKIE_DOMAIN.trim() !== '')
+      issues.push(issue('AUTH_COOKIE_DOMAIN', 'same-host requires host-only cookies'));
+    if (frontend.origin !== api.origin && !normalizedCorsOrigins.includes(frontend.origin))
+      issues.push(
+        issue('CORS_ORIGINS', 'same-host with different origins requires the frontend origin'),
+      );
+  }
   if (env.AUTH_COOKIE_TOPOLOGY === 'same-site-subdomains') {
     const domain = env.AUTH_COOKIE_DOMAIN.trim().replace(/^\./, '');
+    if (frontend.hostname === api.hostname)
+      issues.push(issue('AUTH_COOKIE_TOPOLOGY', 'same-site subdomains require different hosts'));
     if (!domain) {
       issues.push(
         issue('AUTH_COOKIE_DOMAIN', 'same-site subdomains require the shared parent domain'),
@@ -268,13 +334,30 @@ function validateCookieTopology(
   }
 }
 
-function safeUrl(value: string) {
+function safeOrigin(value: string, nodeEnv: EnvironmentVariables['NODE_ENV']) {
+  if (value === 'null' || value === '*') return undefined;
   try {
     const url = new URL(value);
-    return url.username || url.password ? undefined : url;
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined;
+    if (url.username || url.password) return undefined;
+    if (url.pathname !== '' && url.pathname !== '/') return undefined;
+    if (url.search || url.hash) return undefined;
+    if (url.protocol === 'http:' && !isLocalHost(url.hostname)) return undefined;
+    if ((nodeEnv === 'staging' || nodeEnv === 'production') && url.protocol !== 'https:')
+      return undefined;
+    return url;
   } catch {
     return undefined;
   }
+}
+
+function isLocalHost(hostname: string) {
+  return (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '[::1]' ||
+    hostname === '::1'
+  );
 }
 
 function isCookieDomainCompatible(domain: string, frontendHost: string, apiHost: string) {

@@ -36,12 +36,7 @@ export function normalizeRoute(req: Request): string {
   const routePath = routePathToString(getExpressRoutePath(req));
   if (routePath) return joinPathParts(req.baseUrl, routePath);
   const rawPath = (req.path || req.originalUrl || req.url || '/').split('?')[0] || '/';
-  return rawPath
-    .split('/')
-    .map((segment) => normalizePathSegment(decodeSegment(segment)))
-    .join('/')
-    .replace(/\/+/g, '/')
-    .replace(/(.)\/$/, '$1');
+  return normalizeUnmatchedRoute(rawPath);
 }
 
 function routePathToString(path: ExpressRoutePath | undefined): string | undefined {
@@ -76,22 +71,19 @@ function joinPathParts(baseUrl = '', routePath = ''): string {
   return joined.replace(/(.)\/$/, '$1');
 }
 
-function decodeSegment(segment: string): string {
-  try {
-    return decodeURIComponent(segment);
-  } catch {
-    return segment;
-  }
-}
+const recognizedFallbackPrefixes = [
+  ['api', 'v1', 'auth'],
+  ['api', 'v1', 'health'],
+] as const;
 
-function normalizePathSegment(segment: string): string {
-  if (segment === '') return '';
-  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(segment))
-    return ':id';
-  if (/^\d+$/.test(segment)) return ':id';
-  if (/^[^@/\s]+@[^@/\s]+\.[^@/\s]+$/.test(segment)) return ':email';
-  if (/^\+?\d[\d .()-]{7,}\d$/.test(segment)) return ':phone';
-  if (/^[A-Za-z0-9_-]{24,}$/.test(segment)) return ':token';
-  if (/^[0-9a-f]{24,}$/i.test(segment)) return ':token';
-  return segment;
+function normalizeUnmatchedRoute(rawPath: string): string {
+  const segments = rawPath
+    .replace(/[\r\n]/g, '')
+    .split('/')
+    .filter((segment) => segment !== '');
+  const prefix = recognizedFallbackPrefixes.find((candidate) =>
+    candidate.every((segment, index) => segments[index] === segment),
+  );
+  if (!prefix) return '/:unmatched';
+  return `/${prefix.join('/')}/:unmatched`;
 }

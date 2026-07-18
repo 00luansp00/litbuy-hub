@@ -21,8 +21,8 @@ export interface AuthRuntimeConfig {
   cookieSecure: boolean;
   cookieSameSite: 'lax' | 'strict' | 'none';
   cookieDomain?: string;
-  emailDeliveryMode: 'memory' | 'console' | 'disabled';
-  smsDeliveryMode: 'memory' | 'disabled';
+  emailDeliveryMode: 'memory' | 'disabled' | 'external';
+  smsDeliveryMode: 'memory' | 'disabled' | 'external';
   phoneVerificationTtlMinutes: number;
   phoneResendCooldownSeconds: number;
   emailChangeTtlMinutes: number;

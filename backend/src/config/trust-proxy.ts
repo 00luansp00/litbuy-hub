@@ -2,6 +2,8 @@ import { isIP } from 'node:net';
 
 export type TrustProxyConfig = false | number | string;
 
+export const MAX_TRUST_PROXY_HOPS = 10;
+
 const knownProxyNames = new Set(['loopback', 'linklocal', 'uniquelocal']);
 
 export function parseTrustProxy(value: string | undefined): TrustProxyConfig {
@@ -15,7 +17,10 @@ export function isValidTrustProxy(value: string | undefined): boolean {
   if (typeof value !== 'string') return false;
   const normalized = value.trim();
   if (normalized === 'false') return true;
-  if (/^[1-9]\d*$/.test(normalized)) return true;
+  if (/^[1-9]\d*$/.test(normalized)) {
+    const hops = Number(normalized);
+    return Number.isSafeInteger(hops) && hops <= MAX_TRUST_PROXY_HOPS;
+  }
   if (
     normalized === '' ||
     normalized === 'true' ||
