@@ -2358,30 +2358,36 @@ describe('Marketplace RBAC with real PostgreSQL (integration)', () => {
       'utf8',
     );
     try {
-      await prisma.$executeRawUnsafe(`CREATE SCHEMA "${schema}"`);
-      await prisma.$executeRawUnsafe(`SET search_path TO "${schema}"`);
-      await prisma.$executeRawUnsafe(`CREATE TYPE "SecurityEventType" AS ENUM ('REGISTERED')`);
-      await prisma.$executeRawUnsafe(`CREATE TABLE "User" ("id" uuid PRIMARY KEY)`);
-      const existingUserId = crypto.randomUUID();
-      await prisma.$executeRawUnsafe(
-        `INSERT INTO "User" ("id") VALUES ('${existingUserId}'::uuid)`,
-      );
-      for (const statement of migration
-        .split(';')
-        .map((rawStatement) => rawStatement.trim())
-        .filter(Boolean)) {
-        await prisma.$executeRawUnsafe(`${statement};`);
-      }
-      const roles = await prisma.$queryRawUnsafe<Array<{ role: string }>>(
-        `SELECT "role"::text AS role FROM "${schema}"."UserRoleAssignment" WHERE "userId" = '${existingUserId}'::uuid ORDER BY "role"::text`,
-      );
-      expect(roles.map((row) => row.role)).toEqual(['BUYER']);
-      const enumRows = await prisma.$queryRawUnsafe<Array<{ enumlabel: string }>>(
-        `SELECT enumlabel FROM pg_enum WHERE enumtypid = '"${schema}"."PlatformRole"'::regtype ORDER BY enumsortorder`,
-      );
-      expect(enumRows.map((r) => r.enumlabel)).toEqual(['BUYER', 'SELLER', 'ADMIN']);
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(`CREATE SCHEMA "${schema}"`);
+        await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${schema}"`);
+        await tx.$executeRawUnsafe(`CREATE TYPE "SecurityEventType" AS ENUM ('REGISTERED')`);
+        await tx.$executeRawUnsafe(`CREATE TABLE "User" ("id" uuid PRIMARY KEY)`);
+        const existingUserId = crypto.randomUUID();
+        await tx.$executeRawUnsafe(`INSERT INTO "User" ("id") VALUES ('${existingUserId}'::uuid)`);
+        for (const statement of migration
+          .split(';')
+          .map((rawStatement) => rawStatement.trim())
+          .filter(Boolean)) {
+          await tx.$executeRawUnsafe(`${statement};`);
+        }
+        const roles = await tx.$queryRawUnsafe<Array<{ role: string }>>(
+          `SELECT "role"::text AS role FROM "${schema}"."UserRoleAssignment" WHERE "userId" = '${existingUserId}'::uuid ORDER BY "role"::text`,
+        );
+        expect(roles.map((row) => row.role)).toEqual(['BUYER']);
+        await tx.$executeRawUnsafe(
+          `INSERT INTO "${schema}"."UserRoleAssignment" ("userId", "role") VALUES ('${existingUserId}'::uuid, 'BUYER'::"${schema}"."PlatformRole") ON CONFLICT ("userId", "role") DO NOTHING`,
+        );
+        const roleCounts = await tx.$queryRawUnsafe<Array<{ role: string; count: bigint }>>(
+          `SELECT "role"::text AS role, COUNT(*)::bigint AS count FROM "${schema}"."UserRoleAssignment" GROUP BY "role"::text ORDER BY "role"::text`,
+        );
+        expect(roleCounts).toEqual([{ role: 'BUYER', count: 1n }]);
+        const enumRows = await tx.$queryRawUnsafe<Array<{ enumlabel: string }>>(
+          `SELECT enumlabel FROM pg_enum WHERE enumtypid = '"${schema}"."PlatformRole"'::regtype ORDER BY enumsortorder`,
+        );
+        expect(enumRows.map((r) => r.enumlabel)).toEqual(['BUYER', 'SELLER', 'ADMIN']);
+      });
     } finally {
-      await prisma.$executeRawUnsafe('SET search_path TO public');
       await prisma.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
     }
   });
