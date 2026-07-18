@@ -1,3 +1,5 @@
+# Local staging rehearsal only. Do not expose this Compose project on a public network.
+# Published ports bind to loopback; services communicate internally on the Docker network.
 services:
   postgres:
     image: postgres:16.6-alpine
@@ -12,7 +14,7 @@ services:
       retries: 5
     volumes:
       - litbuy_staging_postgres:/var/lib/postgresql/data
-    ports: ["5432:5432"]
+    ports: ["127.0.0.1:5432:5432"]
   redis:
     image: redis:7.4.2-alpine
     command: ["redis-server", "--appendonly", "yes"]
@@ -23,7 +25,7 @@ services:
       retries: 5
     volumes:
       - litbuy_staging_redis:/data
-    ports: ["6379:6379"]
+    ports: ["127.0.0.1:6379:6379"]
   migrate:
     build: ./backend
     env_file: ./backend/.env.staging.local.example
@@ -39,7 +41,7 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }
-    ports: ["3001:3001"]
+    ports: ["127.0.0.1:3001:3001"]
     healthcheck:
       test:
         [
@@ -56,7 +58,7 @@ services:
         VITE_API_BASE_URL: http://localhost:3001/api/v1
     depends_on:
       backend: { condition: service_healthy }
-    ports: ["3000:3000"]
+    ports: ["127.0.0.1:3000:3000"]
 volumes:
   litbuy_staging_postgres:
   litbuy_staging_redis:

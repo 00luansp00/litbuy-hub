@@ -120,7 +120,7 @@ telas sensíveis de marketplace exibem aviso de demonstração; o backend real d
 
 ## Authentication staging readiness
 
-A staging simulation is available through `docker-compose.staging.yml` for frontend, backend, PostgreSQL and Redis. The current frontend build is produced by the Lovable/TanStack Start Vite configuration under `.output/`; the staging Docker image serves `.output/public` statically for rehearsal only. It is not a public deployment blueprint.
+A staging simulation is available through `docker-compose.staging.yml` for frontend, backend, PostgreSQL and Redis. Its published ports bind to `127.0.0.1` only and must not be exposed as public staging infrastructure. The current frontend build is produced by the Lovable/TanStack Start Vite configuration under `.output/`; the staging Docker image serves `.output/public` statically for rehearsal only. It is not a public deployment blueprint.
 
 1. Copy and review `backend/.env.staging.example` for real staging or use `backend/.env.staging.local.example` only for isolated local smoke tests.
 2. Run backend migrations with `cd backend && bun run prisma:generate && bun run prisma:migrate:deploy`.

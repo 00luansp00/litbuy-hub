@@ -1,4 +1,5 @@
 import { plainToInstance, Transform } from 'class-transformer';
+import { isValidTrustProxy } from './trust-proxy';
 import {
   IsBoolean,
   IsIn,
@@ -125,6 +126,10 @@ export class EnvironmentVariables {
   @Transform(({ value }) => Number(value ?? 5)) @IsInt() @Min(1) AUTH_STEP_UP_MAX_ATTEMPTS!: number;
   @IsString() @IsNotEmpty() CURRENT_TERMS_VERSION!: string;
   @IsString() @IsNotEmpty() CURRENT_PRIVACY_VERSION!: string;
+  @IsString() @IsNotEmpty() PUBLIC_FRONTEND_ORIGIN!: string;
+  @IsString() @IsNotEmpty() PUBLIC_API_ORIGIN!: string;
+  @IsIn(['same-origin', 'same-site-subdomains', 'cross-site'])
+  AUTH_COOKIE_TOPOLOGY!: 'same-origin' | 'same-site-subdomains' | 'cross-site';
 }
 
 export function validateEnvironment(config: Record<string, unknown>): EnvironmentVariables {
@@ -136,15 +141,16 @@ export function validateEnvironment(config: Record<string, unknown>): Environmen
     whitelist: true,
     forbidNonWhitelisted: false,
   });
-  const hardeningErrors = validateHardening(validated);
-  if (errors.length > 0 || hardeningErrors.length > 0) {
+  if (errors.length > 0) {
     const details = errors.map((error) => ({
       property: error.property,
       constraints: error.constraints ?? {},
     }));
-    throw new Error(
-      `Invalid environment configuration: ${JSON.stringify([...details, ...hardeningErrors])}`,
-    );
+    throw new Error(`Invalid environment configuration: ${JSON.stringify(details)}`);
+  }
+  const hardeningErrors = validateHardening(validated);
+  if (hardeningErrors.length > 0) {
+    throw new Error(`Invalid environment configuration: ${JSON.stringify(hardeningErrors)}`);
   }
   return validated;
 }
@@ -157,6 +163,13 @@ function validateHardening(
     .map((origin) => origin.trim())
     .filter(Boolean);
   const hardened = hardenedEnvironments.has(env.NODE_ENV);
+  if (!isValidTrustProxy(env.TRUST_PROXY))
+    issues.push(
+      issue(
+        'TRUST_PROXY',
+        'must be false, a positive hop count, known proxy name, IP, CIDR, or explicit valid list',
+      ),
+    );
   if (hardened && origins.length === 0)
     issues.push(issue('CORS_ORIGINS', 'explicit origins are required'));
   if (origins.includes('*'))
@@ -194,8 +207,10 @@ function validateHardening(
         'external email/SMS provider implementation is not installed in this sprint',
       ),
     );
+  if (hardened) validateCookieTopology(env, origins, issues);
   for (const name of secretNames) {
     const value = env[name];
+    if (hardened && value.length < 32) issues.push(issue(name, 'must be at least 32 characters'));
     if (
       hardened &&
       (value.includes('change_me') ||
@@ -206,6 +221,65 @@ function validateHardening(
       issues.push(issue(name, 'placeholder secret is forbidden'));
   }
   return issues;
+}
+
+function validateCookieTopology(
+  env: EnvironmentVariables,
+  origins: string[],
+  issues: Array<{ property: string; constraints: Record<string, string> }>,
+) {
+  const frontend = safeUrl(env.PUBLIC_FRONTEND_ORIGIN);
+  const api = safeUrl(env.PUBLIC_API_ORIGIN);
+  if (!frontend) issues.push(issue('PUBLIC_FRONTEND_ORIGIN', 'must be a valid public origin'));
+  if (!api) issues.push(issue('PUBLIC_API_ORIGIN', 'must be a valid public origin'));
+  if (!frontend || !api) return;
+  if (!origins.includes(env.PUBLIC_FRONTEND_ORIGIN))
+    issues.push(issue('CORS_ORIGINS', 'must include the configured frontend public origin'));
+  if (env.AUTH_COOKIE_TOPOLOGY === 'same-origin' && frontend.origin !== api.origin)
+    issues.push(
+      issue('AUTH_COOKIE_TOPOLOGY', 'same-origin requires identical frontend and API origins'),
+    );
+  if (env.AUTH_COOKIE_TOPOLOGY === 'same-site-subdomains') {
+    const domain = env.AUTH_COOKIE_DOMAIN.trim().replace(/^\./, '');
+    if (!domain) {
+      issues.push(
+        issue('AUTH_COOKIE_DOMAIN', 'same-site subdomains require the shared parent domain'),
+      );
+    } else if (!isCookieDomainCompatible(domain, frontend.hostname, api.hostname)) {
+      issues.push(
+        issue(
+          'AUTH_COOKIE_DOMAIN',
+          'must match the shared parent domain for frontend and API hosts',
+        ),
+      );
+    }
+    if (env.AUTH_COOKIE_SAME_SITE === 'none')
+      issues.push(
+        issue('AUTH_COOKIE_SAME_SITE', 'same-site subdomains should use lax or strict cookies'),
+      );
+  }
+  if (env.AUTH_COOKIE_TOPOLOGY === 'cross-site') {
+    issues.push(
+      issue(
+        'AUTH_COOKIE_TOPOLOGY',
+        'cross-site auth cookies are blocked until a non-cookie CSRF transport is implemented',
+      ),
+    );
+  }
+}
+
+function safeUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.username || url.password ? undefined : url;
+  } catch {
+    return undefined;
+  }
+}
+
+function isCookieDomainCompatible(domain: string, frontendHost: string, apiHost: string) {
+  if (!domain.includes('.') || frontendHost === apiHost) return false;
+  return [frontendHost, apiHost].every((host) => host === domain || host.endsWith(`.${domain}`));
 }
 
 function issue(property: string, message: string) {

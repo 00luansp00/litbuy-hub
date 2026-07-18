@@ -6,7 +6,7 @@ Preparar e validar autenticação em staging com PostgreSQL e Redis reais, sem p
 
 ## 2. Topologia recomendada
 
-Frontend chama somente a API `/api/v1`; backend NestJS usa PostgreSQL como fonte de verdade e Redis para rate limit/cache temporário. O proxy HTTPS termina TLS e encaminha `X-Forwarded-*`; `TRUST_PROXY` deve usar número de hops ou lista de proxies confiáveis; `true` genérico é proibido em staging/production para reduzir spoofing de `X-Forwarded-*`.
+Frontend chama somente a API `/api/v1`; backend NestJS usa PostgreSQL como fonte de verdade e Redis para rate limit/cache temporário. O proxy HTTPS termina TLS e encaminha `X-Forwarded-*`; `TRUST_PROXY` deve ser `false` em desenvolvimento direto, um número positivo de hops, nomes conhecidos do Express/proxy-addr (`loopback`, `linklocal`, `uniquelocal`) ou lista explícita de IPs/CIDRs confiáveis. `true` genérico, zero, negativos e texto arbitrário são proibidos em staging/production para reduzir spoofing de `X-Forwarded-*`.
 
 ## 3. Matriz de ambientes
 
@@ -19,7 +19,7 @@ Frontend chama somente a API `/api/v1`; backend NestJS usa PostgreSQL como fonte
 
 ## 4. Variáveis obrigatórias
 
-Ver `backend/.env.example`, `backend/.env.staging.example`, `backend/.env.staging.local.example`, `.env.example` e `frontend/.env.staging.example`. Secrets devem ser gerados fora do repositório; placeholders são rejeitados em staging/production.
+Ver `backend/.env.example`, `backend/.env.staging.example`, `backend/.env.staging.local.example`, `.env.example` e `frontend/.env.staging.example`. Secrets/peppers de autenticação em staging/production devem ter pelo menos 32 caracteres e ser gerados fora do repositório; placeholders são rejeitados. `PUBLIC_FRONTEND_ORIGIN`, `PUBLIC_API_ORIGIN` e `AUTH_COOKIE_TOPOLOGY` documentam a topologia pública usada para validar cookies/CSRF.
 
 ## 5. Migrations
 
@@ -27,7 +27,7 @@ Executar `bun install --frozen-lockfile`, `bun run prisma:generate` e `bun run p
 
 ## 6. Inicialização
 
-Backend: `cd backend && bun run build && bun run start:prod`. Frontend: configurar `VITE_API_BASE_URL`, executar build e servir o artefato. Para simulação local, use `docker compose -f docker-compose.staging.yml up --build` após revisar o `.env.staging.local.example`; o serviço one-shot `migrate` executa `prisma migrate deploy` apenas nessa simulação local/rehearsal.
+Backend: `cd backend && bun run build && bun run start:prod`. Frontend: configurar `VITE_API_BASE_URL`, executar build e servir o artefato. Para simulação local, use `docker compose -f docker-compose.staging.yml up --build` após revisar o `.env.staging.local.example`; o serviço one-shot `migrate` executa `prisma migrate deploy` apenas nessa simulação local/rehearsal. O compose publica portas somente em `127.0.0.1` e não deve ser exposto em rede pública; a senha fixa do rehearsal não é segura para staging real.
 
 ## 7. Health/readiness
 
@@ -35,11 +35,11 @@ Liveness: `GET /api/v1/health/live`. Readiness: `GET /api/v1/health/ready`, que 
 
 ## 8. Cookies e CORS
 
-Validar `litbuy_refresh` e `litbuy_device` como `HttpOnly`; `litbuy_csrf` legível pelo frontend; `Secure=true` em staging/production; `SameSite=lax` para mesmo site; subdomínios podem ser cross-origin mas normalmente continuam same-site quando compartilham o domínio registrável. Use `SameSite=None` somente quando houver cross-site real e sempre com HTTPS; `CORS_ORIGINS` sem wildcard e com `credentials=true`.
+Validar `litbuy_refresh` e `litbuy_device` como `HttpOnly`; `litbuy_csrf` legível pelo frontend; `Secure=true` em staging/production; `CORS_ORIGINS` sem wildcard e com `credentials=true`. Topologias suportadas: (A) mesmo host/origem com cookie host-only; (B) frontend/API em subdomínios do mesmo domínio registrável com `AUTH_COOKIE_TOPOLOGY=same-site-subdomains` e `AUTH_COOKIE_DOMAIN` definido para o domínio pai compartilhado (ex.: `example.test`, nunca hardcoded para o domínio real); (C) cross-site real fica bloqueado até existir transporte CSRF que não dependa de cookie compartilhável. Subdomínios podem ser cross-origin, mas normalmente continuam same-site quando compartilham o domínio registrável; use `SameSite=None` somente com HTTPS e após revisão de segurança.
 
 ## 9. E-mail/SMS futuros
 
-Não há fornecedor definitivo nesta sprint. Staging real deve configurar providers externos por integração futura. Memory só é permitido com `NODE_ENV=test` em CI/e2e/local rehearsal isolado.
+Não há fornecedor definitivo nesta sprint. Staging real fica bloqueado até instalar adapters externos concretos de e-mail e SMS; uma variável booleana não é prova de provider instalado. Memory só é permitido com `NODE_ENV=test` em CI/e2e/local rehearsal isolado, e nenhuma entrega pode ser simulada como sucesso em staging/production.
 
 ## 10. Checklist de browser
 
@@ -51,7 +51,7 @@ Executar cadastro, verificação de e-mail, aprovação de dispositivo, login, r
 
 ## 12. Logs
 
-Verificar JSON/linhas estruturadas com request ID, método, rota, status, duração e ambiente. Confirmar redaction de Authorization, cookies, CSRF, senhas, 2FA, recovery codes, tokens, grants, telefone e e-mail.
+Verificar JSON/linhas estruturadas com request ID, método, rota normalizada, status, duração e ambiente. Confirmar redaction de Authorization, cookies, CSRF, senhas, 2FA, recovery codes, tokens, grants, telefone e e-mail.
 
 ## 13. Storage/cache/URL
 
@@ -71,7 +71,7 @@ Revogar sessões no banco, rotacionar peppers/secrets se expostos, invalidar coo
 
 ## 17. Critérios para staging aprovado
 
-CI verde, smoke de infraestrutura verde, readiness real, providers configurados, cookies/CORS auditados, logs redigidos e checklist manual executado.
+CI verde, smoke de infraestrutura verde, readiness real, providers externos concretos instalados e testados, cookies/CORS auditados, logs redigidos e checklist manual executado.
 
 ## 18. Critérios que impedem produção
 

@@ -44,7 +44,10 @@ type ManagedEnvKey =
   | 'AUTH_2FA_MAX_ATTEMPTS'
   | 'AUTH_2FA_RECOVERY_CODE_COUNT'
   | 'CURRENT_TERMS_VERSION'
-  | 'CURRENT_PRIVACY_VERSION';
+  | 'CURRENT_PRIVACY_VERSION'
+  | 'PUBLIC_FRONTEND_ORIGIN'
+  | 'PUBLIC_API_ORIGIN'
+  | 'AUTH_COOKIE_TOPOLOGY';
 
 const defaultTestEnv: Record<ManagedEnvKey, string> = {
   NODE_ENV: 'test',
@@ -93,6 +96,9 @@ const defaultTestEnv: Record<ManagedEnvKey, string> = {
   AUTH_2FA_RECOVERY_CODE_COUNT: '10',
   CURRENT_TERMS_VERSION: '2026-test',
   CURRENT_PRIVACY_VERSION: '2026-test',
+  PUBLIC_FRONTEND_ORIGIN: 'http://localhost:3000',
+  PUBLIC_API_ORIGIN: 'http://localhost:3001',
+  AUTH_COOKIE_TOPOLOGY: 'same-origin',
 };
 
 function resolveTestEnvValue(key: ManagedEnvKey, overrides: Partial<NodeJS.ProcessEnv>): string {
@@ -203,6 +209,9 @@ export function applyTestEnv(overrides: Partial<NodeJS.ProcessEnv> = {}): void {
   );
   process.env.CURRENT_TERMS_VERSION = resolveTestEnvValue('CURRENT_TERMS_VERSION', overrides);
   process.env.CURRENT_PRIVACY_VERSION = resolveTestEnvValue('CURRENT_PRIVACY_VERSION', overrides);
+  process.env.PUBLIC_FRONTEND_ORIGIN = resolveTestEnvValue('PUBLIC_FRONTEND_ORIGIN', overrides);
+  process.env.PUBLIC_API_ORIGIN = resolveTestEnvValue('PUBLIC_API_ORIGIN', overrides);
+  process.env.AUTH_COOKIE_TOPOLOGY = resolveTestEnvValue('AUTH_COOKIE_TOPOLOGY', overrides);
 }
 
 applyTestEnv();

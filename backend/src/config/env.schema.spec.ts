@@ -48,6 +48,9 @@ describe('validateEnvironment', () => {
     AUTH_2FA_RECOVERY_CODE_COUNT: '10',
     CURRENT_TERMS_VERSION: '2026-test',
     CURRENT_PRIVACY_VERSION: '2026-test',
+    PUBLIC_FRONTEND_ORIGIN: 'http://localhost:3000',
+    PUBLIC_API_ORIGIN: 'http://localhost:3001',
+    AUTH_COOKIE_TOPOLOGY: 'same-origin',
   };
 
   it('accepts the required backend environment variables', () => {
@@ -118,18 +121,89 @@ describe('validateEnvironment', () => {
     ).toThrow(/AUTH_DELIVERY_MODE/);
   });
 
-  it('does not allow a boolean flag to claim external providers are installed', () => {
+  it.each([
+    'CORS_ORIGINS',
+    'TRUST_PROXY',
+    'AUTH_ACCESS_TOKEN_SECRET',
+    'AUTH_COOKIE_SAME_SITE',
+    'DATABASE_URL',
+  ])('fails safely when %s is missing', (key) => {
+    const config = {
+      ...validConfig,
+      NODE_ENV: 'staging',
+      DATABASE_URL: 'postgresql://private_user:private_password@db.internal.example/litbuy',
+      AUTH_ACCESS_TOKEN_SECRET: 'sensitive_access_secret_value_32_chars',
+    };
+    delete (config as Record<string, unknown>)[key];
+    expect(() => validateEnvironment(config)).toThrow(/Invalid environment configuration/);
+    try {
+      validateEnvironment(config);
+    } catch (error) {
+      const message = (error as Error).message;
+      expect(message).not.toContain('TypeError');
+      expect(message).not.toContain('private_password');
+      expect(message).not.toContain('db.internal.example');
+      expect(message).not.toContain('sensitive_access_secret_value_32_chars');
+    }
+  });
+
+  it('fails safely when several required fields are missing', () => {
+    const config = { ...validConfig };
+    for (const key of ['CORS_ORIGINS', 'TRUST_PROXY', 'AUTH_COOKIE_SAME_SITE', 'DATABASE_URL'])
+      delete (config as Record<string, unknown>)[key];
+    expect(() => validateEnvironment(config)).toThrow(/Invalid environment configuration/);
+  });
+
+  it('validates same-origin cookie topology in hardened environments before provider availability fails', () => {
     expect(() =>
       validateEnvironment({
         ...validConfig,
-        NODE_ENV: 'production',
+        NODE_ENV: 'staging',
         TRUST_PROXY: '1',
         AUTH_COOKIE_SECURE: 'true',
         AUTH_EMAIL_DELIVERY_MODE: 'external',
         AUTH_SMS_DELIVERY_MODE: 'external',
-        AUTH_EXTERNAL_PROVIDERS_CONFIGURED: 'true',
+        PUBLIC_FRONTEND_ORIGIN: 'https://app.example.test',
+        PUBLIC_API_ORIGIN: 'https://api.example.test',
+        CORS_ORIGINS: 'https://app.example.test',
+      }),
+    ).toThrow(/same-origin/);
+  });
+
+  it('accepts same-site subdomain cookie topology up to the missing external provider implementation', () => {
+    expect(() =>
+      validateEnvironment({
+        ...validConfig,
+        NODE_ENV: 'staging',
+        TRUST_PROXY: '1',
+        AUTH_COOKIE_SECURE: 'true',
+        AUTH_COOKIE_DOMAIN: 'example.test',
+        AUTH_COOKIE_TOPOLOGY: 'same-site-subdomains',
+        AUTH_EMAIL_DELIVERY_MODE: 'external',
+        AUTH_SMS_DELIVERY_MODE: 'external',
+        PUBLIC_FRONTEND_ORIGIN: 'https://frontend-staging.example.test',
+        PUBLIC_API_ORIGIN: 'https://api-staging.example.test',
+        CORS_ORIGINS: 'https://frontend-staging.example.test',
       }),
     ).toThrow(/AUTH_EXTERNAL_PROVIDER_IMPLEMENTATION/);
+  });
+
+  it('rejects incompatible shared cookie domain for subdomains', () => {
+    expect(() =>
+      validateEnvironment({
+        ...validConfig,
+        NODE_ENV: 'staging',
+        TRUST_PROXY: '1',
+        AUTH_COOKIE_SECURE: 'true',
+        AUTH_COOKIE_DOMAIN: 'wrong.test',
+        AUTH_COOKIE_TOPOLOGY: 'same-site-subdomains',
+        AUTH_EMAIL_DELIVERY_MODE: 'external',
+        AUTH_SMS_DELIVERY_MODE: 'external',
+        PUBLIC_FRONTEND_ORIGIN: 'https://frontend-staging.example.test',
+        PUBLIC_API_ORIGIN: 'https://api-staging.example.test',
+        CORS_ORIGINS: 'https://frontend-staging.example.test',
+      }),
+    ).toThrow(/AUTH_COOKIE_DOMAIN/);
   });
 
   it('rejects generic true trust proxy in staging', () => {

@@ -100,9 +100,11 @@ jobs:
       AUTH_STEP_UP_GRANT_TTL_MINUTES: "10"
       AUTH_STEP_UP_RESEND_COOLDOWN_SECONDS: "60"
       AUTH_STEP_UP_MAX_ATTEMPTS: "5"
-      AUTH_EXTERNAL_PROVIDERS_CONFIGURED: "false"
       CURRENT_TERMS_VERSION: "2026-test"
       CURRENT_PRIVACY_VERSION: "2026-test"
+      PUBLIC_FRONTEND_ORIGIN: http://localhost:3000
+      PUBLIC_API_ORIGIN: http://localhost:3001
+      AUTH_COOKIE_TOPOLOGY: same-origin
     defaults:
       run:
         working-directory: backend
@@ -213,9 +215,11 @@ jobs:
       AUTH_STEP_UP_GRANT_TTL_MINUTES: "10"
       AUTH_STEP_UP_RESEND_COOLDOWN_SECONDS: "60"
       AUTH_STEP_UP_MAX_ATTEMPTS: "5"
-      AUTH_EXTERNAL_PROVIDERS_CONFIGURED: "false"
       CURRENT_TERMS_VERSION: "2026-test"
       CURRENT_PRIVACY_VERSION: "2026-test"
+      PUBLIC_FRONTEND_ORIGIN: http://localhost:3000
+      PUBLIC_API_ORIGIN: http://localhost:3001
+      AUTH_COOKIE_TOPOLOGY: same-origin
     defaults:
       run:
         working-directory: backend
@@ -242,6 +246,14 @@ jobs:
 
       - name: Verify staging files referenced by compose and runbook
         run: test -f ../docker-compose.staging.yml && test -f .env.staging.example && test -f .env.staging.local.example && test -f ../frontend/.env.staging.example
+
+      - name: Validate staging compose config
+        working-directory: ${{ github.workspace }}
+        run: docker compose -f docker-compose.staging.yml config
+
+      - name: Build staging compose images
+        working-directory: ${{ github.workspace }}
+        run: docker compose -f docker-compose.staging.yml build
 
       - name: Build backend for infrastructure smoke tests
         run: bun run build
