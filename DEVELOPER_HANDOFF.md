@@ -112,6 +112,17 @@ Ordem sugerida:
 14. Configurar monitoramento, backups, LGPD, termos jurídicos.
 15. **Deploy** do frontend e backend NestJS em provedores definidos pelo time, sem dependência obrigatória de Supabase.
 
+
+## Decisões de fornecedores externos
+
+- Nenhum fornecedor externo está definitivamente aprovado neste momento.
+- Resend e Twilio são implementações de referência para autenticação, não decisões comerciais definitivas.
+- Hospedagem, infraestrutura, PostgreSQL/Redis gerenciados, storage, CDN, DNS, HTTPS, secrets, backups e recuperação de desastre permanecem pendentes.
+- Gateway de pagamento, Pix, boleto, cartão, split, escrow, antifraude, saldo, saques e conciliação permanecem pendentes.
+- KYC, observabilidade, filas, busca, realtime/chat, analytics, suporte e demais serviços externos permanecem pendentes.
+- Consulte `EXTERNAL_SERVICES_DECISION_HANDOFF.md` para o inventário e a matriz neutra de decisão.
+- Utilize `EXTERNAL_SERVICE_DECISION_TEMPLATE.md` antes de aprovar qualquer fornecedor para staging ou produção.
+
 ## Documentos relacionados
 
 - `ROUTES_MAP.md`
