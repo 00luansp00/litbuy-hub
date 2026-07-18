@@ -153,13 +153,26 @@ export class AuthMailer implements AuthEmailPort, OnModuleInit {
     if (process.env.NODE_ENV === 'staging' || process.env.NODE_ENV === 'production') {
       throw new ServiceUnavailableException('Auth external email provider not configured');
     }
-    if (process.env.AUTH_EMAIL_DELIVERY_MODE === 'external') {
-      throw new ServiceUnavailableException('Auth external email provider not configured');
+    const mode = process.env.AUTH_EMAIL_DELIVERY_MODE ?? 'disabled';
+    if (mode === 'memory') {
+      if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') {
+        this.sent.push({ to, purpose, token });
+        return;
+      }
+      throw emailDeliveryUnavailable();
     }
-    if (process.env.AUTH_EMAIL_DELIVERY_MODE === 'memory') {
-      this.sent.push({ to, purpose, token });
-    }
+    if (mode === 'disabled') throw emailDeliveryUnavailable();
+    if (mode === 'external') throw emailDeliveryUnavailable();
+    throw emailDeliveryUnavailable();
   }
+}
+
+function emailDeliveryUnavailable() {
+  return new AppError(
+    'EMAIL_DELIVERY_UNAVAILABLE',
+    'Entrega de e-mail indisponível.',
+    HttpStatus.SERVICE_UNAVAILABLE,
+  );
 }
 
 export type AuthSmsPurpose = 'PHONE_VERIFICATION' | 'SECURITY_ALERT' | 'TWO_FACTOR_CODE';

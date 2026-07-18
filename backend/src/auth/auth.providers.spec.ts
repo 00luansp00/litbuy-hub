@@ -60,15 +60,96 @@ describe('auth delivery providers', () => {
     await moduleRef.close();
   });
 
+  it('allows memory email delivery in controlled development mode', () => {
+    process.env.NODE_ENV = 'development';
+    process.env.AUTH_EMAIL_DELIVERY_MODE = 'memory';
+    const mailer = new AuthMailer();
+
+    expect(mailer.send('dev@example.test', 'EMAIL_VERIFICATION', 'dev-token')).toBeUndefined();
+    expect(mailer.sent).toEqual([
+      { to: 'dev@example.test', purpose: 'EMAIL_VERIFICATION', token: 'dev-token' },
+    ]);
+  });
+
+  it('rejects memory email delivery outside development and test', () => {
+    process.env.NODE_ENV = 'local-rehearsal';
+    process.env.AUTH_EMAIL_DELIVERY_MODE = 'memory';
+    const mailer = new AuthMailer();
+
+    expect(() => mailer.send('person@example.test', 'PASSWORD_RESET', 'opaque-token')).toThrow(
+      AppError,
+    );
+    expect(mailer.sent).toEqual([]);
+  });
+
+  it('disabled email is explicit failure and does not store tokens', () => {
+    process.env.NODE_ENV = 'test';
+    process.env.AUTH_EMAIL_DELIVERY_MODE = 'disabled';
+    const mailer = new AuthMailer();
+
+    expect(() => mailer.send('person@example.test', 'PASSWORD_RESET', 'opaque-token')).toThrow(
+      AppError,
+    );
+    try {
+      mailer.send('person@example.test', 'PASSWORD_RESET', 'opaque-token');
+    } catch (error) {
+      expect(error).toMatchObject({
+        code: 'EMAIL_DELIVERY_UNAVAILABLE',
+        statusCode: HttpStatus.SERVICE_UNAVAILABLE,
+      });
+    }
+    expect(mailer.sent).toEqual([]);
+  });
+
   it('external email is explicit failure and not a no-op', () => {
     process.env.NODE_ENV = 'test';
     process.env.AUTH_EMAIL_DELIVERY_MODE = 'external';
     const mailer = new AuthMailer();
 
     expect(() => mailer.send('person@example.test', 'PASSWORD_RESET', 'opaque-token')).toThrow(
-      ServiceUnavailableException,
+      AppError,
     );
     expect(mailer.sent).toEqual([]);
+  });
+
+  it('unknown email mode fails closed without storing tokens', () => {
+    process.env.NODE_ENV = 'test';
+    process.env.AUTH_EMAIL_DELIVERY_MODE = 'unexpected-mode';
+    const mailer = new AuthMailer();
+
+    expect(() => mailer.send('person@example.test', 'PASSWORD_RESET', 'opaque-token')).toThrow(
+      AppError,
+    );
+    expect(mailer.sent).toEqual([]);
+  });
+
+  it('does not write email tokens or codes to console output', () => {
+    process.env.NODE_ENV = 'test';
+    process.env.AUTH_EMAIL_DELIVERY_MODE = 'memory';
+    const spies = [
+      jest.spyOn(console, 'log').mockImplementation(() => undefined),
+      jest.spyOn(console, 'info').mockImplementation(() => undefined),
+      jest.spyOn(console, 'warn').mockImplementation(() => undefined),
+      jest.spyOn(console, 'error').mockImplementation(() => undefined),
+    ];
+    const mailer = new AuthMailer();
+
+    try {
+      mailer.send('person@example.test', 'EMAIL_VERIFICATION', 'sensitive-token');
+      process.env.AUTH_EMAIL_DELIVERY_MODE = 'disabled';
+      expect(() => mailer.send('person@example.test', 'TWO_FACTOR_CODE', '123456')).toThrow(
+        AppError,
+      );
+      const consolePayload = spies
+        .flatMap((spy) => spy.mock.calls)
+        .flat()
+        .join(' ');
+      expect(consolePayload).not.toContain('sensitive-token');
+      expect(consolePayload).not.toContain('123456');
+      for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
   });
 
   it('external SMS never resolves to the memory adapter', async () => {
