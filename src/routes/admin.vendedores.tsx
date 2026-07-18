@@ -1,14 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { BadgeCheck, Star } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { AdminLayout } from "@/components/admin/AdminLayout";
-import { AdminStatusBadge } from "@/components/admin/AdminStatusBadge";
-import { AdminRiskBadge } from "@/components/admin/AdminRiskBadge";
-import { AdminActionMenu } from "@/components/admin/AdminActionMenu";
 import { AdminFilters } from "@/components/admin/AdminFilters";
 import { EmptyState } from "@/components/common/EmptyState";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -17,132 +23,156 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { adminService } from "@/services/adminService";
-import type { AdminSeller } from "@/types";
+import {
+  sellerOnboardingService,
+  type AdminSellerApplication,
+} from "@/services/sellerOnboardingService";
 
-export const Route = createFileRoute("/admin/vendedores")({
-  component: AdminSellersPage,
-});
-
-const STATUS_OPTS = [
+export const Route = createFileRoute("/admin/vendedores")({ component: AdminSellersPage });
+const statusOptions = [
   { value: "all", label: "Status: todos" },
+  { value: "draft", label: "Rascunho" },
+  { value: "submitted", label: "Enviado" },
+  { value: "under_review", label: "Em análise" },
   { value: "approved", label: "Aprovado" },
-  { value: "active", label: "Ativo" },
-  { value: "in_review", label: "Em análise" },
-  { value: "suspended", label: "Suspenso" },
+  { value: "rejected", label: "Rejeitado" },
 ];
-
-function currency(v: number) {
-  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const rejectionCodes = [
+  "INCOMPLETE_INFORMATION",
+  "INVALID_STORE_NAME",
+  "INVALID_STORE_SLUG",
+  "PROHIBITED_ACTIVITY",
+  "ACCOUNT_REQUIREMENTS_NOT_MET",
+  "OTHER",
+];
+function label(s: string) {
+  return statusOptions.find((o) => o.value === s)?.label ?? s;
 }
-
 function AdminSellersPage() {
-  const [sellers, setSellers] = useState<AdminSeller[] | null>(null);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
-  const [risk, setRisk] = useState("all");
-
-  useEffect(() => {
-    let m = true;
-    adminService.getAdminSellers().then((s) => m && setSellers(s));
-    return () => {
-      m = false;
-    };
-  }, []);
-
-  const filtered = useMemo(() => {
-    if (!sellers) return [];
-    const q = search.trim().toLowerCase();
-    return sellers.filter(
-      (s) =>
-        (status === "all" || s.status === status) &&
-        (risk === "all" || s.risk === risk) &&
-        (!q || s.storeName.toLowerCase().includes(q)),
-    );
-  }, [sellers, search, status, risk]);
-
+  const [rejecting, setRejecting] = useState<AdminSellerApplication | null>(null);
+  const [code, setCode] = useState("INCOMPLETE_INFORMATION");
+  const [reason, setReason] = useState("");
+  const qc = useQueryClient();
+  const query = useQuery({
+    queryKey: ["admin", "seller-applications", status, search],
+    queryFn: () => sellerOnboardingService.adminList({ status, search }),
+  });
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["admin", "seller-applications"] });
+  const start = useMutation({
+    mutationFn: sellerOnboardingService.adminStartReview,
+    onSuccess: () => {
+      toast.success("Análise iniciada.");
+      void invalidate();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  const approve = useMutation({
+    mutationFn: sellerOnboardingService.adminApprove,
+    onSuccess: () => {
+      toast.success("Solicitação aprovada e papel SELLER concedido.");
+      void invalidate();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  const reject = useMutation({
+    mutationFn: ({ id }: { id: string }) =>
+      sellerOnboardingService.adminReject(id, { code, reason }),
+    onSuccess: () => {
+      toast.success("Solicitação rejeitada.");
+      setRejecting(null);
+      setReason("");
+      void invalidate();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
   return (
     <AdminLayout
       title="Vendedores"
-      description="Aprovação, verificação e monitoramento de vendedores — visual/mockado."
+      description="Análise real de solicitações de vendedor. Produtos, vendas e financeiro seguem demonstrativos."
     >
       <AdminFilters
         search={search}
         onSearchChange={setSearch}
-        searchPlaceholder="Buscar por loja..."
+        searchPlaceholder="Buscar loja ou slug..."
         status={status}
         onStatusChange={setStatus}
-        statusOptions={STATUS_OPTS}
-        risk={risk}
-        onRiskChange={setRisk}
+        statusOptions={statusOptions}
+        risk="all"
+        onRiskChange={() => {}}
       />
-
-      <div className="rounded-2xl border border-border bg-card shadow-card">
-        {!sellers ? (
-          <div className="p-4">
-            <Skeleton className="h-64 rounded-xl" />
-          </div>
-        ) : filtered.length === 0 ? (
-          <EmptyState icon="Store" title="Nenhum vendedor encontrado" />
+      <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
+        <p className="mb-4 text-sm text-muted-foreground">
+          Esta tela não usa métricas fictícias: lista apenas solicitações persistidas no backend.
+        </p>
+        {query.data?.items.length === 0 ? (
+          <EmptyState icon="Store" title="Nenhuma solicitação encontrada" />
         ) : (
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Loja</TableHead>
+                  <TableHead>Slug</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Anúncios</TableHead>
-                  <TableHead className="text-right">Vendas</TableHead>
-                  <TableHead>Avaliação</TableHead>
-                  <TableHead className="text-right">Volume</TableHead>
-                  <TableHead>Risco</TableHead>
-                  <TableHead className="w-10" />
+                  <TableHead>Envio</TableHead>
+                  <TableHead>Requisitos</TableHead>
+                  <TableHead>Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((s) => (
-                  <TableRow key={s.id}>
+                {query.data?.items.map((a) => (
+                  <TableRow key={a.id}>
+                    <TableCell className="font-medium">
+                      {a.storeName}
+                      <p className="max-w-xs truncate text-xs text-muted-foreground">
+                        {a.description}
+                      </p>
+                    </TableCell>
+                    <TableCell>{a.requestedSlug}</TableCell>
+                    <TableCell>{label(a.status)}</TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-9 w-9 border border-border">
-                          <AvatarImage src={s.avatarUrl} alt={s.storeName} />
-                          <AvatarFallback>{s.storeName.slice(0, 2)}</AvatarFallback>
-                        </Avatar>
-                        <div className="min-w-0">
-                          <p className="flex items-center gap-1 truncate text-sm font-medium text-foreground">
-                            {s.storeName}
-                            {s.verified && (
-                              <BadgeCheck className="h-3.5 w-3.5 text-success" aria-label="Verificado" />
-                            )}
-                          </p>
-                          <p className="truncate text-xs text-muted-foreground">{s.ownerName}</p>
-                        </div>
+                      {a.submittedAt ? new Date(a.submittedAt).toLocaleString("pt-BR") : "—"}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      E-mail {a.requirements.emailVerified ? "✓" : "!"} · Tel{" "}
+                      {a.requirements.phoneVerified ? "✓" : "!"} · 18+{" "}
+                      {a.requirements.ageEligible ? "✓" : "!"}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => start.mutate(a.id)}
+                          disabled={a.status !== "submitted"}
+                        >
+                          Iniciar análise
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            if (
+                              confirm(
+                                `Aprovar ${a.storeName}? O perfil será criado e SELLER concedido.`,
+                              )
+                            )
+                              approve.mutate(a.id);
+                          }}
+                          disabled={!["submitted", "under_review"].includes(a.status)}
+                        >
+                          Aprovar
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => setRejecting(a)}
+                          disabled={!["submitted", "under_review"].includes(a.status)}
+                        >
+                          Rejeitar
+                        </Button>
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <AdminStatusBadge status={s.status} />
-                    </TableCell>
-                    <TableCell className="text-right">{s.activeListings}</TableCell>
-                    <TableCell className="text-right">{s.sales}</TableCell>
-                    <TableCell>
-                      <span className="inline-flex items-center gap-1 text-sm">
-                        <Star className="h-3.5 w-3.5 fill-warning text-warning" /> {s.rating.toFixed(1)}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right">{currency(s.volume)}</TableCell>
-                    <TableCell>
-                      <AdminRiskBadge risk={s.risk} />
-                    </TableCell>
-                    <TableCell>
-                      <AdminActionMenu
-                        actions={[
-                          { label: "Ver loja pública" },
-                          { label: "Aprovar vendedor" },
-                          { label: "Verificar documentos" },
-                          { label: "Enviar aviso" },
-                          { label: "Suspender vendedor", destructive: true },
-                        ]}
-                      />
                     </TableCell>
                   </TableRow>
                 ))}
@@ -151,6 +181,40 @@ function AdminSellersPage() {
           </div>
         )}
       </div>
+      {rejecting && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-background/80 p-4">
+          <div className="w-full max-w-md rounded-2xl border bg-card p-5 shadow-card">
+            <h2 className="font-semibold">Rejeitar {rejecting.storeName}</h2>
+            <Select value={code} onValueChange={setCode}>
+              <SelectTrigger className="mt-4">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {rejectionCodes.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Textarea
+              className="mt-3"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              maxLength={500}
+              placeholder="Motivo seguro para o candidato"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setRejecting(null)}>
+                Cancelar
+              </Button>
+              <Button variant="destructive" onClick={() => reject.mutate({ id: rejecting.id })}>
+                Confirmar rejeição
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   );
 }

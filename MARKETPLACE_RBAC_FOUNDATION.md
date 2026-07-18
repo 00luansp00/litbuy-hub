@@ -26,3 +26,11 @@ Status: implemented as a foundation sprint. Buyer, seller and administrator role
 - Object-level authorization, granular permissions, staging and production rollout.
 
 No payment, delivery, SMS/e-mail, hosting, staging or production provider was selected or changed by this sprint.
+
+## Seller onboarding foundation (2026-07-18)
+
+- Adicionado onboarding real de vendedor sem KYC externo: solicitação persistida, análise administrativa, aprovação/rejeição, criação de perfil inicial e concessão atômica do papel `SELLER`.
+- Novos modelos: `SellerApplication` e `SellerProfile`; `SellerProfile.verified` nasce `false` e não representa KYC.
+- Produtos, anúncios, vendas, financeiro, reputação, wallet, saques, documentos, selfie e verificação externa continuam mockados ou pendentes para sprints futuras.
+- Fornecedor de KYC permanece não escolhido (`NOT_ANALYZED`); nenhum documento real deve ser enviado.
+- Consulte `SELLER_ONBOARDING_FOUNDATION.md` para escopo, endpoints, estados e limitações.

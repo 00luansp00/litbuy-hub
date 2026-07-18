@@ -65,6 +65,8 @@ async function cleanAuthIntegrationData(prisma: PrismaService): Promise<void> {
     await tx.twoFactorRecoveryCode.deleteMany();
     await tx.twoFactorSettings.deleteMany();
     await tx.userRoleAssignment.deleteMany();
+    await tx.sellerProfile.deleteMany();
+    await tx.sellerApplication.deleteMany();
     await tx.session.deleteMany();
     await tx.device.deleteMany();
     await tx.passwordCredential.deleteMany();

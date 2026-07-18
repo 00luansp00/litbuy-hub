@@ -64,12 +64,12 @@ export function SellerGate({ children, className }: { children: ReactNode; class
           Acesso de vendedor pendente
         </h1>
         <p className="mt-3 text-sm text-muted-foreground md:text-base">
-          Sua conta ainda não possui o papel SELLER. O onboarding real de vendedor será implementado
-          em uma sprint futura.
+          Sua conta ainda não possui o papel SELLER. Solicite acesso de vendedor e acompanhe a
+          análise real pelo perfil.
         </p>
         <div className="mt-8 flex justify-center">
           <Button asChild variant="outline" size="lg">
-            <Link to="/como-vender">Ver como vender</Link>
+            <Link to="/perfil/vendedor">Solicitar acesso de vendedor</Link>
           </Button>
         </div>
       </motion.div>

@@ -212,3 +212,11 @@ Pagamentos, KYC, armazenamento, busca, chat, notificações, antifraude e observ
 ## Uso do template
 
 Antes de mover qualquer serviço para `SELECTED_FOR_STAGING` ou `APPROVED_FOR_PRODUCTION`, copie `EXTERNAL_SERVICE_DECISION_TEMPLATE.md`, preencha a análise da categoria e registre aprovação explícita do proprietário. Nenhum item deste handoff deve ser tratado como aprovação automática.
+
+## Seller onboarding foundation (2026-07-18)
+
+- Adicionado onboarding real de vendedor sem KYC externo: solicitação persistida, análise administrativa, aprovação/rejeição, criação de perfil inicial e concessão atômica do papel `SELLER`.
+- Novos modelos: `SellerApplication` e `SellerProfile`; `SellerProfile.verified` nasce `false` e não representa KYC.
+- Produtos, anúncios, vendas, financeiro, reputação, wallet, saques, documentos, selfie e verificação externa continuam mockados ou pendentes para sprints futuras.
+- Fornecedor de KYC permanece não escolhido (`NOT_ANALYZED`); nenhum documento real deve ser enviado.
+- Consulte `SELLER_ONBOARDING_FOUNDATION.md` para escopo, endpoints, estados e limitações.

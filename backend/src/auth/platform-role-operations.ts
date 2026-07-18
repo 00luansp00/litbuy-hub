@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   Prisma,
   PlatformRole,
@@ -10,6 +11,8 @@ export type RoleOperationOrigin = 'cli' | 'system' | 'test';
 export type RoleOperationResult = { changed: boolean; result: 'granted' | 'revoked' | 'unchanged' };
 
 type Tx = {
+  sellerApplication?: any;
+  sellerProfile?: any;
   user: { findUnique(args: unknown): Promise<{ status: UserStatus } | null> };
   userRoleAssignment: {
     findUnique(args: unknown): Promise<object | null>;
@@ -59,6 +62,18 @@ export async function serializableTransactionWithRetry<T>(
   throw lastError;
 }
 
+export async function auditPlatformRoleOperationInTransaction(
+  tx: Tx,
+  userId: string,
+  eventType: SecurityEventType,
+  outcome: SecurityEventOutcome,
+  role: PlatformRole,
+  origin: RoleOperationOrigin,
+  result: RoleOperationResult['result'],
+): Promise<void> {
+  await audit(tx, userId, eventType, outcome, role, origin, result);
+}
+
 async function audit(
   tx: Tx,
   userId: string,
@@ -78,30 +93,37 @@ async function audit(
   });
 }
 
+export async function grantPlatformRoleInTransaction(
+  tx: Tx,
+  userId: string,
+  role: PlatformRole,
+  origin: RoleOperationOrigin,
+): Promise<RoleOperationResult> {
+  const created = await tx.userRoleAssignment.createMany({
+    data: [{ userId, role }],
+    skipDuplicates: true,
+  });
+  const changed = created.count === 1;
+  const result = changed ? 'granted' : 'unchanged';
+  await audit(
+    tx,
+    userId,
+    SecurityEventType.ROLE_GRANTED,
+    SecurityEventOutcome.SUCCESS,
+    role,
+    origin,
+    result,
+  );
+  return { changed, result };
+}
+
 export async function grantPlatformRole(
   prisma: PrismaLike,
   userId: string,
   role: PlatformRole,
   origin: RoleOperationOrigin,
 ): Promise<RoleOperationResult> {
-  return prisma.$transaction(async (tx) => {
-    const created = await tx.userRoleAssignment.createMany({
-      data: [{ userId, role }],
-      skipDuplicates: true,
-    });
-    const changed = created.count === 1;
-    const result = changed ? 'granted' : 'unchanged';
-    await audit(
-      tx,
-      userId,
-      SecurityEventType.ROLE_GRANTED,
-      SecurityEventOutcome.SUCCESS,
-      role,
-      origin,
-      result,
-    );
-    return { changed, result };
-  });
+  return prisma.$transaction((tx) => grantPlatformRoleInTransaction(tx, userId, role, origin));
 }
 
 export async function revokePlatformRole(

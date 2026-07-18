@@ -57,7 +57,7 @@ export function UserMenu() {
       toast.info("Acesso de vendedor pendente", {
         description: "Sua conta ainda não possui acesso de vendedor.",
       });
-      navigate({ to: "/como-vender" });
+      navigate({ to: "/perfil/vendedor" });
       return;
     }
     toast.success("Modo vendedor ativado", {

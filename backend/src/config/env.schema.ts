@@ -151,6 +151,7 @@ export class EnvironmentVariables {
   @Transform(({ value }) => Number(value ?? 5)) @IsInt() @Min(1) AUTH_STEP_UP_MAX_ATTEMPTS!: number;
   @IsString() @IsNotEmpty() CURRENT_TERMS_VERSION!: string;
   @IsString() @IsNotEmpty() CURRENT_PRIVACY_VERSION!: string;
+  @IsString() @IsNotEmpty() CURRENT_SELLER_AGREEMENT_VERSION!: string;
   @IsString() @IsNotEmpty() PUBLIC_FRONTEND_ORIGIN!: string;
   @IsString() @IsNotEmpty() PUBLIC_API_ORIGIN!: string;
   @IsIn(cookieTopologies)
