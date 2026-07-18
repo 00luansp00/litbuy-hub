@@ -19,6 +19,15 @@ export const SELLER_RESERVED_SLUGS = new Set([
   'termos',
   'privacidade',
 ]);
+export const SELLER_PUBLIC_STATUSES = [
+  'draft',
+  'submitted',
+  'under_review',
+  'approved',
+  'rejected',
+] as const;
+export type SellerPublicStatus = (typeof SELLER_PUBLIC_STATUSES)[number];
+
 export const SELLER_REJECTION_CODES = [
   'INCOMPLETE_INFORMATION',
   'INVALID_STORE_NAME',

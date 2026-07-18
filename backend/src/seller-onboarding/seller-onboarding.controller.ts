@@ -18,7 +18,11 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { PlatformRolesGuard } from '../auth/platform-roles.guard';
 import { RequireRoles } from '../auth/platform-roles';
 import type { AuthenticatedRequest } from '../auth/auth.types';
-import { RejectSellerApplicationDto, UpsertSellerApplicationDto } from './dto';
+import {
+  AdminSellerApplicationsQueryDto,
+  RejectSellerApplicationDto,
+  UpsertSellerApplicationDto,
+} from './dto';
 import { SellerOnboardingService } from './seller-onboarding.service';
 
 @ApiTags('Seller onboarding')
@@ -56,8 +60,8 @@ export class SellerOnboardingController {
   @UseGuards(AccessTokenGuard, PlatformRolesGuard)
   @RequireRoles(PlatformRole.ADMIN)
   @ApiBearerAuth()
-  list(@Query('status') status?: string, @Query('search') search?: string) {
-    return this.service.listAdmin(status, search);
+  list(@Query() query: AdminSellerApplicationsQueryDto) {
+    return this.service.listAdmin(query);
   }
   @Get('admin/seller-applications/:id')
   @UseGuards(AccessTokenGuard, PlatformRolesGuard)

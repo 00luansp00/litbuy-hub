@@ -46,7 +46,9 @@ function SellerProfileOnboardingPage() {
       setStoreName(data.application.storeName);
       setRequestedSlug(data.application.requestedSlug);
       setDescription(data.application.description ?? "");
-      setAccepted(true);
+      setAccepted(
+        data.requirements.sellerAgreementAccepted && data.requirements.sellerAgreementCurrent,
+      );
     }
     if (data?.application?.status === "approved") void reloadCurrentUser();
   }, [data?.application?.id, data?.application?.status, reloadCurrentUser]);
@@ -131,8 +133,11 @@ function SellerProfileOnboardingPage() {
             <Alert>
               <AlertTitle>Status: {statusLabel(app?.status)}</AlertTitle>
               <AlertDescription>
-                Versão das regras do vendedor: {data.requirements.sellerAgreementVersion}. O texto
-                permanece pendente de revisão jurídica e poderá mudar antes de produção.
+                Versão das regras do vendedor: {data.requirements.sellerAgreementVersion}.{" "}
+                {data.requirements.sellerAgreementCurrent
+                  ? "A versão vigente já foi aceita."
+                  : "É necessário aceitar a versão vigente antes de enviar."}{" "}
+                O texto permanece pendente de revisão jurídica e poderá mudar antes de produção.
               </AlertDescription>
             </Alert>
             {app?.status === "submitted" && (

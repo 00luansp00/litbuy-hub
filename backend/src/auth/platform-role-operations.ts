@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   Prisma,
   PlatformRole,
@@ -10,21 +9,13 @@ import {
 export type RoleOperationOrigin = 'cli' | 'system' | 'test';
 export type RoleOperationResult = { changed: boolean; result: 'granted' | 'revoked' | 'unchanged' };
 
-type Tx = {
-  sellerApplication?: any;
-  sellerProfile?: any;
-  user: { findUnique(args: unknown): Promise<{ status: UserStatus } | null> };
-  userRoleAssignment: {
-    findUnique(args: unknown): Promise<object | null>;
-    createMany(args: unknown): Promise<{ count: number }>;
-    deleteMany(args: unknown): Promise<{ count: number }>;
-    count(args?: unknown): Promise<number>;
-  };
-  securityEvent: { create(args: unknown): Promise<object> };
-};
+type RoleOperationTx = Pick<
+  Prisma.TransactionClient,
+  'user' | 'userRoleAssignment' | 'securityEvent'
+>;
 
-type PrismaLike = Tx & {
-  $transaction<T>(fn: (tx: Tx) => Promise<T>, options?: object): Promise<T>;
+type PrismaLike = RoleOperationTx & {
+  $transaction<T>(fn: (tx: Prisma.TransactionClient) => Promise<T>, options?: object): Promise<T>;
 };
 
 export class PlatformRoleOperationError extends Error {
@@ -42,7 +33,7 @@ function isSerializationConflict(error: unknown): boolean {
 
 export async function serializableTransactionWithRetry<T>(
   prisma: PrismaLike,
-  operation: (tx: Tx) => Promise<T>,
+  operation: (tx: Prisma.TransactionClient) => Promise<T>,
   maxAttempts = 3,
 ): Promise<T> {
   let lastError: unknown;
@@ -62,20 +53,8 @@ export async function serializableTransactionWithRetry<T>(
   throw lastError;
 }
 
-export async function auditPlatformRoleOperationInTransaction(
-  tx: Tx,
-  userId: string,
-  eventType: SecurityEventType,
-  outcome: SecurityEventOutcome,
-  role: PlatformRole,
-  origin: RoleOperationOrigin,
-  result: RoleOperationResult['result'],
-): Promise<void> {
-  await audit(tx, userId, eventType, outcome, role, origin, result);
-}
-
 async function audit(
-  tx: Tx,
+  tx: RoleOperationTx,
   userId: string,
   eventType: SecurityEventType,
   outcome: SecurityEventOutcome,
@@ -94,7 +73,7 @@ async function audit(
 }
 
 export async function grantPlatformRoleInTransaction(
-  tx: Tx,
+  tx: RoleOperationTx,
   userId: string,
   role: PlatformRole,
   origin: RoleOperationOrigin,
