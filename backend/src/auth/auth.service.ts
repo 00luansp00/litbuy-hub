@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Inject,
   Injectable,
+  Optional,
   OnModuleInit,
   ServiceUnavailableException,
   UnauthorizedException,
@@ -90,81 +91,21 @@ import {
   sanitizeStepUpFailureMetadata,
 } from './auth.utils';
 
+export type AuthEmailPurpose =
+  | 'EMAIL_VERIFICATION'
+  | 'DEVICE_APPROVAL'
+  | 'PASSWORD_RESET'
+  | 'PASSWORD_CHANGED_NOTICE'
+  | 'EMAIL_CHANGE_CONFIRM_CURRENT'
+  | 'EMAIL_CHANGE_CONFIRM_NEW'
+  | 'EMAIL_CHANGED_NOTICE'
+  | 'PHONE_CHANGED_NOTICE'
+  | 'TWO_FACTOR_CODE'
+  | 'TWO_FACTOR_METHOD_CHANGED_NOTICE'
+  | 'TWO_FACTOR_RECOVERY_CODES_REGENERATED_NOTICE';
+
 export interface AuthEmailPort {
-  send(
-    to: string,
-    purpose:
-      | 'EMAIL_VERIFICATION'
-      | 'DEVICE_APPROVAL'
-      | 'PASSWORD_RESET'
-      | 'PASSWORD_CHANGED_NOTICE'
-      | 'EMAIL_CHANGE_CONFIRM_CURRENT'
-      | 'EMAIL_CHANGE_CONFIRM_NEW'
-      | 'EMAIL_CHANGED_NOTICE'
-      | 'PHONE_CHANGED_NOTICE'
-      | 'TWO_FACTOR_CODE'
-      | 'TWO_FACTOR_METHOD_CHANGED_NOTICE'
-      | 'TWO_FACTOR_RECOVERY_CODES_REGENERATED_NOTICE',
-    token?: string,
-  ): void;
-}
-
-@Injectable()
-export class AuthMailer implements AuthEmailPort, OnModuleInit {
-  readonly sent: {
-    to: string;
-    purpose:
-      | 'EMAIL_VERIFICATION'
-      | 'DEVICE_APPROVAL'
-      | 'PASSWORD_RESET'
-      | 'PASSWORD_CHANGED_NOTICE'
-      | 'EMAIL_CHANGE_CONFIRM_CURRENT'
-      | 'EMAIL_CHANGE_CONFIRM_NEW'
-      | 'EMAIL_CHANGED_NOTICE'
-      | 'PHONE_CHANGED_NOTICE'
-      | 'TWO_FACTOR_CODE'
-      | 'TWO_FACTOR_METHOD_CHANGED_NOTICE'
-      | 'TWO_FACTOR_RECOVERY_CODES_REGENERATED_NOTICE';
-    token?: string;
-  }[] = [];
-
-  onModuleInit(): void {
-    if (process.env.NODE_ENV === 'staging' || process.env.NODE_ENV === 'production') {
-      throw new ServiceUnavailableException('Auth external email provider not configured');
-    }
-  }
-
-  send(
-    to: string,
-    purpose:
-      | 'EMAIL_VERIFICATION'
-      | 'DEVICE_APPROVAL'
-      | 'PASSWORD_RESET'
-      | 'PASSWORD_CHANGED_NOTICE'
-      | 'EMAIL_CHANGE_CONFIRM_CURRENT'
-      | 'EMAIL_CHANGE_CONFIRM_NEW'
-      | 'EMAIL_CHANGED_NOTICE'
-      | 'PHONE_CHANGED_NOTICE'
-      | 'TWO_FACTOR_CODE'
-      | 'TWO_FACTOR_METHOD_CHANGED_NOTICE'
-      | 'TWO_FACTOR_RECOVERY_CODES_REGENERATED_NOTICE',
-    token?: string,
-  ): void {
-    if (process.env.NODE_ENV === 'staging' || process.env.NODE_ENV === 'production') {
-      throw new ServiceUnavailableException('Auth external email provider not configured');
-    }
-    const mode = process.env.AUTH_EMAIL_DELIVERY_MODE ?? 'disabled';
-    if (mode === 'memory') {
-      if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') {
-        this.sent.push({ to, purpose, token });
-        return;
-      }
-      throw emailDeliveryUnavailable();
-    }
-    if (mode === 'disabled') throw emailDeliveryUnavailable();
-    if (mode === 'external') throw emailDeliveryUnavailable();
-    throw emailDeliveryUnavailable();
-  }
+  send(to: string, purpose: AuthEmailPurpose, token?: string): Promise<void>;
 }
 
 function emailDeliveryUnavailable() {
@@ -175,37 +116,282 @@ function emailDeliveryUnavailable() {
   );
 }
 
+function smsDeliveryUnavailable(message = 'Entrega de SMS indisponível.') {
+  return new AppError('SMS_DELIVERY_UNAVAILABLE', message, HttpStatus.SERVICE_UNAVAILABLE);
+}
+
+function isControlledMemoryEnvironment(): boolean {
+  return process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+}
+
+function publicFrontendOrigin(): string {
+  return (process.env.PUBLIC_FRONTEND_ORIGIN ?? 'http://localhost:3000').replace(/\/+$/, '');
+}
+
+function requireEmailPayload(purpose: AuthEmailPurpose, token?: string): void {
+  const tokenPurposes: AuthEmailPurpose[] = [
+    'EMAIL_VERIFICATION',
+    'DEVICE_APPROVAL',
+    'PASSWORD_RESET',
+    'EMAIL_CHANGE_CONFIRM_CURRENT',
+    'EMAIL_CHANGE_CONFIRM_NEW',
+  ];
+  if (tokenPurposes.includes(purpose) && !token?.trim()) throw emailDeliveryUnavailable();
+  if (purpose === 'TWO_FACTOR_CODE' && !/^[0-9]{6}$/.test(token ?? '')) {
+    throw emailDeliveryUnavailable();
+  }
+}
+
+function requireSmsPayload(purpose: AuthSmsPurpose, code?: string): void {
+  if (
+    (purpose === 'PHONE_VERIFICATION' || purpose === 'TWO_FACTOR_CODE') &&
+    !/^[0-9]{6}$/.test(code ?? '')
+  ) {
+    throw smsDeliveryUnavailable();
+  }
+}
+
+function authLink(path: string, token: string): string {
+  const url = new URL(path, `${publicFrontendOrigin()}/`);
+  url.searchParams.set('token', token);
+  return url.toString();
+}
+
+function htmlEscape(value: string): string {
+  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+}
+
+export interface AuthEmailMessage {
+  subject: string;
+  html: string;
+  text: string;
+}
+
+function emailTemplate(purpose: AuthEmailPurpose, token?: string): AuthEmailMessage {
+  const action = (label: string, link: string) => ({
+    html: `<p><a href="${htmlEscape(link)}">${htmlEscape(label)}</a></p>`,
+    text: `${label}: ${link}`,
+  });
+  const ignore =
+    'Se você não solicitou esta ação, ignore esta mensagem e revise a segurança da sua conta.';
+  const wrap = (subject: string, body: string, textBody: string): AuthEmailMessage => ({
+    subject,
+    html: `<p>Olá,</p><p>${body}</p><p>${ignore}</p><p>Equipe LIT Buy</p>`,
+    text: `Olá,\n\n${textBody}\n\n${ignore}\n\nEquipe LIT Buy`,
+  });
+  switch (purpose) {
+    case 'EMAIL_VERIFICATION': {
+      const link = authLink('/verificar-email', token ?? '');
+      const a = action('Confirmar e-mail na LIT Buy', link);
+      return wrap(
+        'Confirme seu e-mail na LIT Buy',
+        `Confirme seu e-mail para ativar sua conta LIT Buy.${a.html}`,
+        `Confirme seu e-mail para ativar sua conta LIT Buy.\n${a.text}`,
+      );
+    }
+    case 'DEVICE_APPROVAL': {
+      const link = authLink('/verificacao-login', token ?? '');
+      const a = action('Aprovar dispositivo', link);
+      return wrap(
+        'Aprovação de dispositivo LIT Buy',
+        `Recebemos uma tentativa de login em um novo dispositivo.${a.html}`,
+        `Recebemos uma tentativa de login em um novo dispositivo.\n${a.text}`,
+      );
+    }
+    case 'PASSWORD_RESET': {
+      const link = authLink('/redefinir-senha', token ?? '');
+      const a = action('Redefinir senha', link);
+      return wrap(
+        'Redefinição de senha LIT Buy',
+        `Use o link abaixo para redefinir sua senha.${a.html}`,
+        `Use o link abaixo para redefinir sua senha.\n${a.text}`,
+      );
+    }
+    case 'PASSWORD_CHANGED_NOTICE':
+      return wrap(
+        'Senha alterada na LIT Buy',
+        'A senha da sua conta LIT Buy foi alterada.',
+        'A senha da sua conta LIT Buy foi alterada.',
+      );
+    case 'EMAIL_CHANGE_CONFIRM_CURRENT': {
+      const link = authLink('/confirmar-alteracao-email', token ?? '');
+      const a = action('Confirmar e-mail atual', link);
+      return wrap(
+        'Confirme a alteração de e-mail atual',
+        `Confirme que você autorizou a alteração do e-mail da sua conta.${a.html}`,
+        `Confirme que você autorizou a alteração do e-mail da sua conta.\n${a.text}`,
+      );
+    }
+    case 'EMAIL_CHANGE_CONFIRM_NEW': {
+      const link = authLink('/confirmar-alteracao-email', token ?? '');
+      const a = action('Confirmar novo e-mail', link);
+      return wrap(
+        'Confirme o novo e-mail LIT Buy',
+        `Confirme que este será o novo e-mail da sua conta.${a.html}`,
+        `Confirme que este será o novo e-mail da sua conta.\n${a.text}`,
+      );
+    }
+    case 'EMAIL_CHANGED_NOTICE':
+      return wrap(
+        'E-mail alterado na LIT Buy',
+        'O e-mail da sua conta LIT Buy foi alterado.',
+        'O e-mail da sua conta LIT Buy foi alterado.',
+      );
+    case 'PHONE_CHANGED_NOTICE':
+      return wrap(
+        'Telefone alterado na LIT Buy',
+        'O telefone da sua conta LIT Buy foi alterado.',
+        'O telefone da sua conta LIT Buy foi alterado.',
+      );
+    case 'TWO_FACTOR_CODE':
+      return wrap(
+        'Código de autenticação LIT Buy',
+        `Seu código de autenticação LIT Buy é: <strong>${htmlEscape(token ?? '')}</strong>.`,
+        `Seu código de autenticação LIT Buy é: ${token ?? ''}.`,
+      );
+    case 'TWO_FACTOR_METHOD_CHANGED_NOTICE':
+      return wrap(
+        'Método 2FA alterado na LIT Buy',
+        'O método de autenticação em dois fatores da sua conta foi alterado.',
+        'O método de autenticação em dois fatores da sua conta foi alterado.',
+      );
+    case 'TWO_FACTOR_RECOVERY_CODES_REGENERATED_NOTICE':
+      return wrap(
+        'Recovery codes regenerados na LIT Buy',
+        'Os códigos de recuperação da sua conta foram regenerados. Esta mensagem não contém os códigos.',
+        'Os códigos de recuperação da sua conta foram regenerados. Esta mensagem não contém os códigos.',
+      );
+  }
+}
+
+async function fetchWithTimeout(
+  input: Parameters<typeof fetch>[0],
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<globalThis.Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+@Injectable()
+export class ResendAuthEmailAdapter implements AuthEmailPort, OnModuleInit {
+  onModuleInit(): void {
+    if (process.env.AUTH_EMAIL_DELIVERY_MODE !== 'external') return;
+    if (process.env.AUTH_EMAIL_PROVIDER !== 'resend') {
+      throw new ServiceUnavailableException({ code: 'EMAIL_DELIVERY_UNAVAILABLE' });
+    }
+    if (
+      !process.env.RESEND_API_KEY ||
+      !process.env.RESEND_FROM_EMAIL ||
+      !process.env.RESEND_FROM_NAME
+    ) {
+      throw new ServiceUnavailableException({ code: 'EMAIL_DELIVERY_UNAVAILABLE' });
+    }
+  }
+  async send(to: string, purpose: AuthEmailPurpose, token?: string): Promise<void> {
+    requireEmailPayload(purpose, token);
+    if (process.env.AUTH_EMAIL_PROVIDER !== 'resend') throw emailDeliveryUnavailable();
+    const apiKey = process.env.RESEND_API_KEY;
+    const fromEmail = process.env.RESEND_FROM_EMAIL;
+    const fromName = process.env.RESEND_FROM_NAME;
+    if (!apiKey || !fromEmail || !fromName) throw emailDeliveryUnavailable();
+    const message = emailTemplate(purpose, token);
+    const idempotencySeed = crypto
+      .createHash('sha256')
+      .update(
+        [
+          'litbuy-auth-email',
+          purpose,
+          token ? crypto.createHash('sha256').update(token).digest('hex') : crypto.randomUUID(),
+        ].join(':'),
+      )
+      .digest('hex');
+    const response = await fetchWithTimeout(
+      'https://api.resend.com/emails',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'Idempotency-Key': `auth-${idempotencySeed}`,
+        },
+        body: JSON.stringify({
+          from: `${fromName} <${fromEmail}>`,
+          to: [to],
+          subject: message.subject,
+          html: message.html,
+          text: message.text,
+          ...(process.env.RESEND_REPLY_TO ? { reply_to: process.env.RESEND_REPLY_TO } : {}),
+        }),
+      },
+      Number(process.env.AUTH_EXTERNAL_DELIVERY_TIMEOUT_MS ?? 5000),
+    ).catch(() => {
+      throw emailDeliveryUnavailable();
+    });
+    if (!response.ok) throw emailDeliveryUnavailable();
+  }
+}
+
+@Injectable()
+export class AuthMailer implements AuthEmailPort, OnModuleInit {
+  constructor(@Optional() private readonly resend?: ResendAuthEmailAdapter) {}
+
+  readonly sent: { to: string; purpose: AuthEmailPurpose; token?: string }[] = [];
+
+  onModuleInit(): void {
+    const mode = process.env.AUTH_EMAIL_DELIVERY_MODE ?? 'disabled';
+    if (mode === 'memory' && !isControlledMemoryEnvironment()) {
+      throw new ServiceUnavailableException('Auth email memory adapter unavailable');
+    }
+    if (mode === 'external' && process.env.AUTH_EMAIL_PROVIDER !== 'resend') {
+      throw new ServiceUnavailableException({ code: 'EMAIL_DELIVERY_UNAVAILABLE' });
+    }
+  }
+
+  async send(to: string, purpose: AuthEmailPurpose, token?: string): Promise<void> {
+    const mode = process.env.AUTH_EMAIL_DELIVERY_MODE ?? 'disabled';
+    if (mode === 'memory') {
+      if (!isControlledMemoryEnvironment()) throw emailDeliveryUnavailable();
+      this.sent.push({ to, purpose, token });
+      return;
+    }
+    if (mode === 'external') {
+      if (!this.resend) throw emailDeliveryUnavailable();
+      await this.resend.send(to, purpose, token);
+      return;
+    }
+    throw emailDeliveryUnavailable();
+  }
+}
+
 export type AuthSmsPurpose = 'PHONE_VERIFICATION' | 'SECURITY_ALERT' | 'TWO_FACTOR_CODE';
 
 export interface AuthSmsPort {
-  send(to: string, purpose: AuthSmsPurpose, code?: string): void;
+  send(to: string, purpose: AuthSmsPurpose, code?: string): Promise<void>;
 }
 
 @Injectable()
 export class DisabledAuthSmsPort implements AuthSmsPort {
-  send(): void {
-    throw new AppError(
-      'SMS_DELIVERY_UNAVAILABLE',
-      'Entrega de SMS indisponível.',
-      HttpStatus.SERVICE_UNAVAILABLE,
-    );
+  send(to?: string, purpose?: AuthSmsPurpose, code?: string): Promise<void> {
+    void to;
+    void purpose;
+    void code;
+    return Promise.reject(smsDeliveryUnavailable());
   }
 }
 
 @Injectable()
-export class ExternalUnavailableAuthSmsPort implements AuthSmsPort, OnModuleInit {
-  onModuleInit(): void {
-    if (process.env.NODE_ENV === 'staging' || process.env.NODE_ENV === 'production') {
-      throw new ServiceUnavailableException('Auth external SMS provider not configured');
-    }
-  }
-
-  send(): void {
-    throw new AppError(
-      'SMS_DELIVERY_UNAVAILABLE',
-      'Provider externo de SMS não configurado.',
-      HttpStatus.SERVICE_UNAVAILABLE,
-    );
+export class ExternalUnavailableAuthSmsPort implements AuthSmsPort {
+  send(to?: string, purpose?: AuthSmsPurpose, code?: string): Promise<void> {
+    void to;
+    void purpose;
+    void code;
+    return Promise.reject(smsDeliveryUnavailable('Provider externo de SMS não configurado.'));
   }
 }
 
@@ -213,35 +399,80 @@ export class ExternalUnavailableAuthSmsPort implements AuthSmsPort, OnModuleInit
 export class MemoryAuthSmsPort implements AuthSmsPort, OnModuleInit {
   readonly sent: { to: string; purpose: AuthSmsPurpose; code?: string }[] = [];
   onModuleInit(): void {
-    if (
-      (process.env.NODE_ENV === 'staging' || process.env.NODE_ENV === 'production') &&
-      process.env.AUTH_SMS_DELIVERY_MODE !== 'external'
-    ) {
-      throw new ServiceUnavailableException('Auth SMS memory adapter unavailable in production');
+    if (!isControlledMemoryEnvironment() && process.env.AUTH_SMS_DELIVERY_MODE === 'memory') {
+      throw new ServiceUnavailableException('Auth SMS memory adapter unavailable');
     }
   }
-  send(to: string, purpose: AuthSmsPurpose, code?: string): void {
-    if (
-      (process.env.NODE_ENV === 'staging' || process.env.NODE_ENV === 'production') &&
-      process.env.AUTH_SMS_DELIVERY_MODE !== 'external'
-    ) {
-      throw new ServiceUnavailableException('Auth SMS provider unavailable');
-    }
-    if (process.env.AUTH_SMS_DELIVERY_MODE === 'external') {
-      throw new AppError(
-        'SMS_DELIVERY_UNAVAILABLE',
-        'Provider externo de SMS não configurado.',
-        HttpStatus.SERVICE_UNAVAILABLE,
-      );
-    }
-    if (process.env.AUTH_SMS_DELIVERY_MODE !== 'memory') {
-      throw new AppError(
-        'SMS_DELIVERY_UNAVAILABLE',
-        'Entrega de SMS indisponível.',
-        HttpStatus.SERVICE_UNAVAILABLE,
-      );
+  send(to: string, purpose: AuthSmsPurpose, code?: string): Promise<void> {
+    if (!isControlledMemoryEnvironment() || process.env.AUTH_SMS_DELIVERY_MODE !== 'memory') {
+      return Promise.reject(smsDeliveryUnavailable());
     }
     this.sent.push({ to, purpose, code });
+    return Promise.resolve();
+  }
+}
+
+function smsBody(purpose: AuthSmsPurpose, code?: string): string {
+  if (purpose === 'PHONE_VERIFICATION')
+    return `LIT Buy: seu codigo de verificacao e ${code}. Ignore se nao solicitou.`;
+  if (purpose === 'TWO_FACTOR_CODE')
+    return `LIT Buy: seu codigo de autenticacao e ${code}. Ignore se nao solicitou.`;
+  return 'LIT Buy: alerta de seguranca da sua conta. Se nao reconhece, revise sua conta.';
+}
+
+@Injectable()
+export class TwilioAuthSmsAdapter implements AuthSmsPort, OnModuleInit {
+  onModuleInit(): void {
+    if (process.env.AUTH_SMS_DELIVERY_MODE !== 'external') return;
+    if (process.env.AUTH_SMS_PROVIDER !== 'twilio') {
+      throw new ServiceUnavailableException({ code: 'SMS_DELIVERY_UNAVAILABLE' });
+    }
+    const hasMessagingService = Boolean(process.env.TWILIO_MESSAGING_SERVICE_SID);
+    const hasFrom = Boolean(process.env.TWILIO_FROM_NUMBER);
+    if (
+      !process.env.TWILIO_ACCOUNT_SID ||
+      !process.env.TWILIO_AUTH_TOKEN ||
+      hasMessagingService === hasFrom
+    ) {
+      throw new ServiceUnavailableException({ code: 'SMS_DELIVERY_UNAVAILABLE' });
+    }
+  }
+  async send(to: string, purpose: AuthSmsPurpose, code?: string): Promise<void> {
+    requireSmsPayload(purpose, code);
+    if (process.env.AUTH_SMS_PROVIDER !== 'twilio') throw smsDeliveryUnavailable();
+    if (!/^\+[1-9]\d{7,14}$/.test(to)) throw smsDeliveryUnavailable();
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    const messagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID;
+    const from = process.env.TWILIO_FROM_NUMBER;
+    if (
+      !accountSid ||
+      !authToken ||
+      (!messagingServiceSid && !from) ||
+      (messagingServiceSid && from)
+    ) {
+      throw smsDeliveryUnavailable();
+    }
+    const body = new URLSearchParams({
+      To: to,
+      Body: smsBody(purpose, code),
+      ...(messagingServiceSid ? { MessagingServiceSid: messagingServiceSid } : { From: from! }),
+    });
+    const response = await fetchWithTimeout(
+      `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString('base64')}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body,
+      },
+      Number(process.env.AUTH_EXTERNAL_DELIVERY_TIMEOUT_MS ?? 5000),
+    ).catch(() => {
+      throw smsDeliveryUnavailable();
+    });
+    if (!response.ok) throw smsDeliveryUnavailable();
   }
 }
 
@@ -567,7 +798,7 @@ export class AuthService {
         'EMAIL_VERIFICATION',
         c.emailVerificationTtlMinutes,
       );
-      this.mailer.send(email, 'EMAIL_VERIFICATION', token);
+      await this.mailer.send(email, 'EMAIL_VERIFICATION', token);
       await this.persistBestEffortSecurityEvent({ userId: user.id, eventType: 'REGISTERED', req });
       await this.persistBestEffortSecurityEvent({
         userId: user.id,
@@ -608,7 +839,7 @@ export class AuthService {
         'EMAIL_VERIFICATION',
         this.authConfig().passwordResetTtlMinutes,
       );
-      this.mailer.send(email, 'EMAIL_VERIFICATION', token);
+      await this.mailer.send(email, 'EMAIL_VERIFICATION', token);
       await this.persistBestEffortSecurityEvent({
         userId: user.id,
         eventType: 'EMAIL_VERIFICATION_REQUESTED',
@@ -713,7 +944,7 @@ export class AuthService {
         this.authConfig().deviceApprovalTtlMinutes,
         device.id,
       );
-      this.mailer.send(user.email, 'DEVICE_APPROVAL', token);
+      await this.mailer.send(user.email, 'DEVICE_APPROVAL', token);
       await this.persistBestEffortSecurityEvent({
         userId: user.id,
         deviceId: device.id,
@@ -740,7 +971,7 @@ export class AuthService {
       });
       const challenge = await this.createTwoFactorChallenge(user.id, device.id, 'TWO_FACTOR_LOGIN');
       try {
-        this.deliverTwoFactorCode(user, twoFactor.method, challenge.code);
+        await this.deliverTwoFactorCode(user, twoFactor.method, challenge.code);
       } catch (error) {
         await this.prisma.verificationChallenge.updateMany({
           where: { id: challenge.challengeId, consumedAt: null },
@@ -927,9 +1158,13 @@ export class AuthService {
     }
   }
 
-  private deliverTwoFactorCode(user: User, method: TwoFactorMethod, code: string): void {
+  private async deliverTwoFactorCode(
+    user: User,
+    method: TwoFactorMethod,
+    code: string,
+  ): Promise<void> {
     if (method === 'EMAIL') {
-      this.mailer.send(user.email, 'TWO_FACTOR_CODE', code);
+      await this.mailer.send(user.email, 'TWO_FACTOR_CODE', code);
       return;
     }
     if (!user.phoneE164 || !user.phoneVerifiedAt)
@@ -938,7 +1173,7 @@ export class AuthService {
         'Método indisponível.',
         HttpStatus.BAD_REQUEST,
       );
-    this.sms.send(user.phoneE164, 'TWO_FACTOR_CODE', code);
+    await this.sms.send(user.phoneE164, 'TWO_FACTOR_CODE', code);
   }
 
   private async markFailedTwoFactorLogin(
@@ -1016,7 +1251,7 @@ export class AuthService {
       dto.method,
     );
     try {
-      this.deliverTwoFactorCode(user, dto.method, challenge.code);
+      await this.deliverTwoFactorCode(user, dto.method, challenge.code);
     } catch (error) {
       await this.prisma.verificationChallenge.updateMany({
         where: { id: challenge.challengeId, consumedAt: null },
@@ -1347,7 +1582,7 @@ export class AuthService {
     );
     const ch = await this.createTwoFactorChallenge(old.userId, old.deviceId, 'TWO_FACTOR_LOGIN');
     try {
-      this.deliverTwoFactorCode(old.user, settings.method, ch.code);
+      await this.deliverTwoFactorCode(old.user, settings.method, ch.code);
     } catch (error) {
       await this.prisma.verificationChallenge.updateMany({
         where: { id: ch.challengeId, consumedAt: null },
@@ -1391,7 +1626,7 @@ export class AuthService {
       'TWO_FACTOR_DISABLE',
     );
     try {
-      this.deliverTwoFactorCode(user, settings.method, ch.code);
+      await this.deliverTwoFactorCode(user, settings.method, ch.code);
     } catch (error) {
       await this.prisma.verificationChallenge.updateMany({
         where: { id: ch.challengeId, consumedAt: null },
@@ -1763,7 +1998,7 @@ export class AuthService {
       return { challengeId: id, code, expiresAt };
     }, 'step-up-request');
     try {
-      this.deliverTwoFactorCode(user, settings.method, ch.code);
+      await this.deliverTwoFactorCode(user, settings.method, ch.code);
     } catch {
       await this.prisma.verificationChallenge.updateMany({
         where: { id: ch.challengeId, consumedAt: null },
@@ -2028,7 +2263,7 @@ export class AuthService {
     }, 'step-up-resend');
     if (!created) throw new BadRequestException({ code: 'INVALID_OR_EXPIRED_STEP_UP_CODE' });
     try {
-      this.deliverTwoFactorCode(user, settings.method, created.code);
+      await this.deliverTwoFactorCode(user, settings.method, created.code);
     } catch {
       await this.prisma.verificationChallenge.updateMany({
         where: { id: created.challengeId, consumedAt: null },
@@ -2116,7 +2351,7 @@ export class AuthService {
         return { challengeId: id, code, expiresAt };
       }, '2fa-method-change-request');
       try {
-        this.deliverTwoFactorCode(user, dto.newMethod, result.code);
+        await this.deliverTwoFactorCode(user, dto.newMethod, result.code);
       } catch {
         await this.prisma.verificationChallenge.updateMany({
           where: { id: result.challengeId, consumedAt: null },
@@ -2314,7 +2549,7 @@ export class AuthService {
       throw new BadRequestException({ code: 'TWO_FACTOR_METHOD_CHANGE_CONFLICT' });
     if (result.status !== 'SUCCESS')
       throw new BadRequestException({ code: 'TWO_FACTOR_METHOD_CHANGE_CONFLICT' });
-    this.notifySecurity(result.email, 'TWO_FACTOR_METHOD_CHANGED_NOTICE');
+    await this.notifySecurity(result.email, 'TWO_FACTOR_METHOD_CHANGED_NOTICE');
     return { methodChanged: true };
   }
 
@@ -2398,7 +2633,7 @@ export class AuthService {
       const user = await tx.user.findUniqueOrThrow({ where: { id: auth.userId } });
       return { email: user.email };
     }, '2fa-recovery-regenerate');
-    this.notifySecurity(result.email, 'TWO_FACTOR_RECOVERY_CODES_REGENERATED_NOTICE');
+    await this.notifySecurity(result.email, 'TWO_FACTOR_RECOVERY_CODES_REGENERATED_NOTICE');
     return { recoveryCodes: codes };
   }
 
@@ -2445,7 +2680,7 @@ export class AuthService {
           c.deviceApprovalTtlMinutes,
           device.id,
         );
-        this.mailer.send(email, 'DEVICE_APPROVAL', token);
+        await this.mailer.send(email, 'DEVICE_APPROVAL', token);
         await this.persistBestEffortSecurityEvent({
           userId: user.id,
           deviceId: device.id,
@@ -2664,7 +2899,7 @@ export class AuthService {
         'PASSWORD_RESET',
         this.authConfig().passwordResetTtlMinutes,
       );
-      this.mailer.send(email, 'PASSWORD_RESET', token);
+      await this.mailer.send(email, 'PASSWORD_RESET', token);
       await this.persistBestEffortSecurityEvent({
         userId: user.id,
         eventType: 'PASSWORD_RESET_REQUESTED',
@@ -3006,13 +3241,13 @@ export class AuthService {
     }
   }
 
-  private notifySecurity(
+  private async notifySecurity(
     to: string | null | undefined,
     purpose: Parameters<AuthMailer['send']>[1],
-  ): void {
+  ): Promise<void> {
     if (!to) return;
     try {
-      this.mailer.send(to, purpose);
+      await this.mailer.send(to, purpose);
     } catch (error) {
       this.logger.warn('Security notification delivery failed', {
         purpose,
@@ -3118,7 +3353,7 @@ export class AuthService {
     );
 
     try {
-      this.sms.send(phone, 'PHONE_VERIFICATION', code);
+      await this.sms.send(phone, 'PHONE_VERIFICATION', code);
     } catch (error) {
       await this.prisma.verificationChallenge.updateMany({
         where: { id: challenge.id, userId: auth.userId, purpose: 'PHONE_VERIFICATION' },
@@ -3244,7 +3479,7 @@ export class AuthService {
       throw error;
     }
     this.clearAuth(res);
-    this.notifySecurity(noticeEmail, 'PHONE_CHANGED_NOTICE');
+    await this.notifySecurity(noticeEmail, 'PHONE_CHANGED_NOTICE');
     return { message: 'Telefone confirmado. Faça login novamente.' };
   }
 
@@ -3340,8 +3575,8 @@ export class AuthService {
       );
     }, 'email-change-request');
     try {
-      this.mailer.send(oldEmail, 'EMAIL_CHANGE_CONFIRM_CURRENT', currentToken);
-      this.mailer.send(newEmail, 'EMAIL_CHANGE_CONFIRM_NEW', newToken);
+      await this.mailer.send(oldEmail, 'EMAIL_CHANGE_CONFIRM_CURRENT', currentToken);
+      await this.mailer.send(newEmail, 'EMAIL_CHANGE_CONFIRM_NEW', newToken);
     } catch (error) {
       await this.prisma.$transaction(async (tx) => {
         await tx.emailChangeRequest.updateMany({
@@ -3521,8 +3756,8 @@ export class AuthService {
 
     if (result.status === 'COMPLETED' || completed) {
       this.clearAuth(res);
-      this.notifySecurity(oldEmail, 'EMAIL_CHANGED_NOTICE');
-      this.notifySecurity(newEmail, 'EMAIL_CHANGED_NOTICE');
+      await this.notifySecurity(oldEmail, 'EMAIL_CHANGED_NOTICE');
+      await this.notifySecurity(newEmail, 'EMAIL_CHANGED_NOTICE');
       return { status: 'COMPLETED', message: 'E-mail alterado. Faça login novamente.' };
     }
     return { status: 'PENDING', message: 'Confirmação registrada. Aguarde a outra confirmação.' };

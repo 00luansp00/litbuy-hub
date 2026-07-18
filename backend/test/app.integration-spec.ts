@@ -2024,14 +2024,14 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
     let failSms = true;
     let attemptedCode: string | undefined;
     let attemptedPhone: string | undefined;
-    const failingSmsSend: typeof sms.send = (to, purpose, code) => {
+    const failingSmsSend: typeof sms.send = async (to, purpose, code) => {
       attemptedPhone = to;
       attemptedCode = code;
       if (failSms) {
         failSms = false;
         throw new Error('simulated sms failure');
       }
-      originalSmsSend(to, purpose, code);
+      await originalSmsSend(to, purpose, code);
     };
     sms.send = failingSmsSend;
     const failedSms = await request(app.getHttpServer())
@@ -2083,10 +2083,10 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
       'integration-delivery-email-first@example.com',
     );
     const originalMailSend = mailer.send.bind(mailer);
-    const failingFirstMailSend: AuthMailer['send'] = (to, purpose, token) => {
+    const failingFirstMailSend: AuthMailer['send'] = async (to, purpose, token) => {
       if (purpose === 'EMAIL_CHANGE_CONFIRM_CURRENT')
         throw new Error('simulated first email failure');
-      originalMailSend(to, purpose, token);
+      await originalMailSend(to, purpose, token);
     };
     mailer.send = failingFirstMailSend;
     await request(app.getHttpServer())
@@ -2123,10 +2123,10 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
       'integration-delivery-email-second@example.com',
     );
     let deliveredCurrentToken = '';
-    const failingSecondMailSend: AuthMailer['send'] = (to, purpose, token) => {
+    const failingSecondMailSend: AuthMailer['send'] = async (to, purpose, token) => {
       if (purpose === 'EMAIL_CHANGE_CONFIRM_NEW') throw new Error('simulated second email failure');
       if (purpose === 'EMAIL_CHANGE_CONFIRM_CURRENT') deliveredCurrentToken = token ?? '';
-      originalMailSend(to, purpose, token);
+      await originalMailSend(to, purpose, token);
     };
     mailer.send = failingSecondMailSend;
     await request(app.getHttpServer())

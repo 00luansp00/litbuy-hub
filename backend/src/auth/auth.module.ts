@@ -7,9 +7,11 @@ import { AuthController } from './auth.controller';
 import {
   AuthMailer,
   AuthService,
+  ResendAuthEmailAdapter,
   DisabledAuthSmsPort,
   ExternalUnavailableAuthSmsPort,
   MemoryAuthSmsPort,
+  TwilioAuthSmsAdapter,
 } from './auth.service';
 
 @Module({
@@ -18,15 +20,18 @@ import {
   providers: [
     AuthService,
     AuthMailer,
+    ResendAuthEmailAdapter,
     MemoryAuthSmsPort,
     DisabledAuthSmsPort,
     ExternalUnavailableAuthSmsPort,
+    TwilioAuthSmsAdapter,
     {
       provide: 'AuthSmsPort',
       useFactory: (
         memory: MemoryAuthSmsPort,
         disabled: DisabledAuthSmsPort,
         external: ExternalUnavailableAuthSmsPort,
+        twilio: TwilioAuthSmsAdapter,
       ) => {
         const mode = process.env.AUTH_SMS_DELIVERY_MODE ?? 'disabled';
         if (mode === 'memory') {
@@ -35,11 +40,19 @@ import {
           }
           return memory;
         }
-        if (mode === 'external') return external;
+        if (mode === 'external') {
+          if (process.env.AUTH_SMS_PROVIDER === 'twilio') return twilio;
+          throw new ServiceUnavailableException({ code: 'SMS_DELIVERY_UNAVAILABLE' });
+        }
         if (mode === 'disabled') return disabled;
         throw new ServiceUnavailableException({ code: 'SMS_DELIVERY_UNAVAILABLE' });
       },
-      inject: [MemoryAuthSmsPort, DisabledAuthSmsPort, ExternalUnavailableAuthSmsPort],
+      inject: [
+        MemoryAuthSmsPort,
+        DisabledAuthSmsPort,
+        ExternalUnavailableAuthSmsPort,
+        TwilioAuthSmsAdapter,
+      ],
     },
     AppLogger,
   ],
