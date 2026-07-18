@@ -24,12 +24,21 @@ services:
     volumes:
       - litbuy_staging_redis:/data
     ports: ["6379:6379"]
+  migrate:
+    build: ./backend
+    env_file: ./backend/.env.staging.local.example
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    command: ["./node_modules/.bin/prisma", "migrate", "deploy"]
+    restart: "no"
   backend:
     build: ./backend
     env_file: ./backend/.env.staging.local.example
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
     ports: ["3001:3001"]
     healthcheck:
       test:

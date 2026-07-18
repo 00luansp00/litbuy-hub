@@ -44,7 +44,8 @@ type ManagedEnvKey =
   | 'AUTH_2FA_MAX_ATTEMPTS'
   | 'AUTH_2FA_RECOVERY_CODE_COUNT'
   | 'CURRENT_TERMS_VERSION'
-  | 'CURRENT_PRIVACY_VERSION';
+  | 'CURRENT_PRIVACY_VERSION'
+  | 'AUTH_EXTERNAL_PROVIDERS_CONFIGURED';
 
 const defaultTestEnv: Record<ManagedEnvKey, string> = {
   NODE_ENV: 'test',
@@ -93,6 +94,7 @@ const defaultTestEnv: Record<ManagedEnvKey, string> = {
   AUTH_2FA_RECOVERY_CODE_COUNT: '10',
   CURRENT_TERMS_VERSION: '2026-test',
   CURRENT_PRIVACY_VERSION: '2026-test',
+  AUTH_EXTERNAL_PROVIDERS_CONFIGURED: 'false',
 };
 
 function resolveTestEnvValue(key: ManagedEnvKey, overrides: Partial<NodeJS.ProcessEnv>): string {
@@ -203,6 +205,10 @@ export function applyTestEnv(overrides: Partial<NodeJS.ProcessEnv> = {}): void {
   );
   process.env.CURRENT_TERMS_VERSION = resolveTestEnvValue('CURRENT_TERMS_VERSION', overrides);
   process.env.CURRENT_PRIVACY_VERSION = resolveTestEnvValue('CURRENT_PRIVACY_VERSION', overrides);
+  process.env.AUTH_EXTERNAL_PROVIDERS_CONFIGURED = resolveTestEnvValue(
+    'AUTH_EXTERNAL_PROVIDERS_CONFIGURED',
+    overrides,
+  );
 }
 
 applyTestEnv();

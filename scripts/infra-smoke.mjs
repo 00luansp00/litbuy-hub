@@ -1,7 +1,7 @@
-const baseUrl = process.env.AUTH_SMOKE_BASE_URL ?? "http://localhost:3001/api/v1";
-const origin = process.env.AUTH_SMOKE_ORIGIN ?? "http://localhost:3000";
+const baseUrl = process.env.INFRA_SMOKE_BASE_URL ?? "http://localhost:3001/api/v1";
+const origin = process.env.INFRA_SMOKE_ORIGIN ?? "http://localhost:3000";
 if (process.env.NODE_ENV === "production" || /prod/i.test(baseUrl))
-  throw new Error("Refusing to run auth smoke tests against production-like target");
+  throw new Error("Refusing to run infrastructure smoke checks against production-like target");
 const checks = [];
 async function check(name, fn) {
   try {
@@ -34,4 +34,4 @@ await check("cors preflight", async () => {
   if (r.headers.get("access-control-allow-credentials") !== "true")
     throw new Error("credentials not allowed");
 });
-process.stdout.write(`Auth smoke checks passed: ${checks.length}\n`);
+process.stdout.write(`Infrastructure smoke checks passed: ${checks.length}\n`);

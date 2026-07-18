@@ -4,7 +4,6 @@ import {
   IsIn,
   IsInt,
   IsNotEmpty,
-  IsOptional,
   IsString,
   IsUrl,
   Max,
@@ -41,7 +40,7 @@ export class EnvironmentVariables {
   @Transform(({ value }) => value === true || value === 'true')
   @IsBoolean()
   SWAGGER_ENABLED!: boolean;
-  @Transform(({ value }) => value === true || value === 'true') @IsBoolean() TRUST_PROXY!: boolean;
+  @IsString() @IsNotEmpty() TRUST_PROXY!: string;
   @Transform(({ value }) => Number(value ?? 60_000))
   @IsInt()
   @Min(5_000)
@@ -126,7 +125,9 @@ export class EnvironmentVariables {
   @Transform(({ value }) => Number(value ?? 5)) @IsInt() @Min(1) AUTH_STEP_UP_MAX_ATTEMPTS!: number;
   @IsString() @IsNotEmpty() CURRENT_TERMS_VERSION!: string;
   @IsString() @IsNotEmpty() CURRENT_PRIVACY_VERSION!: string;
-  @IsOptional() @IsString() AUTH_ALLOW_TEST_PROVIDERS_IN_STAGING_CI?: string;
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  AUTH_EXTERNAL_PROVIDERS_CONFIGURED!: boolean;
 }
 
 export function validateEnvironment(config: Record<string, unknown>): EnvironmentVariables {
@@ -167,8 +168,12 @@ function validateHardening(
     issues.push(issue('AUTH_COOKIE_SECURE', 'secure cookies are required'));
   if (env.AUTH_COOKIE_SAME_SITE === 'none' && !env.AUTH_COOKIE_SECURE)
     issues.push(issue('AUTH_COOKIE_SAME_SITE', 'SameSite=None requires secure cookies'));
-  if (hardened && !env.TRUST_PROXY)
+  if (hardened && (env.TRUST_PROXY === 'false' || env.TRUST_PROXY.trim() === ''))
     issues.push(issue('TRUST_PROXY', 'explicit HTTPS proxy trust is required'));
+  if (hardened && env.TRUST_PROXY === 'true')
+    issues.push(
+      issue('TRUST_PROXY', 'generic true is forbidden; use hop count or trusted proxy list'),
+    );
   if (hardened && env.SWAGGER_ENABLED)
     issues.push(issue('SWAGGER_ENABLED', 'Swagger must not be exposed'));
   if (
@@ -180,11 +185,17 @@ function validateHardening(
     );
   if (
     env.NODE_ENV === 'staging' &&
-    env.AUTH_ALLOW_TEST_PROVIDERS_IN_STAGING_CI !== 'true' &&
     (env.AUTH_EMAIL_DELIVERY_MODE !== 'external' || env.AUTH_SMS_DELIVERY_MODE !== 'external')
   )
     issues.push(
       issue('AUTH_DELIVERY_MODE', 'real staging requires external email and SMS providers'),
+    );
+  if (hardened && !env.AUTH_EXTERNAL_PROVIDERS_CONFIGURED)
+    issues.push(
+      issue(
+        'AUTH_EXTERNAL_PROVIDERS_CONFIGURED',
+        'external provider implementation must be configured before real staging/production startup',
+      ),
     );
   for (const name of secretNames) {
     const value = env[name];

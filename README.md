@@ -114,9 +114,9 @@ auditoria e testes. Ver `SECURITY_IMPLEMENTATION_PLAN.md` e
 
 ## Aviso de demonstração
 
-Enquanto o backend não existir, **não insira dados reais** (cartão,
+Enquanto os domínios de marketplace ainda forem mockados, **não insira dados reais** (cartão,
 CPF, documento, selfie, senha, Pix, credenciais de jogo). Todas as
-telas sensíveis exibem aviso de demonstração.
+telas sensíveis de marketplace exibem aviso de demonstração; o backend real de autenticação já existe para os fluxos auditados.
 
 ## Authentication staging readiness
 
@@ -125,5 +125,5 @@ A staging simulation is available through `docker-compose.staging.yml` for front
 1. Copy and review `backend/.env.staging.example` for real staging or use `backend/.env.staging.local.example` only for isolated local smoke tests.
 2. Run backend migrations with `cd backend && bun run prisma:generate && bun run prisma:migrate:deploy`.
 3. Start local staging simulation with `docker compose -f docker-compose.staging.yml up --build`.
-4. Validate `GET /api/v1/health/live`, `GET /api/v1/health/ready`, and `bun run smoke:auth`.
+4. Validate `GET /api/v1/health/live`, `GET /api/v1/health/ready`, and `bun run smoke:infra`. Full auth flows remain covered by backend e2e/integration tests and manual homologation.
 5. Follow `AUTH_STAGING_HOMOLOGATION_RUNBOOK.md` before considering staging approved.

@@ -1,4 +1,5 @@
 import { registerAs } from '@nestjs/config';
+import { parseTrustProxy, type TrustProxyConfig } from './trust-proxy';
 
 export interface AppConfig {
   nodeEnv: 'development' | 'test' | 'staging' | 'production';
@@ -7,7 +8,7 @@ export interface AppConfig {
   corsOrigins: string[];
   logLevel: string;
   swaggerEnabled: boolean;
-  trustProxy: boolean;
+  trustProxy: TrustProxyConfig;
   requestTimeoutMs: number;
 }
 
@@ -24,7 +25,7 @@ export default registerAs('app', (): AppConfig => {
     corsOrigins,
     logLevel: process.env.LOG_LEVEL ?? 'info',
     swaggerEnabled: process.env.SWAGGER_ENABLED === 'true',
-    trustProxy: process.env.TRUST_PROXY === 'true',
+    trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
     requestTimeoutMs: Number(process.env.SERVER_REQUEST_TIMEOUT_MS ?? 60_000),
   };
 });

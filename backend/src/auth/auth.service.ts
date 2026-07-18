@@ -159,6 +159,9 @@ export class AuthMailer implements AuthEmailPort, OnModuleInit {
     ) {
       throw new ServiceUnavailableException('Auth email provider unavailable');
     }
+    if (process.env.AUTH_EMAIL_DELIVERY_MODE === 'external') {
+      throw new ServiceUnavailableException('Auth external email provider not configured');
+    }
     if (process.env.AUTH_EMAIL_DELIVERY_MODE === 'memory') {
       this.sent.push({ to, purpose, token });
     }
@@ -183,6 +186,17 @@ export class DisabledAuthSmsPort implements AuthSmsPort {
 }
 
 @Injectable()
+export class ExternalUnavailableAuthSmsPort implements AuthSmsPort {
+  send(): void {
+    throw new AppError(
+      'SMS_DELIVERY_UNAVAILABLE',
+      'Provider externo de SMS não configurado.',
+      HttpStatus.SERVICE_UNAVAILABLE,
+    );
+  }
+}
+
+@Injectable()
 export class MemoryAuthSmsPort implements AuthSmsPort, OnModuleInit {
   readonly sent: { to: string; purpose: AuthSmsPurpose; code?: string }[] = [];
   onModuleInit(): void {
@@ -200,7 +214,13 @@ export class MemoryAuthSmsPort implements AuthSmsPort, OnModuleInit {
     ) {
       throw new ServiceUnavailableException('Auth SMS provider unavailable');
     }
-    if (process.env.AUTH_SMS_DELIVERY_MODE === 'external') return;
+    if (process.env.AUTH_SMS_DELIVERY_MODE === 'external') {
+      throw new AppError(
+        'SMS_DELIVERY_UNAVAILABLE',
+        'Provider externo de SMS não configurado.',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
     if (process.env.AUTH_SMS_DELIVERY_MODE !== 'memory') {
       throw new AppError(
         'SMS_DELIVERY_UNAVAILABLE',

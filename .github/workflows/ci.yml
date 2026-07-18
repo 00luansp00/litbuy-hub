@@ -100,6 +100,7 @@ jobs:
       AUTH_STEP_UP_GRANT_TTL_MINUTES: "10"
       AUTH_STEP_UP_RESEND_COOLDOWN_SECONDS: "60"
       AUTH_STEP_UP_MAX_ATTEMPTS: "5"
+      AUTH_EXTERNAL_PROVIDERS_CONFIGURED: "false"
       CURRENT_TERMS_VERSION: "2026-test"
       CURRENT_PRIVACY_VERSION: "2026-test"
     defaults:
@@ -212,6 +213,7 @@ jobs:
       AUTH_STEP_UP_GRANT_TTL_MINUTES: "10"
       AUTH_STEP_UP_RESEND_COOLDOWN_SECONDS: "60"
       AUTH_STEP_UP_MAX_ATTEMPTS: "5"
+      AUTH_EXTERNAL_PROVIDERS_CONFIGURED: "false"
       CURRENT_TERMS_VERSION: "2026-test"
       CURRENT_PRIVACY_VERSION: "2026-test"
     defaults:
@@ -238,17 +240,43 @@ jobs:
       - name: Run real infrastructure integration tests
         run: bun run test:integration
 
-      - name: Build backend for smoke tests
+      - name: Verify staging files referenced by compose and runbook
+        run: test -f ../docker-compose.staging.yml && test -f .env.staging.example && test -f .env.staging.local.example && test -f ../frontend/.env.staging.example
+
+      - name: Build backend for infrastructure smoke tests
         run: bun run build
 
-      - name: Start backend for smoke tests
-        run: bun run start:prod > /tmp/litbuy-backend.log 2>&1 &
+      - name: Start backend for infrastructure smoke tests
+        run: |
+          set -euo pipefail
+          bun run start:prod > /tmp/litbuy-backend.log 2>&1 &
+          echo "$!" > /tmp/litbuy-backend.pid
+          sleep 1
+          kill -0 "$(cat /tmp/litbuy-backend.pid)"
 
-      - name: Wait for backend readiness
-        run: node -e "let n=0; const url='http://localhost:3001/api/v1/health/ready'; (async function poll(){try{const r=await fetch(url); if(r.ok) return;}catch{} if(++n>30) process.exit(1); setTimeout(poll,1000);})()"
-
-      - name: Run auth smoke tests
-        run: bun run smoke:auth
+      - name: Wait for backend liveness and readiness
+        run: node ../scripts/wait-backend.mjs
         env:
-          AUTH_SMOKE_BASE_URL: http://localhost:3001/api/v1
-          AUTH_SMOKE_ORIGIN: http://localhost:3000
+          WAIT_BACKEND_BASE_URL: http://localhost:3001/api/v1
+          WAIT_BACKEND_PID_FILE: /tmp/litbuy-backend.pid
+          WAIT_BACKEND_LOG_FILE: /tmp/litbuy-backend.log
+          WAIT_BACKEND_TIMEOUT_MS: "90000"
+
+      - name: Run infrastructure smoke tests
+        run: bun run smoke:infra
+        env:
+          INFRA_SMOKE_BASE_URL: http://localhost:3001/api/v1
+          INFRA_SMOKE_ORIGIN: http://localhost:3000
+
+      - name: Show backend smoke logs
+        if: always()
+        run: |
+          if [ -f /tmp/litbuy-backend.log ]; then cat /tmp/litbuy-backend.log; else echo "No backend log file"; fi
+
+      - name: Stop backend smoke process
+        if: always()
+        run: |
+          if [ -f /tmp/litbuy-backend.pid ] && kill -0 "$(cat /tmp/litbuy-backend.pid)" 2>/dev/null; then
+            kill "$(cat /tmp/litbuy-backend.pid)"
+            wait "$(cat /tmp/litbuy-backend.pid)" 2>/dev/null || true
+          fi
