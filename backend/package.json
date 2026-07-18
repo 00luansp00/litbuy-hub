@@ -23,7 +23,9 @@
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:migrate:status": "prisma migrate status",
     "smoke:infra": "node ../scripts/infra-smoke.mjs",
-    "check:prod-entrypoint": "node scripts/check-prod-entrypoint.mjs"
+    "check:prod-entrypoint": "node scripts/check-prod-entrypoint.mjs",
+    "roles:grant": "ts-node scripts/manage-roles.ts grant",
+    "roles:revoke": "ts-node scripts/manage-roles.ts revoke"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.9",

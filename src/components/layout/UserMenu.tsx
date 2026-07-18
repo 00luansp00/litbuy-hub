@@ -38,7 +38,8 @@ function initials(name: string) {
 }
 
 export function UserMenu() {
-  const { user, logout, activeRole, switchToBuyer, switchToSeller, isAdmin } = useAuth();
+  const { user, logout, activeRole, switchToBuyer, switchToSeller, isAdmin, hasSellerAccess } =
+    useAuth();
   const navigate = useNavigate();
 
   if (!user) return null;
@@ -51,13 +52,19 @@ export function UserMenu() {
   };
 
   const handleSwitchToSeller = () => {
-    switchToSeller();
+    const result = switchToSeller();
+    if (!result.ok) {
+      toast.info("Acesso de vendedor pendente", {
+        description: "Sua conta ainda não possui acesso de vendedor.",
+      });
+      navigate({ to: "/como-vender" });
+      return;
+    }
     toast.success("Modo vendedor ativado", {
       description: "Você agora está navegando como vendedor.",
     });
     navigate({ to: "/vendedor" });
   };
-
 
   const handleSwitchToBuyer = () => {
     switchToBuyer();
@@ -91,14 +98,9 @@ export function UserMenu() {
       <DropdownMenuContent align="end" className="w-60">
         <DropdownMenuLabel className="flex flex-col gap-1">
           <span className="text-sm font-semibold">{user.name}</span>
-          <span className="truncate text-xs font-normal text-muted-foreground">
-            {user.email}
-          </span>
-          <Badge
-            variant="secondary"
-            className="mt-1 w-fit gap-1 text-[10px] font-medium"
-          >
-            {isSeller ? (
+          <span className="truncate text-xs font-normal text-muted-foreground">{user.email}</span>
+          <Badge variant="secondary" className="mt-1 w-fit gap-1 text-[10px] font-medium">
+            {isSeller && hasSellerAccess ? (
               <>
                 <Store className="h-3 w-3" /> Modo vendedor
               </>
@@ -111,7 +113,7 @@ export function UserMenu() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
 
-        {isSeller ? (
+        {isSeller && hasSellerAccess ? (
           <>
             <DropdownMenuItem asChild>
               <Link to="/vendedor">
@@ -153,25 +155,35 @@ export function UserMenu() {
         ) : (
           <>
             <DropdownMenuItem asChild>
-              <Link to="/perfil"><UserCircle2 className="h-4 w-4" /> Meu perfil</Link>
+              <Link to="/perfil">
+                <UserCircle2 className="h-4 w-4" /> Meu perfil
+              </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link to="/pedidos"><ShoppingBag className="h-4 w-4" /> Pedidos</Link>
+              <Link to="/pedidos">
+                <ShoppingBag className="h-4 w-4" /> Pedidos
+              </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link to="/favoritos"><Heart className="h-4 w-4" /> Favoritos</Link>
+              <Link to="/favoritos">
+                <Heart className="h-4 w-4" /> Favoritos
+              </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link to="/carteira"><Wallet className="h-4 w-4" /> Carteira</Link>
+              <Link to="/carteira">
+                <Wallet className="h-4 w-4" /> Carteira
+              </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link to="/mensagens"><MessageSquare className="h-4 w-4" /> Mensagens</Link>
+              <Link to="/mensagens">
+                <MessageSquare className="h-4 w-4" /> Mensagens
+              </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={handleSwitchToSeller}>
-              <ArrowLeftRight className="h-4 w-4" /> Mudar para modo vendedor
+              <ArrowLeftRight className="h-4 w-4" />{" "}
+              {hasSellerAccess ? "Mudar para modo vendedor" : "Quero vender"}
             </DropdownMenuItem>
-
           </>
         )}
 
@@ -187,7 +199,10 @@ export function UserMenu() {
         )}
 
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={handleLogout} className="text-destructive focus:text-destructive">
+        <DropdownMenuItem
+          onSelect={handleLogout}
+          className="text-destructive focus:text-destructive"
+        >
           <LogOut className="h-4 w-4" /> Sair
         </DropdownMenuItem>
       </DropdownMenuContent>

@@ -14,7 +14,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { Prisma } from '@prisma/client';
+import { PlatformRole, Prisma } from '@prisma/client';
 import type {
   Device,
   SecurityEventOutcome,
@@ -57,6 +57,7 @@ import {
   TwoFactorMethodChangeRequestDto,
   TwoFactorMethodChangeConfirmDto,
 } from './dto';
+import { toPlatformRoleApiValues } from './platform-roles';
 import {
   buildChallengeToken,
   hmacToken,
@@ -780,6 +781,7 @@ export class AuthService {
           privacyVersion: c.currentPrivacyVersion,
           privacyAcceptedAt: new Date(),
           passwordCredential: { create: { passwordHash: await hashPassword(dto.password) } },
+          roleAssignments: { create: { role: PlatformRole.BUYER } },
           devices: {
             create: {
               tokenHash,
@@ -3764,7 +3766,10 @@ export class AuthService {
   }
 
   async me(userId: string): Promise<Record<string, unknown>> {
-    const u = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    const u = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      include: { roleAssignments: { select: { role: true } } },
+    });
     return {
       id: u.id,
       email: u.email,
@@ -3777,6 +3782,11 @@ export class AuthService {
       birthDate: u.birthDate,
       status: u.status,
       createdAt: u.createdAt,
+      roles: toPlatformRoleApiValues(
+        Array.isArray(u.roleAssignments)
+          ? u.roleAssignments.map((assignment) => assignment.role)
+          : [],
+      ),
     };
   }
 }

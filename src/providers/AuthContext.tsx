@@ -8,7 +8,9 @@ export interface AuthContextValue {
   loading: boolean;
   status: AuthStatus;
   activeRole: UserRole;
+  /** @deprecated use hasSellerAccess; SellerProfile is a future domain. */
   hasSellerProfile: boolean;
+  hasSellerAccess: boolean;
   isAdmin: boolean;
   twoFactorChallenge: Extract<LoginResult, { status: "twoFactorRequired" }> | null;
   login: (email: string, password: string) => Promise<LoginResult>;

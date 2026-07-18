@@ -381,3 +381,7 @@ Verificação documental de que o schema previsto acobera as regras registradas 
 - **Reviews ligadas a pedido** — `product_reviews.order_item_id` obrigatório e único; ver `REVIEW_RULES.md`.
 - **Conversations ligadas a pedido opcionalmente** — `conversations.order_id nullable` para permitir pré-compra.
 - **Admin audit logs** — tabela `admin_audit_logs` (actor_id, action, target_type, target_id, payload jsonb, created_at) imutável; escrita apenas via server function; leitura restrita a admins.
+
+## Marketplace RBAC foundation update
+
+The marketplace authorization foundation is now persistent: `BUYER`, `SELLER` and `ADMIN` live in the backend database, `/auth/me` returns real lowercase roles, and the frontend derives `isAdmin`/`hasSellerAccess` only from that response. Demo role flags no longer grant access. Seller/admin page content remains mock-oriented; only gates and future server-side authorization primitives were added. See `MARKETPLACE_RBAC_FOUNDATION.md`.

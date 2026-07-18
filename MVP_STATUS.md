@@ -205,7 +205,7 @@ GitHub/Cursor/desenvolvedor.
 - `/vendedor` e `/vendedor/anuncios/novo` abrem para qualquer usuário
   logado — `AuthGate` exige apenas login.
 - `/admin` continua protegido por `AdminGate` (login + `isAdmin`).
-- No mock, `isAdmin: true` só é atribuído ao login demo
+- `isAdmin` é verdadeiro somente quando `/auth/me.roles` contém `admin`
   `admin@litbuy.com`. Qualquer outro email loga como usuário comum.
 - Tudo permanece em memória, sem `localStorage` e sem cookies.
 
@@ -527,3 +527,7 @@ Implementada no frontend a troca segura do método 2FA na Central de Segurança.
 ## Atualização — auditoria final de autenticação (2026-07-17)
 
 O bloco de autenticação deixou de ser mock no escopo descrito em `AUTHENTICATION_FINAL_AUDIT.md`: cadastro, login, e-mail, dispositivo, 2FA, recovery codes, step-up, sessões, dispositivos, senha, telefone e e-mail seguro usam frontend e backend reais. O restante do marketplace continua visual/mockado conforme inventário.
+
+## Marketplace RBAC foundation update
+
+The marketplace authorization foundation is now persistent: `BUYER`, `SELLER` and `ADMIN` live in the backend database, `/auth/me` returns real lowercase roles, and the frontend derives `isAdmin`/`hasSellerAccess` only from that response. Demo role flags no longer grant access. Seller/admin page content remains mock-oriented; only gates and future server-side authorization primitives were added. See `MARKETPLACE_RBAC_FOUNDATION.md`.

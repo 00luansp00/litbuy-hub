@@ -89,3 +89,7 @@ Reforços conceituais alinhados a `MARKETPLACE_RULES.md`:
 - **transaction referencia wallet** — `wallet_transactions.wallet_id`, com `order_id`/`dispute_id` opcionais.
 - **conversation pode referenciar order** — `conversations.order_id nullable`.
 - **admin actions geram audit log** — toda mutação administrativa produz linha em `admin_audit_logs`.
+
+## Marketplace RBAC foundation update
+
+The marketplace authorization foundation is now persistent: `BUYER`, `SELLER` and `ADMIN` live in the backend database, `/auth/me` returns real lowercase roles, and the frontend derives `isAdmin`/`hasSellerAccess` only from that response. Demo role flags no longer grant access. Seller/admin page content remains mock-oriented; only gates and future server-side authorization primitives were added. See `MARKETPLACE_RBAC_FOUNDATION.md`.

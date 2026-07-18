@@ -4,6 +4,8 @@ import { DatabaseModule } from '../database/database.module';
 import { RedisModule } from '../redis/redis.module';
 import { AppLogger } from '../common/logging/app-logger.service';
 import { AuthController } from './auth.controller';
+import { PlatformRolesGuard } from './platform-roles.guard';
+import { PlatformRolesService } from './platform-roles.service';
 import {
   AuthMailer,
   AuthService,
@@ -19,6 +21,8 @@ import {
   controllers: [AuthController],
   providers: [
     AuthService,
+    PlatformRolesService,
+    PlatformRolesGuard,
     AuthMailer,
     ResendAuthEmailAdapter,
     MemoryAuthSmsPort,
@@ -56,6 +60,6 @@ import {
     },
     AppLogger,
   ],
-  exports: [AuthMailer, 'AuthSmsPort', MemoryAuthSmsPort],
+  exports: [AuthMailer, 'AuthSmsPort', MemoryAuthSmsPort, PlatformRolesService, PlatformRolesGuard],
 })
 export class AuthModule {}

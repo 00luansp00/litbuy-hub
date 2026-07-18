@@ -40,6 +40,12 @@ enum TwoFactorMethod {
   SMS
 }
 
+enum PlatformRole {
+  BUYER
+  SELLER
+  ADMIN
+}
+
 enum SecurityEventType {
   REGISTERED
   EMAIL_VERIFICATION_REQUESTED
@@ -83,6 +89,8 @@ enum SecurityEventType {
   TWO_FACTOR_METHOD_CHANGE_REQUESTED
   TWO_FACTOR_METHOD_CHANGED
   TWO_FACTOR_RECOVERY_CODES_REGENERATED
+  ROLE_GRANTED
+  ROLE_REVOKED
 }
 
 enum StepUpScope {
@@ -129,10 +137,22 @@ model User {
   twoFactorSettings        TwoFactorSettings?
   twoFactorRecoveryCodes   TwoFactorRecoveryCode[]
   stepUpGrants             StepUpGrant[]
+  roleAssignments          UserRoleAssignment[]
 
   @@unique([phoneE164])
   @@index([email])
   @@index([status])
+}
+
+model UserRoleAssignment {
+  userId    String       @db.Uuid
+  role      PlatformRole
+  grantedAt DateTime     @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, role])
+  @@index([role])
 }
 
 model PasswordCredential {

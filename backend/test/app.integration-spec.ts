@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import cookieParser from 'cookie-parser';
 import { HttpStatus, ValidationPipe, VersioningType } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -53,6 +55,23 @@ async function redisKeys(redis: RedisService): Promise<string[]> {
   return client.keys('*');
 }
 
+async function cleanAuthIntegrationData(prisma: PrismaService): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    await tx.securityEvent.deleteMany();
+    await tx.stepUpGrant.deleteMany();
+    await tx.sessionRefreshToken.deleteMany();
+    await tx.verificationChallenge.deleteMany();
+    await tx.emailChangeRequest.deleteMany();
+    await tx.twoFactorRecoveryCode.deleteMany();
+    await tx.twoFactorSettings.deleteMany();
+    await tx.userRoleAssignment.deleteMany();
+    await tx.session.deleteMany();
+    await tx.device.deleteMany();
+    await tx.passwordCredential.deleteMany();
+    await tx.user.deleteMany();
+  });
+}
+
 describe('App foundation with real PostgreSQL and Redis (integration)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
@@ -92,17 +111,7 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
     await redisClient.flushdb();
     mailer.send = AuthMailer.prototype.send.bind(mailer);
     sms.send = MemoryAuthSmsPort.prototype.send.bind(sms);
-    await prisma.securityEvent.deleteMany();
-    await prisma.stepUpGrant.deleteMany();
-    await prisma.sessionRefreshToken.deleteMany();
-    await prisma.verificationChallenge.deleteMany();
-    await prisma.twoFactorRecoveryCode.deleteMany();
-    await prisma.twoFactorSettings.deleteMany();
-    await prisma.emailChangeRequest.deleteMany();
-    await prisma.session.deleteMany();
-    await prisma.device.deleteMany();
-    await prisma.passwordCredential.deleteMany();
-    await prisma.user.deleteMany();
+    await cleanAuthIntegrationData(prisma);
     mailer.sent.splice(0);
     sms.sent.splice(0);
   });
@@ -2301,5 +2310,211 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
       .set('Authorization', auth)
       .set('X-Step-Up-Token', recoveryGrant.body.stepUpToken)
       .expect(HttpStatus.BAD_REQUEST);
+  });
+});
+
+describe('Marketplace RBAC with real PostgreSQL (integration)', () => {
+  let app: INestApplication;
+  let prisma: PrismaService;
+  let redis: RedisService;
+  let mailer: AuthMailer;
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    app = moduleRef.createNestApplication();
+    const config = app.get(ConfigService);
+    const appConfig = config.getOrThrow<AppConfig>('app');
+    app.setGlobalPrefix(appConfig.apiPrefix);
+    app.enableVersioning({ type: VersioningType.URI });
+    app.use(cookieParser());
+    app.useGlobalPipes(
+      new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }),
+    );
+    app.useGlobalFilters(new GlobalExceptionFilter());
+    await app.init();
+    prisma = app.get(PrismaService);
+    redis = app.get(RedisService);
+    mailer = app.get(AuthMailer);
+  });
+
+  beforeEach(async () => {
+    const redisClient = await redis.getClient();
+    await redisClient.flushdb();
+    await cleanAuthIntegrationData(prisma);
+    mailer.sent.splice(0);
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('applies the RBAC migration to a pre-RBAC schema and backfills only BUYER', async () => {
+    const schema = `rbac_upgrade_${crypto.randomUUID().replaceAll('-', '_')}`;
+    const migration = readFileSync(
+      join(
+        process.cwd(),
+        'prisma/migrations/20260718120000_marketplace_rbac_foundation/migration.sql',
+      ),
+      'utf8',
+    );
+    try {
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(`CREATE SCHEMA "${schema}"`);
+        await tx.$executeRawUnsafe(`SET LOCAL search_path TO "${schema}"`);
+        await tx.$executeRawUnsafe(`CREATE TYPE "SecurityEventType" AS ENUM ('REGISTERED')`);
+        await tx.$executeRawUnsafe(`CREATE TABLE "User" ("id" uuid PRIMARY KEY)`);
+        const existingUserId = crypto.randomUUID();
+        await tx.$executeRawUnsafe(`INSERT INTO "User" ("id") VALUES ('${existingUserId}'::uuid)`);
+        for (const statement of migration
+          .split(';')
+          .map((rawStatement) => rawStatement.trim())
+          .filter(Boolean)) {
+          await tx.$executeRawUnsafe(`${statement};`);
+        }
+        const roles = await tx.$queryRawUnsafe<Array<{ role: string }>>(
+          `SELECT "role"::text AS role FROM "${schema}"."UserRoleAssignment" WHERE "userId" = '${existingUserId}'::uuid ORDER BY "role"::text`,
+        );
+        expect(roles.map((row) => row.role)).toEqual(['BUYER']);
+        await tx.$executeRawUnsafe(
+          `INSERT INTO "${schema}"."UserRoleAssignment" ("userId", "role") VALUES ('${existingUserId}'::uuid, 'BUYER'::"${schema}"."PlatformRole") ON CONFLICT ("userId", "role") DO NOTHING`,
+        );
+        const roleCounts = await tx.$queryRawUnsafe<Array<{ role: string; count: bigint }>>(
+          `SELECT "role"::text AS role, COUNT(*)::bigint AS count FROM "${schema}"."UserRoleAssignment" GROUP BY "role"::text ORDER BY "role"::text`,
+        );
+        expect(roleCounts).toEqual([{ role: 'BUYER', count: 1n }]);
+        const enumRows = await tx.$queryRawUnsafe<Array<{ enumlabel: string }>>(
+          `SELECT enumlabel FROM pg_enum WHERE enumtypid = '"${schema}"."PlatformRole"'::regtype ORDER BY enumsortorder`,
+        );
+        expect(enumRows.map((r) => r.enumlabel)).toEqual(['BUYER', 'SELLER', 'ADMIN']);
+      });
+    } finally {
+      await prisma.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+    }
+  });
+
+  it('enforces composite uniqueness without assigning SELLER or ADMIN implicitly', async () => {
+    const user = await prisma.user.create({
+      data: {
+        email: 'pre-rbac@example.com',
+        birthDate: new Date('2000-01-01'),
+        status: 'ACTIVE',
+        termsVersion: 'test',
+        termsAcceptedAt: new Date(),
+        privacyVersion: 'test',
+        privacyAcceptedAt: new Date(),
+        passwordCredential: { create: { passwordHash: 'hash' } },
+      },
+    });
+    await prisma.userRoleAssignment.create({ data: { userId: user.id, role: 'BUYER' } });
+    await expect(
+      prisma.userRoleAssignment.create({ data: { userId: user.id, role: 'BUYER' } }),
+    ).rejects.toThrow();
+    expect(
+      await prisma.userRoleAssignment.count({
+        where: { userId: user.id, role: { in: ['SELLER', 'ADMIN'] } },
+      }),
+    ).toBe(0);
+  });
+
+  it('records granted/unchanged/revoked outcomes and protects the last active admin', async () => {
+    const { grantPlatformRole, revokePlatformRole } =
+      await import('../src/auth/platform-role-operations');
+    const [adminA, adminB] = await Promise.all([
+      prisma.user.create({
+        data: {
+          email: 'admin-a@example.com',
+          birthDate: new Date('2000-01-01'),
+          status: 'ACTIVE',
+          termsVersion: 'test',
+          termsAcceptedAt: new Date(),
+          privacyVersion: 'test',
+          privacyAcceptedAt: new Date(),
+          passwordCredential: { create: { passwordHash: 'hash' } },
+        },
+      }),
+      prisma.user.create({
+        data: {
+          email: 'admin-b@example.com',
+          birthDate: new Date('2000-01-01'),
+          status: 'ACTIVE',
+          termsVersion: 'test',
+          termsAcceptedAt: new Date(),
+          privacyVersion: 'test',
+          privacyAcceptedAt: new Date(),
+          passwordCredential: { create: { passwordHash: 'hash' } },
+        },
+      }),
+    ]);
+    await expect(
+      Promise.all([
+        grantPlatformRole(prisma, adminA.id, 'ADMIN', 'test'),
+        grantPlatformRole(prisma, adminA.id, 'ADMIN', 'test'),
+      ]),
+    ).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ result: 'granted' }),
+        expect.objectContaining({ result: 'unchanged' }),
+      ]),
+    );
+    await expect(grantPlatformRole(prisma, adminB.id, 'ADMIN', 'test')).resolves.toMatchObject({
+      changed: true,
+    });
+    await expect(revokePlatformRole(prisma, adminA.id, 'ADMIN', 'test')).resolves.toEqual({
+      changed: true,
+      result: 'revoked',
+    });
+    await expect(revokePlatformRole(prisma, adminA.id, 'ADMIN', 'test')).resolves.toEqual({
+      changed: false,
+      result: 'unchanged',
+    });
+    await expect(revokePlatformRole(prisma, adminB.id, 'ADMIN', 'test')).rejects.toMatchObject({
+      code: 'LAST_ACTIVE_ADMIN_REVOKE_BLOCKED',
+    });
+    const events = await prisma.securityEvent.findMany({
+      where: { userId: adminA.id },
+      orderBy: { createdAt: 'asc' },
+    });
+    expect(events.map((event) => (event.metadata as { result: string }).result)).toEqual(
+      expect.arrayContaining(['granted', 'unchanged', 'revoked']),
+    );
+  });
+
+  it('registration creates BUYER and /auth/me returns deterministic roles', async () => {
+    const email = 'rbac-register@example.com';
+    const password = 'integration password 123';
+    const register = await request(app.getHttpServer())
+      .post('/api/v1/auth/register')
+      .send({
+        email,
+        password,
+        birthDate: '2000-01-01',
+        termsAccepted: true,
+        privacyAccepted: true,
+        termsVersion: process.env.CURRENT_TERMS_VERSION,
+        privacyVersion: process.env.CURRENT_PRIVACY_VERSION,
+      })
+      .expect(HttpStatus.CREATED);
+    const token = mailer.sent.find(
+      (message) => message.to === email && message.purpose === 'EMAIL_VERIFICATION',
+    )?.token;
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/verify')
+      .send({ token })
+      .expect(HttpStatus.OK);
+    const login = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', register.headers['set-cookie'] as unknown as string[])
+      .send({ email, password })
+      .expect(HttpStatus.OK);
+    const user = await prisma.user.findUniqueOrThrow({ where: { email } });
+    expect(await prisma.userRoleAssignment.findMany({ where: { userId: user.id } })).toMatchObject([
+      { role: 'BUYER' },
+    ]);
+    await prisma.userRoleAssignment.create({ data: { userId: user.id, role: 'SELLER' } });
+    await request(app.getHttpServer())
+      .get('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${login.body.accessToken}`)
+      .expect(HttpStatus.OK)
+      .expect((r) => expect(r.body.roles).toEqual(['buyer', 'seller']));
   });
 });

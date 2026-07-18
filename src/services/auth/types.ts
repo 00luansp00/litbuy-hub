@@ -1,4 +1,5 @@
 export type UserRole = "buyer" | "seller";
+export type PlatformRole = "buyer" | "seller" | "admin";
 
 export type AuthUser = {
   id: string;
@@ -11,12 +12,14 @@ export type AuthUser = {
   createdAt: string;
   sensitiveActionHoldUntil?: string | null;
   sensitiveActionHoldActive?: boolean;
+  roles: PlatformRole[];
   displayName: string;
   name: string;
   avatarUrl?: string;
-  /** Contexto visual legado; perfil real de vendedor virá em sprint própria. */
+  /** @deprecated Seller profile is a future domain; use hasSellerAccess from AuthContext. */
   sellerSlug?: string | null;
   sellerName?: string | null;
+  /** Presentation preference only; never backend authorization. */
   activeRole?: UserRole;
 };
 

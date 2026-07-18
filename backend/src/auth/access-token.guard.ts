@@ -26,14 +26,15 @@ export class AccessTokenGuard implements CanActivate {
         throw new Error('invalid payload');
       const session = await this.prisma.session.findUnique({
         where: { id: payload.sid },
-        include: { device: true },
+        include: { device: true, user: true },
       });
       if (
         !session ||
         session.userId !== payload.sub ||
         session.revokedAt ||
         session.expiresAt < new Date() ||
-        session.device.status !== 'APPROVED'
+        session.device.status !== 'APPROVED' ||
+        session.user.status !== 'ACTIVE'
       )
         throw new Error('inactive session');
       req.auth = { userId: payload.sub, sessionId: payload.sid, deviceId: session.deviceId };

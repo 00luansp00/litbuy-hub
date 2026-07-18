@@ -78,7 +78,7 @@ bun run format     # Prettier
 Autenticação não usa mais `authMock`: o bloco real está documentado em `AUTHENTICATION_FINAL_AUDIT.md`.
 
 - Cadastro, login, refresh, logout, senha, e-mail, telefone, dispositivos, sessões, 2FA, step-up e recovery codes usam a API NestJS `/api/v1`.
-- Papéis comprador/vendedor/admin no frontend continuam contexto visual quando `VITE_ENABLE_DEMO_ROLES=true`; autorização real de marketplace ainda precisa ser server-side.
+- Papéis comprador/vendedor/admin agora vêm do banco via `/auth/me.roles`; `VITE_ENABLE_DEMO_ROLES` não concede acesso.
 - Não inserir dados reais em domínios de marketplace ainda mockados, como pagamentos, pedidos, seller/admin, KYC e wallet.
 
 ## 6. Regra principal
@@ -111,7 +111,6 @@ Ordem sugerida:
 13. Avaliar SSR/SSG para SEO das rotas públicas.
 14. Configurar monitoramento, backups, LGPD, termos jurídicos.
 15. **Deploy** do frontend e backend NestJS em provedores definidos pelo time, sem dependência obrigatória de Supabase.
-
 
 ## Decisões de fornecedores externos
 
@@ -194,3 +193,7 @@ Ordem sugerida:
 ## Auditoria final de autenticação — 2026-07-17
 
 A documentação consolidada do bloco real de autenticação está em `AUTHENTICATION_FINAL_AUDIT.md`. Ela substitui as afirmações antigas de que não havia backend/autenticação real para o escopo específico de auth. Permanecem mockados fora de autenticação: catálogo, carrinho, checkout, pagamentos, pedidos, vendedor, admin, KYC, wallet, afiliados, notificações de produto e CMS. Próxima sprint recomendada: Staging, homologação e hardening operacional de autenticação antes de iniciar domínios financeiros ou marketplace.
+
+## Marketplace RBAC foundation update
+
+The marketplace authorization foundation is now persistent: `BUYER`, `SELLER` and `ADMIN` live in the backend database, `/auth/me` returns real lowercase roles, and the frontend derives `isAdmin`/`hasSellerAccess` only from that response. Demo role flags no longer grant access. Seller/admin page content remains mock-oriented; only gates and future server-side authorization primitives were added. See `MARKETPLACE_RBAC_FOUNDATION.md`.

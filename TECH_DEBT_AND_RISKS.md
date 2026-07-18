@@ -191,3 +191,7 @@ O lint raiz legado (`eslint .`) ainda varre todo o monorepo, incluindo backend e
 ## Atualização — riscos remanescentes de autenticação (2026-07-17)
 
 A dívida de "auth mockado" foi encerrada para o bloco coberto por `AUTHENTICATION_FINAL_AUDIT.md`. Riscos remanescentes: staging/homologação, provedores reais de e-mail/SMS, cookies de produção, observabilidade, rate limit sob tráfego real, LGPD e pentest.
+
+## Marketplace RBAC foundation update
+
+The marketplace authorization foundation is now persistent: `BUYER`, `SELLER` and `ADMIN` live in the backend database, `/auth/me` returns real lowercase roles, and the frontend derives `isAdmin`/`hasSellerAccess` only from that response. Demo role flags no longer grant access. Seller/admin page content remains mock-oriented; only gates and future server-side authorization primitives were added. See `MARKETPLACE_RBAC_FOUNDATION.md`.

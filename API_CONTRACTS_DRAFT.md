@@ -133,3 +133,7 @@ O contrato real de autenticação está documentado em `AUTHENTICATION_FINAL_AUD
 ## Contrato real de autenticação — consolidado em 2026-07-17
 
 O contrato real implementado para autenticação está documentado em `AUTHENTICATION_FINAL_AUDIT.md` e substitui o rascunho antigo desta seção para endpoints `/auth/*`. Não inferir contratos de pagamentos, pedidos, seller, admin, KYC ou wallet a partir do bloco de autenticação.
+
+## Marketplace RBAC foundation update
+
+The marketplace authorization foundation is now persistent: `BUYER`, `SELLER` and `ADMIN` live in the backend database, `/auth/me` returns real lowercase roles, and the frontend derives `isAdmin`/`hasSellerAccess` only from that response. Demo role flags no longer grant access. Seller/admin page content remains mock-oriented; only gates and future server-side authorization primitives were added. See `MARKETPLACE_RBAC_FOUNDATION.md`.
