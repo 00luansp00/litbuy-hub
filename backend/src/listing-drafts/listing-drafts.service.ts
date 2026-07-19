@@ -36,6 +36,10 @@ const include = {
   sellerProfile: { include: { user: true } },
   reviewedBy: true,
 };
+type DraftClient = PrismaService | Prisma.TransactionClient;
+type DraftWithRelations = Prisma.ListingDraftGetPayload<{ include: typeof include }>;
+type DraftUpdateData = Prisma.ListingDraftUpdateManyMutationInput;
+
 const rejectCodes = new Set([
   'CONTENT_INCOMPLETE',
   'CATEGORY_MISMATCH',
@@ -82,7 +86,13 @@ export class ListingDraftsService {
       throw this.err('SELLER_PROFILE_ACTIVE_REQUIRED', HttpStatus.FORBIDDEN);
     return p;
   }
-  private async findOwned(userId: string, id: string, tx: any = this.prisma) {
+  private async sellerProfileInTransaction(tx: DraftClient, userId: string) {
+    const p = await tx.sellerProfile.findUnique({ where: { userId } });
+    if (!p || p.status !== SellerProfileStatus.ACTIVE)
+      throw this.err('SELLER_PROFILE_ACTIVE_REQUIRED', HttpStatus.FORBIDDEN);
+    return p;
+  }
+  private async findOwned(userId: string, id: string, tx: DraftClient = this.prisma) {
     const p = await tx.sellerProfile.findUnique({ where: { userId } });
     if (!p) throw new NotFoundException({ code: 'LISTING_DRAFT_NOT_FOUND' });
     const d = await tx.listingDraft.findFirst({ where: { id, sellerProfileId: p.id }, include });
@@ -91,7 +101,20 @@ export class ListingDraftsService {
       throw this.err('SELLER_PROFILE_ACTIVE_REQUIRED', HttpStatus.FORBIDDEN);
     return d;
   }
-  private map(d: any) {
+  private async findFull(tx: DraftClient, id: string): Promise<DraftWithRelations> {
+    const d = await tx.listingDraft.findUnique({ where: { id }, include });
+    if (!d) throw new NotFoundException({ code: 'LISTING_DRAFT_NOT_FOUND' });
+    return d;
+  }
+  private versionConflict(d: Pick<DraftWithRelations, 'version' | 'updatedAt'>, message: string) {
+    return new ConflictException({
+      code: 'LISTING_DRAFT_VERSION_CONFLICT',
+      currentVersion: d.version,
+      updatedAt: d.updatedAt.toISOString(),
+      message,
+    });
+  }
+  private map(d: DraftWithRelations) {
     return {
       id: d.id,
       status: d.status,
@@ -159,19 +182,40 @@ export class ListingDraftsService {
           : undefined,
     };
   }
-  private async audit(tx: any, userId: string | null, type: SecurityEventType, metadata: any) {
+  private async audit(
+    tx: DraftClient,
+    userId: string | null,
+    type: SecurityEventType,
+    metadata: Prisma.InputJsonValue,
+  ) {
     await tx.securityEvent.create({
       data: { userId, eventType: type, outcome: SecurityEventOutcome.SUCCESS, metadata },
     });
   }
-  private async validateTaxonomy(data: any, requireActive = false) {
-    if (!data.categoryId) return [];
-    const cat = await this.prisma.catalogCategory.findUnique({ where: { id: data.categoryId } });
+  private async validateTaxonomy(
+    tx: DraftClient,
+    data: {
+      categoryId?: string | null;
+      subcategoryId?: string | null;
+      productType?: CatalogProductType | null;
+      attributes?: { key: string; value: string }[];
+    },
+    requireActive = false,
+  ) {
+    if (!data.categoryId) {
+      if (data.subcategoryId) throw this.err('LISTING_CATEGORY_NOT_FOUND', 404);
+      if (data.productType || (data.attributes?.length ?? 0) > 0)
+        throw this.err('LISTING_CATEGORY_NOT_FOUND', 404);
+      return [];
+    }
+    if (!data.productType && (data.attributes?.length ?? 0) > 0)
+      throw this.err('CATALOG_PRODUCT_TYPE_INVALID');
+    const cat = await tx.catalogCategory.findUnique({ where: { id: data.categoryId } });
     if (!cat) throw this.err('LISTING_CATEGORY_NOT_FOUND', 404);
     if (requireActive && cat.status !== CatalogEntityStatus.ACTIVE)
       throw this.err('LISTING_TAXONOMY_INACTIVE');
     if (data.subcategoryId) {
-      const sub = await this.prisma.catalogSubcategory.findUnique({
+      const sub = await tx.catalogSubcategory.findUnique({
         where: { id: data.subcategoryId },
       });
       if (!sub) throw this.err('LISTING_SUBCATEGORY_NOT_FOUND', 404);
@@ -179,19 +223,40 @@ export class ListingDraftsService {
       if (requireActive && sub.status !== CatalogEntityStatus.ACTIVE)
         throw this.err('LISTING_TAXONOMY_INACTIVE');
     }
-    const attrs = await this.prisma.catalogAttribute.findMany({
-      where: {
-        OR: [
-          { productType: data.productType ?? undefined },
-          { subcategoryId: data.subcategoryId ?? undefined },
-        ],
-        ...(requireActive ? { status: CatalogEntityStatus.ACTIVE } : {}),
-      },
-    });
-    const map = new Map(attrs.map((a) => [a.key, a]));
+    const [generic, specific] = await Promise.all([
+      data.productType
+        ? tx.catalogAttribute.findMany({
+            where: {
+              productType: data.productType,
+              ...(requireActive ? { status: CatalogEntityStatus.ACTIVE } : {}),
+            },
+          })
+        : Promise.resolve([]),
+      data.subcategoryId
+        ? tx.catalogAttribute.findMany({
+            where: {
+              subcategoryId: data.subcategoryId,
+              ...(requireActive ? { status: CatalogEntityStatus.ACTIVE } : {}),
+            },
+          })
+        : Promise.resolve([]),
+    ]);
+    const map = new Map<string, (typeof generic)[number]>();
+    for (const a of generic) map.set(a.key, a);
+    for (const a of specific) map.set(a.key, a);
+    const attrs = [...map.values()].sort(
+      (a, b) => a.sortOrder - b.sortOrder || a.key.localeCompare(b.key),
+    );
+    const seen = new Set<string>();
     for (const a of data.attributes ?? []) {
+      if (seen.has(a.key)) throw this.err('LISTING_ATTRIBUTE_DUPLICATED');
+      seen.add(a.key);
       const cfg = map.get(a.key);
       if (!cfg) throw this.err('LISTING_ATTRIBUTE_UNKNOWN');
+      if (!a.value?.trim()) {
+        if (cfg.required) throw this.err('LISTING_REQUIRED_ATTRIBUTE_MISSING');
+        continue;
+      }
       if (cfg.inputType === CatalogAttributeInputType.NUMBER && !/^-?\d+(\.\d+)?$/.test(a.value))
         throw this.err('LISTING_ATTRIBUTE_VALUE_INVALID');
       if (
@@ -207,7 +272,10 @@ export class ListingDraftsService {
     }
     if (requireActive)
       for (const cfg of attrs)
-        if (cfg.required && !(data.attributes ?? []).some((a: any) => a.key === cfg.key && a.value))
+        if (
+          cfg.required &&
+          !(data.attributes ?? []).some((a) => a.key === cfg.key && a.value.trim())
+        )
           throw this.err('LISTING_REQUIRED_ATTRIBUTE_MISSING');
   }
   private validateSubmit(d: any) {
@@ -276,10 +344,10 @@ export class ListingDraftsService {
     return data;
   }
   async create(userId: string, dto: CreateDraftDto) {
-    const p = await this.sellerProfile(userId);
     const data = await this.dataFromDto(dto);
-    await this.validateTaxonomy({ ...data, attributes: dto.attributes ?? [] });
     return this.prisma.$transaction(async (tx) => {
+      const p = await this.sellerProfileInTransaction(tx, userId);
+      await this.validateTaxonomy(tx, { ...data, attributes: dto.attributes ?? [] });
       const d = await tx.listingDraft.create({
         data: {
           ...data,
@@ -298,15 +366,11 @@ export class ListingDraftsService {
       if (dto.variants) await this.replaceVariants(tx, d.id, dto.variants);
       if (dto.serviceDetails)
         await tx.listingDraftServiceDetails.create({
-          data: {
-            ...dto.serviceDetails,
-            basePrice: this.price(dto.serviceDetails.basePrice),
-            draftId: d.id,
-          },
+          data: this.serviceDetailsData(dto.serviceDetails, d.id),
         });
       if (dto.accountDetails)
         await tx.listingDraftAccountDetails.create({
-          data: { ...dto.accountDetails, draftId: d.id },
+          data: this.accountDetailsData(dto.accountDetails, d.id),
         });
       await this.audit(tx, userId, SecurityEventType.LISTING_DRAFT_CREATED, {
         draftId: d.id,
@@ -314,7 +378,7 @@ export class ListingDraftsService {
         statusNew: d.status,
         versionNew: d.version,
       });
-      return this.get(userId, d.id);
+      return this.map(await this.findFull(tx, d.id));
     });
   }
   async list(userId: string, q: SellerDraftQueryDto) {
@@ -332,20 +396,53 @@ export class ListingDraftsService {
       q,
     );
   }
-  private async listWhere(where: any, q: any) {
+  private encodeCursor(d: DraftWithRelations) {
+    return Buffer.from(JSON.stringify({ updatedAt: d.updatedAt.toISOString(), id: d.id })).toString(
+      'base64url',
+    );
+  }
+  private decodeCursor(cursor?: string) {
+    if (!cursor) return undefined;
+    try {
+      const raw = JSON.parse(Buffer.from(cursor, 'base64url').toString()) as {
+        updatedAt?: unknown;
+        id?: unknown;
+      };
+      if (typeof raw.updatedAt !== 'string' || typeof raw.id !== 'string')
+        throw new Error('invalid cursor');
+      const updatedAt = new Date(raw.updatedAt);
+      if (Number.isNaN(updatedAt.getTime())) throw new Error('invalid cursor');
+      return { updatedAt, id: raw.id };
+    } catch {
+      throw this.err('LISTING_DRAFT_CURSOR_INVALID');
+    }
+  }
+  private async listWhere(where: Prisma.ListingDraftWhereInput, q: SellerDraftQueryDto) {
     const limit = Math.min(q.limit ?? 20, 50);
+    const cursor = this.decodeCursor(q.cursor);
     const items = await this.prisma.listingDraft.findMany({
       where: {
         ...where,
         ...(q.status ? { status: q.status } : {}),
         ...(q.search ? { title: { contains: q.search, mode: 'insensitive' } } : {}),
+        ...(cursor
+          ? {
+              OR: [
+                { updatedAt: { lt: cursor.updatedAt } },
+                { updatedAt: cursor.updatedAt, id: { lt: cursor.id } },
+              ],
+            }
+          : {}),
       },
       orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
       include,
     });
     const page = items.slice(0, limit).map((d) => this.map(d));
-    return { items: page, nextCursor: items.length > limit ? page.at(-1)!.id : null };
+    return {
+      items: page,
+      nextCursor: items.length > limit ? this.encodeCursor(items[limit - 1]) : null,
+    };
   }
   async get(userId: string, id: string) {
     return this.map(await this.findOwned(userId, id));
@@ -355,7 +452,18 @@ export class ListingDraftsService {
     if (!d) throw new NotFoundException({ code: 'LISTING_DRAFT_NOT_FOUND' });
     return this.map(d);
   }
-  private async replaceVariants(tx: any, draftId: string, variants: any[]) {
+  private async replaceVariants(
+    tx: Prisma.TransactionClient,
+    draftId: string,
+    variants: {
+      title: string;
+      description?: string | null;
+      price: string;
+      stock: number;
+      status?: ListingDraftVariantStatus;
+      sortOrder?: number;
+    }[],
+  ) {
     await tx.listingDraftVariant.deleteMany({ where: { draftId } });
     if (variants.length)
       await tx.listingDraftVariant.createMany({
@@ -370,25 +478,61 @@ export class ListingDraftsService {
         })),
       });
   }
+  private serviceDetailsData(dto: NonNullable<CreateDraftDto['serviceDetails']>, draftId: string) {
+    return {
+      draftId,
+      title: this.text(dto.title, 140),
+      description: this.text(dto.description, 5000),
+      pricingType: dto.pricingType,
+      basePrice: this.price(dto.basePrice),
+      estimatedDelivery: this.text(dto.estimatedDelivery, 120),
+      buyerRequirements: this.text(dto.buyerRequirements, 1000),
+      notes: this.text(dto.notes, 1000),
+    };
+  }
+  private accountDetailsData(dto: NonNullable<CreateDraftDto['accountDetails']>, draftId: string) {
+    return {
+      draftId,
+      provenance: dto.provenance,
+      recoveryLevel: dto.recoveryLevel,
+      emailVerified: dto.emailVerified,
+      phoneLinked: dto.phoneLinked,
+      documentLinked: dto.documentLinked,
+      fullAccess: dto.fullAccess,
+      recoveryRisk: dto.recoveryRisk,
+      warrantyNote: this.text(dto.warrantyNote, 1000),
+    };
+  }
   async update(userId: string, id: string, dto: UpdateDraftDto) {
     return this.prisma.$transaction(async (tx) => {
       const d = await this.findOwned(userId, id, tx);
       if (!['DRAFT', 'REJECTED'].includes(d.status))
         throw this.err('LISTING_DRAFT_NOT_EDITABLE', 409);
       if (d.version !== dto.expectedVersion)
-        throw new ConflictException({
-          code: 'LISTING_DRAFT_VERSION_CONFLICT',
-          currentVersion: d.version,
-          updatedAt: d.updatedAt.toISOString(),
-          message: 'Recarregue o rascunho antes de salvar.',
-        });
+        throw this.versionConflict(d, 'Recarregue o rascunho antes de salvar.');
       const data = await this.dataFromDto(dto);
-      await this.validateTaxonomy({ ...d, ...data, attributes: dto.attributes ?? d.attributes });
-      const next = await tx.listingDraft.update({
-        where: { id },
-        data: { ...data, version: { increment: 1 } },
-        include,
+      await this.validateTaxonomy(tx, {
+        ...d,
+        ...data,
+        attributes: dto.attributes ?? d.attributes,
       });
+      const hasChildPatch =
+        'attributes' in dto ||
+        'variants' in dto ||
+        'serviceDetails' in dto ||
+        'accountDetails' in dto;
+      if (Object.keys(data).length === 0 && !hasChildPatch)
+        throw this.err('LISTING_DRAFT_UPDATE_EMPTY');
+      const updated = await tx.listingDraft.updateMany({
+        where: { id, version: dto.expectedVersion, status: { in: ['DRAFT', 'REJECTED'] } },
+        data: { ...data, version: { increment: 1 } },
+      });
+      if (updated.count !== 1) {
+        const current = await this.findOwned(userId, id, tx);
+        if (!['DRAFT', 'REJECTED'].includes(current.status))
+          throw this.err('LISTING_DRAFT_NOT_EDITABLE', 409);
+        throw this.versionConflict(current, 'Recarregue o rascunho antes de salvar.');
+      }
       if (dto.attributes) {
         await tx.listingDraftAttributeValue.deleteMany({ where: { draftId: id } });
         if (dto.attributes.length)
@@ -405,29 +549,25 @@ export class ListingDraftsService {
         await tx.listingDraftServiceDetails.deleteMany({ where: { draftId: id } });
         if (dto.serviceDetails)
           await tx.listingDraftServiceDetails.create({
-            data: {
-              ...dto.serviceDetails,
-              basePrice: this.price(dto.serviceDetails.basePrice),
-              draftId: id,
-            },
+            data: this.serviceDetailsData(dto.serviceDetails, id),
           });
       }
       if ('accountDetails' in dto) {
         await tx.listingDraftAccountDetails.deleteMany({ where: { draftId: id } });
         if (dto.accountDetails)
           await tx.listingDraftAccountDetails.create({
-            data: { ...dto.accountDetails, draftId: id },
+            data: this.accountDetailsData(dto.accountDetails, id),
           });
       }
       await this.audit(tx, userId, SecurityEventType.LISTING_DRAFT_UPDATED, {
         draftId: id,
         sellerProfileId: d.sellerProfileId,
         statusOld: d.status,
-        statusNew: next.status,
+        statusNew: d.status,
         versionOld: d.version,
-        versionNew: next.version,
+        versionNew: d.version + 1,
       });
-      return this.adminGet(id);
+      return this.map(await this.findFull(tx, id));
     });
   }
   async submit(userId: string, id: string, dto: VersionDto) {
@@ -437,38 +577,38 @@ export class ListingDraftsService {
       if (!['DRAFT', 'REJECTED'].includes(d.status))
         throw this.err('LISTING_DRAFT_STATUS_CONFLICT', 409);
       if (d.version !== dto.expectedVersion)
-        throw new ConflictException({
-          code: 'LISTING_DRAFT_VERSION_CONFLICT',
-          currentVersion: d.version,
-          updatedAt: d.updatedAt.toISOString(),
-          message: 'Recarregue o rascunho antes de enviar.',
-        });
-      await this.validateTaxonomy(d, true);
+        throw this.versionConflict(d, 'Recarregue o rascunho antes de enviar.');
+      await this.validateTaxonomy(tx, d, true);
       this.validateSubmit(d);
-      const next = await tx.listingDraft.update({
-        where: { id },
+      const updated = await tx.listingDraft.updateMany({
+        where: { id, version: dto.expectedVersion, status: { in: ['DRAFT', 'REJECTED'] } },
         data: {
           status: 'PENDING_REVIEW',
           submittedAt: new Date(),
           reviewStartedAt: null,
           reviewedAt: null,
-          reviewedByUserId: null,
           rejectionCode: null,
           rejectionReason: null,
           approvedAt: null,
           version: { increment: 1 },
         },
-        include,
       });
+      if (updated.count !== 1) {
+        const current = await this.findOwned(userId, id, tx);
+        if (current.status === 'PENDING_REVIEW') return this.map(current);
+        if (!['DRAFT', 'REJECTED'].includes(current.status))
+          throw this.err('LISTING_DRAFT_STATUS_CONFLICT', 409);
+        throw this.versionConflict(current, 'Recarregue o rascunho antes de enviar.');
+      }
       await this.audit(tx, userId, SecurityEventType.LISTING_DRAFT_SUBMITTED, {
         draftId: id,
         sellerProfileId: d.sellerProfileId,
         statusOld: d.status,
-        statusNew: next.status,
+        statusNew: 'PENDING_REVIEW',
         versionOld: d.version,
-        versionNew: next.version,
+        versionNew: d.version + 1,
       });
-      return this.map(next);
+      return this.map(await this.findFull(tx, id));
     });
   }
   async startReview(adminId: string, id: string, dto: VersionDto) {
@@ -478,22 +618,17 @@ export class ListingDraftsService {
       dto,
       SecurityEventType.LISTING_DRAFT_REVIEW_STARTED,
       'UNDER_REVIEW',
-      { reviewStartedAt: new Date(), reviewedByUserId: adminId },
+      { reviewStartedAt: new Date() },
     );
   }
   async approve(adminId: string, id: string, dto: VersionDto) {
-    const d = await this.prisma.listingDraft.findUnique({ where: { id }, include });
-    if (d) {
-      await this.validateTaxonomy(d, true);
-      this.validateSubmit(d);
-    }
     return this.adminTransition(
       adminId,
       id,
       dto,
       SecurityEventType.LISTING_DRAFT_APPROVED,
       'APPROVED',
-      { approvedAt: new Date(), reviewedAt: new Date(), reviewedByUserId: adminId },
+      { approvedAt: new Date(), reviewedAt: new Date() },
     );
   }
   async reject(adminId: string, id: string, dto: RejectDraftDto) {
@@ -510,7 +645,6 @@ export class ListingDraftsService {
         rejectionCode: dto.rejectionCode,
         rejectionReason: reason,
         reviewedAt: new Date(),
-        reviewedByUserId: adminId,
         approvedAt: null,
       },
     );
@@ -521,7 +655,7 @@ export class ListingDraftsService {
     dto: VersionDto,
     type: SecurityEventType,
     status: ListingDraftStatus,
-    data: any,
+    data: DraftUpdateData,
   ) {
     return this.prisma.$transaction(async (tx) => {
       const d = await tx.listingDraft.findUnique({ where: { id }, include });
@@ -530,27 +664,38 @@ export class ListingDraftsService {
       if (!['PENDING_REVIEW', 'UNDER_REVIEW'].includes(d.status))
         throw this.err('LISTING_DRAFT_STATUS_CONFLICT', 409);
       if (d.version !== dto.expectedVersion)
-        throw new ConflictException({
-          code: 'LISTING_DRAFT_VERSION_CONFLICT',
-          currentVersion: d.version,
-          updatedAt: d.updatedAt.toISOString(),
-          message: 'Recarregue o rascunho antes da moderação.',
-        });
-      const next = await tx.listingDraft.update({
-        where: { id },
+        throw this.versionConflict(d, 'Recarregue o rascunho antes da moderação.');
+      if (status === 'APPROVED') {
+        if (!d.sellerProfile || d.sellerProfile.status !== SellerProfileStatus.ACTIVE)
+          throw this.err('SELLER_PROFILE_ACTIVE_REQUIRED', HttpStatus.CONFLICT);
+        await this.validateTaxonomy(tx, d, true);
+        this.validateSubmit(d);
+      }
+      const updated = await tx.listingDraft.updateMany({
+        where: {
+          id,
+          version: dto.expectedVersion,
+          status: { in: ['PENDING_REVIEW', 'UNDER_REVIEW'] },
+        },
         data: { ...data, status, version: { increment: 1 } },
-        include,
       });
+      if (updated.count !== 1) {
+        const current = await this.findFull(tx, id);
+        if (current.status === status) return this.map(current);
+        if (!['PENDING_REVIEW', 'UNDER_REVIEW'].includes(current.status))
+          throw this.err('LISTING_DRAFT_STATUS_CONFLICT', 409);
+        throw this.versionConflict(current, 'Recarregue o rascunho antes da moderação.');
+      }
       await this.audit(tx, adminId, type, {
         draftId: id,
         sellerProfileId: d.sellerProfileId,
         statusOld: d.status,
         statusNew: status,
         versionOld: d.version,
-        versionNew: next.version,
+        versionNew: d.version + 1,
         rejectionCode: data.rejectionCode,
       });
-      return this.map(next);
+      return this.map(await this.findFull(tx, id));
     });
   }
 }

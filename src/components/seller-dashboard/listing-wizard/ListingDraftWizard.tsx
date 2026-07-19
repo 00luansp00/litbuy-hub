@@ -20,7 +20,7 @@ import {
   type DraftPayload,
   type ListingDraftRecord,
 } from "@/services/listingDraftApiService";
-import type { Category, Subcategory } from "@/types";
+import type { Category, ListingProductType, Subcategory } from "@/types";
 
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "conflict" | "error";
 const statusLabel: Record<string, string> = {
@@ -40,7 +40,16 @@ export function ListingDraftWizard({ initialDraft }: { initialDraft?: ListingDra
   const [gallery, setGallery] = useState<ImageUploaderItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [subs, setSubs] = useState<Subcategory[]>([]);
-  const [attrs, setAttrs] = useState<any[]>([]);
+  const [attrs, setAttrs] = useState<
+    {
+      key: string;
+      label: string;
+      type: "text" | "number" | "select" | "boolean";
+      required?: boolean;
+      options?: string[];
+    }[]
+  >([]);
+  const [productTypes, setProductTypes] = useState<{ id: ListingProductType; name: string }[]>([]);
   const editable = !draft || ["DRAFT", "REJECTED"].includes(draft.status);
   const payload = useMemo<DraftPayload>(
     () => ({
@@ -81,9 +90,11 @@ export function ListingDraftWizard({ initialDraft }: { initialDraft?: ListingDra
     [draft, step],
   );
   useEffect(() => {
-    catalogService
-      .getCategories()
-      .then(setCategories)
+    Promise.all([catalogService.getCategories(), catalogService.getProductTypes()])
+      .then(([nextCategories, nextProductTypes]) => {
+        setCategories(nextCategories);
+        setProductTypes(nextProductTypes);
+      })
       .catch(() => toast.error("Falha ao carregar taxonomia"));
   }, []);
   useEffect(() => {
@@ -146,8 +157,8 @@ export function ListingDraftWizard({ initialDraft }: { initialDraft?: ListingDra
       accountDetails: null,
     };
   }
-  async function save() {
-    if (!editable) return;
+  async function save(): Promise<ListingDraftRecord | null> {
+    if (!editable) return null;
     setState("saving");
     try {
       const saved =
@@ -159,10 +170,15 @@ export function ListingDraftWizard({ initialDraft }: { initialDraft?: ListingDra
       toast.success("Rascunho persistido", {
         description: "Imagens locais e cofre não foram enviados nem salvos.",
       });
-      if (!initialDraft) window.location.assign(`/vendedor/anuncios/${saved.id}/editar`);
-    } catch (e: any) {
-      setState(e?.code === "LISTING_DRAFT_VERSION_CONFLICT" ? "conflict" : "error");
-      toast.error(e?.message ?? "Erro ao salvar");
+      if (!initialDraft) {
+        await navigate({ to: "/vendedor/anuncios/$id/editar", params: { id: saved.id } });
+      }
+      return saved;
+    } catch (e) {
+      const error = e as { code?: string; message?: string };
+      setState(error.code === "LISTING_DRAFT_VERSION_CONFLICT" ? "conflict" : "error");
+      toast.error(error.message ?? "Erro ao salvar");
+      return null;
     }
   }
   async function submit() {
@@ -172,19 +188,17 @@ export function ListingDraftWizard({ initialDraft }: { initialDraft?: ListingDra
       });
       return;
     }
-    const saved =
-      state === "dirty" || !draft || draft.id.startsWith("0000")
-        ? await (save(), undefined)
-        : draft;
-    const current = saved ?? draft;
+    const current =
+      state === "dirty" || !draft || draft.id.startsWith("0000") ? await save() : draft;
     if (!current || current.id.startsWith("0000")) return;
     try {
       const res = await listingDraftApiService.submit(current.id, current.version);
       setDraft(res);
       toast.success("Enviado para análise");
       navigate({ to: "/vendedor/anuncios" });
-    } catch (e: any) {
-      toast.error(e?.message ?? "Falha ao enviar");
+    } catch (e) {
+      const error = e as { message?: string };
+      toast.error(error.message ?? "Falha ao enviar");
     }
   }
   return (
@@ -232,7 +246,7 @@ export function ListingDraftWizard({ initialDraft }: { initialDraft?: ListingDra
             <Label>Modelo</Label>
             <Select
               value={draft?.model ?? "NORMAL"}
-              onValueChange={(v) => patch({ model: v as any })}
+              onValueChange={(v) => patch({ model: v as ListingDraftRecord["model"] })}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -300,11 +314,21 @@ export function ListingDraftWizard({ initialDraft }: { initialDraft?: ListingDra
         <div className="grid gap-3 md:grid-cols-4">
           <div>
             <Label>Tipo</Label>
-            <Input
+            <Select
               value={draft?.productType ?? ""}
-              onChange={(e) => patch({ productType: e.target.value as any })}
-              placeholder="account, service..."
-            />
+              onValueChange={(value) => patch({ productType: value as ListingProductType })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione" />
+              </SelectTrigger>
+              <SelectContent>
+                {productTypes.map((type) => (
+                  <SelectItem key={type.id} value={type.id}>
+                    {type.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <Label>Preço</Label>
@@ -328,7 +352,9 @@ export function ListingDraftWizard({ initialDraft }: { initialDraft?: ListingDra
             <Label>Entrega</Label>
             <Select
               value={draft?.deliveryMode ?? "MANUAL"}
-              onValueChange={(v) => patch({ deliveryMode: v as any })}
+              onValueChange={(v) =>
+                patch({ deliveryMode: v as ListingDraftRecord["deliveryMode"] })
+              }
             >
               <SelectTrigger>
                 <SelectValue />

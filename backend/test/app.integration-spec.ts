@@ -67,6 +67,11 @@ async function cleanAuthIntegrationData(prisma: PrismaService): Promise<void> {
     await tx.emailChangeRequest.deleteMany();
     await tx.twoFactorRecoveryCode.deleteMany();
     await tx.twoFactorSettings.deleteMany();
+    await tx.listingDraftAttributeValue.deleteMany();
+    await tx.listingDraftVariant.deleteMany();
+    await tx.listingDraftServiceDetails.deleteMany();
+    await tx.listingDraftAccountDetails.deleteMany();
+    await tx.listingDraft.deleteMany();
     await tx.sellerProfile.deleteMany();
     await tx.sellerApplication.deleteMany();
     await tx.userRoleAssignment.deleteMany();
@@ -153,6 +158,22 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
       .expect(HttpStatus.OK);
     const user = await prisma.user.findUniqueOrThrow({ where: { email } });
     return { email, password, register, login, user };
+  }
+
+  async function activeSeller(email: string) {
+    const account = await registerVerifiedAndLogin(email);
+    await prisma.userRoleAssignment.create({
+      data: { userId: account.user.id, role: 'SELLER' },
+    });
+    await prisma.sellerProfile.create({
+      data: {
+        userId: account.user.id,
+        storeName: `Store ${email}`,
+        slug: `store-${account.user.id}`,
+        status: 'ACTIVE',
+      },
+    });
+    return { ...account, auth: `Bearer ${account.login.body.accessToken}` };
   }
 
   async function loginOnNewApprovedDevice(
@@ -808,6 +829,24 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
     });
     expect(serialized).not.toContain(emailToken);
     expect(serialized).not.toContain(oldRefreshCookie);
+  });
+
+  it('creates and returns a persistent listing draft through the seller HTTP API', async () => {
+    const seller = await activeSeller('integration-listing-draft-create@example.com');
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/seller/listing-drafts')
+      .set('Authorization', seller.auth)
+      .send({ title: 'Rascunho inicial', wizardStep: 2 })
+      .expect(HttpStatus.CREATED);
+
+    expect(response.body).toMatchObject({
+      id: expect.any(String),
+      status: 'DRAFT',
+      title: 'Rascunho inicial',
+      wizardStep: 2,
+      version: 1,
+    });
+    await expect(prisma.listingDraft.count({ where: { id: response.body.id } })).resolves.toBe(1);
   });
 
   it('handles concurrent refresh attempts for the same token safely with real PostgreSQL and Redis', async () => {
@@ -3033,7 +3072,7 @@ describe('Catalog taxonomy with real PostgreSQL (integration)', () => {
     await app.close();
   });
 
-  it('has the exact migrated baseline taxonomy and no persistent product/listing tables', async () => {
+  it('has the exact taxonomy baseline and no public product/listing tables', async () => {
     const categories = await prisma.catalogCategory.findMany({
       where: { slug: { in: baselineSlugs } },
       orderBy: { sortOrder: 'asc' },
@@ -3069,7 +3108,18 @@ describe('Catalog taxonomy with real PostgreSQL (integration)', () => {
     ).resolves.toEqual([]);
     await expect(
       prisma.$queryRawUnsafe(
-        `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('Product','Listing','ListingDraft','CatalogProduct','CatalogListing')`,
+        `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('ListingDraft','ListingDraftVariant','ListingDraftAttributeValue','ListingDraftServiceDetails','ListingDraftAccountDetails') ORDER BY table_name`,
+      ),
+    ).resolves.toEqual([
+      { table_name: 'ListingDraft' },
+      { table_name: 'ListingDraftAccountDetails' },
+      { table_name: 'ListingDraftAttributeValue' },
+      { table_name: 'ListingDraftServiceDetails' },
+      { table_name: 'ListingDraftVariant' },
+    ]);
+    await expect(
+      prisma.$queryRawUnsafe(
+        `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('Product','PublicProduct','Listing','CatalogProduct','CatalogListing')`,
       ),
     ).resolves.toEqual([]);
   });
