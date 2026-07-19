@@ -48,14 +48,9 @@ export function DynamicItemsEditor({ value, onChange }: Props) {
 
       <div className="space-y-3">
         {value.map((v, i) => (
-          <div
-            key={v.id}
-            className="rounded-xl border border-border bg-surface/40 p-3 space-y-3"
-          >
+          <div key={v.id} className="rounded-xl border border-border bg-surface/40 p-3 space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">
-                Variação #{i + 1}
-              </span>
+              <span className="text-xs font-medium text-muted-foreground">Variação #{i + 1}</span>
               <Button
                 type="button"
                 variant="ghost"
@@ -97,6 +92,19 @@ export function DynamicItemsEditor({ value, onChange }: Props) {
                     update(v.id, { stock: Math.max(0, Number(e.target.value) || 0) })
                   }
                 />
+              </div>
+              <div>
+                <Label className="mb-1.5 block text-xs">Status</Label>
+                <select
+                  value={v.status}
+                  onChange={(e) =>
+                    update(v.id, { status: e.target.value as ListingVariant["status"] })
+                  }
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="active">Ativa</option>
+                  <option value="paused">Pausada</option>
+                </select>
               </div>
               <div className="sm:col-span-2">
                 <Label className="mb-1.5 block text-xs">Descrição curta (opcional)</Label>

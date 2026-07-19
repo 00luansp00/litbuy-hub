@@ -9,6 +9,7 @@ import { AppLogger } from './common/logging/app-logger.service';
 import { AuthModule } from './auth/auth.module';
 import { SellerOnboardingModule } from './seller-onboarding/seller-onboarding.module';
 import { CatalogModule } from './catalog/catalog.module';
+import { ListingDraftsModule } from './listing-drafts/listing-drafts.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { CatalogModule } from './catalog/catalog.module';
     AuthModule,
     SellerOnboardingModule,
     CatalogModule,
+    ListingDraftsModule,
   ],
   providers: [AppLogger],
 })
