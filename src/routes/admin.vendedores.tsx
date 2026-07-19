@@ -74,7 +74,9 @@ function AdminSellersPage() {
   }, [query.data?.pages]);
   const invalidate = () => qc.invalidateQueries({ queryKey: ["admin", "seller-applications"] });
   const actionPending = (id: string) =>
-    start.variables === id || approve.variables === id || reject.variables?.id === id;
+    (start.isPending && start.variables === id) ||
+    (approve.isPending && approve.variables === id) ||
+    (reject.isPending && reject.variables?.id === id);
   const start = useMutation({
     mutationFn: sellerOnboardingService.adminStartReview,
     onSuccess: () => {

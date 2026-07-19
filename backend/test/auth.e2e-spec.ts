@@ -765,7 +765,6 @@ describe('Auth HTTP e2e flows', () => {
         ['no-phone@example.com', { phoneVerifiedAt: null }, 'SELLER_PHONE_NOT_VERIFIED'],
         ['no-email@example.com', { emailVerifiedAt: null }, 'SELLER_EMAIL_NOT_VERIFIED'],
         ['minor-seller@example.com', { birthDate: new Date() }, 'SELLER_AGE_REQUIREMENT_NOT_MET'],
-        ['suspended-seller@example.com', { status: 'SUSPENDED' }, 'SELLER_REQUIREMENTS_NOT_MET'],
       ] as const) {
         const candidate = eligible(email);
         await request(app.getHttpServer())
@@ -783,9 +782,45 @@ describe('Auth HTTP e2e flows', () => {
           .set('Authorization', `Bearer ${candidate.token}`)
           .expect((r) => {
             expect(r.status).toBeGreaterThanOrEqual(400);
-            expect([code, 'INVALID_ACCESS_TOKEN']).toContain(r.body.code);
+            expect(r.body.code).toBe(code);
           });
       }
+
+      const noBuyer = eligible('no-buyer-seller@example.com');
+      prisma.userRoleAssignments = prisma.userRoleAssignments.filter(
+        (role) => !(role.userId === noBuyer.user.id && role.role === PlatformRole.BUYER),
+      );
+      await request(app.getHttpServer())
+        .put('/api/v1/seller-onboarding/application')
+        .set('Authorization', `Bearer ${noBuyer.token}`)
+        .send({
+          storeName: 'Loja Sem Buyer',
+          requestedSlug: 'loja-sem-buyer',
+          sellerAgreementAccepted: true,
+        })
+        .expect(HttpStatus.OK);
+      await request(app.getHttpServer())
+        .post('/api/v1/seller-onboarding/application/submit')
+        .set('Authorization', `Bearer ${noBuyer.token}`)
+        .expect(HttpStatus.FORBIDDEN)
+        .expect((r) => expect(r.body.code).toBe('SELLER_REQUIREMENTS_NOT_MET'));
+
+      const suspended = eligible('suspended-seller@example.com');
+      await request(app.getHttpServer())
+        .put('/api/v1/seller-onboarding/application')
+        .set('Authorization', `Bearer ${suspended.token}`)
+        .send({
+          storeName: 'Loja Suspensa',
+          requestedSlug: 'loja-suspensa',
+          sellerAgreementAccepted: true,
+        })
+        .expect(HttpStatus.OK);
+      suspended.user.status = 'SUSPENDED';
+      await request(app.getHttpServer())
+        .post('/api/v1/seller-onboarding/application/submit')
+        .set('Authorization', `Bearer ${suspended.token}`)
+        .expect(HttpStatus.UNAUTHORIZED)
+        .expect((r) => expect(r.body.code).toBe('INVALID_ACCESS_TOKEN'));
 
       await request(app.getHttpServer())
         .put('/api/v1/seller-onboarding/application')
