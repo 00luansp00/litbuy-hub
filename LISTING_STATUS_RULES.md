@@ -60,3 +60,7 @@ Qualquer outra combinação → botão "Comprar"/"Adicionar ao carrinho" desabil
 Real: rascunhos persistentes de anúncio, edição, submissão, fila administrativa, início de análise, rejeição, correção/reenvio, aprovação de moderação, `expectedVersion`, validação pela taxonomia real e auditoria em `SecurityEvent`.
 
 Futuro/demonstrativo: aprovação não publica produto público; imagens permanecem previews locais sem upload/storage; cofre, credenciais, entrega automática real, planos pagos, pagamentos, compras e KYC não foram implementados. Ver `LISTING_DRAFT_FOUNDATION.md`.
+
+## Produto após aprovação
+
+`APPROVED` significa conteúdo aprovado e produto interno materializado. O produto nasce `UNPUBLISHED`; `ACTIVE` e publicação pública permanecem futuros.

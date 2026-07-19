@@ -10,6 +10,7 @@ import { AuthModule } from './auth/auth.module';
 import { SellerOnboardingModule } from './seller-onboarding/seller-onboarding.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { ListingDraftsModule } from './listing-drafts/listing-drafts.module';
+import { ProductsModule } from './products/products.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { ListingDraftsModule } from './listing-drafts/listing-drafts.module';
     SellerOnboardingModule,
     CatalogModule,
     ListingDraftsModule,
+    ProductsModule,
   ],
   providers: [AppLogger],
 })

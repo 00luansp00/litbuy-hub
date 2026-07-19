@@ -7,6 +7,11 @@ export type ListingDraftStatus =
   | "UNDER_REVIEW"
   | "REJECTED"
   | "APPROVED";
+export type MaterializedProductReference = {
+  id: string;
+  slug: string;
+  status: "UNPUBLISHED" | "ACTIVE" | "PAUSED" | "REMOVED";
+};
 export type ListingDraftRecord = {
   id: string;
   status: ListingDraftStatus;
@@ -56,6 +61,7 @@ export type ListingDraftRecord = {
     status: string;
     verified: boolean;
   } | null;
+  materializedProduct: MaterializedProductReference | null;
   moderationNotice?: string;
 };
 
@@ -96,6 +102,7 @@ export type SellerListingDraftSummary = Pick<
   | "rejectionCode"
   | "rejectionReason"
   | "moderationNotice"
+  | "materializedProduct"
 >;
 export type AdminListingDraftSummary = SellerListingDraftSummary & {
   seller: NonNullable<ListingDraftRecord["seller"]>;
@@ -134,6 +141,7 @@ const deliveries = ["MANUAL", "AUTOMATIC"] as const;
 const promotions = ["SILVER", "GOLD", "DIAMOND"] as const;
 const plans = ["STANDARD", "LIT_MAX"] as const;
 const variantStatuses = ["ACTIVE", "PAUSED"] as const;
+const productStatuses = ["UNPUBLISHED", "ACTIVE", "PAUSED", "REMOVED"] as const;
 const productTypes = [
   "account",
   "virtual_currency",
@@ -192,6 +200,17 @@ function parseProductType(v: unknown): ListingProductType | null {
   if (v === null) return null;
   if (!isEnum(productTypes, v)) invalid();
   return v as ListingProductType;
+}
+function parseMaterializedProduct(v: unknown): MaterializedProductReference | null {
+  if (v === null || v === undefined) return null;
+  if (
+    !isObject(v) ||
+    !uuid.test(String(v.id)) ||
+    typeof v.slug !== "string" ||
+    !isEnum(productStatuses, v.status)
+  )
+    invalid();
+  return { id: String(v.id), slug: v.slug, status: v.status };
 }
 function parseAttributes(v: unknown): { key: string; value: string }[] {
   if (!Array.isArray(v)) invalid();
@@ -319,6 +338,7 @@ function parseSellerSummaryFields(raw: unknown): SellerListingDraftSummary {
     updatedAt: raw.updatedAt,
     rejectionCode: nullableString(raw.rejectionCode),
     rejectionReason: nullableString(raw.rejectionReason),
+    materializedProduct: parseMaterializedProduct(raw.materializedProduct),
     moderationNotice:
       raw.moderationNotice === undefined
         ? undefined

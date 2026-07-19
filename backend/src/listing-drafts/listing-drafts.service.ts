@@ -18,6 +18,7 @@ import {
 import { AppError } from '../common/errors/app-error';
 import { PrismaService } from '../database/prisma.service';
 import { API_PRODUCT_TYPE, PRODUCT_TYPE_API } from '../catalog/catalog.constants';
+import { ProductMaterializationService } from '../products/product-materialization.service';
 import type {
   AdminDraftQueryDto,
   CreateDraftDto,
@@ -36,6 +37,7 @@ const include = {
   accountDetails: true,
   sellerProfile: true,
   reviewedBy: true,
+  materializedProduct: true,
 };
 type DraftClient = PrismaService | Prisma.TransactionClient;
 type DraftWithRelations = Prisma.ListingDraftGetPayload<{ include: typeof include }>;
@@ -81,7 +83,12 @@ const rejectCodes = new Set([
 ]);
 @Injectable()
 export class ListingDraftsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly productMaterialization: ProductMaterializationService = new ProductMaterializationService(
+      prisma,
+    ),
+  ) {}
   private err(code: string, status = HttpStatus.BAD_REQUEST, details?: unknown) {
     return new AppError(code, code, status, Array.isArray(details) ? details : []);
   }
@@ -217,9 +224,12 @@ export class ListingDraftsService {
             warrantyNote: d.accountDetails.warrantyNote,
           }
         : null,
+      materializedProduct: d.materializedProduct
+        ? this.productMaterialization.productReference(d.materializedProduct)
+        : null,
       moderationNotice:
         d.status === 'APPROVED'
-          ? 'Aprovado pela moderação. A publicação pública ainda não está disponível.'
+          ? 'Produto real gerado. Ele ainda não está publicado e aguarda imagens e publicação.'
           : undefined,
     };
   }
@@ -895,15 +905,66 @@ export class ListingDraftsService {
     );
   }
   async approve(adminId: string, id: string, dto: VersionDto) {
-    return this.adminTransition(
-      adminId,
-      id,
-      dto,
-      SecurityEventType.LISTING_DRAFT_APPROVED,
-      'APPROVED',
-      { approvedAt: new Date(), reviewedAt: new Date() },
-    );
+    return this.adminApprove(adminId, id, dto);
   }
+
+  private async adminApprove(adminId: string, id: string, dto: VersionDto) {
+    return this.prisma.$transaction(async (tx) => {
+      const d = await tx.listingDraft.findUnique({ where: { id }, include });
+      if (!d) throw new NotFoundException({ code: 'LISTING_DRAFT_NOT_FOUND' });
+      const alreadyApproved = d.status === 'APPROVED';
+      if (alreadyApproved && d.materializedProduct) return this.mapAdmin(d);
+      if (!alreadyApproved && !['PENDING_REVIEW', 'UNDER_REVIEW'].includes(d.status))
+        throw this.err('LISTING_DRAFT_STATUS_CONFLICT', 409);
+      if (!alreadyApproved && d.version !== dto.expectedVersion)
+        throw this.versionConflict(d, 'Recarregue o rascunho antes da moderação.');
+      if (!d.sellerProfile || d.sellerProfile.status !== SellerProfileStatus.ACTIVE)
+        throw this.err('SELLER_PROFILE_ACTIVE_REQUIRED', HttpStatus.CONFLICT);
+      await this.validateTaxonomy(tx, d, true);
+      this.validateSubmit(d);
+      const product = await this.productMaterialization.materializeFromApprovedDraft(
+        tx,
+        id,
+        adminId,
+        alreadyApproved ? 'reconciliation' : 'approval',
+      );
+      if (!alreadyApproved) {
+        const updated = await tx.listingDraft.updateMany({
+          where: {
+            id,
+            version: dto.expectedVersion,
+            status: { in: ['PENDING_REVIEW', 'UNDER_REVIEW'] },
+          },
+          data: {
+            status: 'APPROVED',
+            approvedAt: new Date(),
+            reviewedAt: new Date(),
+            version: { increment: 1 },
+          },
+        });
+        if (updated.count !== 1) {
+          const current = await this.findFull(tx, id);
+          if (current.status !== 'APPROVED')
+            throw this.versionConflict(current, 'Recarregue o rascunho antes da moderação.');
+        }
+        await tx.listingDraft.update({
+          where: { id },
+          data: { reviewedBy: { connect: { id: adminId } } },
+        });
+        await this.audit(tx, adminId, SecurityEventType.LISTING_DRAFT_APPROVED, {
+          draftId: id,
+          productId: product.id,
+          sellerProfileId: d.sellerProfileId,
+          statusOld: d.status,
+          statusNew: 'APPROVED',
+          versionOld: d.version,
+          versionNew: d.version + 1,
+        });
+      }
+      return this.mapAdmin(await this.findFull(tx, id));
+    });
+  }
+
   async reject(adminId: string, id: string, dto: RejectDraftDto) {
     if (!rejectCodes.has(dto.rejectionCode)) throw this.err('LISTING_REJECTION_CODE_INVALID');
     const reason = this.text(dto.rejectionReason, 1000);
