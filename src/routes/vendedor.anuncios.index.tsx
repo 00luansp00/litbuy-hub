@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/select";
 import {
   listingDraftApiService,
-  type ListingDraftRecord,
+  type SellerListingDraftSummary,
   type ListingDraftStatus,
 } from "@/services/listingDraftApiService";
 export const Route = createFileRoute("/vendedor/anuncios/")({
@@ -36,7 +36,7 @@ const labels: Record<ListingDraftStatus, string> = {
   APPROVED: "Aprovado",
 };
 function ListingsPage() {
-  const [items, setItems] = useState<ListingDraftRecord[] | null>(null);
+  const [items, setItems] = useState<SellerListingDraftSummary[] | null>(null);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [cursor, setCursor] = useState<string | null>(null);
@@ -62,7 +62,7 @@ function ListingsPage() {
   useEffect(() => {
     load(false);
   }, [search, status]);
-  const submit = (d: ListingDraftRecord) =>
+  const submit = (d: SellerListingDraftSummary) =>
     listingDraftApiService
       .submit(d.id, d.version)
       .then(() => {

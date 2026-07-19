@@ -1,4 +1,3 @@
-/* eslint-disable */
 import { ConflictException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import {
   CatalogAttributeInputType,
@@ -6,6 +5,8 @@ import {
   CatalogProductType,
   ListingDraftDeliveryMode,
   ListingDraftModel,
+  ListingDraftPromotionPreference,
+  ListingDraftSellerPlanPreference,
   ListingDraftServicePricingType,
   ListingDraftStatus,
   ListingDraftVariantStatus,
@@ -38,7 +39,32 @@ const include = {
 };
 type DraftClient = PrismaService | Prisma.TransactionClient;
 type DraftWithRelations = Prisma.ListingDraftGetPayload<{ include: typeof include }>;
-type DraftUpdateData = Prisma.ListingDraftUpdateManyMutationInput;
+type DraftUpdateData = {
+  model?: ListingDraftModel;
+  categoryId?: string | null;
+  subcategoryId?: string | null;
+  productType?: CatalogProductType | null;
+  title?: string | null;
+  description?: string | null;
+  price?: Prisma.Decimal | null;
+  stock?: number | null;
+  deliveryMode?: ListingDraftDeliveryMode;
+  requestedPromotionTier?: ListingDraftPromotionPreference;
+  requestedSellerPlan?: ListingDraftSellerPlanPreference;
+  autoMessage?: string | null;
+  notifyInApp?: boolean;
+  notifyBrowser?: boolean;
+  notifyEmailFuture?: boolean;
+  notifyExternalFuture?: boolean;
+  wizardStep?: number;
+  status?: ListingDraftStatus;
+  submittedAt?: Date | null;
+  reviewStartedAt?: Date | null;
+  reviewedAt?: Date | null;
+  rejectionCode?: string | null;
+  rejectionReason?: string | null;
+  approvedAt?: Date | null;
+};
 
 export type SellerListingDraftSummary = ReturnType<ListingDraftsService['mapSellerSummary']>;
 export type AdminListingDraftSummary = ReturnType<ListingDraftsService['mapAdminSummary']>;
@@ -59,17 +85,17 @@ export class ListingDraftsService {
   private err(code: string, status = HttpStatus.BAD_REQUEST, details?: unknown) {
     return new AppError(code, code, status, Array.isArray(details) ? details : []);
   }
-  private text(v: unknown, max = 5000) {
+  private text(v: string | number | boolean | null | undefined, max = 5000) {
     if (v == null) return null;
     const s = String(v)
-      .replace(/[\u0000-\u001f\u007f]/g, ' ')
+      .replace(/\p{Cc}/gu, ' ')
       .replace(/<[^>]*>/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
     if (s.length > max) throw this.err('LISTING_TEXT_INVALID');
     return s || null;
   }
-  private price(v: unknown) {
+  private price(v: string | number | null | undefined) {
     if (v == null || v === '') return null;
     const s = String(v).trim();
     if (!/^(?:[1-9]\d{0,9}|0)\.\d{2}$/.test(s) && !/^[1-9]\d{0,9}$/.test(s))
@@ -78,8 +104,9 @@ export class ListingDraftsService {
     if (!Number.isFinite(n) || n <= 0 || n > 9999999999) throw this.err('LISTING_PRICE_INVALID');
     return new Prisma.Decimal(s);
   }
-  private productType(v?: string | null) {
-    if (!v) return undefined;
+  private productType(v: string | null | undefined) {
+    if (v === undefined) return undefined;
+    if (v === null) return null;
     const upper = v.toUpperCase() as CatalogProductType;
     const t = API_PRODUCT_TYPE[v] ?? (CatalogProductType[upper] ? upper : undefined);
     if (!t) throw this.err('CATALOG_PRODUCT_TYPE_INVALID');
@@ -134,7 +161,7 @@ export class ListingDraftsService {
         : null,
       categoryId: d.categoryId,
       subcategoryId: d.subcategoryId,
-      productType: d.productType ? PRODUCT_TYPE_API[d.productType as CatalogProductType].id : null,
+      productType: d.productType ? PRODUCT_TYPE_API[d.productType].id : null,
       price: d.price?.toFixed(2) ?? null,
       stock: d.stock,
       deliveryMode: d.deliveryMode,
@@ -356,8 +383,8 @@ export class ListingDraftsService {
     price?: Prisma.Decimal | null;
     stock?: number | null;
     variants?: unknown[];
-    serviceDetails?: unknown | null;
-    accountDetails?: unknown | null;
+    serviceDetails?: object | null;
+    accountDetails?: object | null;
   }) {
     if (snapshot.accountDetails && snapshot.productType !== CatalogProductType.ACCOUNT)
       throw this.err('LISTING_ACCOUNT_DETAILS_NOT_ALLOWED', HttpStatus.CONFLICT);
@@ -378,7 +405,7 @@ export class ListingDraftsService {
         throw this.err('LISTING_ACCOUNT_DETAILS_NOT_ALLOWED', HttpStatus.CONFLICT);
     }
   }
-  private validateSubmit(d: any) {
+  private validateSubmit(d: DraftWithRelations) {
     if (d.deliveryMode === ListingDraftDeliveryMode.AUTOMATIC)
       throw this.err('LISTING_AUTOMATIC_DELIVERY_UNAVAILABLE', 409);
     if (!d.categoryId || !d.productType) throw this.err('LISTING_REQUIRED_FIELD_MISSING');
@@ -397,7 +424,7 @@ export class ListingDraftsService {
     if (
       d.model === ListingDraftModel.DYNAMIC &&
       (!d.variants?.length ||
-        !d.variants.some((v: any) => v.status === ListingDraftVariantStatus.ACTIVE && v.stock > 0))
+        !d.variants.some((v) => v.status === ListingDraftVariantStatus.ACTIVE && v.stock > 0))
     )
       throw this.err('LISTING_REQUIRED_FIELD_MISSING');
     if (d.model === ListingDraftModel.SERVICE) {
@@ -416,35 +443,29 @@ export class ListingDraftsService {
         throw this.err('LISTING_SERVICE_MODEL_INVALID');
     }
   }
-  private async dataFromDto(dto: CreateDraftDto | UpdateDraftDto) {
-    const data: any = {};
-    for (const k of [
-      'model',
-      'categoryId',
-      'subcategoryId',
-      'deliveryMode',
-      'requestedPromotionTier',
-      'requestedSellerPlan',
-      'notifyInApp',
-      'notifyBrowser',
-      'notifyEmailFuture',
-      'notifyExternalFuture',
-      'wizardStep',
-    ] as const)
-      if (k in dto) data[k] = (dto as any)[k];
+  private dataFromDto(dto: CreateDraftDto | UpdateDraftDto): DraftUpdateData {
+    const data: DraftUpdateData = {};
+    if ('model' in dto) data.model = dto.model;
+    if ('categoryId' in dto) data.categoryId = dto.categoryId;
+    if ('subcategoryId' in dto) data.subcategoryId = dto.subcategoryId;
+    if ('deliveryMode' in dto) data.deliveryMode = dto.deliveryMode;
+    if ('requestedPromotionTier' in dto) data.requestedPromotionTier = dto.requestedPromotionTier;
+    if ('requestedSellerPlan' in dto) data.requestedSellerPlan = dto.requestedSellerPlan;
+    if ('notifyInApp' in dto) data.notifyInApp = dto.notifyInApp;
+    if ('notifyBrowser' in dto) data.notifyBrowser = dto.notifyBrowser;
+    if ('notifyEmailFuture' in dto) data.notifyEmailFuture = dto.notifyEmailFuture;
+    if ('notifyExternalFuture' in dto) data.notifyExternalFuture = dto.notifyExternalFuture;
+    if ('wizardStep' in dto) data.wizardStep = dto.wizardStep;
     if ('productType' in dto) data.productType = this.productType(dto.productType);
-    for (const k of ['title', 'description', 'autoMessage'] as const)
-      if (k in dto)
-        data[k] = this.text(
-          (dto as any)[k],
-          k === 'title' ? 140 : k === 'autoMessage' ? 1000 : 5000,
-        );
+    if ('title' in dto) data.title = this.text(dto.title, 140);
+    if ('description' in dto) data.description = this.text(dto.description, 5000);
+    if ('autoMessage' in dto) data.autoMessage = this.text(dto.autoMessage, 1000);
     if ('price' in dto) data.price = this.price(dto.price);
     if ('stock' in dto) data.stock = dto.stock;
     return data;
   }
   async create(userId: string, dto: CreateDraftDto) {
-    const data = await this.dataFromDto(dto);
+    const data = this.dataFromDto(dto);
     return this.prisma.$transaction(async (tx) => {
       const p = await this.sellerProfileInTransaction(tx, userId);
       await this.validateTaxonomy(tx, { ...data, attributes: dto.attributes ?? [] });
@@ -570,6 +591,123 @@ export class ListingDraftsService {
     if (!d) throw new NotFoundException({ code: 'LISTING_DRAFT_NOT_FOUND' });
     return this.mapAdmin(d);
   }
+  private present(dto: object, key: string) {
+    return Object.prototype.hasOwnProperty.call(dto, key);
+  }
+  private scalarValue(
+    draft: DraftWithRelations,
+    data: DraftUpdateData,
+    key: keyof DraftUpdateData,
+  ) {
+    return this.present(data, key) ? data[key] : draft[key as keyof DraftWithRelations];
+  }
+  private normalizeDraftForComparison(
+    draft: DraftWithRelations,
+    data: DraftUpdateData,
+    dto: UpdateDraftDto,
+  ) {
+    const attributes = this.present(dto, 'attributes')
+      ? (dto.attributes ?? []).map((a) => ({ key: a.key, value: this.text(a.value, 500) ?? '' }))
+      : draft.attributes.map((a) => ({ key: a.key, value: a.value }));
+    attributes.sort((a, b) => a.key.localeCompare(b.key));
+    const variants = this.present(dto, 'variants')
+      ? (dto.variants ?? []).map((v, index) => ({
+          title: this.text(v.title, 140) ?? '',
+          description: this.text(v.description, 1000),
+          price: this.price(v.price)?.toFixed(2) ?? null,
+          stock: v.stock,
+          status: v.status ?? ListingDraftVariantStatus.ACTIVE,
+          sortOrder: v.sortOrder ?? index,
+        }))
+      : draft.variants.map((v) => ({
+          title: v.title,
+          description: v.description,
+          price: v.price.toFixed(2),
+          stock: v.stock,
+          status: v.status,
+          sortOrder: v.sortOrder,
+        }));
+    variants.sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title));
+    const serviceDetails = this.present(dto, 'serviceDetails')
+      ? dto.serviceDetails
+        ? this.serviceDetailsComparison(dto.serviceDetails)
+        : null
+      : draft.serviceDetails
+        ? {
+            title: draft.serviceDetails.title,
+            description: draft.serviceDetails.description,
+            pricingType: draft.serviceDetails.pricingType,
+            basePrice: draft.serviceDetails.basePrice?.toFixed(2) ?? null,
+            estimatedDelivery: draft.serviceDetails.estimatedDelivery,
+            buyerRequirements: draft.serviceDetails.buyerRequirements,
+            notes: draft.serviceDetails.notes,
+          }
+        : null;
+    const accountDetails = this.present(dto, 'accountDetails')
+      ? dto.accountDetails
+        ? this.accountDetailsComparison(dto.accountDetails)
+        : null
+      : draft.accountDetails
+        ? {
+            provenance: draft.accountDetails.provenance,
+            recoveryLevel: draft.accountDetails.recoveryLevel,
+            emailVerified: draft.accountDetails.emailVerified,
+            phoneLinked: draft.accountDetails.phoneLinked,
+            documentLinked: draft.accountDetails.documentLinked,
+            fullAccess: draft.accountDetails.fullAccess,
+            recoveryRisk: draft.accountDetails.recoveryRisk,
+            warrantyNote: draft.accountDetails.warrantyNote,
+          }
+        : null;
+    return JSON.stringify({
+      model: this.scalarValue(draft, data, 'model'),
+      categoryId: this.scalarValue(draft, data, 'categoryId'),
+      subcategoryId: this.scalarValue(draft, data, 'subcategoryId'),
+      productType: this.scalarValue(draft, data, 'productType'),
+      title: this.scalarValue(draft, data, 'title'),
+      description: this.scalarValue(draft, data, 'description'),
+      price: this.present(data, 'price')
+        ? (data.price?.toFixed(2) ?? null)
+        : (draft.price?.toFixed(2) ?? null),
+      stock: this.scalarValue(draft, data, 'stock'),
+      deliveryMode: this.scalarValue(draft, data, 'deliveryMode'),
+      requestedPromotionTier: this.scalarValue(draft, data, 'requestedPromotionTier'),
+      requestedSellerPlan: this.scalarValue(draft, data, 'requestedSellerPlan'),
+      autoMessage: this.scalarValue(draft, data, 'autoMessage'),
+      notifyInApp: this.scalarValue(draft, data, 'notifyInApp'),
+      notifyBrowser: this.scalarValue(draft, data, 'notifyBrowser'),
+      notifyEmailFuture: this.scalarValue(draft, data, 'notifyEmailFuture'),
+      notifyExternalFuture: this.scalarValue(draft, data, 'notifyExternalFuture'),
+      wizardStep: this.scalarValue(draft, data, 'wizardStep'),
+      attributes,
+      variants,
+      serviceDetails,
+      accountDetails,
+    });
+  }
+  private serviceDetailsComparison(dto: NonNullable<CreateDraftDto['serviceDetails']>) {
+    return {
+      title: this.text(dto.title, 140),
+      description: this.text(dto.description, 5000),
+      pricingType: dto.pricingType ?? null,
+      basePrice: this.price(dto.basePrice)?.toFixed(2) ?? null,
+      estimatedDelivery: this.text(dto.estimatedDelivery, 120),
+      buyerRequirements: this.text(dto.buyerRequirements, 1000),
+      notes: this.text(dto.notes, 1000),
+    };
+  }
+  private accountDetailsComparison(dto: NonNullable<CreateDraftDto['accountDetails']>) {
+    return {
+      provenance: dto.provenance ?? null,
+      recoveryLevel: dto.recoveryLevel ?? null,
+      emailVerified: dto.emailVerified ?? null,
+      phoneLinked: dto.phoneLinked ?? null,
+      documentLinked: dto.documentLinked ?? null,
+      fullAccess: dto.fullAccess ?? null,
+      recoveryRisk: dto.recoveryRisk ?? null,
+      warrantyNote: this.text(dto.warrantyNote, 1000),
+    };
+  }
   private async replaceVariants(
     tx: Prisma.TransactionClient,
     draftId: string,
@@ -628,7 +766,7 @@ export class ListingDraftsService {
         throw this.err('LISTING_DRAFT_NOT_EDITABLE', 409);
       if (d.version !== dto.expectedVersion)
         throw this.versionConflict(d, 'Recarregue o rascunho antes de salvar.');
-      const data = await this.dataFromDto(dto);
+      const data = this.dataFromDto(dto);
       await this.validateTaxonomy(tx, {
         ...d,
         ...data,
@@ -648,6 +786,11 @@ export class ListingDraftsService {
         'accountDetails' in dto;
       if (Object.keys(data).length === 0 && !hasChildPatch)
         throw this.err('LISTING_DRAFT_UPDATE_EMPTY');
+      if (
+        this.normalizeDraftForComparison(d, {}, {} as UpdateDraftDto) ===
+        this.normalizeDraftForComparison(d, data, dto)
+      )
+        return this.mapSeller(d);
       const updated = await tx.listingDraft.updateMany({
         where: { id, version: dto.expectedVersion, status: { in: ['DRAFT', 'REJECTED'] } },
         data: { ...data, version: { increment: 1 } },

@@ -15,7 +15,8 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import {
   listingDraftApiService,
-  type ListingDraftRecord,
+  type AdminListingDraftDetail,
+  type AdminListingDraftSummary,
   type ListingDraftStatus,
 } from "@/services/listingDraftApiService";
 export const Route = createFileRoute("/admin/anuncios")({ component: AdminListingsPage });
@@ -27,12 +28,13 @@ const labels: Record<ListingDraftStatus, string> = {
   APPROVED: "Aprovado",
 };
 function AdminListingsPage() {
-  const [items, setItems] = useState<ListingDraftRecord[] | null>(null);
-  const [selected, setSelected] = useState<ListingDraftRecord | null>(null);
+  const [items, setItems] = useState<AdminListingDraftSummary[] | null>(null);
+  const [selected, setSelected] = useState<AdminListingDraftDetail | null>(null);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("PENDING_REVIEW");
   const [reason, setReason] = useState("");
   const [pending, setPending] = useState("");
+  const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState(false);
   const load = () => {
     setError(false);
@@ -42,7 +44,7 @@ function AdminListingsPage() {
       .catch(() => setError(true));
   };
   useEffect(load, [search, status]);
-  const mutate = (id: string, fn: () => Promise<ListingDraftRecord>) => {
+  const mutate = (id: string, fn: () => Promise<AdminListingDraftDetail>) => {
     setPending(id);
     fn()
       .then((d) => {
@@ -93,7 +95,20 @@ function AdminListingsPage() {
             {items.map((d) => (
               <button
                 key={d.id}
-                onClick={() => setSelected(d)}
+                onClick={() => {
+                  setSelected(null);
+                  setDetailLoading(true);
+                  const selectedId = d.id;
+                  listingDraftApiService
+                    .adminGet(selectedId)
+                    .then((detail) =>
+                      setSelected((current) =>
+                        current && current.id !== selectedId ? current : detail,
+                      ),
+                    )
+                    .catch((error) => toast.error(error.message ?? "Falha ao carregar detalhe"))
+                    .finally(() => setDetailLoading(false));
+                }}
                 className="w-full rounded-2xl border bg-card p-4 text-left hover:border-primary"
               >
                 <p className="font-semibold">{d.title || "Sem título"}</p>
@@ -108,7 +123,9 @@ function AdminListingsPage() {
             ))}
           </div>
           <aside className="rounded-2xl border bg-card p-4">
-            {selected ? (
+            {detailLoading ? (
+              <div className="h-40 animate-pulse rounded-xl bg-muted" />
+            ) : selected ? (
               <div className="space-y-3">
                 <h2 className="text-lg font-semibold">{selected.title || "Sem título"}</h2>
                 <p className="text-sm text-muted-foreground">
