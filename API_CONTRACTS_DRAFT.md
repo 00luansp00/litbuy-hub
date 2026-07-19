@@ -153,3 +153,9 @@ Persistent catalog taxonomy is now the source of truth for categories, subcatego
 ### Catalog subcategory public contract
 
 `GET /api/v1/catalog/categories/:slug/subcategories` returns a minimal public contract: `id`, `slug`, `name` and `sortOrder`. It intentionally omits `categoryId`, `status`, timestamps, administrative metadata and all fictitious metrics because the category is already provided by the URL context.
+
+## Persistent Listing Draft Foundation (2026-07-19)
+
+Real: rascunhos persistentes de anúncio, edição, submissão, fila administrativa, início de análise, rejeição, correção/reenvio, aprovação de moderação, `expectedVersion`, validação pela taxonomia real e auditoria em `SecurityEvent`.
+
+Futuro/demonstrativo: aprovação não publica produto público; imagens permanecem previews locais sem upload/storage; cofre, credenciais, entrega automática real, planos pagos, pagamentos, compras e KYC não foram implementados. Ver `LISTING_DRAFT_FOUNDATION.md`.

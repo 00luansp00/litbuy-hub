@@ -14,6 +14,7 @@ import type { AppConfig } from '../src/config/app.config';
 import { AuthMailer, MemoryAuthSmsPort } from '../src/auth/auth.service';
 import { SellerOnboardingService } from '../src/seller-onboarding/seller-onboarding.service';
 import { CatalogService } from '../src/catalog/catalog.service';
+import { ListingDraftsService } from '../src/listing-drafts/listing-drafts.service';
 import { SecurityEventType } from '@prisma/client';
 
 function sessionIdFromAccessToken(accessToken: string): string {
@@ -67,6 +68,11 @@ async function cleanAuthIntegrationData(prisma: PrismaService): Promise<void> {
     await tx.emailChangeRequest.deleteMany();
     await tx.twoFactorRecoveryCode.deleteMany();
     await tx.twoFactorSettings.deleteMany();
+    await tx.listingDraftAttributeValue.deleteMany();
+    await tx.listingDraftVariant.deleteMany();
+    await tx.listingDraftServiceDetails.deleteMany();
+    await tx.listingDraftAccountDetails.deleteMany();
+    await tx.listingDraft.deleteMany();
     await tx.sellerProfile.deleteMany();
     await tx.sellerApplication.deleteMany();
     await tx.userRoleAssignment.deleteMany();
@@ -153,6 +159,55 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
       .expect(HttpStatus.OK);
     const user = await prisma.user.findUniqueOrThrow({ where: { email } });
     return { email, password, register, login, user };
+  }
+
+  async function activeSeller(email: string, password = 'integration password 123') {
+    const payload = {
+      email,
+      password,
+      birthDate: '2000-01-01',
+      termsAccepted: true,
+      privacyAccepted: true,
+      termsVersion: process.env.CURRENT_TERMS_VERSION,
+      privacyVersion: process.env.CURRENT_PRIVACY_VERSION,
+    };
+    const register = await request(app.getHttpServer())
+      .post('/api/v1/auth/register')
+      .send(payload)
+      .expect(HttpStatus.CREATED);
+    const verifyToken = mailer.sent.find(
+      (message) => message.to === email && message.purpose === 'EMAIL_VERIFICATION',
+    )?.token;
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/email/verify')
+      .send({ token: verifyToken })
+      .expect(HttpStatus.OK);
+    const user = await prisma.user.findUniqueOrThrow({ where: { email } });
+    await prisma.userRoleAssignment.create({
+      data: { userId: user.id, role: 'SELLER' },
+    });
+    await prisma.sellerProfile.create({
+      data: {
+        userId: user.id,
+        storeName: `Store ${user.id}`,
+        slug: `store-${user.id}`,
+        status: 'ACTIVE',
+      },
+    });
+    await expect(
+      prisma.userRoleAssignment.count({ where: { userId: user.id, role: 'SELLER' } }),
+    ).resolves.toBe(1);
+    await expect(
+      prisma.sellerProfile.findUnique({ where: { userId: user.id } }),
+    ).resolves.toMatchObject({
+      status: 'ACTIVE',
+    });
+    const login = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', register.headers['set-cookie'] as unknown as string[])
+      .send({ email, password })
+      .expect(HttpStatus.OK);
+    return { email, password, register, login, user, auth: `Bearer ${login.body.accessToken}` };
   }
 
   async function loginOnNewApprovedDevice(
@@ -808,6 +863,77 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
     });
     expect(serialized).not.toContain(emailToken);
     expect(serialized).not.toContain(oldRefreshCookie);
+  });
+
+  it('creates and returns a persistent listing draft through the seller HTTP API', async () => {
+    const seller = await activeSeller('integration-listing-draft-create@example.com');
+    await expect(
+      prisma.userRoleAssignment.count({ where: { userId: seller.user.id, role: 'SELLER' } }),
+    ).resolves.toBe(1);
+    await expect(
+      prisma.sellerProfile.findUnique({ where: { userId: seller.user.id } }),
+    ).resolves.toMatchObject({ status: 'ACTIVE' });
+
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/seller/listing-drafts')
+      .set('Authorization', seller.auth)
+      .send({ title: 'Rascunho inicial', wizardStep: 2 });
+
+    const safeCreateDiagnostic = JSON.stringify({
+      status: response.status,
+      code: response.body?.code,
+      message: response.body?.message,
+      body: {
+        id: typeof response.body?.id === 'string' ? response.body.id : undefined,
+        status: response.body?.status,
+        title: response.body?.title,
+        wizardStep: response.body?.wizardStep,
+        version: response.body?.version,
+      },
+    });
+    if (response.status !== Number(HttpStatus.CREATED)) {
+      throw new Error(
+        `Expected ${HttpStatus.CREATED} but received ${response.status}: ${safeCreateDiagnostic}`,
+      );
+    }
+
+    expect(response.body).toMatchObject({
+      id: expect.any(String),
+      status: 'DRAFT',
+      title: 'Rascunho inicial',
+      wizardStep: 2,
+      version: 1,
+    });
+    await expect(prisma.listingDraft.count({ where: { id: response.body.id } })).resolves.toBe(1);
+    await expect(
+      prisma.securityEvent.count({
+        where: { userId: seller.user.id, eventType: SecurityEventType.LISTING_DRAFT_CREATED },
+      }),
+    ).resolves.toBe(1);
+    expect(JSON.stringify(response.body)).not.toContain('reviewedBy');
+    expect(JSON.stringify(response.body)).not.toContain('userEmail');
+
+    await request(app.getHttpServer())
+      .post('/api/v1/v1/seller/listing-drafts')
+      .set('Authorization', seller.auth)
+      .send({ title: 'Rota duplicada' })
+      .expect(HttpStatus.NOT_FOUND);
+
+    const admin = await registerVerifiedAndLogin('integration-listing-admin-route@example.com');
+    await prisma.userRoleAssignment.create({ data: { userId: admin.user.id, role: 'ADMIN' } });
+    const adminLogin = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', admin.register.headers['set-cookie'] as unknown as string[])
+      .send({ email: admin.email, password: admin.password })
+      .expect(HttpStatus.OK);
+    await request(app.getHttpServer())
+      .get('/api/v1/admin/listing-drafts')
+      .set('Authorization', `Bearer ${adminLogin.body.accessToken}`)
+      .expect(HttpStatus.OK);
+    await request(app.getHttpServer())
+      .get('/api/v1/v1/admin/listing-drafts')
+      .set('Authorization', `Bearer ${adminLogin.body.accessToken}`)
+      .expect(HttpStatus.NOT_FOUND);
   });
 
   it('handles concurrent refresh attempts for the same token safely with real PostgreSQL and Redis', async () => {
@@ -3033,7 +3159,7 @@ describe('Catalog taxonomy with real PostgreSQL (integration)', () => {
     await app.close();
   });
 
-  it('has the exact migrated baseline taxonomy and no persistent product/listing tables', async () => {
+  it('has the exact taxonomy baseline and no public product/listing tables', async () => {
     const categories = await prisma.catalogCategory.findMany({
       where: { slug: { in: baselineSlugs } },
       orderBy: { sortOrder: 'asc' },
@@ -3069,7 +3195,18 @@ describe('Catalog taxonomy with real PostgreSQL (integration)', () => {
     ).resolves.toEqual([]);
     await expect(
       prisma.$queryRawUnsafe(
-        `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('Product','Listing','ListingDraft','CatalogProduct','CatalogListing')`,
+        `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('ListingDraft','ListingDraftVariant','ListingDraftAttributeValue','ListingDraftServiceDetails','ListingDraftAccountDetails') ORDER BY table_name`,
+      ),
+    ).resolves.toEqual([
+      { table_name: 'ListingDraft' },
+      { table_name: 'ListingDraftAccountDetails' },
+      { table_name: 'ListingDraftAttributeValue' },
+      { table_name: 'ListingDraftServiceDetails' },
+      { table_name: 'ListingDraftVariant' },
+    ]);
+    await expect(
+      prisma.$queryRawUnsafe(
+        `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('Product','PublicProduct','Listing','CatalogProduct','CatalogListing')`,
       ),
     ).resolves.toEqual([]);
   });
@@ -3253,5 +3390,128 @@ describe('Catalog taxonomy with real PostgreSQL (integration)', () => {
       data: { status: 'INACTIVE' },
     });
     await expect(catalog.publicCategoryBySlug(slug)).rejects.toThrow();
+  });
+});
+
+describe('Persistent listing drafts with real PostgreSQL (integration)', () => {
+  let app: INestApplication;
+  let prisma: PrismaService;
+  let listingDrafts: ListingDraftsService;
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    app = moduleRef.createNestApplication();
+    const config = app.get(ConfigService);
+    const appConfig = config.getOrThrow<AppConfig>('app');
+    app.setGlobalPrefix(appConfig.apiPrefix);
+    app.enableVersioning({ type: VersioningType.URI });
+    app.use(cookieParser());
+    app.useGlobalPipes(
+      new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }),
+    );
+    app.useGlobalFilters(new GlobalExceptionFilter());
+    await app.init();
+    prisma = app.get(PrismaService);
+    listingDrafts = app.get(ListingDraftsService);
+  });
+
+  beforeEach(async () => {
+    await cleanAuthIntegrationData(prisma);
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('has listing draft tables, constraints, indexes, enums and no public product/listing tables', async () => {
+    expect(listingDrafts).toBeInstanceOf(ListingDraftsService);
+    const tables = await prisma.$queryRaw<{ table_name: string }[]>`
+      SELECT table_name
+      FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_name IN (
+          'ListingDraft',
+          'ListingDraftVariant',
+          'ListingDraftAttributeValue',
+          'ListingDraftServiceDetails',
+          'ListingDraftAccountDetails',
+          'Product',
+          'PublicProduct',
+          'Listing',
+          'CatalogProduct',
+          'CatalogListing'
+        )
+      ORDER BY table_name ASC
+    `;
+    const tableNames = tables.map((table) => table.table_name);
+    expect(tableNames).toEqual(
+      expect.arrayContaining([
+        'ListingDraft',
+        'ListingDraftVariant',
+        'ListingDraftAttributeValue',
+        'ListingDraftServiceDetails',
+        'ListingDraftAccountDetails',
+      ]),
+    );
+    expect(tableNames).not.toEqual(
+      expect.arrayContaining([
+        'Product',
+        'PublicProduct',
+        'Listing',
+        'CatalogProduct',
+        'CatalogListing',
+      ]),
+    );
+
+    const enums = await prisma.$queryRaw<{ typname: string }[]>`
+      SELECT typname
+      FROM pg_type
+      WHERE typname IN (
+        'ListingDraftStatus',
+        'ListingDraftModel',
+        'ListingDraftDeliveryMode',
+        'ListingDraftPromotionPreference',
+        'ListingDraftSellerPlanPreference',
+        'ListingDraftServicePricingType',
+        'ListingDraftVariantStatus',
+        'ListingDraftAccountProvenance',
+        'ListingDraftAccountRecoveryLevel',
+        'ListingDraftAccountRecoveryRisk'
+      )
+    `;
+    expect(enums).toHaveLength(10);
+
+    const constraints = await prisma.$queryRaw<{ kind: string; total: bigint }[]>`
+      SELECT contype::text AS kind, COUNT(*) AS total
+      FROM pg_constraint
+      WHERE conrelid IN (
+        '"ListingDraft"'::regclass,
+        '"ListingDraftVariant"'::regclass,
+        '"ListingDraftAttributeValue"'::regclass,
+        '"ListingDraftServiceDetails"'::regclass,
+        '"ListingDraftAccountDetails"'::regclass
+      )
+      GROUP BY contype
+    `;
+    expect(Number(constraints.find((row) => row.kind === 'f')?.total ?? 0)).toBeGreaterThanOrEqual(
+      8,
+    );
+    expect(Number(constraints.find((row) => row.kind === 'c')?.total ?? 0)).toBeGreaterThanOrEqual(
+      6,
+    );
+
+    const indexes = await prisma.$queryRaw<{ indexname: string }[]>`
+      SELECT indexname
+      FROM pg_indexes
+      WHERE schemaname = 'public'
+        AND tablename IN (
+          'ListingDraft',
+          'ListingDraftVariant',
+          'ListingDraftAttributeValue',
+          'ListingDraftServiceDetails',
+          'ListingDraftAccountDetails'
+        )
+    `;
+    expect(indexes.length).toBeGreaterThanOrEqual(7);
   });
 });

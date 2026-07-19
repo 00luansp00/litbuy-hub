@@ -14,16 +14,16 @@ Regras de status de anúncio (listing/product). **Documentação-alvo.** Hoje o 
 
 ## Quem pode mudar cada status
 
-| De → Para                     | Vendedor | Admin |
-|-------------------------------|----------|-------|
-| `draft` → `pending_review`    | ✓        | —     |
-| `draft`/`pending_review` → `active` (sem revisão) | ✓ | ✓ |
-| `pending_review` → `active`   | —        | ✓     |
-| `pending_review` → `rejected` | —        | ✓     |
-| `active` → `paused`           | ✓        | ✓     |
-| `paused` → `active`           | ✓        | ✓     |
-| qualquer → `removed`          | ✓ (próprio) | ✓ |
-| `active` ↔ `sold_out`         | sistema (baseado em stock) | — |
+| De → Para                                         | Vendedor                   | Admin |
+| ------------------------------------------------- | -------------------------- | ----- |
+| `draft` → `pending_review`                        | ✓                          | —     |
+| `draft`/`pending_review` → `active` (sem revisão) | ✓                          | ✓     |
+| `pending_review` → `active`                       | —                          | ✓     |
+| `pending_review` → `rejected`                     | —                          | ✓     |
+| `active` → `paused`                               | ✓                          | ✓     |
+| `paused` → `active`                               | ✓                          | ✓     |
+| qualquer → `removed`                              | ✓ (próprio)                | ✓     |
+| `active` ↔ `sold_out`                             | sistema (baseado em stock) | —     |
 
 ## Visibilidade no catálogo
 
@@ -54,3 +54,9 @@ Qualquer outra combinação → botão "Comprar"/"Adicionar ao carrinho" desabil
 - `paused` — pausado pelo vendedor.
 - `sold` / `out_of_stock` — sem estoque disponível.
 - `removed` — retirado pelo vendedor ou admin.
+
+## Persistent Listing Draft Foundation (2026-07-19)
+
+Real: rascunhos persistentes de anúncio, edição, submissão, fila administrativa, início de análise, rejeição, correção/reenvio, aprovação de moderação, `expectedVersion`, validação pela taxonomia real e auditoria em `SecurityEvent`.
+
+Futuro/demonstrativo: aprovação não publica produto público; imagens permanecem previews locais sem upload/storage; cofre, credenciais, entrega automática real, planos pagos, pagamentos, compras e KYC não foram implementados. Ver `LISTING_DRAFT_FOUNDATION.md`.

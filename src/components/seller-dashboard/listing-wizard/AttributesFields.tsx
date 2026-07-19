@@ -1,3 +1,4 @@
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ListingAttributeConfig, ListingAttributeValue } from "@/types";
@@ -19,9 +20,7 @@ export function AttributesFields({ config, value, onChange }: Props) {
   return (
     <div className="space-y-3 rounded-xl border border-border bg-surface/40 p-4">
       <div>
-        <h4 className="text-sm font-semibold text-foreground">
-          Atributos do produto
-        </h4>
+        <h4 className="text-sm font-semibold text-foreground">Atributos do produto</h4>
         <p className="text-xs text-muted-foreground">
           Campos variam conforme a subcategoria ou tipo do produto.
         </p>
@@ -43,6 +42,14 @@ export function AttributesFields({ config, value, onChange }: Props) {
                   </option>
                 ))}
               </select>
+            ) : f.type === "boolean" ? (
+              <label className="flex h-10 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm">
+                <Checkbox
+                  checked={get(f.key) === "true"}
+                  onCheckedChange={(checked) => set(f.key, checked ? "true" : "false")}
+                />
+                <span>{get(f.key) === "true" ? "Sim" : "Não"}</span>
+              </label>
             ) : (
               <Input
                 type={f.type === "number" ? "number" : "text"}
