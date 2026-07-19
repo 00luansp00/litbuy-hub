@@ -39,6 +39,7 @@ type CatalogSubcategoryRow = Prisma.CatalogSubcategoryGetPayload<Record<string, 
 type CatalogAttributeRow = Prisma.CatalogAttributeGetPayload<Record<string, never>>;
 type AuditMetadata = Record<string, string | string[] | number | boolean | null>;
 type PublicCategory = Omit<CatalogCategoryRow, 'status'>;
+type PublicSubcategory = { id: string; slug: string; name: string; sortOrder: number };
 type PublicAttribute = {
   key: string;
   label: string;
@@ -129,7 +130,11 @@ export class CatalogService {
     return this.publicCategory(c);
   }
 
-  async publicSubcategories(categorySlug: string): Promise<{ items: CatalogSubcategoryRow[] }> {
+  publicSubcategory(s: CatalogSubcategoryRow): PublicSubcategory {
+    return { id: s.id, slug: s.slug, name: s.name, sortOrder: s.sortOrder };
+  }
+
+  async publicSubcategories(categorySlug: string): Promise<{ items: PublicSubcategory[] }> {
     const c = await this.prisma.catalogCategory.findFirst({
       where: { slug: normalizeCatalogSlugFormat(categorySlug), status: 'ACTIVE' },
       select: { id: true },
@@ -139,7 +144,7 @@ export class CatalogService {
       where: { categoryId: c.id, status: 'ACTIVE' },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }, { id: 'asc' }],
     });
-    return { items };
+    return { items: items.map((s) => this.publicSubcategory(s)) };
   }
 
   productTypes(): { items: { id: string; name: string }[] } {
@@ -322,6 +327,8 @@ export class CatalogService {
     const inputType = patch.inputType;
     if (!patch.key || !patch.label || !inputType)
       throw new BadRequestException({ code: 'CATALOG_ATTRIBUTE_INVALID' });
+    if (!!patch.subcategoryId === !!patch.productType)
+      throw new BadRequestException({ code: 'CATALOG_ATTRIBUTE_SCOPE_INVALID' });
     const selectOptions = normalizeOptions(inputType, patch.selectOptions);
     return {
       subcategoryId: patch.subcategoryId,

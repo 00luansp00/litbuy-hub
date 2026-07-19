@@ -60,4 +60,67 @@ describe("catalogService parser", () => {
       catalogService.getAttributesForSubcategory("contas", "valorant", "account"),
     ).rejects.toMatchObject({ code: "CATALOG_RESPONSE_INVALID" });
   });
+  const adminAttr = {
+    id: "00000000-0000-4000-8000-000000000111",
+    subcategoryId: null,
+    productType: "virtual_currency",
+    key: "quantidade",
+    label: "Quantidade",
+    inputType: "number",
+    placeholder: "0",
+    required: false,
+    options: [],
+    sortOrder: 1,
+    status: "ACTIVE",
+  };
+  it.each([
+    { subcategoryId: null, productType: null },
+    { subcategoryId: "00000000-0000-4000-8000-000000000111", productType: "account" },
+    { key: "Bad Key" },
+    { inputType: "select", options: [] },
+    { inputType: "text", options: ["BR"] },
+    { inputType: "select", options: ["BR", "BR"] },
+    { inputType: "select", options: [""] },
+    { inputType: "select", options: Array.from({ length: 31 }, (_, i) => `O${i}`) },
+    { status: "DELETED" },
+    { sortOrder: 1.5 },
+    { subcategoryId: "not-uuid", productType: null },
+    { productType: "unknown" },
+  ])("rejects malformed admin attribute scope/options %#", async (patch) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ items: [{ ...adminAttr, ...patch }] }), { status: 200 }),
+      ),
+    );
+    await expect(catalogService.admin.attributes()).rejects.toMatchObject({
+      code: "CATALOG_RESPONSE_INVALID",
+    });
+  });
+  it("parses admin attribute with explicit subcategory scope", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              items: [
+                {
+                  ...adminAttr,
+                  subcategoryId: "00000000-0000-4000-8000-000000000222",
+                  productType: null,
+                  inputType: "select",
+                  options: ["BR", "NA"],
+                },
+              ],
+            }),
+            { status: 200 },
+          ),
+      ),
+    );
+    await expect(catalogService.admin.attributes()).resolves.toMatchObject([
+      { subcategoryId: "00000000-0000-4000-8000-000000000222", productType: null },
+    ]);
+  });
 });

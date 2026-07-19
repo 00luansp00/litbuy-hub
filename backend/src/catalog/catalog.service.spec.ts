@@ -115,7 +115,9 @@ describe('CatalogService', () => {
       .mockResolvedValueOnce([genericAttr])
       .mockResolvedValueOnce([specificAttr]);
     const service = new CatalogService(prisma as never);
-    await expect(service.publicSubcategories('contas')).resolves.toEqual({ items: [sub] });
+    await expect(service.publicSubcategories('contas')).resolves.toEqual({
+      items: [{ id: sub.id, slug: sub.slug, name: sub.name, sortOrder: sub.sortOrder }],
+    });
     await expect(
       service.attributes({
         categorySlug: 'contas',

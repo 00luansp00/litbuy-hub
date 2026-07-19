@@ -141,24 +141,29 @@ function adminSub(v: unknown): AdminCatalogSubcategory {
   if (status !== "ACTIVE" && status !== "INACTIVE") invalid();
   return { ...s, categoryId: str(o.categoryId, uuid), status, sortOrder: num(o.sortOrder) };
 }
+function parseOptions(type: ListingAttributeConfig["type"], raw: unknown) {
+  const arr =
+    raw == null
+      ? []
+      : Array.isArray(raw) && raw.every((x) => typeof x === "string" && x.trim())
+        ? (raw as string[]).map((x) => x.trim())
+        : invalid();
+  if (arr.length > 30 || new Set(arr).size !== arr.length) invalid();
+  if (type === "select" && arr.length === 0) invalid();
+  if (type !== "select" && arr.length > 0) invalid();
+  return arr;
+}
 function attr(v: unknown): ListingAttributeConfig {
   const o = obj(v);
   const type = normalizeInputType(str(o.inputType ?? o.type));
-  const options = o.options ?? o.selectOptions;
-  const arr =
-    options == null
-      ? undefined
-      : Array.isArray(options) && options.every((x) => typeof x === "string" && x.trim())
-        ? [...new Set(options as string[])]
-        : invalid();
-  if (type === "select" && (!arr || arr.length === 0)) invalid();
+  const arr = parseOptions(type, o.options ?? o.selectOptions);
   return {
-    key: str(o.key),
+    key: str(o.key, /^[a-z][a-z0-9_]{1,59}$/),
     label: str(o.label),
     type,
     placeholder: optStr(o.placeholder),
     required: o.required == null ? undefined : bool(o.required),
-    options: arr,
+    options: arr.length ? arr : undefined,
   };
 }
 function adminAttr(v: unknown): AdminCatalogAttribute {
@@ -166,11 +171,13 @@ function adminAttr(v: unknown): AdminCatalogAttribute {
   const o = obj(v);
   const status = str(o.status) as CatalogEntityStatus;
   if (status !== "ACTIVE" && status !== "INACTIVE") invalid();
+  const subcategoryId = o.subcategoryId == null ? null : str(o.subcategoryId, uuid);
   const pt = o.productType == null ? null : normalizeProductType(str(o.productType));
+  if ((subcategoryId == null) === (pt == null)) invalid();
   return {
     ...a,
     id: str(o.id, uuid),
-    subcategoryId: o.subcategoryId == null ? null : str(o.subcategoryId, uuid),
+    subcategoryId,
     productType: pt as ListingProductType | null,
     status,
     sortOrder: num(o.sortOrder),

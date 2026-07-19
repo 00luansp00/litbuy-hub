@@ -18,6 +18,10 @@ Status: implemented as the first persistent catalog taxonomy foundation. It does
 - `/produto/$id` remains a demonstrative product page.
 - `/vendedor/anuncios/novo` consumes real taxonomy, but draft submission remains demonstrative and publishes nothing.
 
+## Public subcategory contract
+
+Public subcategory responses are minimal (`id`, `slug`, `name`, `sortOrder`) and do not expose status, timestamps, categoryId, administrative metadata or fictitious metrics.
+
 ## Attribute resolution
 
 When `/api/v1/catalog/attributes` receives a product type and subcategory, the backend loads active generic product-type attributes and active subcategory attributes. Subcategory attributes override generic attributes with the same `key`. The final result is ordered by `sortOrder ASC` and then `key ASC` for deterministic ties. The frontend must not merge attribute scopes by itself.

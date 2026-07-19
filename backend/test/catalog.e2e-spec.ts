@@ -110,6 +110,8 @@ function prisma() {
   return { ...tx, $transaction: jest.fn((fn: (client: typeof tx) => unknown) => fn(tx)) };
 }
 
+const admin = (r: request.Test) => r.set('x-test-user', 'admin').set('x-test-role', 'admin');
+
 describe('Catalog taxonomy HTTP (e2e)', () => {
   let app: INestApplication;
   beforeEach(async () => {
@@ -133,20 +135,46 @@ describe('Catalog taxonomy HTTP (e2e)', () => {
   });
   afterEach(async () => app.close());
 
-  it('serves public catalog endpoints with active records and lowercase contracts', async () => {
+  it('lists only active public categories without admin status', async () => {
     await request(app.getHttpServer())
       .get('/api/v1/catalog/categories')
       .expect(HttpStatus.OK)
-      .expect(({ body }) =>
-        expect(body.items).toEqual([expect.not.objectContaining({ status: expect.anything() })]),
-      );
+      .expect(({ body }) => {
+        expect(body.items).toHaveLength(1);
+        expect(body.items[0]).not.toHaveProperty('status');
+      });
+  });
+  it('loads active category by slug and returns inactive/missing categories as 404', async () => {
+    await request(app.getHttpServer())
+      .get('/api/v1/catalog/categories/contas')
+      .expect(HttpStatus.OK);
     await request(app.getHttpServer())
       .get('/api/v1/catalog/categories/old')
-      .expect(HttpStatus.NOT_FOUND);
+      .expect(HttpStatus.NOT_FOUND)
+      .expect(({ body }) => expect(body.code).toBe('CATALOG_CATEGORY_NOT_FOUND'));
+    await request(app.getHttpServer())
+      .get('/api/v1/catalog/categories/missing')
+      .expect(HttpStatus.NOT_FOUND)
+      .expect(({ body }) => expect(body.code).toBe('CATALOG_CATEGORY_NOT_FOUND'));
+  });
+  it('returns minimal active subcategory public contract', async () => {
     await request(app.getHttpServer())
       .get('/api/v1/catalog/categories/contas/subcategories')
       .expect(HttpStatus.OK)
-      .expect(({ body }) => expect(body.items[0].slug).toBe('valorant'));
+      .expect(({ body }) => {
+        expect(body.items[0]).toEqual({
+          id: sub.id,
+          slug: 'valorant',
+          name: 'Valorant',
+          sortOrder: 1,
+        });
+        expect(body.items[0]).not.toHaveProperty('status');
+        expect(body.items[0]).not.toHaveProperty('createdAt');
+        expect(body.items[0]).not.toHaveProperty('updatedAt');
+        expect(body.items[0]).not.toHaveProperty('categoryId');
+      });
+  });
+  it('returns lowercase product types and attributes', async () => {
     await request(app.getHttpServer())
       .get('/api/v1/catalog/product-types')
       .expect(HttpStatus.OK)
@@ -158,8 +186,13 @@ describe('Catalog taxonomy HTTP (e2e)', () => {
       .expect(HttpStatus.OK)
       .expect(({ body }) => expect(body.items[0]).toMatchObject({ inputType: 'number' }));
   });
-
-  it('protects and validates admin endpoints', async () => {
+  it('rejects invalid public attribute filters', async () => {
+    await request(app.getHttpServer())
+      .get('/api/v1/catalog/attributes')
+      .expect(HttpStatus.BAD_REQUEST)
+      .expect(({ body }) => expect(body.code).toBe('CATALOG_ATTRIBUTE_FILTER_REQUIRED'));
+  });
+  it('protects admin endpoints for visitors, buyers and sellers without ADMIN', async () => {
     await request(app.getHttpServer())
       .get('/api/v1/admin/catalog/categories')
       .expect(HttpStatus.UNAUTHORIZED);
@@ -169,9 +202,13 @@ describe('Catalog taxonomy HTTP (e2e)', () => {
       .set('x-test-role', 'buyer')
       .expect(HttpStatus.FORBIDDEN);
     await request(app.getHttpServer())
-      .get('/api/v1/admin/catalog/attributes')
-      .set('x-test-user', 'admin')
-      .set('x-test-role', 'admin')
+      .get('/api/v1/admin/catalog/categories')
+      .set('x-test-user', 'seller')
+      .set('x-test-role', 'seller')
+      .expect(HttpStatus.FORBIDDEN);
+  });
+  it('allows admin listing with lowercase attribute contract', async () => {
+    await admin(request(app.getHttpServer()).get('/api/v1/admin/catalog/attributes'))
       .expect(HttpStatus.OK)
       .expect(({ body }) =>
         expect(body.items[0]).toMatchObject({
@@ -179,23 +216,64 @@ describe('Catalog taxonomy HTTP (e2e)', () => {
           inputType: 'number',
         }),
       );
-    await request(app.getHttpServer())
-      .patch('/api/v1/admin/catalog/categories/00000000-0000-4000-8000-000000000001')
-      .set('x-test-user', 'admin')
-      .set('x-test-role', 'admin')
+  });
+  it('validates admin category payloads and empty patches', async () => {
+    await admin(
+      request(app.getHttpServer()).patch(
+        '/api/v1/admin/catalog/categories/00000000-0000-4000-8000-000000000001',
+      ),
+    )
       .send({ extra: true })
       .expect(HttpStatus.BAD_REQUEST);
-    await request(app.getHttpServer())
-      .patch('/api/v1/admin/catalog/categories/00000000-0000-4000-8000-000000000001')
-      .set('x-test-user', 'admin')
-      .set('x-test-role', 'admin')
+    await admin(
+      request(app.getHttpServer()).patch(
+        '/api/v1/admin/catalog/categories/00000000-0000-4000-8000-000000000001',
+      ),
+    )
       .send({})
-      .expect(HttpStatus.BAD_REQUEST);
-    await request(app.getHttpServer())
-      .post('/api/v1/admin/catalog/attributes')
-      .set('x-test-user', 'admin')
-      .set('x-test-role', 'admin')
+      .expect(HttpStatus.BAD_REQUEST)
+      .expect(({ body }) => expect(body.code).toBe('CATALOG_UPDATE_EMPTY'));
+    await admin(request(app.getHttpServer()).post('/api/v1/admin/catalog/categories'))
+      .send({ slug: 'admin', name: 'Admin' })
+      .expect(HttpStatus.BAD_REQUEST)
+      .expect(({ body }) => expect(body.code).toBe('CATALOG_SLUG_INVALID'));
+  });
+  it('creates and edits admin taxonomy records', async () => {
+    await admin(request(app.getHttpServer()).post('/api/v1/admin/catalog/categories'))
+      .send({ slug: 'nova', name: 'Nova' })
+      .expect(HttpStatus.CREATED);
+    await admin(request(app.getHttpServer()).post('/api/v1/admin/catalog/subcategories'))
+      .send({ categoryId: cat.id, slug: 'nova', name: 'Nova' })
+      .expect(HttpStatus.CREATED);
+    await admin(request(app.getHttpServer()).patch(`/api/v1/admin/catalog/subcategories/${sub.id}`))
+      .send({ name: 'Valorant BR' })
+      .expect(HttpStatus.OK);
+  });
+  it('validates and updates admin attributes', async () => {
+    await admin(request(app.getHttpServer()).post('/api/v1/admin/catalog/attributes'))
       .send({ key: 'elo', label: 'Elo', inputType: 'select' })
-      .expect(HttpStatus.BAD_REQUEST);
+      .expect(HttpStatus.BAD_REQUEST)
+      .expect(({ body }) => expect(body.code).toBe('CATALOG_ATTRIBUTE_SCOPE_INVALID'));
+    await admin(request(app.getHttpServer()).post('/api/v1/admin/catalog/attributes'))
+      .send({
+        subcategoryId: sub.id,
+        productType: 'account',
+        key: 'elo',
+        label: 'Elo',
+        inputType: 'select',
+        selectOptions: ['BR'],
+      })
+      .expect(HttpStatus.BAD_REQUEST)
+      .expect(({ body }) => expect(body.code).toBe('CATALOG_ATTRIBUTE_SCOPE_INVALID'));
+    await admin(request(app.getHttpServer()).post('/api/v1/admin/catalog/attributes'))
+      .send({ productType: 'account', key: 'elo', label: 'Elo', inputType: 'select' })
+      .expect(HttpStatus.BAD_REQUEST)
+      .expect(({ body }) => expect(body.code).toBe('CATALOG_SELECT_OPTIONS_REQUIRED'));
+    await admin(request(app.getHttpServer()).patch(`/api/v1/admin/catalog/attributes/${attr.id}`))
+      .send({ inputType: 'select', selectOptions: ['BR', 'NA'] })
+      .expect(HttpStatus.OK);
+    await admin(request(app.getHttpServer()).patch(`/api/v1/admin/catalog/attributes/${attr.id}`))
+      .send({ subcategoryId: sub.id, productType: null })
+      .expect(HttpStatus.OK);
   });
 });
