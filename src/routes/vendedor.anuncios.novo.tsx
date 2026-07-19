@@ -23,10 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { SellerDashboardLayout } from "@/components/seller-dashboard/SellerDashboardLayout";
-import {
-  ImageUploader,
-  type ImageUploaderItem,
-} from "@/components/common/ImageUploader";
+import { ImageUploader, type ImageUploaderItem } from "@/components/common/ImageUploader";
 import { listingDraftService } from "@/services/listingDraftService";
 import { cn } from "@/lib/utils";
 import type {
@@ -109,12 +106,10 @@ function NovoAnuncioPage() {
   const [gallery, setGallery] = useState<ImageUploaderItem[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const [productTypes, setProductTypes] = useState<
-    { id: ListingProductType; name: string }[]
-  >([]);
-  const [models, setModels] = useState<
-    { id: ListingModel; name: string; description: string }[]
-  >([]);
+  const [productTypes, setProductTypes] = useState<{ id: ListingProductType; name: string }[]>([]);
+  const [models, setModels] = useState<{ id: ListingModel; name: string; description: string }[]>(
+    [],
+  );
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
   const [attrConfig, setAttrConfig] = useState<ListingAttributeConfig[]>([]);
@@ -146,6 +141,8 @@ function NovoAnuncioPage() {
     let m = true;
     if (!draft.categorySlug) {
       setSubcategories([]);
+      setAttrConfig([]);
+      setDraft((d) => ({ ...d, subcategorySlug: undefined, attributes: [] }));
       return;
     }
     listingDraftService
@@ -159,12 +156,20 @@ function NovoAnuncioPage() {
   useEffect(() => {
     let m = true;
     listingDraftService
-      .getAttributesForSubcategory(draft.subcategorySlug, draft.productType)
-      .then((c) => m && setAttrConfig(c));
+      .getAttributesForSubcategory(draft.subcategorySlug, draft.productType, draft.categorySlug)
+      .then((c) => {
+        if (!m) return;
+        setAttrConfig(c);
+        const allowed = new Set(c.map((item) => item.key));
+        setDraft((d) => ({
+          ...d,
+          attributes: (d.attributes ?? []).filter((item) => allowed.has(item.key)),
+        }));
+      });
     return () => {
       m = false;
     };
-  }, [draft.subcategorySlug, draft.productType]);
+  }, [draft.categorySlug, draft.subcategorySlug, draft.productType]);
 
   const update = <K extends keyof ListingDraft>(key: K, value: ListingDraft[K]) =>
     setDraft((d) => ({ ...d, [key]: value }));
@@ -175,10 +180,8 @@ function NovoAnuncioPage() {
   const canContinue = useMemo(() => {
     if (step === 1) return !!draft.model && !!draft.categorySlug;
     if (step === 2) {
-      if (draft.model === "service")
-        return !!draft.service?.title && !!draft.service?.description;
-      if (draft.model === "dynamic")
-        return (draft.dynamicItems?.length ?? 0) >= 1;
+      if (draft.model === "service") return !!draft.service?.title && !!draft.service?.description;
+      if (draft.model === "dynamic") return (draft.dynamicItems?.length ?? 0) >= 1;
       return !!draft.title && typeof draft.price === "number";
     }
     if (step === 3) return !!draft.deliveryMode;
@@ -213,7 +216,9 @@ function NovoAnuncioPage() {
       hideCreateCta
     >
       <div className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-muted-foreground">
-        Em produção, alguns tipos de anúncio podem exigir <strong className="text-warning">verificação de identidade</strong>. Nesta demonstração, isso não bloqueia a criação.
+        Em produção, alguns tipos de anúncio podem exigir{" "}
+        <strong className="text-warning">verificação de identidade</strong>. Nesta demonstração,
+        isso não bloqueia a criação.
       </div>
       {/* Steps */}
       <ol className="flex flex-wrap items-center gap-2 text-xs sm:text-sm">
@@ -280,9 +285,7 @@ function NovoAnuncioPage() {
                   >
                     <div className="mb-2 flex items-center gap-2">
                       <Icon className="h-4 w-4 text-primary" />
-                      <span className="text-base font-bold text-foreground">
-                        {m.name}
-                      </span>
+                      <span className="text-base font-bold text-foreground">{m.name}</span>
                       {active && <Check className="ml-auto h-4 w-4 text-primary" />}
                     </div>
                     <p className="text-xs text-muted-foreground">{m.description}</p>
@@ -304,8 +307,13 @@ function NovoAnuncioPage() {
                 <select
                   value={draft.categorySlug ?? ""}
                   onChange={(e) => {
-                    update("categorySlug", e.target.value || undefined);
-                    update("subcategorySlug", undefined);
+                    setAttrConfig([]);
+                    setDraft((d) => ({
+                      ...d,
+                      categorySlug: e.target.value || undefined,
+                      subcategorySlug: undefined,
+                      attributes: [],
+                    }));
                   }}
                   className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                 >
@@ -321,16 +329,19 @@ function NovoAnuncioPage() {
                 <Label className="mb-1.5 block">Subcategoria</Label>
                 <select
                   value={draft.subcategorySlug ?? ""}
-                  onChange={(e) =>
-                    update("subcategorySlug", e.target.value || undefined)
-                  }
+                  onChange={(e) => {
+                    setAttrConfig([]);
+                    setDraft((d) => ({
+                      ...d,
+                      subcategorySlug: e.target.value || undefined,
+                      attributes: [],
+                    }));
+                  }}
                   disabled={subcategories.length === 0}
                   className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50"
                 >
                   <option value="">
-                    {subcategories.length === 0
-                      ? "Escolha uma categoria primeiro"
-                      : "Selecionar"}
+                    {subcategories.length === 0 ? "Escolha uma categoria primeiro" : "Selecionar"}
                   </option>
                   {subcategories.map((s) => (
                     <option key={s.slug} value={s.slug}>
@@ -346,7 +357,10 @@ function NovoAnuncioPage() {
                     <button
                       key={t.id}
                       type="button"
-                      onClick={() => update("productType", t.id)}
+                      onClick={() => {
+                        setAttrConfig([]);
+                        setDraft((d) => ({ ...d, productType: t.id, attributes: [] }));
+                      }}
                       className={cn(
                         "rounded-full border px-3 py-1.5 text-sm transition-colors",
                         draft.productType === t.id
@@ -409,10 +423,7 @@ function NovoAnuncioPage() {
                     step="0.01"
                     value={draft.price ?? ""}
                     onChange={(e) =>
-                      update(
-                        "price",
-                        e.target.value ? Number(e.target.value) : undefined,
-                      )
+                      update("price", e.target.value ? Number(e.target.value) : undefined)
                     }
                   />
                 </div>
@@ -423,10 +434,7 @@ function NovoAnuncioPage() {
                     min={0}
                     value={draft.stock ?? ""}
                     onChange={(e) =>
-                      update(
-                        "stock",
-                        e.target.value ? Number(e.target.value) : undefined,
-                      )
+                      update("stock", e.target.value ? Number(e.target.value) : undefined)
                     }
                   />
                 </div>
@@ -441,17 +449,11 @@ function NovoAnuncioPage() {
             )}
 
             {draft.model === "service" && (
-              <ServiceFields
-                value={draft.service ?? {}}
-                onChange={(v) => update("service", v)}
-              />
+              <ServiceFields value={draft.service ?? {}} onChange={(v) => update("service", v)} />
             )}
 
             {draft.productType === "account" && draft.model !== "service" && (
-              <AccountFields
-                value={draft.account ?? {}}
-                onChange={(v) => update("account", v)}
-              />
+              <AccountFields value={draft.account ?? {}} onChange={(v) => update("account", v)} />
             )}
 
             {attrConfig.length > 0 && (
@@ -472,20 +474,18 @@ function NovoAnuncioPage() {
               description="Escolha como o comprador receberá o produto."
             />
             <div className="grid gap-3 md:grid-cols-2">
-              {(
-                [
-                  {
-                    id: "manual" as ListingDeliveryMode,
-                    title: "Entrega Manual",
-                    desc: "Você entrega após a compra. O comprador acompanha pelo pedido.",
-                  },
-                  {
-                    id: "automatic" as ListingDeliveryMode,
-                    title: "Entrega Automática",
-                    desc: "Prepare um cofre seguro. O sistema entrega uma unidade após o pagamento.",
-                  },
-                ]
-              ).map((opt) => {
+              {[
+                {
+                  id: "manual" as ListingDeliveryMode,
+                  title: "Entrega Manual",
+                  desc: "Você entrega após a compra. O comprador acompanha pelo pedido.",
+                },
+                {
+                  id: "automatic" as ListingDeliveryMode,
+                  title: "Entrega Automática",
+                  desc: "Prepare um cofre seguro. O sistema entrega uma unidade após o pagamento.",
+                },
+              ].map((opt) => {
                 const active = draft.deliveryMode === opt.id;
                 return (
                   <button
@@ -607,7 +607,10 @@ function NovoAnuncioPage() {
             />
             <div className="grid gap-3 sm:grid-cols-2">
               <Info label="Modelo" value={modelLabel(draft.model)} />
-              <Info label="Tipo do produto" value={productTypeLabel(draft.productType, productTypes)} />
+              <Info
+                label="Tipo do produto"
+                value={productTypeLabel(draft.productType, productTypes)}
+              />
               <Info label="Categoria" value={draft.categorySlug ?? "—"} />
               <Info label="Subcategoria" value={draft.subcategorySlug ?? "—"} />
               {draft.model === "normal" && (
@@ -628,10 +631,7 @@ function NovoAnuncioPage() {
                 </>
               )}
               {draft.model === "dynamic" && (
-                <Info
-                  label="Variações"
-                  value={`${draft.dynamicItems?.length ?? 0} itens`}
-                />
+                <Info label="Variações" value={`${draft.dynamicItems?.length ?? 0} itens`} />
               )}
               {draft.model === "service" && (
                 <>
@@ -655,18 +655,12 @@ function NovoAnuncioPage() {
                 label="Entrega"
                 value={draft.deliveryMode === "automatic" ? "Automática" : "Manual"}
               />
-              <Info
-                label="Plano de destaque"
-                value={promotionLabel(draft.promotionTier)}
-              />
+              <Info label="Plano de destaque" value={promotionLabel(draft.promotionTier)} />
               <Info
                 label="Plano do vendedor"
                 value={draft.sellerPlan === "lit_max" ? "LIT-MAX" : "Padrão"}
               />
-              <Info
-                label="Capa"
-                value={cover.length > 0 ? "Definida" : "—"}
-              />
+              <Info label="Capa" value={cover.length > 0 ? "Definida" : "—"} />
               <Info label="Galeria" value={`${gallery.length} imagens`} />
             </div>
 
@@ -684,9 +678,8 @@ function NovoAnuncioPage() {
             <div className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/5 p-3 text-xs text-warning">
               <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
               <p>
-                Modo demonstração: nenhum anúncio é publicado, nenhuma imagem é
-                enviada, nenhum cofre é criado, nenhuma mensagem é enviada e nada
-                é persistido.
+                Modo demonstração: nenhum anúncio é publicado, nenhuma imagem é enviada, nenhum
+                cofre é criado, nenhuma mensagem é enviada e nada é persistido.
               </p>
             </div>
           </div>
@@ -703,11 +696,7 @@ function NovoAnuncioPage() {
           </Button>
         ) : (
           <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              onClick={() => handleSubmit("draft")}
-              disabled={loading}
-            >
+            <Button variant="outline" onClick={() => handleSubmit("draft")} disabled={loading}>
               <Save className="mr-2 h-4 w-4" /> Salvar rascunho
             </Button>
             <Button onClick={() => handleSubmit("submit")} disabled={loading}>
@@ -738,9 +727,7 @@ function SectionTitle({
           Demo
         </Badge>
       </div>
-      {description && (
-        <p className="text-xs text-muted-foreground">{description}</p>
-      )}
+      {description && <p className="text-xs text-muted-foreground">{description}</p>}
       <Separator className="mt-3" />
     </header>
   );
@@ -749,12 +736,8 @@ function SectionTitle({
 function Info({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-border bg-surface/60 p-3">
-      <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-        {label}
-      </div>
-      <div className="mt-0.5 truncate text-sm font-medium text-foreground">
-        {value}
-      </div>
+      <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="mt-0.5 truncate text-sm font-medium text-foreground">{value}</div>
     </div>
   );
 }

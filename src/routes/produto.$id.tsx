@@ -20,7 +20,6 @@ import { ReportButton } from "@/components/report/ReportButton";
 import { productService } from "@/services/productService";
 import { reviewService } from "@/services/reviewService";
 
-
 export const Route = createFileRoute("/produto/$id")({
   loader: async ({ params }) => {
     const product = await productService.byId(params.id);
@@ -54,15 +53,13 @@ function ProductPage() {
     product.description ??
     `${product.title} — entrega ${product.instantDelivery ? "instantânea" : "rápida"} e vendedor ${product.verifiedSeller ? "verificado" : "avaliado"} pela LIT Buy.\n\nAntes da compra, verifique as informações e a reputação do anunciante. Todas as transações são protegidas pela nossa garantia da plataforma, com suporte dedicado em caso de qualquer problema.\n\nDúvidas? Use a seção de perguntas públicas abaixo ou envie uma mensagem privada ao vendedor.`;
 
-  const seller: import("@/types").Seller =
-    product.seller ??
-    {
-      id: "seller-generic",
-      name: "LIT Seller",
-      avatarUrl: undefined,
-      rating: 4.8,
-      verified: true,
-    };
+  const seller: import("@/types").Seller = product.seller ?? {
+    id: "seller-generic",
+    name: "LIT Seller",
+    avatarUrl: undefined,
+    rating: 4.8,
+    verified: true,
+  };
 
   const enrichedSeller = {
     ...seller,
@@ -78,6 +75,10 @@ function ProductPage() {
 
   return (
     <div className="container-lit space-y-8 py-6 md:py-10">
+      <p className="rounded-lg border border-border bg-muted/40 px-4 py-2 text-sm text-muted-foreground">
+        Categorias e subcategorias são reais. Produtos, preços, estoque, vendedores e avaliações
+        ainda são demonstrativos.
+      </p>
       <Breadcrumb
         items={[
           { label: "Home", to: "/" },
@@ -116,9 +117,7 @@ function ProductPage() {
 
           <div className="rounded-2xl border border-border bg-card p-5">
             <div className="mb-3 flex items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold text-foreground">
-                Sobre o vendedor
-              </h3>
+              <h3 className="text-sm font-semibold text-foreground">Sobre o vendedor</h3>
               <div className="flex flex-wrap items-center gap-1.5">
                 <SellerLevelBadge sellerId={enrichedSeller.id} size="sm" />
                 <SellerVerificationBadge sellerId={enrichedSeller.id} size="sm" />

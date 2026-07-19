@@ -1,6 +1,6 @@
 import { products } from "@/data/products";
-import { categories } from "@/data/categories";
-import type { Product, Category } from "@/types";
+import type { Product } from "@/types";
+export { categoryService } from "@/services/catalogService";
 
 /**
  * Mock service layer.
@@ -8,7 +8,7 @@ import type { Product, Category } from "@/types";
  * backend later without changing consumers.
  */
 
-const delay = <T,>(data: T, ms = 200): Promise<T> =>
+const delay = <T>(data: T, ms = 200): Promise<T> =>
   new Promise((resolve) => setTimeout(() => resolve(data), ms));
 
 export const productService = {
@@ -25,9 +25,7 @@ export const productService = {
   related: (id: string, limit = 8): Promise<Product[]> => {
     const base = products.find((p) => p.id === id || p.slug === id);
     if (!base) return delay([]);
-    const same = products.filter(
-      (p) => p.categorySlug === base.categorySlug && p.id !== base.id,
-    );
+    const same = products.filter((p) => p.categorySlug === base.categorySlug && p.id !== base.id);
     return delay(same.slice(0, limit));
   },
 };
@@ -68,10 +66,3 @@ export function getUnavailabilityReason(
   }
   return null;
 }
-
-
-export const categoryService = {
-  list: (): Promise<Category[]> => delay(categories),
-  bySlug: (slug: string): Promise<Category | undefined> =>
-    delay(categories.find((c) => c.slug === slug)),
-};

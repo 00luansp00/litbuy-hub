@@ -145,3 +145,11 @@ The marketplace authorization foundation is now persistent: `BUYER`, `SELLER` an
 - Produtos, anúncios, vendas, financeiro, reputação, wallet, saques, documentos, selfie e verificação externa continuam mockados ou pendentes para sprints futuras.
 - Fornecedor de KYC permanece não escolhido (`NOT_ANALYZED`); nenhum documento real deve ser enviado.
 - Consulte `SELLER_ONBOARDING_FOUNDATION.md` para escopo, endpoints, estados e limitações.
+
+## Catalog taxonomy foundation update
+
+Persistent catalog taxonomy is now the source of truth for categories, subcategories, product types, attributes, ordering, active/inactive status and category featured flags. Public consumers use active entities only, and `/admin/catalogo` uses protected administrative endpoints. Products, listings, prices, images, stock, seller metrics, reviews, search, promotions, seller plans and publishing remain demonstrative/mock and must not be treated as real commercial catalog data.
+
+### Catalog subcategory public contract
+
+`GET /api/v1/catalog/categories/:slug/subcategories` returns a minimal public contract: `id`, `slug`, `name` and `sortOrder`. It intentionally omits `categoryId`, `status`, timestamps, administrative metadata and all fictitious metrics because the category is already provided by the URL context.

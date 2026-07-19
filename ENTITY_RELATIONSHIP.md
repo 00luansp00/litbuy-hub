@@ -31,11 +31,13 @@ auth.users ──1:1── users ──1:1── profiles
 ## Relacionamentos principais
 
 ### Usuário e identidade
+
 - Todo **usuário** (`users`) corresponde a exatamente um registro em `auth.users` do Supabase.
 - Todo usuário possui exatamente um **profile** (dados públicos/pessoais).
 - Um usuário **pode** também ser **vendedor** — nesse caso existe um registro em `sellers` associado.
 
 ### Catálogo
+
 - Cada **vendedor** possui vários **produtos**.
 - Cada **produto** pertence a exatamente uma **categoria**.
 - Categorias podem ter subcategorias (auto-referência via `parent_id`).
@@ -43,6 +45,7 @@ auth.users ──1:1── users ──1:1── profiles
 - Um produto acumula várias **reviews** (`product_reviews`), sempre vinculadas a um pedido concluído.
 
 ### Carrinho e pedidos
+
 - Cada usuário possui **um único carrinho** persistente.
 - Um carrinho contém vários **itens de carrinho**; cada item aponta para um produto.
 - Ao finalizar compra, o carrinho gera um **pedido** (`orders`) do comprador.
@@ -52,17 +55,20 @@ auth.users ──1:1── users ──1:1── profiles
 - Um pedido pode gerar uma ou mais **disputes**.
 
 ### Carteira e financeiro
+
 - Cada usuário possui uma **wallet_account** (carteira interna).
 - Toda movimentação passa por **wallet_transactions** — imutáveis, escritas apenas por lógica server-side.
 - **Withdrawals** representam pedidos de saque feitos pelo usuário.
 - O frontend nunca altera saldo diretamente; sempre solicita operações que geram transações.
 
 ### Comunicação
+
 - **Conversations** conectam um comprador (`users`) e um vendedor (`sellers`), opcionalmente contextualizadas por produto ou pedido.
 - **Messages** pertencem a uma conversa; apenas os participantes podem ler ou escrever.
 - **Disputes** pertencem a um pedido e envolvem comprador, vendedor e (quando escalado) administração.
 
 ### Engajamento
+
 - **Favorites** conectam usuários a produtos (relação N:N).
 - **Notifications** são notificações individuais por usuário, com deep-link para rotas internas.
 
@@ -101,3 +107,7 @@ The marketplace authorization foundation is now persistent: `BUYER`, `SELLER` an
 - Produtos, anúncios, vendas, financeiro, reputação, wallet, saques, documentos, selfie e verificação externa continuam mockados ou pendentes para sprints futuras.
 - Fornecedor de KYC permanece não escolhido (`NOT_ANALYZED`); nenhum documento real deve ser enviado.
 - Consulte `SELLER_ONBOARDING_FOUNDATION.md` para escopo, endpoints, estados e limitações.
+
+## Catalog taxonomy foundation update
+
+Persistent catalog taxonomy is now the source of truth for categories, subcategories, product types, attributes, ordering, active/inactive status and category featured flags. Public consumers use active entities only, and `/admin/catalogo` uses protected administrative endpoints. Products, listings, prices, images, stock, seller metrics, reviews, search, promotions, seller plans and publishing remain demonstrative/mock and must not be treated as real commercial catalog data.
