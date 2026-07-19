@@ -84,3 +84,10 @@ ALTER TABLE "ProductVariant" ADD CONSTRAINT "ProductVariant_productId_fkey" FORE
 ALTER TABLE "ProductAttributeValue" ADD CONSTRAINT "ProductAttributeValue_productId_fkey" FOREIGN KEY ("productId") REFERENCES "Product"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "ProductServiceDetails" ADD CONSTRAINT "ProductServiceDetails_productId_fkey" FOREIGN KEY ("productId") REFERENCES "Product"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "ProductAccountDetails" ADD CONSTRAINT "ProductAccountDetails_productId_fkey" FOREIGN KEY ("productId") REFERENCES "Product"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+ALTER TABLE "Product" ADD CONSTRAINT "Product_version_check" CHECK ("version" >= 1);
+ALTER TABLE "Product" ADD CONSTRAINT "Product_price_check" CHECK ("price" IS NULL OR "price" > 0);
+ALTER TABLE "Product" ADD CONSTRAINT "Product_stock_check" CHECK ("stock" IS NULL OR "stock" >= 0);
+ALTER TABLE "ProductVariant" ADD CONSTRAINT "ProductVariant_price_check" CHECK ("price" IS NULL OR "price" > 0);
+ALTER TABLE "ProductVariant" ADD CONSTRAINT "ProductVariant_stock_check" CHECK ("stock" IS NULL OR "stock" >= 0);
+ALTER TABLE "ProductVariant" ADD CONSTRAINT "ProductVariant_sortOrder_check" CHECK ("sortOrder" >= 0);

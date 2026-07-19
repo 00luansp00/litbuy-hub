@@ -118,25 +118,28 @@ export class ProductMaterializationService {
     q: { status?: ProductStatus; limit?: number; cursor?: string },
   ) {
     const seller = await this.prisma.sellerProfile.findUnique({ where: { userId } });
-    if (!seller)
+    if (!seller || seller.status !== SellerProfileStatus.ACTIVE)
       throw new AppError(
         'SELLER_PROFILE_ACTIVE_REQUIRED',
         'SELLER_PROFILE_ACTIVE_REQUIRED',
         HttpStatus.FORBIDDEN,
         [],
       );
-    const products = await this.prisma.product.findMany({
-      where: { sellerProfileId: seller.id, ...(q.status ? { status: q.status } : {}) },
-      include: productInclude,
-      orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
-      take: Math.min(q.limit ?? 20, 50),
-    });
-    return { items: products.map((p) => this.map(p)), nextCursor: null };
+    return this.listWhere(
+      { sellerProfileId: seller.id, ...(q.status ? { status: q.status } : {}) },
+      q,
+    );
   }
 
   async getForSeller(userId: string, id: string) {
     const seller = await this.prisma.sellerProfile.findUnique({ where: { userId } });
-    if (!seller) throw new AppError('PRODUCT_NOT_FOUND', 'PRODUCT_NOT_FOUND', 404, []);
+    if (!seller || seller.status !== SellerProfileStatus.ACTIVE)
+      throw new AppError(
+        'SELLER_PROFILE_ACTIVE_REQUIRED',
+        'SELLER_PROFILE_ACTIVE_REQUIRED',
+        HttpStatus.FORBIDDEN,
+        [],
+      );
     const product = await this.prisma.product.findFirst({
       where: { id, sellerProfileId: seller.id },
       include: productInclude,
@@ -151,19 +154,16 @@ export class ProductMaterializationService {
     categoryId?: string;
     limit?: number;
   }) {
-    const products = await this.prisma.product.findMany({
-      where: {
+    return this.listWhere(
+      {
         ...(q.status ? { status: q.status } : {}),
         ...(q.categoryId ? { categoryId: q.categoryId } : {}),
         ...(q.seller
           ? { sellerProfile: { storeName: { contains: q.seller, mode: 'insensitive' } } }
           : {}),
       },
-      include: productInclude,
-      orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
-      take: Math.min(q.limit ?? 20, 50),
-    });
-    return { items: products.map((p) => this.map(p)), nextCursor: null };
+      q,
+    );
   }
 
   async adminGet(id: string) {
@@ -175,12 +175,64 @@ export class ProductMaterializationService {
     return this.map(product);
   }
 
+  private encodeCursor(product: Pick<ProductFull, 'updatedAt' | 'id'>) {
+    return Buffer.from(
+      JSON.stringify({ updatedAt: product.updatedAt.toISOString(), id: product.id }),
+    ).toString('base64url');
+  }
+
+  private decodeCursor(cursor?: string) {
+    if (!cursor) return undefined;
+    if (cursor.length > 512 || !/^[A-Za-z0-9_-]+$/.test(cursor))
+      throw new AppError('PRODUCT_CURSOR_INVALID', 'PRODUCT_CURSOR_INVALID', 400, []);
+    try {
+      const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString()) as unknown;
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('bad');
+      const raw = parsed as { updatedAt?: unknown; id?: unknown };
+      if (typeof raw.updatedAt !== 'string' || typeof raw.id !== 'string') throw new Error('bad');
+      const updatedAt = new Date(raw.updatedAt);
+      if (Number.isNaN(updatedAt.getTime()) || updatedAt.toISOString() !== raw.updatedAt)
+        throw new Error('bad');
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(raw.id))
+        throw new Error('bad');
+      return { updatedAt, id: raw.id };
+    } catch {
+      throw new AppError('PRODUCT_CURSOR_INVALID', 'PRODUCT_CURSOR_INVALID', 400, []);
+    }
+  }
+
+  private async listWhere(where: Prisma.ProductWhereInput, q: { limit?: number; cursor?: string }) {
+    const limit = Math.min(q.limit ?? 20, 50);
+    const cursor = this.decodeCursor(q.cursor);
+    const products = await this.prisma.product.findMany({
+      where: {
+        ...where,
+        ...(cursor
+          ? {
+              OR: [
+                { updatedAt: { lt: cursor.updatedAt } },
+                { updatedAt: cursor.updatedAt, id: { lt: cursor.id } },
+              ],
+            }
+          : {}),
+      },
+      include: productInclude,
+      orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+    });
+    return {
+      items: products.slice(0, limit).map((p) => this.map(p)),
+      nextCursor: products.length > limit ? this.encodeCursor(products[limit - 1]) : null,
+    };
+  }
+
   async materializeFromApprovedDraft(
     tx: Tx,
     draftId: string,
     adminUserId: string,
     mode: 'approval' | 'reconciliation',
   ) {
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`product-draft:${draftId}`}))`;
     const existing = await tx.product.findUnique({
       where: { sourceListingDraftId: draftId },
       include: productInclude,
@@ -193,83 +245,72 @@ export class ProductMaterializationService {
     if (!draft) throw new AppError('LISTING_DRAFT_NOT_FOUND', 'LISTING_DRAFT_NOT_FOUND', 404, []);
     this.assertMaterializable(draft);
     const slug = await this.uniqueSlug(tx, this.productTitle(draft), draft.id);
-    try {
-      const product = await tx.product.create({
-        data: {
-          sourceListingDraftId: draft.id,
+    const product = await tx.product.create({
+      data: {
+        sourceListingDraftId: draft.id,
+        sellerProfileId: draft.sellerProfileId,
+        categoryId: draft.categoryId!,
+        subcategoryId: draft.subcategoryId,
+        productType: draft.productType!,
+        model: draft.model,
+        status: ProductStatus.UNPUBLISHED,
+        slug,
+        title: this.productTitle(draft),
+        description: this.productDescription(draft),
+        price:
+          draft.model === ListingDraftModel.NORMAL
+            ? draft.price
+            : (draft.serviceDetails?.basePrice ?? null),
+        stock: draft.model === ListingDraftModel.NORMAL ? draft.stock : null,
+        deliveryMode: draft.deliveryMode,
+        autoMessage: draft.autoMessage,
+        variants: { create: this.variantData(draft) },
+        attributes: { create: draft.attributes.map((a) => ({ key: a.key, value: a.value })) },
+        serviceDetails: draft.serviceDetails
+          ? {
+              create: {
+                pricingType: draft.serviceDetails.pricingType!,
+                basePrice: draft.serviceDetails.basePrice,
+                estimatedDelivery: draft.serviceDetails.estimatedDelivery,
+                buyerRequirements: draft.serviceDetails.buyerRequirements,
+                notes: draft.serviceDetails.notes,
+              },
+            }
+          : undefined,
+        accountDetails: draft.accountDetails
+          ? {
+              create: {
+                provenance: draft.accountDetails.provenance,
+                recoveryLevel: draft.accountDetails.recoveryLevel,
+                emailVerified: draft.accountDetails.emailVerified,
+                phoneLinked: draft.accountDetails.phoneLinked,
+                documentLinked: draft.accountDetails.documentLinked,
+                fullAccess: draft.accountDetails.fullAccess,
+                recoveryRisk: draft.accountDetails.recoveryRisk,
+                warrantyNote: draft.accountDetails.warrantyNote,
+              },
+            }
+          : undefined,
+      },
+      include: productInclude,
+    });
+    await tx.securityEvent.create({
+      data: {
+        userId: adminUserId,
+        eventType: SecurityEventType.PRODUCT_MATERIALIZED,
+        outcome: SecurityEventOutcome.SUCCESS,
+        metadata: {
+          draftId,
+          productId: product.id,
           sellerProfileId: draft.sellerProfileId,
-          categoryId: draft.categoryId!,
-          subcategoryId: draft.subcategoryId,
-          productType: draft.productType!,
-          model: draft.model,
-          status: ProductStatus.UNPUBLISHED,
-          slug,
-          title: this.productTitle(draft),
-          description: this.productDescription(draft),
-          price:
-            draft.model === ListingDraftModel.NORMAL
-              ? draft.price
-              : (draft.serviceDetails?.basePrice ?? null),
-          stock: draft.model === ListingDraftModel.NORMAL ? draft.stock : null,
-          deliveryMode: draft.deliveryMode,
-          autoMessage: draft.autoMessage,
-          variants: { create: this.variantData(draft) },
-          attributes: { create: draft.attributes.map((a) => ({ key: a.key, value: a.value })) },
-          serviceDetails: draft.serviceDetails
-            ? {
-                create: {
-                  pricingType: draft.serviceDetails.pricingType!,
-                  basePrice: draft.serviceDetails.basePrice,
-                  estimatedDelivery: draft.serviceDetails.estimatedDelivery,
-                  buyerRequirements: draft.serviceDetails.buyerRequirements,
-                  notes: draft.serviceDetails.notes,
-                },
-              }
-            : undefined,
-          accountDetails: draft.accountDetails
-            ? {
-                create: {
-                  provenance: draft.accountDetails.provenance,
-                  recoveryLevel: draft.accountDetails.recoveryLevel,
-                  emailVerified: draft.accountDetails.emailVerified,
-                  phoneLinked: draft.accountDetails.phoneLinked,
-                  documentLinked: draft.accountDetails.documentLinked,
-                  fullAccess: draft.accountDetails.fullAccess,
-                  recoveryRisk: draft.accountDetails.recoveryRisk,
-                  warrantyNote: draft.accountDetails.warrantyNote,
-                },
-              }
-            : undefined,
+          adminUserId,
+          draftVersion: draft.version,
+          productStatus: product.status,
+          mode,
         },
-        include: productInclude,
-      });
-      await tx.securityEvent.create({
-        data: {
-          userId: adminUserId,
-          eventType: SecurityEventType.PRODUCT_MATERIALIZED,
-          outcome: SecurityEventOutcome.SUCCESS,
-          metadata: {
-            draftId,
-            productId: product.id,
-            sellerProfileId: draft.sellerProfileId,
-            adminUserId,
-            draftVersion: draft.version,
-            productStatus: product.status,
-            mode,
-          },
-        },
-      });
-      return product;
-    } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
-        const product = await tx.product.findUnique({
-          where: { sourceListingDraftId: draftId },
-          include: productInclude,
-        });
-        if (product) return product;
-      }
-      throw e;
-    }
+      },
+    });
+    return product;
   }
 
   publicSlugBaseForTest(title: string) {
@@ -329,9 +370,20 @@ export class ProductMaterializationService {
   }
   private async uniqueSlug(tx: Tx, title: string, draftId: string) {
     const base = this.slugBase(title);
-    const stable = `${base}-${this.stableSuffix(draftId)}`;
-    if (!(await tx.product.findUnique({ where: { slug: base } }))) return base;
-    return stable;
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`product-slug:${base}`}))`;
+    const suffixSource = draftId.replace(/-/g, '');
+    const candidates = [
+      base,
+      `${base}-${suffixSource.slice(0, 8)}`,
+      `${base}-${suffixSource.slice(0, 12)}`,
+      `${base}-${suffixSource.slice(0, 16)}`,
+      `${base}-${suffixSource}`,
+    ];
+    for (const candidate of candidates) {
+      const existing = await tx.product.findUnique({ where: { slug: candidate } });
+      if (!existing) return candidate;
+    }
+    throw new AppError('PRODUCT_SLUG_CONFLICT', 'PRODUCT_SLUG_CONFLICT', 409, []);
   }
   private variantData(d: Draft) {
     if (d.model === ListingDraftModel.DYNAMIC)

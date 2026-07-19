@@ -207,6 +207,7 @@ function parseMaterializedProduct(v: unknown): MaterializedProductReference | nu
     !isObject(v) ||
     !uuid.test(String(v.id)) ||
     typeof v.slug !== "string" ||
+    !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(v.slug) ||
     !isEnum(productStatuses, v.status)
   )
     invalid();

@@ -15,6 +15,7 @@ import { AuthMailer, MemoryAuthSmsPort } from '../src/auth/auth.service';
 import { SellerOnboardingService } from '../src/seller-onboarding/seller-onboarding.service';
 import { CatalogService } from '../src/catalog/catalog.service';
 import { ListingDraftsService } from '../src/listing-drafts/listing-drafts.service';
+import { ProductMaterializationService } from '../src/products/product-materialization.service';
 import { SecurityEventType } from '@prisma/client';
 
 function sessionIdFromAccessToken(accessToken: string): string {
@@ -68,6 +69,11 @@ async function cleanAuthIntegrationData(prisma: PrismaService): Promise<void> {
     await tx.emailChangeRequest.deleteMany();
     await tx.twoFactorRecoveryCode.deleteMany();
     await tx.twoFactorSettings.deleteMany();
+    await tx.productAttributeValue.deleteMany();
+    await tx.productVariant.deleteMany();
+    await tx.productServiceDetails.deleteMany();
+    await tx.productAccountDetails.deleteMany();
+    await tx.product.deleteMany();
     await tx.listingDraftAttributeValue.deleteMany();
     await tx.listingDraftVariant.deleteMany();
     await tx.listingDraftServiceDetails.deleteMany();
@@ -3159,7 +3165,7 @@ describe('Catalog taxonomy with real PostgreSQL (integration)', () => {
     await app.close();
   });
 
-  it('has the exact taxonomy baseline and no public product/listing tables', async () => {
+  it('has the exact taxonomy baseline, draft/product foundations and no public catalog product tables', async () => {
     const categories = await prisma.catalogCategory.findMany({
       where: { slug: { in: baselineSlugs } },
       orderBy: { sortOrder: 'asc' },
@@ -3206,9 +3212,15 @@ describe('Catalog taxonomy with real PostgreSQL (integration)', () => {
     ]);
     await expect(
       prisma.$queryRawUnsafe(
-        `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('Product','PublicProduct','Listing','CatalogProduct','CatalogListing')`,
+        `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('Product','ProductVariant','ProductAttributeValue','ProductServiceDetails','ProductAccountDetails','PublicProduct','Listing','CatalogProduct','CatalogListing') ORDER BY table_name`,
       ),
-    ).resolves.toEqual([]);
+    ).resolves.toEqual([
+      { table_name: 'Product' },
+      { table_name: 'ProductAccountDetails' },
+      { table_name: 'ProductAttributeValue' },
+      { table_name: 'ProductServiceDetails' },
+      { table_name: 'ProductVariant' },
+    ]);
   });
 
   it('persists exactly one category and one creation audit under concurrent duplicate slugs', async () => {
@@ -3423,7 +3435,339 @@ describe('Persistent listing drafts with real PostgreSQL (integration)', () => {
     await app.close();
   });
 
-  it('has listing draft tables, constraints, indexes, enums and no public product/listing tables', async () => {
+  async function createProductFixture(
+    model: 'NORMAL' | 'DYNAMIC' | 'SERVICE' = 'NORMAL',
+    title = 'Produto Épico',
+  ) {
+    const suffix = `${Date.now()}-${Math.random()}`.replace(/[^0-9a-z]/gi, '');
+    const admin = await prisma.user.create({
+      data: {
+        email: `product-admin-${suffix}@example.test`,
+        birthDate: new Date('1990-01-01'),
+        termsVersion: 'test',
+        termsAcceptedAt: new Date(),
+        privacyVersion: 'test',
+        privacyAcceptedAt: new Date(),
+        status: 'ACTIVE',
+      },
+    });
+    const sellerUser = await prisma.user.create({
+      data: {
+        email: `product-seller-${suffix}@example.test`,
+        birthDate: new Date('1990-01-01'),
+        termsVersion: 'test',
+        termsAcceptedAt: new Date(),
+        privacyVersion: 'test',
+        privacyAcceptedAt: new Date(),
+        status: 'ACTIVE',
+      },
+    });
+    const seller = await prisma.sellerProfile.create({
+      data: {
+        userId: sellerUser.id,
+        storeName: `Loja ${suffix}`,
+        slug: `loja-${suffix}`,
+        status: 'ACTIVE',
+      },
+    });
+    const category = await prisma.catalogCategory.create({
+      data: { slug: `product-cat-${suffix}`, name: 'Produtos internos', status: 'ACTIVE' },
+    });
+    const subcategory = await prisma.catalogSubcategory.create({
+      data: {
+        categoryId: category.id,
+        slug: `product-sub-${suffix}`,
+        name: 'Sub',
+        status: 'ACTIVE',
+      },
+    });
+    const draft = await prisma.listingDraft.create({
+      data: {
+        sellerProfileId: seller.id,
+        categoryId: category.id,
+        subcategoryId: subcategory.id,
+        productType: 'ACCOUNT',
+        model,
+        status: 'UNDER_REVIEW',
+        title: model === 'SERVICE' ? null : title,
+        description: model === 'SERVICE' ? null : 'Descrição completa aprovada',
+        price: model === 'NORMAL' ? '25.50' : null,
+        stock: model === 'NORMAL' ? 3 : null,
+        attributes: { create: [{ key: 'rank', value: 'ouro' }] },
+        accountDetails:
+          model === 'SERVICE'
+            ? undefined
+            : {
+                create: {
+                  provenance: 'ORIGINAL_OWNER',
+                  recoveryLevel: 'FULL',
+                  emailVerified: true,
+                  phoneLinked: false,
+                  documentLinked: false,
+                  fullAccess: true,
+                  recoveryRisk: 'LOW',
+                  warrantyNote: 'Garantia declarativa',
+                },
+              },
+        variants:
+          model === 'DYNAMIC'
+            ? {
+                create: [
+                  {
+                    title: 'Ativa',
+                    description: 'A',
+                    price: '10.00',
+                    stock: 2,
+                    status: 'ACTIVE',
+                    sortOrder: 0,
+                  },
+                  {
+                    title: 'Pausada',
+                    description: 'P',
+                    price: '12.00',
+                    stock: 1,
+                    status: 'PAUSED',
+                    sortOrder: 1,
+                  },
+                ],
+              }
+            : undefined,
+        serviceDetails:
+          model === 'SERVICE'
+            ? {
+                create: {
+                  title,
+                  description: 'Serviço detalhado aprovado',
+                  pricingType: 'FIXED',
+                  basePrice: '99.00',
+                  estimatedDelivery: '3 dias',
+                  buyerRequirements: 'Enviar requisitos',
+                  notes: 'Notas internas',
+                },
+              }
+            : undefined,
+      },
+    });
+    return { admin, sellerUser, seller, category, subcategory, draft };
+  }
+
+  it('materializes one unpublished product with copied approved data and default variant', async () => {
+    const { admin, draft, seller, category, subcategory } = await createProductFixture('NORMAL');
+    const approved = await listingDrafts.approve(admin.id, draft.id, {
+      expectedVersion: draft.version,
+    });
+    expect(approved.materializedProduct?.status).toBe('UNPUBLISHED');
+    const products = await prisma.product.findMany({
+      where: { sourceListingDraftId: draft.id },
+      include: { variants: true, attributes: true, accountDetails: true },
+    });
+    expect(products).toHaveLength(1);
+    expect(products[0]).toMatchObject({
+      sellerProfileId: seller.id,
+      categoryId: category.id,
+      subcategoryId: subcategory.id,
+      status: 'UNPUBLISHED',
+      title: 'Produto Épico',
+      stock: 3,
+    });
+    expect(products[0].price!.toFixed(2)).toBe('25.50');
+    expect(products[0].variants).toHaveLength(1);
+    expect(products[0].variants[0]).toMatchObject({
+      title: 'Produto Épico',
+      status: 'ACTIVE',
+      stock: 3,
+    });
+    expect(products[0].attributes).toEqual([
+      expect.objectContaining({ key: 'rank', value: 'ouro' }),
+    ]);
+    expect(products[0].accountDetails).toMatchObject({
+      emailVerified: true,
+      fullAccess: true,
+      warrantyNote: 'Garantia declarativa',
+    });
+  });
+
+  it('keeps source draft unique and approval retries return the same product', async () => {
+    const { admin, draft } = await createProductFixture('NORMAL', 'Retry Produto');
+    const first = await listingDrafts.approve(admin.id, draft.id, {
+      expectedVersion: draft.version,
+    });
+    const second = await listingDrafts.approve(admin.id, draft.id, {
+      expectedVersion: draft.version + 1,
+    });
+    expect(second.materializedProduct).toEqual(first.materializedProduct);
+    await expect(prisma.product.count({ where: { sourceListingDraftId: draft.id } })).resolves.toBe(
+      1,
+    );
+    await expect(
+      prisma.product.create({
+        data: {
+          sourceListingDraftId: draft.id,
+          sellerProfileId: (
+            await prisma.product.findFirstOrThrow({ where: { sourceListingDraftId: draft.id } })
+          ).sellerProfileId,
+          categoryId: (
+            await prisma.product.findFirstOrThrow({ where: { sourceListingDraftId: draft.id } })
+          ).categoryId,
+          productType: 'ACCOUNT',
+          model: 'NORMAL',
+          slug: `duplicate-${Date.now()}`,
+          title: 'Dup',
+          description: 'Dup',
+        },
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('copies dynamic paused variants and fixed service details, while quote service creates no variant', async () => {
+    const dyn = await createProductFixture('DYNAMIC', 'Mesmo Título');
+    await listingDrafts.approve(dyn.admin.id, dyn.draft.id, { expectedVersion: dyn.draft.version });
+    const dynamicProduct = await prisma.product.findFirstOrThrow({
+      where: { sourceListingDraftId: dyn.draft.id },
+      include: { variants: true },
+    });
+    expect(dynamicProduct.variants.map((variant) => variant.status).sort()).toEqual([
+      'ACTIVE',
+      'PAUSED',
+    ]);
+
+    const fixed = await createProductFixture('SERVICE', 'Serviço Fixo');
+    await listingDrafts.approve(fixed.admin.id, fixed.draft.id, {
+      expectedVersion: fixed.draft.version,
+    });
+    const fixedProduct = await prisma.product.findFirstOrThrow({
+      where: { sourceListingDraftId: fixed.draft.id },
+      include: { variants: true, serviceDetails: true },
+    });
+    expect(fixedProduct.variants).toHaveLength(1);
+    expect(fixedProduct.serviceDetails).toMatchObject({
+      pricingType: 'FIXED',
+      estimatedDelivery: '3 dias',
+    });
+
+    const quote = await createProductFixture('SERVICE', 'Serviço Orçamento');
+    await prisma.listingDraftServiceDetails.update({
+      where: { draftId: quote.draft.id },
+      data: { pricingType: 'QUOTE', basePrice: null },
+    });
+    await listingDrafts.approve(quote.admin.id, quote.draft.id, {
+      expectedVersion: quote.draft.version,
+    });
+    await expect(
+      prisma.productVariant.count({ where: { product: { sourceListingDraftId: quote.draft.id } } }),
+    ).resolves.toBe(0);
+  });
+
+  it('serializes concurrent approvals and concurrent equal titles without duplicate products or slugs', async () => {
+    const one = await createProductFixture('NORMAL', 'Título Concorrente');
+    const sameDraftResults = await Promise.allSettled([
+      listingDrafts.approve(one.admin.id, one.draft.id, { expectedVersion: one.draft.version }),
+      listingDrafts.approve(one.admin.id, one.draft.id, { expectedVersion: one.draft.version }),
+    ]);
+    expect(await prisma.product.count({ where: { sourceListingDraftId: one.draft.id } })).toBe(1);
+    expect(sameDraftResults.some((result) => result.status === 'fulfilled')).toBe(true);
+
+    const a = await createProductFixture('NORMAL', 'Título Igual');
+    const b = await createProductFixture('NORMAL', 'Título Igual');
+    await Promise.all([
+      listingDrafts.approve(a.admin.id, a.draft.id, { expectedVersion: a.draft.version }),
+      listingDrafts.approve(b.admin.id, b.draft.id, { expectedVersion: b.draft.version }),
+    ]);
+    const products = await prisma.product.findMany({
+      where: { sourceListingDraftId: { in: [a.draft.id, b.draft.id] } },
+    });
+    expect(products).toHaveLength(2);
+    expect(new Set(products.map((product) => product.slug)).size).toBe(2);
+  });
+
+  it('rolls back product creation when approval audit fails and protects expectedVersion', async () => {
+    const { admin, draft } = await createProductFixture('NORMAL', 'Rollback Produto');
+    await expect(
+      listingDrafts.approve(admin.id, draft.id, { expectedVersion: draft.version + 99 }),
+    ).rejects.toThrow();
+    await expect(prisma.product.count({ where: { sourceListingDraftId: draft.id } })).resolves.toBe(
+      0,
+    );
+    const spy = jest
+      .spyOn(prisma.securityEvent, 'create')
+      .mockRejectedValueOnce(new Error('audit failed'));
+    await expect(
+      listingDrafts.approve(admin.id, draft.id, { expectedVersion: draft.version }),
+    ).rejects.toThrow('audit failed');
+    spy.mockRestore();
+    await expect(prisma.product.count({ where: { sourceListingDraftId: draft.id } })).resolves.toBe(
+      0,
+    );
+    await expect(
+      prisma.listingDraft.findUniqueOrThrow({ where: { id: draft.id } }),
+    ).resolves.toMatchObject({ status: 'UNDER_REVIEW' });
+  });
+
+  it('reconciles old approved drafts without product and keeps seller product access scoped to active owners', async () => {
+    const { admin, draft, sellerUser, seller } = await createProductFixture(
+      'NORMAL',
+      'Antigo Aprovado',
+    );
+    await prisma.listingDraft.update({
+      where: { id: draft.id },
+      data: { status: 'APPROVED', approvedAt: new Date(), reviewedAt: new Date() },
+    });
+    const reconciled = await listingDrafts.approve(admin.id, draft.id, {
+      expectedVersion: draft.version,
+    });
+    expect(reconciled.materializedProduct?.status).toBe('UNPUBLISHED');
+    await expect(prisma.product.count({ where: { sourceListingDraftId: draft.id } })).resolves.toBe(
+      1,
+    );
+    await expect(prisma.product.count({ where: { sourceListingDraftId: draft.id } })).resolves.toBe(
+      1,
+    );
+
+    const productService = app.get(ProductMaterializationService);
+    await expect(productService.listForSeller(sellerUser.id, {})).resolves.toMatchObject({
+      items: [expect.objectContaining({ sourceListingDraftId: draft.id })],
+    });
+    const other = await createProductFixture('NORMAL', 'Outro Seller');
+    const otherApproved = await listingDrafts.approve(other.admin.id, other.draft.id, {
+      expectedVersion: other.draft.version,
+    });
+    await expect(
+      productService.getForSeller(sellerUser.id, otherApproved.materializedProduct!.id),
+    ).rejects.toThrow();
+    await prisma.sellerProfile.update({ where: { id: seller.id }, data: { status: 'SUSPENDED' } });
+    await expect(productService.listForSeller(sellerUser.id, {})).rejects.toThrow();
+  });
+
+  it('enforces product check constraints in PostgreSQL', async () => {
+    const { admin, draft } = await createProductFixture('NORMAL', 'Checks Produto');
+    await listingDrafts.approve(admin.id, draft.id, { expectedVersion: draft.version });
+    const product = await prisma.product.findFirstOrThrow({
+      where: { sourceListingDraftId: draft.id },
+    });
+    await expect(
+      prisma.product.update({ where: { id: product.id }, data: { version: 0 } }),
+    ).rejects.toThrow();
+    await expect(
+      prisma.product.update({ where: { id: product.id }, data: { price: '-1.00' } }),
+    ).rejects.toThrow();
+    await expect(
+      prisma.product.update({ where: { id: product.id }, data: { stock: -1 } }),
+    ).rejects.toThrow();
+    const variant = await prisma.productVariant.findFirstOrThrow({
+      where: { productId: product.id },
+    });
+    await expect(
+      prisma.productVariant.update({ where: { id: variant.id }, data: { price: '-1.00' } }),
+    ).rejects.toThrow();
+    await expect(
+      prisma.productVariant.update({ where: { id: variant.id }, data: { stock: -1 } }),
+    ).rejects.toThrow();
+    await expect(
+      prisma.productVariant.update({ where: { id: variant.id }, data: { sortOrder: -1 } }),
+    ).rejects.toThrow();
+  });
+
+  it('has listing draft and internal product tables, constraints, indexes, enums and no public product/listing tables', async () => {
     expect(listingDrafts).toBeInstanceOf(ListingDraftsService);
     const tables = await prisma.$queryRaw<{ table_name: string }[]>`
       SELECT table_name
@@ -3436,6 +3780,10 @@ describe('Persistent listing drafts with real PostgreSQL (integration)', () => {
           'ListingDraftServiceDetails',
           'ListingDraftAccountDetails',
           'Product',
+          'ProductVariant',
+          'ProductAttributeValue',
+          'ProductServiceDetails',
+          'ProductAccountDetails',
           'PublicProduct',
           'Listing',
           'CatalogProduct',
@@ -3451,16 +3799,15 @@ describe('Persistent listing drafts with real PostgreSQL (integration)', () => {
         'ListingDraftAttributeValue',
         'ListingDraftServiceDetails',
         'ListingDraftAccountDetails',
+        'Product',
+        'ProductVariant',
+        'ProductAttributeValue',
+        'ProductServiceDetails',
+        'ProductAccountDetails',
       ]),
     );
     expect(tableNames).not.toEqual(
-      expect.arrayContaining([
-        'Product',
-        'PublicProduct',
-        'Listing',
-        'CatalogProduct',
-        'CatalogListing',
-      ]),
+      expect.arrayContaining(['PublicProduct', 'Listing', 'CatalogProduct', 'CatalogListing']),
     );
 
     const enums = await prisma.$queryRaw<{ typname: string }[]>`
@@ -3476,10 +3823,12 @@ describe('Persistent listing drafts with real PostgreSQL (integration)', () => {
         'ListingDraftVariantStatus',
         'ListingDraftAccountProvenance',
         'ListingDraftAccountRecoveryLevel',
-        'ListingDraftAccountRecoveryRisk'
+        'ListingDraftAccountRecoveryRisk',
+        'ProductStatus',
+        'ProductVariantStatus'
       )
     `;
-    expect(enums).toHaveLength(10);
+    expect(enums).toHaveLength(12);
 
     const constraints = await prisma.$queryRaw<{ kind: string; total: bigint }[]>`
       SELECT contype::text AS kind, COUNT(*) AS total
@@ -3489,7 +3838,12 @@ describe('Persistent listing drafts with real PostgreSQL (integration)', () => {
         '"ListingDraftVariant"'::regclass,
         '"ListingDraftAttributeValue"'::regclass,
         '"ListingDraftServiceDetails"'::regclass,
-        '"ListingDraftAccountDetails"'::regclass
+        '"ListingDraftAccountDetails"'::regclass,
+        '"Product"'::regclass,
+        '"ProductVariant"'::regclass,
+        '"ProductAttributeValue"'::regclass,
+        '"ProductServiceDetails"'::regclass,
+        '"ProductAccountDetails"'::regclass
       )
       GROUP BY contype
     `;
@@ -3509,9 +3863,14 @@ describe('Persistent listing drafts with real PostgreSQL (integration)', () => {
           'ListingDraftVariant',
           'ListingDraftAttributeValue',
           'ListingDraftServiceDetails',
-          'ListingDraftAccountDetails'
+          'ListingDraftAccountDetails',
+          'Product',
+          'ProductVariant',
+          'ProductAttributeValue',
+          'ProductServiceDetails',
+          'ProductAccountDetails'
         )
     `;
-    expect(indexes.length).toBeGreaterThanOrEqual(7);
+    expect(indexes.length).toBeGreaterThanOrEqual(14);
   });
 });

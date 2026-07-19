@@ -228,9 +228,11 @@ export class ListingDraftsService {
         ? this.productMaterialization.productReference(d.materializedProduct)
         : null,
       moderationNotice:
-        d.status === 'APPROVED'
+        d.status === 'APPROVED' && d.materializedProduct
           ? 'Produto real gerado. Ele ainda não está publicado e aguarda imagens e publicação.'
-          : undefined,
+          : d.status === 'APPROVED'
+            ? 'Rascunho aprovado antes da fundação de produtos. A materialização interna precisa ser reconciliada.'
+            : undefined,
     };
   }
   private mapSellerSummary(d: DraftWithRelations) {
@@ -910,6 +912,7 @@ export class ListingDraftsService {
 
   private async adminApprove(adminId: string, id: string, dto: VersionDto) {
     return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "ListingDraft" WHERE id = ${id}::uuid FOR UPDATE`;
       const d = await tx.listingDraft.findUnique({ where: { id }, include });
       if (!d) throw new NotFoundException({ code: 'LISTING_DRAFT_NOT_FOUND' });
       const alreadyApproved = d.status === 'APPROVED';
