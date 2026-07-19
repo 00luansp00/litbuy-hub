@@ -23,6 +23,7 @@ import {
 import type { Category, ListingProductType, Subcategory } from "@/types";
 
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "conflict" | "error";
+const EMPTY_DRAFT_ID = "00000000-0000-4000-8000-000000000000";
 const statusLabel: Record<string, string> = {
   idle: "Não salvo",
   dirty: "Não salvo",
@@ -123,7 +124,7 @@ export function ListingDraftWizard({ initialDraft }: { initialDraft?: ListingDra
   }
   function blank(): ListingDraftRecord {
     return {
-      id: "00000000-0000-4000-8000-000000000000",
+      id: EMPTY_DRAFT_ID,
       status: "DRAFT",
       model: "NORMAL",
       title: null,
@@ -161,16 +162,17 @@ export function ListingDraftWizard({ initialDraft }: { initialDraft?: ListingDra
     if (!editable) return null;
     setState("saving");
     try {
-      const saved =
-        initialDraft || draft?.id !== "00000000-0000-4000-8000-000000000000"
-          ? await listingDraftApiService.update(draft!.id, draft!.version, payload)
-          : await listingDraftApiService.create(payload);
+      const persistedDraft = draft && draft.id !== EMPTY_DRAFT_ID ? draft : null;
+      const isPersisted = Boolean(persistedDraft);
+      const saved = persistedDraft
+        ? await listingDraftApiService.update(persistedDraft.id, persistedDraft.version, payload)
+        : await listingDraftApiService.create(payload);
       setDraft(saved);
       setState("saved");
       toast.success("Rascunho persistido", {
         description: "Imagens locais e cofre não foram enviados nem salvos.",
       });
-      if (!initialDraft) {
+      if (!isPersisted) {
         await navigate({ to: "/vendedor/anuncios/$id/editar", params: { id: saved.id } });
       }
       return saved;
@@ -189,8 +191,8 @@ export function ListingDraftWizard({ initialDraft }: { initialDraft?: ListingDra
       return;
     }
     const current =
-      state === "dirty" || !draft || draft.id.startsWith("0000") ? await save() : draft;
-    if (!current || current.id.startsWith("0000")) return;
+      state === "dirty" || !draft || draft.id === EMPTY_DRAFT_ID ? await save() : draft;
+    if (!current || current.id === EMPTY_DRAFT_ID) return;
     try {
       const res = await listingDraftApiService.submit(current.id, current.version);
       setDraft(res);
@@ -269,6 +271,7 @@ export function ListingDraftWizard({ initialDraft }: { initialDraft?: ListingDra
                   category: c ? { id: c.id, slug: c.slug, name: c.name } : null,
                   subcategoryId: null,
                   subcategory: null,
+                  attributes: [],
                 });
               }}
             >
@@ -316,7 +319,13 @@ export function ListingDraftWizard({ initialDraft }: { initialDraft?: ListingDra
             <Label>Tipo</Label>
             <Select
               value={draft?.productType ?? ""}
-              onValueChange={(value) => patch({ productType: value as ListingProductType })}
+              onValueChange={(value) =>
+                patch({
+                  productType: value as ListingProductType,
+                  attributes: [],
+                  accountDetails: null,
+                })
+              }
             >
               <SelectTrigger>
                 <SelectValue placeholder="Selecione" />
@@ -392,21 +401,54 @@ export function ListingDraftWizard({ initialDraft }: { initialDraft?: ListingDra
               Nenhum atributo ativo para a seleção atual.
             </p>
           ) : (
-            attrs.map((a) => (
-              <Input
-                key={a.key}
-                placeholder={`${a.label}${a.required ? " *" : ""}`}
-                value={draft?.attributes.find((x) => x.key === a.key)?.value ?? ""}
-                onChange={(e) =>
-                  patch({
-                    attributes: [
-                      ...(draft?.attributes.filter((x) => x.key !== a.key) ?? []),
-                      { key: a.key, value: e.target.value },
-                    ],
-                  })
-                }
-              />
-            ))
+            attrs.map((a) => {
+              const value = draft?.attributes.find((x) => x.key === a.key)?.value ?? "";
+              const updateAttribute = (next: string) =>
+                patch({
+                  attributes: [
+                    ...(draft?.attributes.filter((x) => x.key !== a.key) ?? []),
+                    { key: a.key, value: next },
+                  ],
+                });
+              if (a.type === "select") {
+                return (
+                  <Select key={a.key} value={value} onValueChange={updateAttribute}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={`${a.label}${a.required ? " *" : ""}`} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(a.options ?? []).map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                );
+              }
+              if (a.type === "boolean") {
+                return (
+                  <label key={a.key} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={value === "true"}
+                      onChange={(event) => updateAttribute(event.target.checked ? "true" : "false")}
+                    />
+                    {a.label}
+                    {a.required ? " *" : ""}
+                  </label>
+                );
+              }
+              return (
+                <Input
+                  key={a.key}
+                  type={a.type === "number" ? "number" : "text"}
+                  placeholder={`${a.label}${a.required ? " *" : ""}`}
+                  value={value}
+                  onChange={(e) => updateAttribute(e.target.value)}
+                />
+              );
+            })
           )}
         </div>
       </fieldset>
