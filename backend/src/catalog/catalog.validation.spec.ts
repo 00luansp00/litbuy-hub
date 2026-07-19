@@ -34,6 +34,41 @@ describe('catalog validation and mapping', () => {
     ])
       expect(fn).toThrow(BadRequestException);
   });
+
+  it('normalizes canonical catalog attribute keys independently from slug validation', () => {
+    expect(normalizeKey('preco_unidade')).toBe('preco_unidade');
+    expect(normalizeKey('preco-unidade')).toBe('preco_unidade');
+    expect(normalizeKey('skins_raras')).toBe('skins_raras');
+    expect(normalizeKey(' race_attr_123 ')).toBe('race_attr_123');
+    expect(normalizeKey('a1')).toBe('a1');
+    expect(normalizeKey('a'.repeat(60))).toBe('a'.repeat(60));
+  });
+
+  it('rejects unsafe catalog attribute keys with a categorical error', () => {
+    for (const key of [
+      '_preco',
+      'preco_',
+      'preco__unidade',
+      'preco--unidade',
+      'preco_-unidade',
+      'preco unidade',
+      'Preço',
+      '<script>',
+      'a',
+      'a'.repeat(61),
+      'preco.unidade',
+    ]) {
+      try {
+        normalizeKey(key);
+        throw new Error(`Expected ${key} to be rejected`);
+      } catch (error) {
+        expect(error).toBeInstanceOf(BadRequestException);
+        expect((error as BadRequestException).getResponse()).toEqual({
+          code: 'CATALOG_ATTRIBUTE_KEY_INVALID',
+        });
+      }
+    }
+  });
   it('validates select options and enum public mapping', () => {
     expect(normalizeOptions(CatalogAttributeInputType.SELECT, ['BR', 'BR', 'NA'])).toEqual([
       'BR',

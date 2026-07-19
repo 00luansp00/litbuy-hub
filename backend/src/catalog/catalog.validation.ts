@@ -51,10 +51,19 @@ export function normalizeOrder(v?: number) {
   return n;
 }
 export function normalizeKey(v: string) {
-  const s = normalizeCatalogSlugFormat(v).replace(/-/g, '_');
-  if (!/^[a-z0-9_]{2,60}$/.test(s))
-    throw new BadRequestException({ code: 'CATALOG_ATTRIBUTE_KEY_INVALID' });
-  return s;
+  const raw = (v ?? '').trim().toLowerCase();
+  const hasInvalidFormat =
+    raw.length < 2 ||
+    raw.length > 60 ||
+    /[<>]|[\u0000-\u001f\u007f]/.test(raw) ||
+    !/^[a-z0-9_-]+$/.test(raw) ||
+    /^[_-]/.test(raw) ||
+    /[_-]$/.test(raw) ||
+    /[_-]{2,}/.test(raw);
+
+  if (hasInvalidFormat) throw new BadRequestException({ code: 'CATALOG_ATTRIBUTE_KEY_INVALID' });
+
+  return raw.replace(/-/g, '_');
 }
 export function normalizeOptions(inputType: CatalogAttributeInputType, opts?: string[]) {
   const arr = [...new Set((opts ?? []).map((o) => normalizeName(o)))];
