@@ -2982,6 +2982,39 @@ describe('Catalog taxonomy with real PostgreSQL (integration)', () => {
   let prisma: PrismaService;
   let catalog: CatalogService;
 
+  const baselineSlugs = [
+    'contas',
+    'gift-cards',
+    'moedas',
+    'skins',
+    'itens',
+    'servicos',
+    'boost',
+    'assinaturas',
+    'software',
+    'jogos',
+    'streaming',
+    'outros',
+  ];
+  const adminUser = () =>
+    prisma.user.create({
+      data: {
+        email: `catalog-admin-${Date.now()}-${Math.random()}@example.test`,
+        birthDate: new Date('1990-01-01'),
+        termsVersion: 'integration-test',
+        termsAcceptedAt: new Date(),
+        privacyVersion: 'integration-test',
+        privacyAcceptedAt: new Date(),
+        status: 'ACTIVE',
+      },
+    });
+  const rejectedCode = (result: PromiseSettledResult<unknown>) => {
+    if (result.status !== 'rejected') return null;
+    const reason = result.reason as { getResponse?: () => unknown };
+    const response = reason.getResponse?.() as { code?: string } | undefined;
+    return response?.code;
+  };
+
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
@@ -3000,75 +3033,125 @@ describe('Catalog taxonomy with real PostgreSQL (integration)', () => {
     await app.close();
   });
 
-  it('has migrated baseline taxonomy without fictitious product/listing tables', async () => {
-    await expect(prisma.catalogCategory.count()).resolves.toBeGreaterThanOrEqual(12);
+  it('has the exact migrated baseline taxonomy and no persistent product/listing tables', async () => {
+    const categories = await prisma.catalogCategory.findMany({
+      where: { slug: { in: baselineSlugs } },
+      orderBy: { sortOrder: 'asc' },
+    });
+    expect(categories.map((category) => category.slug)).toEqual(baselineSlugs);
+    expect(categories).toHaveLength(12);
+    expect(categories[0]).toMatchObject({ id: '00000000-0000-4000-8000-000000000001' });
     await expect(
-      prisma.catalogCategory.findUnique({ where: { slug: 'contas' } }),
-    ).resolves.toMatchObject({ id: '00000000-0000-4000-8000-000000000001' });
-    await expect(
-      prisma.catalogSubcategory.findFirst({ where: { slug: 'valorant' } }),
-    ).resolves.toMatchObject({ name: expect.stringContaining('Valorant') });
+      prisma.catalogSubcategory.findMany({
+        where: { slug: { in: ['league-of-legends', 'valorant', 'free-fire'] } },
+      }),
+    ).resolves.toHaveLength(3);
     await expect(
       prisma.catalogAttribute.count({ where: { productType: 'VIRTUAL_CURRENCY' } }),
-    ).resolves.toBeGreaterThanOrEqual(5);
+    ).resolves.toBe(5);
+    await expect(
+      prisma.catalogAttribute.findMany({
+        where: {
+          subcategoryId: {
+            in: [
+              '00000000-0000-4000-8000-000000000101',
+              '00000000-0000-4000-8000-000000000102',
+              '00000000-0000-4000-8000-000000000103',
+            ],
+          },
+        },
+      }),
+    ).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ key: 'elo' })]));
     await expect(
       prisma.$queryRawUnsafe(
         `SELECT column_name FROM information_schema.columns WHERE table_name = 'CatalogCategory' AND column_name = 'listingCount'`,
       ),
     ).resolves.toEqual([]);
+    await expect(
+      prisma.$queryRawUnsafe(
+        `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('Product','Listing','ListingDraft','CatalogProduct','CatalogListing')`,
+      ),
+    ).resolves.toEqual([]);
   });
 
-  it('enforces uniqueness, XOR scope, FK restrict and deterministic public reads', async () => {
-    const slug = `it-${Date.now()}`;
-    const category = await prisma.catalogCategory.create({
-      data: { slug, name: 'Integration Category' },
-    });
-    await expect(
-      prisma.catalogCategory.create({ data: { slug, name: 'Duplicate' } }),
-    ).rejects.toThrow();
-    await prisma.catalogSubcategory.create({
-      data: { categoryId: category.id, slug: 'same', name: 'Same A' },
-    });
-    await expect(
-      prisma.catalogSubcategory.create({
-        data: { categoryId: category.id, slug: 'same', name: 'Same B' },
-      }),
-    ).rejects.toThrow();
-    const other = await prisma.catalogCategory.create({
-      data: { slug: `${slug}-b`, name: 'Integration Category B' },
-    });
-    await expect(
-      prisma.catalogSubcategory.create({
-        data: { categoryId: other.id, slug: 'same', name: 'Same OK' },
-      }),
-    ).resolves.toBeDefined();
-    await expect(
-      prisma.catalogAttribute.create({ data: { key: 'bad', label: 'Bad', inputType: 'TEXT' } }),
-    ).rejects.toThrow();
-    await expect(prisma.catalogCategory.delete({ where: { id: category.id } })).rejects.toThrow();
-    const publicItems = await catalog.publicCategories();
-    expect(publicItems.items.map((item) => item.slug)).toContain('contas');
-  });
-
-  it('converts concurrent conflicts to categorical service errors and rolls back audit failures', async () => {
-    const admin = await prisma.user.create({
-      data: {
-        email: `catalog-admin-${Date.now()}@example.test`,
-        birthDate: new Date('1990-01-01'),
-        termsVersion: 'integration-test',
-        termsAcceptedAt: new Date(),
-        privacyVersion: 'integration-test',
-        privacyAcceptedAt: new Date(),
-        status: 'ACTIVE',
-      },
-    });
-    const slug = `race-${Date.now()}`;
+  it('persists exactly one category and one creation audit under concurrent duplicate slugs', async () => {
+    const admin = await adminUser();
+    const slug = `race-cat-${Date.now()}`;
     const results = await Promise.allSettled([
-      catalog.createCategory({ slug, name: 'Race A' }, admin.id),
-      catalog.createCategory({ slug, name: 'Race B' }, admin.id),
+      catalog.createCategory({ slug, name: 'Race Category A' }, admin.id),
+      catalog.createCategory({ slug, name: 'Race Category B' }, admin.id),
     ]);
     expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
-    expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
+    expect(results.map(rejectedCode)).toContain('CATALOG_CATEGORY_SLUG_CONFLICT');
+    await expect(prisma.catalogCategory.count({ where: { slug } })).resolves.toBe(1);
+    await expect(
+      prisma.securityEvent.count({
+        where: { userId: admin.id, eventType: SecurityEventType.CATALOG_CATEGORY_CREATED },
+      }),
+    ).resolves.toBe(1);
+  });
+
+  it('persists exactly one subcategory and one creation audit under concurrent duplicate slugs', async () => {
+    const admin = await adminUser();
+    const slug = `race-sub-${Date.now()}`;
+    const category = await prisma.catalogCategory.create({
+      data: { slug: `${slug}-cat`, name: 'Race Sub Cat' },
+    });
+    const results = await Promise.allSettled([
+      catalog.createSubcategory({ categoryId: category.id, slug, name: 'Race Sub A' }, admin.id),
+      catalog.createSubcategory({ categoryId: category.id, slug, name: 'Race Sub B' }, admin.id),
+    ]);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.map(rejectedCode)).toContain('CATALOG_SUBCATEGORY_SLUG_CONFLICT');
+    await expect(
+      prisma.catalogSubcategory.count({ where: { categoryId: category.id, slug } }),
+    ).resolves.toBe(1);
+    await expect(
+      prisma.securityEvent.count({
+        where: { userId: admin.id, eventType: SecurityEventType.CATALOG_SUBCATEGORY_CREATED },
+      }),
+    ).resolves.toBe(1);
+  });
+
+  it('persists exactly one attribute and one creation audit under concurrent duplicate scoped keys', async () => {
+    const admin = await adminUser();
+    const key = `race_attr_${Date.now()}`;
+    const results = await Promise.allSettled([
+      catalog.createAttribute(
+        { productType: 'virtual_currency', key, label: 'Race Attr A', inputType: 'number' },
+        admin.id,
+      ),
+      catalog.createAttribute(
+        { productType: 'virtual_currency', key, label: 'Race Attr B', inputType: 'number' },
+        admin.id,
+      ),
+    ]);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.map(rejectedCode)).toContain('CATALOG_ATTRIBUTE_KEY_CONFLICT');
+    await expect(
+      prisma.catalogAttribute.count({ where: { productType: 'VIRTUAL_CURRENCY', key } }),
+    ).resolves.toBe(1);
+    await expect(
+      prisma.securityEvent.count({
+        where: { userId: admin.id, eventType: SecurityEventType.CATALOG_ATTRIBUTE_CREATED },
+      }),
+    ).resolves.toBe(1);
+  });
+
+  it('rolls back category creates, category updates/status changes and attribute updates when audit fails', async () => {
+    const admin = await adminUser();
+    const slug = `rollback-${Date.now()}`;
+    const category = await catalog.createCategory({ slug, name: 'Rollback Category' }, admin.id);
+    const attribute = await catalog.createAttribute(
+      {
+        productType: 'virtual_currency',
+        key: `rollback_attr_${Date.now()}`,
+        label: 'Rollback Attr',
+        inputType: 'number',
+      },
+      admin.id,
+    );
+    const eventCount = await prisma.securityEvent.count({ where: { userId: admin.id } });
     const fn = `catalog_audit_fail_${Date.now()}`;
     const trigger = `${fn}_trigger`;
     try {
@@ -3079,14 +3162,96 @@ describe('Catalog taxonomy with real PostgreSQL (integration)', () => {
         `CREATE TRIGGER "${trigger}" BEFORE INSERT ON "SecurityEvent" FOR EACH ROW EXECUTE FUNCTION "${fn}"();`,
       );
       await expect(
-        catalog.createCategory({ slug: `${slug}-rollback`, name: 'Rollback' }, admin.id),
+        catalog.createCategory({ slug: `${slug}-create-fail`, name: 'Create Fail' }, admin.id),
+      ).rejects.toThrow();
+      await expect(
+        catalog.updateCategory(category.id, { name: 'Changed' }, admin.id),
+      ).rejects.toThrow();
+      await expect(
+        catalog.updateCategory(category.id, { status: 'INACTIVE' }, admin.id),
+      ).rejects.toThrow();
+      await expect(
+        catalog.updateAttribute(
+          attribute.id,
+          { subcategoryId: '00000000-0000-4000-8000-000000000101', productType: null },
+          admin.id,
+        ),
       ).rejects.toThrow();
     } finally {
       await prisma.$executeRawUnsafe(`DROP TRIGGER IF EXISTS "${trigger}" ON "SecurityEvent"`);
       await prisma.$executeRawUnsafe(`DROP FUNCTION IF EXISTS "${fn}"()`);
     }
     await expect(
-      prisma.catalogCategory.findUnique({ where: { slug: `${slug}-rollback` } }),
+      prisma.catalogCategory.findUnique({ where: { slug: `${slug}-create-fail` } }),
     ).resolves.toBeNull();
+    await expect(
+      prisma.catalogCategory.findUnique({ where: { id: category.id } }),
+    ).resolves.toMatchObject({ name: 'Rollback Category', status: 'ACTIVE' });
+    await expect(
+      prisma.catalogAttribute.findUnique({ where: { id: attribute.id } }),
+    ).resolves.toMatchObject({ productType: 'VIRTUAL_CURRENCY', subcategoryId: null });
+    await expect(prisma.securityEvent.count({ where: { userId: admin.id } })).resolves.toBe(
+      eventCount,
+    );
+  });
+
+  it('hides inactive public entities, resolves overrides and keeps minimal subcategory contracts', async () => {
+    const slug = `public-${Date.now()}`;
+    const category = await prisma.catalogCategory.create({
+      data: { slug, name: 'Public Category', sortOrder: 200 },
+    });
+    const subcategory = await prisma.catalogSubcategory.create({
+      data: { categoryId: category.id, slug: 'public-sub', name: 'Public Sub', sortOrder: 1 },
+    });
+    await prisma.catalogAttribute.create({
+      data: {
+        productType: 'ACCOUNT',
+        key: 'server',
+        label: 'Generic Server',
+        inputType: 'TEXT',
+        sortOrder: 2,
+      },
+    });
+    await prisma.catalogAttribute.create({
+      data: {
+        subcategoryId: subcategory.id,
+        key: 'server',
+        label: 'Specific Server',
+        inputType: 'SELECT',
+        selectOptions: ['BR'],
+        sortOrder: 1,
+      },
+    });
+    await prisma.catalogSubcategory.create({
+      data: { categoryId: category.id, slug: 'hidden-sub', name: 'Hidden Sub', status: 'INACTIVE' },
+    });
+    await prisma.catalogAttribute.create({
+      data: {
+        productType: 'ACCOUNT',
+        key: `hidden_${Date.now()}`,
+        label: 'Hidden',
+        inputType: 'TEXT',
+        status: 'INACTIVE',
+      },
+    });
+    const subcategories = await catalog.publicSubcategories(slug);
+    expect(subcategories.items).toEqual([
+      { id: subcategory.id, slug: 'public-sub', name: 'Public Sub', sortOrder: 1 },
+    ]);
+    const attributes = await catalog.attributes({
+      categorySlug: slug,
+      subcategorySlug: 'public-sub',
+      productType: 'account',
+    });
+    expect(attributes.items[0]).toMatchObject({
+      key: 'server',
+      label: 'Specific Server',
+      inputType: 'select',
+    });
+    await prisma.catalogCategory.update({
+      where: { id: category.id },
+      data: { status: 'INACTIVE' },
+    });
+    await expect(catalog.publicCategoryBySlug(slug)).rejects.toThrow();
   });
 });

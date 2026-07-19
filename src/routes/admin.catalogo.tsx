@@ -32,6 +32,8 @@ import type { ListingAttributeInputType, ListingProductType } from "@/types";
 
 export const Route = createFileRoute("/admin/catalogo")({ component: AdminCatalogoPage });
 
+type MutationSource = "form" | "inline";
+
 type DialogState =
   | { kind: "category"; item?: AdminCatalogCategory }
   | { kind: "subcategory"; item?: AdminCatalogSubcategory }
@@ -85,55 +87,55 @@ function AdminCatalogoPage() {
     });
   const opKey = (entity: "category" | "subcategory" | "attribute", id?: string) =>
     `${entity}:${id ?? "create"}`;
-  const mutateCategory = (id: string | undefined, body: unknown) => {
+  const mutateCategory = (id: string | undefined, body: unknown, source: MutationSource) => {
     const key = opKey("category", id);
     if (pendingOps.has(key)) return;
     addPending(key);
-    categoryMutation.mutate({ id, body, key });
+    categoryMutation.mutate({ id, body, key, source });
   };
-  const mutateSubcategory = (id: string | undefined, body: unknown) => {
+  const mutateSubcategory = (id: string | undefined, body: unknown, source: MutationSource) => {
     const key = opKey("subcategory", id);
     if (pendingOps.has(key)) return;
     addPending(key);
-    subcategoryMutation.mutate({ id, body, key });
+    subcategoryMutation.mutate({ id, body, key, source });
   };
-  const mutateAttribute = (id: string | undefined, body: unknown) => {
+  const mutateAttribute = (id: string | undefined, body: unknown, source: MutationSource) => {
     const key = opKey("attribute", id);
     if (pendingOps.has(key)) return;
     addPending(key);
-    attributeMutation.mutate({ id, body, key });
+    attributeMutation.mutate({ id, body, key, source });
   };
-  const done = (label: string) => {
+  const done = (label: string, source: MutationSource) => {
     toast.success(label);
-    setDialog(null);
+    if (source === "form") setDialog(null);
     invalidate();
   };
   const categoryMutation = useMutation({
-    mutationFn: ({ id, body }: { id?: string; body: unknown; key: string }) =>
+    mutationFn: ({ id, body }: { id?: string; body: unknown; key: string; source: MutationSource }) =>
       id
         ? catalogService.admin.updateCategory(id, body)
         : catalogService.admin.createCategory(body),
     onSuccess: (_data, variables) =>
-      done(variables.id ? "Categoria atualizada" : "Categoria criada"),
+      done(variables.id ? "Categoria atualizada" : "Categoria criada", variables.source),
     onError: (e: Error) => toast.error(message(e)),
     onSettled: (_data, _error, variables) => removePending(variables.key),
   });
   const subcategoryMutation = useMutation({
-    mutationFn: ({ id, body }: { id?: string; body: unknown; key: string }) =>
+    mutationFn: ({ id, body }: { id?: string; body: unknown; key: string; source: MutationSource }) =>
       id
         ? catalogService.admin.updateSubcategory(id, body)
         : catalogService.admin.createSubcategory(body),
     onSuccess: (_data, variables) =>
-      done(variables.id ? "Subcategoria atualizada" : "Subcategoria criada"),
+      done(variables.id ? "Subcategoria atualizada" : "Subcategoria criada", variables.source),
     onError: (e: Error) => toast.error(message(e)),
     onSettled: (_data, _error, variables) => removePending(variables.key),
   });
   const attributeMutation = useMutation({
-    mutationFn: ({ id, body }: { id?: string; body: unknown; key: string }) =>
+    mutationFn: ({ id, body }: { id?: string; body: unknown; key: string; source: MutationSource }) =>
       id
         ? catalogService.admin.updateAttribute(id, body)
         : catalogService.admin.createAttribute(body),
-    onSuccess: (_data, variables) => done(variables.id ? "Atributo atualizado" : "Atributo criado"),
+    onSuccess: (_data, variables) => done(variables.id ? "Atributo atualizado" : "Atributo criado", variables.source),
     onError: (e: Error) => toast.error(message(e)),
     onSettled: (_data, _error, variables) => removePending(variables.key),
   });
@@ -214,7 +216,7 @@ function AdminCatalogoPage() {
                       <TableCell>
                         <button
                           disabled={categoryPending(c.id)}
-                          onClick={() => mutateCategory(c.id, { featured: !c.featured })}
+                          onClick={() => mutateCategory(c.id, { featured: !c.featured }, "inline")}
                         >
                           <Star
                             className={
@@ -247,9 +249,11 @@ function AdminCatalogoPage() {
                               !confirm(`Inativar ${c.name}? Ela desaparecerá do catálogo público.`)
                             )
                               return;
-                            mutateCategory(c.id, {
-                              status: c.status === "ACTIVE" ? "INACTIVE" : "ACTIVE",
-                            });
+                            mutateCategory(
+                              c.id,
+                              { status: c.status === "ACTIVE" ? "INACTIVE" : "ACTIVE" },
+                              "inline",
+                            );
                           }}
                         />
                       </TableCell>
@@ -312,9 +316,11 @@ function AdminCatalogoPage() {
                           checked={s.status === "ACTIVE"}
                           onCheckedChange={() => {
                             if (s.status === "ACTIVE" && !confirm(`Inativar ${s.name}?`)) return;
-                            mutateSubcategory(s.id, {
-                              status: s.status === "ACTIVE" ? "INACTIVE" : "ACTIVE",
-                            });
+                            mutateSubcategory(
+                              s.id,
+                              { status: s.status === "ACTIVE" ? "INACTIVE" : "ACTIVE" },
+                              "inline",
+                            );
                           }}
                         />
                       </TableCell>
@@ -374,9 +380,11 @@ function AdminCatalogoPage() {
                           disabled={attributePending(a.id)}
                           checked={a.status === "ACTIVE"}
                           onCheckedChange={() =>
-                            mutateAttribute(a.id, {
-                              status: a.status === "ACTIVE" ? "INACTIVE" : "ACTIVE",
-                            })
+                            mutateAttribute(
+                              a.id,
+                              { status: a.status === "ACTIVE" ? "INACTIVE" : "ACTIVE" },
+                              "inline",
+                            )
                           }
                         />
                       </TableCell>
@@ -393,9 +401,9 @@ function AdminCatalogoPage() {
         categories={cats.data ?? []}
         subcategories={subs.data ?? []}
         onClose={() => setDialog(null)}
-        onCategory={mutateCategory}
-        onSubcategory={mutateSubcategory}
-        onAttribute={mutateAttribute}
+        onCategory={(id, body) => mutateCategory(id, body, "form")}
+        onSubcategory={(id, body) => mutateSubcategory(id, body, "form")}
+        onAttribute={(id, body) => mutateAttribute(id, body, "form")}
         pending={dialog ? pendingOps.has(opKey(dialog.kind, dialog.item?.id)) : false}
       />
     </AdminLayout>

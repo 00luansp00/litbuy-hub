@@ -176,6 +176,47 @@ describe("/admin/catalogo", () => {
     await waitFor(() => expect(switches[0]).not.toBeDisabled());
   });
 
+  it("does not let an inline mutation close a different form dialog", async () => {
+    const inline = deferred<typeof categoryA>();
+    const form = deferred<typeof subcategory>();
+    service.updateCategory.mockReturnValueOnce(inline.promise);
+    service.createSubcategory.mockReturnValueOnce(form.promise);
+    await renderRoute();
+    expect((await screen.findAllByText("Contas")).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByRole("switch")[0]);
+    fireEvent.click(screen.getByRole("button", { name: /Nova subcategoria/i }));
+    expect(screen.getByRole("dialog")).toHaveTextContent(/Nova subcategoria/i);
+    inline.resolve(categoryA);
+    await waitFor(() => expect(service.updateCategory).toHaveBeenCalled());
+    expect(screen.getByRole("dialog")).toHaveTextContent(/Nova subcategoria/i);
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(dialog.querySelector('input[name="name"]')!, {
+      target: { value: "Nova Sub" },
+    });
+    fireEvent.change(dialog.querySelector('input[name="slug"]')!, {
+      target: { value: "nova-sub" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Salvar/i }));
+    await waitFor(() => expect(service.createSubcategory).toHaveBeenCalled());
+    form.resolve(subcategory);
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("can cancel a filled category form without creating records", async () => {
+    await renderRoute();
+    fireEvent.click(await screen.findByRole("button", { name: /Nova categoria/i }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(dialog.querySelector('input[name="name"]')!, {
+      target: { value: "Cancelada" },
+    });
+    fireEvent.change(dialog.querySelector('input[name="slug"]')!, {
+      target: { value: "cancelada" },
+    });
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(service.createCategory).not.toHaveBeenCalled();
+  });
+
   it("lists and edits attributes including conflict errors", async () => {
     await renderRoute();
     expect(await screen.findByText("Quantidade")).toBeInTheDocument();
