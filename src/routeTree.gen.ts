@@ -50,6 +50,7 @@ import { Route as VendedorAvaliacoesRouteImport } from './routes/vendedor.avalia
 import { Route as VendedorAnunciosRouteImport } from './routes/vendedor.anuncios'
 import { Route as ProdutoIdRouteImport } from './routes/produto.$id'
 import { Route as PerfilVerificacaoRouteImport } from './routes/perfil.verificacao'
+import { Route as PerfilVendedorRouteImport } from './routes/perfil.vendedor'
 import { Route as PerfilSegurancaRouteImport } from './routes/perfil.seguranca'
 import { Route as PerfilPreferenciasRouteImport } from './routes/perfil.preferencias'
 import { Route as PedidosIdRouteImport } from './routes/pedidos.$id'
@@ -281,6 +282,11 @@ const PerfilVerificacaoRoute = PerfilVerificacaoRouteImport.update({
   path: '/perfil/verificacao',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PerfilVendedorRoute = PerfilVendedorRouteImport.update({
+  id: '/perfil/vendedor',
+  path: '/perfil/vendedor',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PerfilSegurancaRoute = PerfilSegurancaRouteImport.update({
   id: '/perfil/seguranca',
   path: '/perfil/seguranca',
@@ -461,6 +467,7 @@ export interface FileRoutesByFullPath {
   '/pedidos/$id': typeof PedidosIdRoute
   '/perfil/preferencias': typeof PerfilPreferenciasRoute
   '/perfil/seguranca': typeof PerfilSegurancaRoute
+  '/perfil/vendedor': typeof PerfilVendedorRoute
   '/perfil/verificacao': typeof PerfilVerificacaoRoute
   '/produto/$id': typeof ProdutoIdRoute
   '/vendedor/anuncios': typeof VendedorAnunciosRouteWithChildren
@@ -527,6 +534,7 @@ export interface FileRoutesByTo {
   '/pedidos/$id': typeof PedidosIdRoute
   '/perfil/preferencias': typeof PerfilPreferenciasRoute
   '/perfil/seguranca': typeof PerfilSegurancaRoute
+  '/perfil/vendedor': typeof PerfilVendedorRoute
   '/perfil/verificacao': typeof PerfilVerificacaoRoute
   '/produto/$id': typeof ProdutoIdRoute
   '/vendedor/avaliacoes': typeof VendedorAvaliacoesRoute
@@ -595,6 +603,7 @@ export interface FileRoutesById {
   '/pedidos/$id': typeof PedidosIdRoute
   '/perfil/preferencias': typeof PerfilPreferenciasRoute
   '/perfil/seguranca': typeof PerfilSegurancaRoute
+  '/perfil/vendedor': typeof PerfilVendedorRoute
   '/perfil/verificacao': typeof PerfilVerificacaoRoute
   '/produto/$id': typeof ProdutoIdRoute
   '/vendedor/anuncios': typeof VendedorAnunciosRouteWithChildren
@@ -665,6 +674,7 @@ export interface FileRouteTypes {
     | '/pedidos/$id'
     | '/perfil/preferencias'
     | '/perfil/seguranca'
+    | '/perfil/vendedor'
     | '/perfil/verificacao'
     | '/produto/$id'
     | '/vendedor/anuncios'
@@ -731,6 +741,7 @@ export interface FileRouteTypes {
     | '/pedidos/$id'
     | '/perfil/preferencias'
     | '/perfil/seguranca'
+    | '/perfil/vendedor'
     | '/perfil/verificacao'
     | '/produto/$id'
     | '/vendedor/avaliacoes'
@@ -798,6 +809,7 @@ export interface FileRouteTypes {
     | '/pedidos/$id'
     | '/perfil/preferencias'
     | '/perfil/seguranca'
+    | '/perfil/vendedor'
     | '/perfil/verificacao'
     | '/produto/$id'
     | '/vendedor/anuncios'
@@ -850,6 +862,7 @@ export interface RootRouteChildren {
   PagamentoIdRoute: typeof PagamentoIdRoute
   PerfilPreferenciasRoute: typeof PerfilPreferenciasRoute
   PerfilSegurancaRoute: typeof PerfilSegurancaRoute
+  PerfilVendedorRoute: typeof PerfilVendedorRoute
   PerfilVerificacaoRoute: typeof PerfilVerificacaoRoute
   ProdutoIdRoute: typeof ProdutoIdRoute
   PerfilIndexRoute: typeof PerfilIndexRoute
@@ -1142,6 +1155,13 @@ declare module '@tanstack/react-router' {
       path: '/perfil/verificacao'
       fullPath: '/perfil/verificacao'
       preLoaderRoute: typeof PerfilVerificacaoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/perfil/vendedor': {
+      id: '/perfil/vendedor'
+      path: '/perfil/vendedor'
+      fullPath: '/perfil/vendedor'
+      preLoaderRoute: typeof PerfilVendedorRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/perfil/seguranca': {
@@ -1469,6 +1489,7 @@ const rootRouteChildren: RootRouteChildren = {
   PagamentoIdRoute: PagamentoIdRoute,
   PerfilPreferenciasRoute: PerfilPreferenciasRoute,
   PerfilSegurancaRoute: PerfilSegurancaRoute,
+  PerfilVendedorRoute: PerfilVendedorRoute,
   PerfilVerificacaoRoute: PerfilVerificacaoRoute,
   ProdutoIdRoute: ProdutoIdRoute,
   PerfilIndexRoute: PerfilIndexRoute,

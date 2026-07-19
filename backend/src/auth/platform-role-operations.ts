@@ -9,19 +9,13 @@ import {
 export type RoleOperationOrigin = 'cli' | 'system' | 'test';
 export type RoleOperationResult = { changed: boolean; result: 'granted' | 'revoked' | 'unchanged' };
 
-type Tx = {
-  user: { findUnique(args: unknown): Promise<{ status: UserStatus } | null> };
-  userRoleAssignment: {
-    findUnique(args: unknown): Promise<object | null>;
-    createMany(args: unknown): Promise<{ count: number }>;
-    deleteMany(args: unknown): Promise<{ count: number }>;
-    count(args?: unknown): Promise<number>;
-  };
-  securityEvent: { create(args: unknown): Promise<object> };
-};
+type RoleOperationTx = Pick<
+  Prisma.TransactionClient,
+  'user' | 'userRoleAssignment' | 'securityEvent'
+>;
 
-type PrismaLike = Tx & {
-  $transaction<T>(fn: (tx: Tx) => Promise<T>, options?: object): Promise<T>;
+type PrismaLike = RoleOperationTx & {
+  $transaction<T>(fn: (tx: Prisma.TransactionClient) => Promise<T>, options?: object): Promise<T>;
 };
 
 export class PlatformRoleOperationError extends Error {
@@ -39,7 +33,7 @@ function isSerializationConflict(error: unknown): boolean {
 
 export async function serializableTransactionWithRetry<T>(
   prisma: PrismaLike,
-  operation: (tx: Tx) => Promise<T>,
+  operation: (tx: Prisma.TransactionClient) => Promise<T>,
   maxAttempts = 3,
 ): Promise<T> {
   let lastError: unknown;
@@ -60,7 +54,7 @@ export async function serializableTransactionWithRetry<T>(
 }
 
 async function audit(
-  tx: Tx,
+  tx: RoleOperationTx,
   userId: string,
   eventType: SecurityEventType,
   outcome: SecurityEventOutcome,
@@ -78,30 +72,37 @@ async function audit(
   });
 }
 
+export async function grantPlatformRoleInTransaction(
+  tx: RoleOperationTx,
+  userId: string,
+  role: PlatformRole,
+  origin: RoleOperationOrigin,
+): Promise<RoleOperationResult> {
+  const created = await tx.userRoleAssignment.createMany({
+    data: [{ userId, role }],
+    skipDuplicates: true,
+  });
+  const changed = created.count === 1;
+  const result = changed ? 'granted' : 'unchanged';
+  await audit(
+    tx,
+    userId,
+    SecurityEventType.ROLE_GRANTED,
+    SecurityEventOutcome.SUCCESS,
+    role,
+    origin,
+    result,
+  );
+  return { changed, result };
+}
+
 export async function grantPlatformRole(
   prisma: PrismaLike,
   userId: string,
   role: PlatformRole,
   origin: RoleOperationOrigin,
 ): Promise<RoleOperationResult> {
-  return prisma.$transaction(async (tx) => {
-    const created = await tx.userRoleAssignment.createMany({
-      data: [{ userId, role }],
-      skipDuplicates: true,
-    });
-    const changed = created.count === 1;
-    const result = changed ? 'granted' : 'unchanged';
-    await audit(
-      tx,
-      userId,
-      SecurityEventType.ROLE_GRANTED,
-      SecurityEventOutcome.SUCCESS,
-      role,
-      origin,
-      result,
-    );
-    return { changed, result };
-  });
+  return prisma.$transaction((tx) => grantPlatformRoleInTransaction(tx, userId, role, origin));
 }
 
 export async function revokePlatformRole(

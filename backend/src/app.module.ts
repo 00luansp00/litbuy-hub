@@ -7,9 +7,17 @@ import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 import { RequestLoggingMiddleware } from './common/middleware/request-logging.middleware';
 import { AppLogger } from './common/logging/app-logger.service';
 import { AuthModule } from './auth/auth.module';
+import { SellerOnboardingModule } from './seller-onboarding/seller-onboarding.module';
 
 @Module({
-  imports: [ConfigModule, DatabaseModule, RedisModule, HealthModule, AuthModule],
+  imports: [
+    ConfigModule,
+    DatabaseModule,
+    RedisModule,
+    HealthModule,
+    AuthModule,
+    SellerOnboardingModule,
+  ],
   providers: [AppLogger],
 })
 export class AppModule implements NestModule {

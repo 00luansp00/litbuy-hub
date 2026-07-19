@@ -236,6 +236,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [clear, setSafeLoading]);
 
+  const reloadCurrentUser = useCallback(
+    () =>
+      runPending(async () => {
+        const fresh = await authService.me();
+        setUser((current) => withPresentation(fresh, current?.activeRole));
+        setStatus("authenticated");
+        queryClient.invalidateQueries();
+      }),
+    [queryClient, runPending],
+  );
+
   const refreshSession = useCallback(
     () =>
       runPending(async () => {
@@ -318,6 +329,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       resendEmailVerification,
       resendDeviceApproval,
       refreshSession,
+      reloadCurrentUser,
       requestPasswordReset,
       resetPassword,
       logout,
@@ -348,6 +360,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       register,
       verifyTwoFactorLogin,
       refreshSession,
+      reloadCurrentUser,
       logout,
       clear,
       verifyEmail,

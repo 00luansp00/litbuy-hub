@@ -46,6 +46,20 @@ enum PlatformRole {
   ADMIN
 }
 
+enum SellerApplicationStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum SellerProfileStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
 enum SecurityEventType {
   REGISTERED
   EMAIL_VERIFICATION_REQUESTED
@@ -91,6 +105,12 @@ enum SecurityEventType {
   TWO_FACTOR_RECOVERY_CODES_REGENERATED
   ROLE_GRANTED
   ROLE_REVOKED
+  SELLER_APPLICATION_DRAFT_SAVED
+  SELLER_APPLICATION_SUBMITTED
+  SELLER_APPLICATION_REVIEW_STARTED
+  SELLER_APPLICATION_APPROVED
+  SELLER_APPLICATION_REJECTED
+  SELLER_PROFILE_CREATED
 }
 
 enum StepUpScope {
@@ -112,32 +132,35 @@ enum SecurityEventOutcome {
 }
 
 model User {
-  id                       String                  @id @default(uuid()) @db.Uuid
-  email                    String                  @unique
-  phoneE164                String?
-  phoneVerifiedAt          DateTime?
-  birthDate                DateTime                @db.Date
-  status                   UserStatus              @default(PENDING_EMAIL)
-  emailVerifiedAt          DateTime?
-  termsVersion             String
-  termsAcceptedAt          DateTime
-  privacyVersion           String
-  privacyAcceptedAt        DateTime
-  createdAt                DateTime                @default(now())
-  updatedAt                DateTime                @updatedAt
-  deletedAt                DateTime?
-  sensitiveActionHoldUntil DateTime?
-  lastSensitiveChangeAt    DateTime?
-  passwordCredential       PasswordCredential?
-  devices                  Device[]
-  sessions                 Session[]
-  verificationChallenges   VerificationChallenge[]
-  securityEvents           SecurityEvent[]
-  emailChangeRequests      EmailChangeRequest[]
-  twoFactorSettings        TwoFactorSettings?
-  twoFactorRecoveryCodes   TwoFactorRecoveryCode[]
-  stepUpGrants             StepUpGrant[]
-  roleAssignments          UserRoleAssignment[]
+  id                         String                  @id @default(uuid()) @db.Uuid
+  email                      String                  @unique
+  phoneE164                  String?
+  phoneVerifiedAt            DateTime?
+  birthDate                  DateTime                @db.Date
+  status                     UserStatus              @default(PENDING_EMAIL)
+  emailVerifiedAt            DateTime?
+  termsVersion               String
+  termsAcceptedAt            DateTime
+  privacyVersion             String
+  privacyAcceptedAt          DateTime
+  createdAt                  DateTime                @default(now())
+  updatedAt                  DateTime                @updatedAt
+  deletedAt                  DateTime?
+  sensitiveActionHoldUntil   DateTime?
+  lastSensitiveChangeAt      DateTime?
+  passwordCredential         PasswordCredential?
+  devices                    Device[]
+  sessions                   Session[]
+  verificationChallenges     VerificationChallenge[]
+  securityEvents             SecurityEvent[]
+  emailChangeRequests        EmailChangeRequest[]
+  twoFactorSettings          TwoFactorSettings?
+  twoFactorRecoveryCodes     TwoFactorRecoveryCode[]
+  stepUpGrants               StepUpGrant[]
+  roleAssignments            UserRoleAssignment[]
+  sellerApplication          SellerApplication?      @relation("SellerApplicationOwner")
+  reviewedSellerApplications SellerApplication[]     @relation("SellerApplicationReviewer")
+  sellerProfile              SellerProfile?
 
   @@unique([phoneE164])
   @@index([email])
@@ -153,6 +176,47 @@ model UserRoleAssignment {
 
   @@id([userId, role])
   @@index([role])
+}
+
+model SellerApplication {
+  id                        String                  @id @default(uuid()) @db.Uuid
+  userId                    String                  @unique @db.Uuid
+  storeName                 String
+  requestedSlug             String
+  description               String?
+  status                    SellerApplicationStatus @default(DRAFT)
+  sellerAgreementVersion    String?
+  sellerAgreementAcceptedAt DateTime?
+  submittedAt               DateTime?
+  reviewedAt                DateTime?
+  reviewedByUserId          String?                 @db.Uuid
+  rejectionCode             String?
+  rejectionReason           String?
+  createdAt                 DateTime                @default(now())
+  updatedAt                 DateTime                @updatedAt
+
+  user       User  @relation("SellerApplicationOwner", fields: [userId], references: [id], onDelete: Restrict)
+  reviewedBy User? @relation("SellerApplicationReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([status, submittedAt])
+  @@index([requestedSlug])
+}
+
+model SellerProfile {
+  id          String              @id @default(uuid()) @db.Uuid
+  userId      String              @unique @db.Uuid
+  storeName   String
+  slug        String              @unique
+  description String?
+  status      SellerProfileStatus @default(ACTIVE)
+  verified    Boolean             @default(false)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([status])
+  @@index([slug])
 }
 
 model PasswordCredential {

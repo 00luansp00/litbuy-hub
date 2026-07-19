@@ -30,12 +30,20 @@ export const Route = createFileRoute("/vendedor/")({
 
 function VendedorPage() {
   return (
-    <AuthGate
-      title="Entre para acessar sua área de vendedor"
-      description="Você precisa estar logado na LIT Buy para vender. Faça login ou crie sua conta em segundos."
-    >
-      <VendedorDashboard />
-    </AuthGate>
+    <>
+      <div className="container-lit pt-4">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          Os dados de anúncios, vendas e financeiro desta área ainda são demonstrativos. A conta e o
+          acesso de vendedor já são reais.
+        </div>
+      </div>
+      <AuthGate
+        title="Entre para acessar sua área de vendedor"
+        description="Você precisa estar logado na LIT Buy para vender. Faça login ou crie sua conta em segundos."
+      >
+        <VendedorDashboard />
+      </AuthGate>
+    </>
   );
 }
 
@@ -89,10 +97,9 @@ function VendedorDashboard() {
         <SellerLevelCard />
       </div>
       <p className="text-[11px] text-muted-foreground">
-        Aviso: na operação real, a verificação de identidade poderá ser exigida para vender,
-        sacar ou acessar recursos avançados.
+        Aviso: na operação real, a verificação de identidade poderá ser exigida para vender, sacar
+        ou acessar recursos avançados.
       </p>
-
 
       {/* Duas colunas: vendas + performance/financeiro */}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
@@ -117,8 +124,8 @@ function VendedorDashboard() {
               <Users className="h-4 w-4 text-primary" /> Afiliados LIT Buy
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              Indique compradores e vendedores para a LIT Buy e acumule comissão
-              demonstrativa. Comissão real exigirá backend.
+              Indique compradores e vendedores para a LIT Buy e acumule comissão demonstrativa.
+              Comissão real exigirá backend.
             </p>
           </div>
           <Link

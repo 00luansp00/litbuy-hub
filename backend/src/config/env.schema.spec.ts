@@ -48,6 +48,7 @@ describe('validateEnvironment', () => {
     AUTH_2FA_RECOVERY_CODE_COUNT: '10',
     CURRENT_TERMS_VERSION: '2026-test',
     CURRENT_PRIVACY_VERSION: '2026-test',
+    CURRENT_SELLER_AGREEMENT_VERSION: '2026-test',
     PUBLIC_FRONTEND_ORIGIN: 'http://localhost:3000',
     PUBLIC_API_ORIGIN: 'http://localhost:3001',
     AUTH_COOKIE_TOPOLOGY: 'same-host',

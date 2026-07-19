@@ -203,6 +203,8 @@ class FakePrisma {
   twoFactorRecoveryCodeRows: Row[] = [];
   stepUpGrantRows: Row[] = [];
   userRoleAssignments: Row[] = [];
+  sellerApplications: Row[] = [];
+  sellerProfiles: Row[] = [];
   user = {
     create: async (a: { data: Row }) => {
       await Promise.resolve();
@@ -351,6 +353,72 @@ class FakePrisma {
       return { count };
     },
     deleteMany: (a: { where?: Row } = {}) => this.roleDelegate.deleteMany(a),
+  };
+
+  private sellerApplicationDelegate = new Delegate(this.sellerApplications);
+  sellerApplication = {
+    create: (a: { data: Row }) => this.sellerApplicationDelegate.create(a),
+    upsert: (a: { where: Row; update: Row; create: Row }) =>
+      this.sellerApplicationDelegate.upsert(a),
+    update: (a: { where: Row; data: Row }) => this.sellerApplicationDelegate.update(a),
+    findUnique: async (a: { where: Row; include?: Row }) => {
+      const row = await this.sellerApplicationDelegate.findUnique(a);
+      if (!row || !a.include) return row;
+      return { ...row, user: this.users.find((u) => u.id === row.userId) };
+    },
+    findMany: async (
+      a: { where?: Row; include?: Row; take?: number; cursor?: Row; skip?: number } = {},
+    ) => {
+      await Promise.resolve();
+      let rows = [...this.sellerApplications];
+      const where = a.where ?? {};
+      if (where.status) rows = rows.filter((r) => r.status === where.status);
+      if (Array.isArray(where.OR)) {
+        const terms = where.OR as Row[];
+        rows = rows.filter((r) =>
+          terms.some((term) =>
+            Object.entries(term).some(
+              ([key, condition]) =>
+                typeof r[key] === 'string' &&
+                typeof (condition as Row).contains === 'string' &&
+                r[key]
+                  .toLowerCase()
+                  .includes(((condition as Row).contains as string).toLowerCase()),
+            ),
+          ),
+        );
+      }
+      rows.sort((aRow, bRow) => String(aRow.id).localeCompare(String(bRow.id)));
+      if (a.cursor?.id) {
+        const index = rows.findIndex((r) => r.id === a.cursor?.id);
+        rows = index >= 0 ? rows.slice(index + (a.skip ?? 0)) : [];
+      }
+      if (a.take) rows = rows.slice(0, a.take);
+      return a.include
+        ? rows.map((r) => ({ ...r, user: this.users.find((u) => u.id === r.userId) }))
+        : rows;
+    },
+    deleteMany: (a: { where?: Row } = {}) => this.sellerApplicationDelegate.deleteMany(a),
+    count: (a: { where?: Row } = {}) => this.sellerApplicationDelegate.count(a),
+  };
+  private sellerProfileDelegate = new Delegate(this.sellerProfiles);
+  sellerProfile = {
+    create: async (a: { data: Row }) => {
+      if (this.sellerProfiles.some((p) => p.userId === a.data.userId || p.slug === a.data.slug))
+        throw new Error('unique seller profile');
+      return this.sellerProfileDelegate.create({
+        data: { status: 'ACTIVE', verified: false, ...a.data },
+      });
+    },
+    findUnique: async (a: { where: Row }) => {
+      await Promise.resolve();
+      return (
+        this.sellerProfiles.find((p) => p.userId === a.where.userId || p.slug === a.where.slug) ??
+        null
+      );
+    },
+    count: (a: { where?: Row } = {}) => this.sellerProfileDelegate.count(a),
+    deleteMany: (a: { where?: Row } = {}) => this.sellerProfileDelegate.deleteMany(a),
   };
   securityEvent = new Delegate(this.events);
   emailChangeRequest = new Delegate(this.emailChanges);
@@ -549,7 +617,7 @@ describe('Auth HTTP e2e flows', () => {
       });
     await request(app.getHttpServer())
       .post('/api/v1/auth/register')
-      .send({ ...base, email: 'minor@example.com', birthDate: isoDateYearsAgo(17) })
+      .send({ ...base, email: 'minor@example.com', birthDate: new Date() })
       .expect(400);
     await request(app.getHttpServer())
       .post('/api/v1/auth/register')
@@ -586,6 +654,334 @@ describe('Auth HTTP e2e flows', () => {
     const user = prisma.users.find((u) => u.email === email)!;
     return { user, token: login.body.accessToken as string };
   }
+
+  describe('seller onboarding HTTP e2e flows', () => {
+    function eligible(email: string) {
+      const user = {
+        id: id(),
+        email,
+        birthDate: new Date('2000-01-01'),
+        status: 'ACTIVE',
+        emailVerifiedAt: new Date(),
+        phoneE164: '+5511999999999',
+        phoneVerifiedAt: new Date(),
+        termsVersion: '2026-test',
+        termsAcceptedAt: new Date(),
+        privacyVersion: '2026-test',
+        privacyAcceptedAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        deletedAt: null,
+        sensitiveActionHoldUntil: null,
+        lastSensitiveChangeAt: null,
+      };
+      const device = {
+        id: id(),
+        userId: user.id,
+        fingerprintHash: id(),
+        userAgent: 'e2e',
+        ipAddress: '127.0.0.1',
+        status: 'APPROVED',
+        firstSeenAt: new Date(),
+        lastSeenAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        revokedAt: null,
+      };
+      const session = {
+        id: id(),
+        userId: user.id,
+        deviceId: device.id,
+        refreshTokenHash: id(),
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        lastUsedAt: new Date(),
+        revokedAt: null,
+      };
+      prisma.users.push(user);
+      prisma.devices.push(device);
+      prisma.sessions.push(session);
+      prisma.userRoleAssignments.push({ userId: user.id, role: PlatformRole.BUYER });
+      const token = jwt.sign(
+        { sub: user.id, sid: session.id, type: 'access' },
+        { secret: authSecret },
+      );
+      return { user, token };
+    }
+
+    it('covers candidate validation, idempotent submit, admin review/approval and pagination', async () => {
+      await request(app.getHttpServer()).get('/api/v1/seller-onboarding/me').expect(401);
+      const buyer = eligible('seller-candidate@example.com');
+      const other = eligible('seller-other@example.com');
+      const admin = eligible('seller-admin@example.com');
+      prisma.userRoleAssignments.push({ userId: admin.user.id, role: PlatformRole.ADMIN });
+      const sellerOnly = eligible('seller-no-admin@example.com');
+      prisma.userRoleAssignments.push({ userId: sellerOnly.user.id, role: PlatformRole.SELLER });
+
+      await request(app.getHttpServer())
+        .get('/api/v1/seller-onboarding/me')
+        .set('Authorization', `Bearer ${buyer.token}`)
+        .expect(HttpStatus.OK)
+        .expect((r) => expect(r.body.application).toBeNull());
+
+      await request(app.getHttpServer())
+        .put('/api/v1/seller-onboarding/application')
+        .set('Authorization', `Bearer ${buyer.token}`)
+        .send({
+          storeName: 'Loja Sem Acordo',
+          requestedSlug: 'loja-sem-acordo',
+          sellerAgreementAccepted: false,
+        })
+        .expect(HttpStatus.OK)
+        .expect((r) => expect(r.body.status).toBe('draft'));
+      await request(app.getHttpServer())
+        .post('/api/v1/seller-onboarding/application/submit')
+        .set('Authorization', `Bearer ${buyer.token}`)
+        .expect(HttpStatus.CONFLICT)
+        .expect((r) => expect(r.body.code).toBe('SELLER_AGREEMENT_REQUIRED'));
+      for (const field of [
+        'userId',
+        'role',
+        'roles',
+        'status',
+        'approved',
+        'verified',
+        'reviewedByUserId',
+      ]) {
+        await request(app.getHttpServer())
+          .put('/api/v1/seller-onboarding/application')
+          .set('Authorization', `Bearer ${buyer.token}`)
+          .send({
+            storeName: 'Loja X',
+            requestedSlug: 'loja-x',
+            sellerAgreementAccepted: false,
+            [field]: 'x',
+          })
+          .expect((r) => expect(r.status).toBeGreaterThanOrEqual(400));
+      }
+
+      for (const [email, patch, code] of [
+        ['no-phone@example.com', { phoneVerifiedAt: null }, 'SELLER_PHONE_NOT_VERIFIED'],
+        ['no-email@example.com', { emailVerifiedAt: null }, 'SELLER_EMAIL_NOT_VERIFIED'],
+        ['minor-seller@example.com', { birthDate: new Date() }, 'SELLER_AGE_REQUIREMENT_NOT_MET'],
+      ] as const) {
+        const candidate = eligible(email);
+        await request(app.getHttpServer())
+          .put('/api/v1/seller-onboarding/application')
+          .set('Authorization', `Bearer ${candidate.token}`)
+          .send({
+            storeName: 'Loja Bloqueada',
+            requestedSlug: `loja-${email.split('-')[0]}`,
+            sellerAgreementAccepted: true,
+          })
+          .expect(HttpStatus.OK);
+        Object.assign(candidate.user, patch);
+        await request(app.getHttpServer())
+          .post('/api/v1/seller-onboarding/application/submit')
+          .set('Authorization', `Bearer ${candidate.token}`)
+          .expect((r) => {
+            expect(r.status).toBeGreaterThanOrEqual(400);
+            expect(r.body.code).toBe(code);
+          });
+      }
+
+      const noBuyer = eligible('no-buyer-seller@example.com');
+      prisma.userRoleAssignments = prisma.userRoleAssignments.filter(
+        (role) => !(role.userId === noBuyer.user.id && role.role === PlatformRole.BUYER),
+      );
+      await request(app.getHttpServer())
+        .put('/api/v1/seller-onboarding/application')
+        .set('Authorization', `Bearer ${noBuyer.token}`)
+        .send({
+          storeName: 'Loja Sem Buyer',
+          requestedSlug: 'loja-sem-buyer',
+          sellerAgreementAccepted: true,
+        })
+        .expect(HttpStatus.OK);
+      await request(app.getHttpServer())
+        .post('/api/v1/seller-onboarding/application/submit')
+        .set('Authorization', `Bearer ${noBuyer.token}`)
+        .expect(HttpStatus.FORBIDDEN)
+        .expect((r) => expect(r.body.code).toBe('SELLER_REQUIREMENTS_NOT_MET'));
+
+      const suspended = eligible('suspended-seller@example.com');
+      await request(app.getHttpServer())
+        .put('/api/v1/seller-onboarding/application')
+        .set('Authorization', `Bearer ${suspended.token}`)
+        .send({
+          storeName: 'Loja Suspensa',
+          requestedSlug: 'loja-suspensa',
+          sellerAgreementAccepted: true,
+        })
+        .expect(HttpStatus.OK);
+      suspended.user.status = 'SUSPENDED';
+      await request(app.getHttpServer())
+        .post('/api/v1/seller-onboarding/application/submit')
+        .set('Authorization', `Bearer ${suspended.token}`)
+        .expect(HttpStatus.UNAUTHORIZED)
+        .expect((r) => expect(r.body.code).toBe('INVALID_ACCESS_TOKEN'));
+
+      await request(app.getHttpServer())
+        .put('/api/v1/seller-onboarding/application')
+        .set('Authorization', `Bearer ${buyer.token}`)
+        .send({
+          storeName: 'Loja Principal',
+          requestedSlug: 'loja-principal',
+          sellerAgreementAccepted: true,
+        })
+        .expect(HttpStatus.OK);
+      prisma.sellerApplications.find((a) => a.userId === buyer.user.id)!.sellerAgreementVersion =
+        'old';
+      await request(app.getHttpServer())
+        .post('/api/v1/seller-onboarding/application/submit')
+        .set('Authorization', `Bearer ${buyer.token}`)
+        .expect(HttpStatus.CONFLICT)
+        .expect((r) => expect(r.body.code).toBe('SELLER_AGREEMENT_VERSION_OUTDATED'));
+      await request(app.getHttpServer())
+        .put('/api/v1/seller-onboarding/application')
+        .set('Authorization', `Bearer ${buyer.token}`)
+        .send({
+          storeName: 'Loja Principal',
+          requestedSlug: 'loja-principal',
+          sellerAgreementAccepted: true,
+        })
+        .expect(HttpStatus.OK);
+      const submitted = await request(app.getHttpServer())
+        .post('/api/v1/seller-onboarding/application/submit')
+        .set('Authorization', `Bearer ${buyer.token}`)
+        .expect(HttpStatus.OK);
+      expect(submitted.body.status).toBe('submitted');
+      await request(app.getHttpServer())
+        .post('/api/v1/seller-onboarding/application/submit')
+        .set('Authorization', `Bearer ${buyer.token}`)
+        .expect(HttpStatus.OK)
+        .expect((r) => expect(r.body.status).toBe('submitted'));
+      await request(app.getHttpServer())
+        .get('/api/v1/seller-onboarding/me')
+        .set('Authorization', `Bearer ${other.token}`)
+        .expect(HttpStatus.OK)
+        .expect((r) => expect(r.body.application).toBeNull());
+      await request(app.getHttpServer())
+        .get('/api/v1/admin/seller-applications')
+        .set('Authorization', `Bearer ${buyer.token}`)
+        .expect(HttpStatus.FORBIDDEN);
+      await request(app.getHttpServer())
+        .get('/api/v1/admin/seller-applications')
+        .set('Authorization', `Bearer ${sellerOnly.token}`)
+        .expect(HttpStatus.FORBIDDEN);
+      await request(app.getHttpServer())
+        .get('/api/v1/admin/seller-applications?status=invalid')
+        .set('Authorization', `Bearer ${admin.token}`)
+        .expect(HttpStatus.BAD_REQUEST);
+      await request(app.getHttpServer())
+        .get('/api/v1/admin/seller-applications?limit=0')
+        .set('Authorization', `Bearer ${admin.token}`)
+        .expect(HttpStatus.BAD_REQUEST);
+      await request(app.getHttpServer())
+        .get('/api/v1/admin/seller-applications?limit=51')
+        .set('Authorization', `Bearer ${admin.token}`)
+        .expect(HttpStatus.BAD_REQUEST);
+      await request(app.getHttpServer())
+        .get('/api/v1/admin/seller-applications?cursor=bad')
+        .set('Authorization', `Bearer ${admin.token}`)
+        .expect(HttpStatus.BAD_REQUEST);
+      const listed = await request(app.getHttpServer())
+        .get('/api/v1/admin/seller-applications?limit=1')
+        .set('Authorization', `Bearer ${admin.token}`)
+        .expect(HttpStatus.OK);
+      expect(listed.body.items[0].requirements).toMatchObject({
+        sellerAgreementVersion: '2026-test',
+        sellerAgreementAccepted: true,
+        sellerAgreementCurrent: true,
+      });
+      const applicationId = submitted.body.id as string;
+      await request(app.getHttpServer())
+        .get(`/api/v1/admin/seller-applications/${applicationId}`)
+        .set('Authorization', `Bearer ${admin.token}`)
+        .expect(HttpStatus.OK);
+      await request(app.getHttpServer())
+        .post(`/api/v1/admin/seller-applications/${applicationId}/start-review`)
+        .set('Authorization', `Bearer ${admin.token}`)
+        .expect(HttpStatus.OK)
+        .expect((r) => expect(r.body.status).toBe('under_review'));
+      await request(app.getHttpServer())
+        .post(`/api/v1/admin/seller-applications/${applicationId}/reject`)
+        .set('Authorization', `Bearer ${admin.token}`)
+        .send({ code: 'OTHER', reason: 'Corrigir.' })
+        .expect(HttpStatus.OK)
+        .expect((r) => expect(r.body.status).toBe('rejected'));
+      await request(app.getHttpServer())
+        .put('/api/v1/seller-onboarding/application')
+        .set('Authorization', `Bearer ${buyer.token}`)
+        .send({
+          storeName: 'Loja Principal',
+          requestedSlug: 'loja-principal',
+          sellerAgreementAccepted: true,
+        })
+        .expect(HttpStatus.OK);
+      await request(app.getHttpServer())
+        .post('/api/v1/seller-onboarding/application/submit')
+        .set('Authorization', `Bearer ${buyer.token}`)
+        .expect(HttpStatus.OK);
+      await request(app.getHttpServer())
+        .post(`/api/v1/admin/seller-applications/${applicationId}/approve`)
+        .set('Authorization', `Bearer ${admin.token}`)
+        .expect(HttpStatus.OK)
+        .expect((r) => expect(r.body.status).toBe('approved'));
+      await request(app.getHttpServer())
+        .get('/api/v1/auth/me')
+        .set('Authorization', `Bearer ${buyer.token}`)
+        .expect(HttpStatus.OK)
+        .expect((r) => expect(r.body.roles).toEqual(['buyer', 'seller']));
+      expect(
+        prisma.sellerProfiles.filter((profile) => profile.userId === buyer.user.id),
+      ).toHaveLength(1);
+      expect(prisma.sellerProfiles[0].verified).toBe(false);
+      await request(app.getHttpServer())
+        .post(`/api/v1/admin/seller-applications/${applicationId}/approve`)
+        .set('Authorization', `Bearer ${admin.token}`)
+        .expect(HttpStatus.OK);
+      expect(
+        prisma.sellerProfiles.filter((profile) => profile.userId === buyer.user.id),
+      ).toHaveLength(1);
+      expect(
+        prisma.userRoleAssignments.filter(
+          (role) => role.userId === buyer.user.id && role.role === PlatformRole.SELLER,
+        ),
+      ).toHaveLength(1);
+
+      for (const n of [1, 2, 3]) {
+        const candidate = eligible(`seller-page-${n}@example.com`);
+        await request(app.getHttpServer())
+          .put('/api/v1/seller-onboarding/application')
+          .set('Authorization', `Bearer ${candidate.token}`)
+          .send({
+            storeName: `Loja Pagina ${n}`,
+            requestedSlug: `loja-pagina-${n}`,
+            sellerAgreementAccepted: true,
+          })
+          .expect(HttpStatus.OK);
+        await request(app.getHttpServer())
+          .post('/api/v1/seller-onboarding/application/submit')
+          .set('Authorization', `Bearer ${candidate.token}`)
+          .expect(HttpStatus.OK);
+      }
+      const seen = new Set<string>();
+      let cursor: string | null = null;
+      do {
+        const pageResponse = await request(app.getHttpServer())
+          .get(`/api/v1/admin/seller-applications?limit=1${cursor ? `&cursor=${cursor}` : ''}`)
+          .set('Authorization', `Bearer ${admin.token}`)
+          .expect(HttpStatus.OK);
+        expect(pageResponse.body.items).toHaveLength(1);
+        expect(seen.has(pageResponse.body.items[0].id)).toBe(false);
+        seen.add(pageResponse.body.items[0].id);
+        cursor = pageResponse.body.nextCursor as string | null;
+      } while (cursor && seen.size < 4);
+      expect(seen.size).toBeGreaterThanOrEqual(4);
+    }, 30000);
+  });
 
   it('executes verification challenge scenarios through HTTP', async () => {
     await register();

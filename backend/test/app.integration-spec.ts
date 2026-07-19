@@ -12,6 +12,8 @@ import { PrismaService } from '../src/database/prisma.service';
 import { RedisService } from '../src/redis/redis.service';
 import type { AppConfig } from '../src/config/app.config';
 import { AuthMailer, MemoryAuthSmsPort } from '../src/auth/auth.service';
+import { SellerOnboardingService } from '../src/seller-onboarding/seller-onboarding.service';
+import { SecurityEventType } from '@prisma/client';
 
 function sessionIdFromAccessToken(accessToken: string): string {
   const payload = JSON.parse(Buffer.from(accessToken.split('.')[1], 'base64url').toString()) as {
@@ -64,6 +66,8 @@ async function cleanAuthIntegrationData(prisma: PrismaService): Promise<void> {
     await tx.emailChangeRequest.deleteMany();
     await tx.twoFactorRecoveryCode.deleteMany();
     await tx.twoFactorSettings.deleteMany();
+    await tx.sellerProfile.deleteMany();
+    await tx.sellerApplication.deleteMany();
     await tx.userRoleAssignment.deleteMany();
     await tx.session.deleteMany();
     await tx.device.deleteMany();
@@ -2516,5 +2520,458 @@ describe('Marketplace RBAC with real PostgreSQL (integration)', () => {
       .set('Authorization', `Bearer ${login.body.accessToken}`)
       .expect(HttpStatus.OK)
       .expect((r) => expect(r.body.roles).toEqual(['buyer', 'seller']));
+  });
+});
+
+describe('Seller onboarding with real PostgreSQL (integration)', () => {
+  let app: INestApplication;
+  let prisma: PrismaService;
+  let redis: RedisService;
+  let service: SellerOnboardingService;
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    app = moduleRef.createNestApplication();
+    const config = app.get(ConfigService);
+    const appConfig = config.getOrThrow<AppConfig>('app');
+    app.setGlobalPrefix(appConfig.apiPrefix);
+    app.enableVersioning({ type: VersioningType.URI });
+    app.use(cookieParser());
+    app.useGlobalPipes(
+      new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }),
+    );
+    app.useGlobalFilters(new GlobalExceptionFilter());
+    await app.init();
+    prisma = app.get(PrismaService);
+    redis = app.get(RedisService);
+    service = app.get(SellerOnboardingService);
+  });
+
+  beforeEach(async () => {
+    const redisClient = await redis.getClient();
+    await redisClient.flushdb();
+    await cleanAuthIntegrationData(prisma);
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  let sellerPhoneSequence = 0;
+
+  function nextSellerTestPhone(): string {
+    sellerPhoneSequence += 1;
+    return `+55119${String(10000000 + sellerPhoneSequence).padStart(8, '0')}`;
+  }
+
+  async function user(email: string, role: 'BUYER' | 'ADMIN' | 'SELLER' = 'BUYER') {
+    const created = await prisma.user.create({
+      data: {
+        email,
+        birthDate: new Date('2000-01-01'),
+        status: 'ACTIVE',
+        emailVerifiedAt: new Date(),
+        phoneE164: nextSellerTestPhone(),
+        phoneVerifiedAt: new Date(),
+        termsVersion: 'test',
+        termsAcceptedAt: new Date(),
+        privacyVersion: 'test',
+        privacyAcceptedAt: new Date(),
+        passwordCredential: { create: { passwordHash: 'hash' } },
+        roleAssignments: { create: { role } },
+      },
+    });
+    return created;
+  }
+
+  it('creates deterministic unique E.164 phones for seller onboarding fixtures', async () => {
+    const first = await user('onboarding-phone-a@example.com');
+    const second = await user('onboarding-phone-b@example.com');
+    expect(first.phoneE164).toMatch(/^\+55119\d{8}$/);
+    expect(second.phoneE164).toMatch(/^\+55119\d{8}$/);
+    expect(first.phoneE164).not.toBe(second.phoneE164);
+  });
+
+  it('has onboarding enums, tables, foreign keys, uniqueness, and verified=false defaults', async () => {
+    const enumRows = await prisma.$queryRaw<Array<{ typname: string }>>`
+      SELECT typname FROM pg_type WHERE typname IN ('SellerApplicationStatus', 'SellerProfileStatus')
+    `;
+    expect(enumRows.map((row) => row.typname).sort()).toEqual([
+      'SellerApplicationStatus',
+      'SellerProfileStatus',
+    ]);
+    const tableRows = await prisma.$queryRaw<Array<{ tablename: string }>>`
+      SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename IN ('SellerApplication', 'SellerProfile')
+    `;
+    expect(tableRows.map((row) => row.tablename).sort()).toEqual([
+      'SellerApplication',
+      'SellerProfile',
+    ]);
+    const fkRows = await prisma.$queryRaw<Array<{ constraint_name: string }>>`
+      SELECT constraint_name FROM information_schema.table_constraints
+      WHERE table_schema = 'public' AND constraint_type = 'FOREIGN KEY'
+        AND table_name IN ('SellerApplication', 'SellerProfile')
+    `;
+    expect(fkRows.map((row) => row.constraint_name)).toEqual(
+      expect.arrayContaining([
+        'SellerApplication_userId_fkey',
+        'SellerApplication_reviewedByUserId_fkey',
+        'SellerProfile_userId_fkey',
+      ]),
+    );
+    const owner = await user('onboarding-constraints@example.com');
+    await prisma.sellerApplication.create({
+      data: { userId: owner.id, storeName: 'Loja A', requestedSlug: 'loja-a' },
+    });
+    await expect(
+      prisma.sellerApplication.create({
+        data: { userId: owner.id, storeName: 'Loja B', requestedSlug: 'loja-b' },
+      }),
+    ).rejects.toThrow();
+    const profile = await prisma.sellerProfile.create({
+      data: { userId: owner.id, storeName: 'Loja A', slug: 'loja-a' },
+    });
+    expect(profile.verified).toBe(false);
+    await expect(
+      prisma.sellerProfile.create({
+        data: { userId: owner.id, storeName: 'Loja C', slug: 'loja-c' },
+      }),
+    ).rejects.toThrow();
+    const other = await user('onboarding-constraints-other@example.com');
+    await expect(
+      prisma.sellerProfile.create({
+        data: { userId: other.id, storeName: 'Loja A Clone', slug: 'loja-a' },
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('persists draft, reject, correction, approval, SELLER role, profile and audit events', async () => {
+    const candidate = await user('onboarding-flow@example.com');
+    const admin = await user('onboarding-admin@example.com', 'ADMIN');
+    await service.saveDraft(candidate.id, {
+      storeName: ' Loja   Real ',
+      requestedSlug: 'loja-real',
+      sellerAgreementAccepted: false,
+    });
+    expect(
+      await prisma.sellerApplication.findUniqueOrThrow({ where: { userId: candidate.id } }),
+    ).toMatchObject({ sellerAgreementVersion: null, sellerAgreementAcceptedAt: null });
+    await service.saveDraft(candidate.id, {
+      storeName: 'Loja Real',
+      requestedSlug: 'loja-real',
+      sellerAgreementAccepted: true,
+    });
+    await service.submit(candidate.id);
+    await service.startReview(
+      (await prisma.sellerApplication.findUniqueOrThrow({ where: { userId: candidate.id } })).id,
+      admin.id,
+    );
+    await service.reject(
+      (await prisma.sellerApplication.findUniqueOrThrow({ where: { userId: candidate.id } })).id,
+      admin.id,
+      { code: 'OTHER', reason: 'Corrigir.' },
+    );
+    await service.saveDraft(candidate.id, {
+      storeName: 'Loja Real Ajustada',
+      requestedSlug: 'loja-real-ajustada',
+      sellerAgreementAccepted: true,
+    });
+    await service.submit(candidate.id);
+    const approved = await service.approve(
+      (await prisma.sellerApplication.findUniqueOrThrow({ where: { userId: candidate.id } })).id,
+      admin.id,
+    );
+    expect(approved.status).toBe('approved');
+    expect(
+      await prisma.sellerApplication.findUnique({ where: { userId: candidate.id } }),
+    ).toMatchObject({
+      status: 'APPROVED',
+    });
+    expect(await prisma.sellerProfile.count({ where: { userId: candidate.id } })).toBe(1);
+    expect(
+      await prisma.sellerProfile.findUnique({ where: { userId: candidate.id } }),
+    ).toMatchObject({
+      verified: false,
+    });
+    expect(
+      await prisma.userRoleAssignment.count({ where: { userId: candidate.id, role: 'SELLER' } }),
+    ).toBe(1);
+    const eventTypes = (
+      await prisma.securityEvent.findMany({ where: { userId: candidate.id } })
+    ).map((event) => event.eventType);
+    expect(eventTypes).toEqual(
+      expect.arrayContaining([
+        SecurityEventType.SELLER_APPLICATION_DRAFT_SAVED,
+        SecurityEventType.SELLER_APPLICATION_SUBMITTED,
+        SecurityEventType.SELLER_APPLICATION_APPROVED,
+        SecurityEventType.SELLER_PROFILE_CREATED,
+      ]),
+    );
+  });
+
+  it('keeps one submitted/approved state under concurrent submit and approve calls', async () => {
+    const candidate = await user('onboarding-concurrency@example.com');
+    const admin = await user('onboarding-concurrency-admin@example.com', 'ADMIN');
+    await service.saveDraft(candidate.id, {
+      storeName: 'Loja Concorrente',
+      requestedSlug: 'loja-concorrente',
+      sellerAgreementAccepted: true,
+    });
+    await Promise.all([service.submit(candidate.id), service.submit(candidate.id)]);
+    const application = await prisma.sellerApplication.findUniqueOrThrow({
+      where: { userId: candidate.id },
+    });
+    expect(application.status).toBe('SUBMITTED');
+    const results = await Promise.allSettled([
+      service.approve(application.id, admin.id),
+      service.approve(application.id, admin.id),
+    ]);
+    const fulfilled = results.filter((result) => result.status === 'fulfilled');
+    const rejected = results.filter((result) => result.status === 'rejected');
+    expect(fulfilled.length).toBeGreaterThanOrEqual(1);
+    expect(fulfilled.every((result) => result.value.status === 'approved')).toBe(true);
+    expect(
+      rejected.every((result) =>
+        ['SELLER_APPROVAL_CONFLICT', 'SELLER_APPLICATION_INVALID_TRANSITION'].includes(
+          (result.reason as { response?: { code?: string }; code?: string }).response?.code ??
+            (result.reason as { code?: string }).code ??
+            '',
+        ),
+      ),
+    ).toBe(true);
+    expect(await prisma.sellerProfile.count({ where: { userId: candidate.id } })).toBe(1);
+    expect(
+      await prisma.userRoleAssignment.count({ where: { userId: candidate.id, role: 'SELLER' } }),
+    ).toBe(1);
+    expect(
+      (await prisma.sellerApplication.findUniqueOrThrow({ where: { id: application.id } })).status,
+    ).toBe('APPROVED');
+    expect(
+      await prisma.securityEvent.count({
+        where: { userId: candidate.id, eventType: SecurityEventType.SELLER_PROFILE_CREATED },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.securityEvent.count({
+        where: { userId: candidate.id, eventType: SecurityEventType.SELLER_APPLICATION_APPROVED },
+      }),
+    ).toBe(1);
+    const roleGrantedEvents = await prisma.securityEvent.findMany({
+      where: { userId: candidate.id, eventType: SecurityEventType.ROLE_GRANTED },
+    });
+    expect(
+      roleGrantedEvents.filter(
+        (event) => (event.metadata as { result?: string }).result === 'granted',
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('rolls back profile, role and approved status when SELLER role insertion fails', async () => {
+    const candidate = await user('onboarding-role-rollback@example.com');
+    const admin = await user('onboarding-role-rollback-admin@example.com', 'ADMIN');
+    await service.saveDraft(candidate.id, {
+      storeName: 'Loja Rollback Papel',
+      requestedSlug: 'loja-rollback-papel',
+      sellerAgreementAccepted: true,
+    });
+    await service.submit(candidate.id);
+    const application = await prisma.sellerApplication.findUniqueOrThrow({
+      where: { userId: candidate.id },
+    });
+    const functionName = `fail_seller_role_${candidate.id.replaceAll('-', '_')}`;
+    const triggerName = `trigger_${functionName}`;
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE OR REPLACE FUNCTION "${functionName}"() RETURNS trigger AS $$
+        BEGIN
+          IF NEW."userId" = '${candidate.id}'::uuid AND NEW."role"::text = 'SELLER' THEN
+            RAISE EXCEPTION 'forced seller role failure';
+          END IF;
+          RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+      `);
+      await prisma.$executeRawUnsafe(`
+        CREATE TRIGGER "${triggerName}" BEFORE INSERT ON "UserRoleAssignment"
+        FOR EACH ROW EXECUTE FUNCTION "${functionName}"();
+      `);
+      await expect(service.approve(application.id, admin.id)).rejects.toThrow();
+    } finally {
+      await prisma.$executeRawUnsafe(
+        `DROP TRIGGER IF EXISTS "${triggerName}" ON "UserRoleAssignment"`,
+      );
+      await prisma.$executeRawUnsafe(`DROP FUNCTION IF EXISTS "${functionName}"()`);
+    }
+    expect(await prisma.sellerProfile.count({ where: { userId: candidate.id } })).toBe(0);
+    expect(
+      await prisma.userRoleAssignment.count({ where: { userId: candidate.id, role: 'SELLER' } }),
+    ).toBe(0);
+    expect(
+      (await prisma.sellerApplication.findUniqueOrThrow({ where: { id: application.id } })).status,
+    ).not.toBe('APPROVED');
+    expect(
+      await prisma.securityEvent.count({
+        where: { userId: candidate.id, eventType: SecurityEventType.SELLER_APPLICATION_APPROVED },
+      }),
+    ).toBe(0);
+  });
+
+  it('allows exactly one concurrent approval when two applications dispute the same slug', async () => {
+    const admin = await user('onboarding-slug-admin@example.com', 'ADMIN');
+    const first = await user('onboarding-slug-a@example.com');
+    const second = await user('onboarding-slug-b@example.com');
+    await service.saveDraft(first.id, {
+      storeName: 'Loja Slug A',
+      requestedSlug: 'slug-disputado',
+      sellerAgreementAccepted: true,
+    });
+    await service.saveDraft(second.id, {
+      storeName: 'Loja Slug B',
+      requestedSlug: 'slug-disputado',
+      sellerAgreementAccepted: true,
+    });
+    await Promise.all([service.submit(first.id), service.submit(second.id)]);
+    const [firstApp, secondApp] = await Promise.all([
+      prisma.sellerApplication.findUniqueOrThrow({ where: { userId: first.id } }),
+      prisma.sellerApplication.findUniqueOrThrow({ where: { userId: second.id } }),
+    ]);
+    const results = await Promise.allSettled([
+      service.approve(firstApp.id, admin.id),
+      service.approve(secondApp.id, admin.id),
+    ]);
+    const approvedResults = results.filter(
+      (result) => result.status === 'fulfilled' && result.value.status === 'approved',
+    );
+    const rejectedResults = results.filter((result) => result.status === 'rejected');
+    expect(approvedResults).toHaveLength(1);
+    expect(rejectedResults).toHaveLength(1);
+    expect(
+      rejectedResults.map(
+        (result) =>
+          (result.reason as { response?: { code?: string }; code?: string }).response?.code ??
+          (result.reason as { code?: string }).code,
+      ),
+    ).toEqual(expect.arrayContaining(['SELLER_APPROVAL_CONFLICT']));
+    expect(await prisma.sellerProfile.count({ where: { slug: 'slug-disputado' } })).toBe(1);
+    const profiles = await prisma.sellerProfile.findMany({ where: { slug: 'slug-disputado' } });
+    const winnerId = profiles[0].userId;
+    const loserId = winnerId === first.id ? second.id : first.id;
+    expect(
+      await prisma.userRoleAssignment.count({ where: { userId: winnerId, role: 'SELLER' } }),
+    ).toBe(1);
+    expect(
+      await prisma.userRoleAssignment.count({ where: { userId: loserId, role: 'SELLER' } }),
+    ).toBe(0);
+    expect(
+      (await prisma.sellerApplication.findUniqueOrThrow({ where: { userId: winnerId } })).status,
+    ).toBe('APPROVED');
+    expect(['SUBMITTED', 'UNDER_REVIEW']).toContain(
+      (await prisma.sellerApplication.findUniqueOrThrow({ where: { userId: loserId } })).status,
+    );
+    expect(await prisma.sellerProfile.count({ where: { userId: loserId } })).toBe(0);
+    expect(
+      await prisma.securityEvent.count({
+        where: { eventType: SecurityEventType.SELLER_APPLICATION_APPROVED },
+      }),
+    ).toBe(1);
+  });
+
+  it('rolls back profile, role, approval status and same-transaction audit when approval audit fails', async () => {
+    const candidate = await user('onboarding-audit-rollback@example.com');
+    const admin = await user('onboarding-audit-rollback-admin@example.com', 'ADMIN');
+    await service.saveDraft(candidate.id, {
+      storeName: 'Loja Rollback Auditoria',
+      requestedSlug: 'loja-rollback-auditoria',
+      sellerAgreementAccepted: true,
+    });
+    await service.submit(candidate.id);
+    const application = await prisma.sellerApplication.findUniqueOrThrow({
+      where: { userId: candidate.id },
+    });
+    const functionName = `fail_seller_audit_${candidate.id.replaceAll('-', '_')}`;
+    const triggerName = `trigger_${functionName}`;
+    try {
+      await prisma.$executeRawUnsafe(`
+        CREATE OR REPLACE FUNCTION "${functionName}"() RETURNS trigger AS $$
+        BEGIN
+          IF NEW."userId" = '${candidate.id}'::uuid AND NEW."eventType"::text = 'SELLER_APPLICATION_APPROVED' THEN
+            RAISE EXCEPTION 'forced seller approval audit failure';
+          END IF;
+          RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+      `);
+      await prisma.$executeRawUnsafe(`
+        CREATE TRIGGER "${triggerName}" BEFORE INSERT ON "SecurityEvent"
+        FOR EACH ROW EXECUTE FUNCTION "${functionName}"();
+      `);
+      await expect(service.approve(application.id, admin.id)).rejects.toThrow();
+    } finally {
+      await prisma.$executeRawUnsafe(`DROP TRIGGER IF EXISTS "${triggerName}" ON "SecurityEvent"`);
+      await prisma.$executeRawUnsafe(`DROP FUNCTION IF EXISTS "${functionName}"()`);
+    }
+    expect(await prisma.sellerProfile.count({ where: { userId: candidate.id } })).toBe(0);
+    expect(
+      await prisma.userRoleAssignment.count({ where: { userId: candidate.id, role: 'SELLER' } }),
+    ).toBe(0);
+    expect(
+      (await prisma.sellerApplication.findUniqueOrThrow({ where: { id: application.id } })).status,
+    ).toBe('SUBMITTED');
+    expect(
+      await prisma.securityEvent.count({
+        where: { userId: candidate.id, eventType: SecurityEventType.SELLER_PROFILE_CREATED },
+      }),
+    ).toBe(0);
+    expect(
+      await prisma.securityEvent.count({
+        where: { userId: candidate.id, eventType: SecurityEventType.SELLER_APPLICATION_APPROVED },
+      }),
+    ).toBe(0);
+    expect(
+      await prisma.securityEvent.count({
+        where: { userId: candidate.id, eventType: SecurityEventType.ROLE_GRANTED },
+      }),
+    ).toBe(0);
+    await expect(service.startReview(application.id, admin.id)).resolves.toMatchObject({
+      status: 'under_review',
+    });
+  });
+
+  it('blocks approval when the accepted agreement is no longer current until the candidate reaccepts', async () => {
+    const candidate = await user('onboarding-agreement-change@example.com');
+    const admin = await user('onboarding-agreement-change-admin@example.com', 'ADMIN');
+    await service.saveDraft(candidate.id, {
+      storeName: 'Loja Acordo',
+      requestedSlug: 'loja-acordo',
+      sellerAgreementAccepted: true,
+    });
+    await service.submit(candidate.id);
+    await prisma.sellerApplication.update({
+      where: { userId: candidate.id },
+      data: { sellerAgreementVersion: 'outdated-version' },
+    });
+    const application = await prisma.sellerApplication.findUniqueOrThrow({
+      where: { userId: candidate.id },
+    });
+    await expect(service.approve(application.id, admin.id)).rejects.toMatchObject({
+      code: 'SELLER_AGREEMENT_VERSION_OUTDATED',
+    });
+    expect(await prisma.sellerProfile.count({ where: { userId: candidate.id } })).toBe(0);
+    expect(
+      await prisma.userRoleAssignment.count({ where: { userId: candidate.id, role: 'SELLER' } }),
+    ).toBe(0);
+    await prisma.sellerApplication.update({
+      where: { id: application.id },
+      data: { status: 'REJECTED' },
+    });
+    await service.saveDraft(candidate.id, {
+      storeName: 'Loja Acordo',
+      requestedSlug: 'loja-acordo',
+      sellerAgreementAccepted: true,
+    });
+    await service.submit(candidate.id);
+    await expect(service.approve(application.id, admin.id)).resolves.toMatchObject({
+      status: 'approved',
+    });
   });
 });

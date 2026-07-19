@@ -22,6 +22,7 @@ export interface AuthContextValue {
   resendEmailVerification: (email: string) => Promise<void>;
   resendDeviceApproval: (email: string) => Promise<void>;
   refreshSession: () => Promise<void>;
+  reloadCurrentUser: () => Promise<void>;
   requestPasswordReset: (email: string) => Promise<void>;
   resetPassword: (token: string, newPassword: string) => Promise<void>;
   logout: () => Promise<void>;
