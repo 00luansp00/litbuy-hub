@@ -13,6 +13,7 @@ import { RedisService } from '../src/redis/redis.service';
 import type { AppConfig } from '../src/config/app.config';
 import { AuthMailer, MemoryAuthSmsPort } from '../src/auth/auth.service';
 import { SellerOnboardingService } from '../src/seller-onboarding/seller-onboarding.service';
+import { CatalogService } from '../src/catalog/catalog.service';
 import { SecurityEventType } from '@prisma/client';
 
 function sessionIdFromAccessToken(accessToken: string): string {
@@ -2973,5 +2974,119 @@ describe('Seller onboarding with real PostgreSQL (integration)', () => {
     await expect(service.approve(application.id, admin.id)).resolves.toMatchObject({
       status: 'approved',
     });
+  });
+});
+
+describe('Catalog taxonomy with real PostgreSQL (integration)', () => {
+  let app: INestApplication;
+  let prisma: PrismaService;
+  let catalog: CatalogService;
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    app = moduleRef.createNestApplication();
+    app.setGlobalPrefix('api/v1');
+    app.enableVersioning({ type: VersioningType.URI });
+    app.use(cookieParser());
+    app.useGlobalPipes(
+      new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }),
+    );
+    app.useGlobalFilters(new GlobalExceptionFilter());
+    await app.init();
+    prisma = app.get(PrismaService);
+    catalog = app.get(CatalogService);
+  });
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('has migrated baseline taxonomy without fictitious product/listing tables', async () => {
+    await expect(prisma.catalogCategory.count()).resolves.toBeGreaterThanOrEqual(12);
+    await expect(
+      prisma.catalogCategory.findUnique({ where: { slug: 'contas' } }),
+    ).resolves.toMatchObject({ id: '00000000-0000-4000-8000-000000000001' });
+    await expect(
+      prisma.catalogSubcategory.findFirst({ where: { slug: 'valorant' } }),
+    ).resolves.toMatchObject({ name: expect.stringContaining('Valorant') });
+    await expect(
+      prisma.catalogAttribute.count({ where: { productType: 'VIRTUAL_CURRENCY' } }),
+    ).resolves.toBeGreaterThanOrEqual(5);
+    await expect(
+      prisma.$queryRawUnsafe(
+        `SELECT column_name FROM information_schema.columns WHERE table_name = 'CatalogCategory' AND column_name = 'listingCount'`,
+      ),
+    ).resolves.toEqual([]);
+  });
+
+  it('enforces uniqueness, XOR scope, FK restrict and deterministic public reads', async () => {
+    const slug = `it-${Date.now()}`;
+    const category = await prisma.catalogCategory.create({
+      data: { slug, name: 'Integration Category' },
+    });
+    await expect(
+      prisma.catalogCategory.create({ data: { slug, name: 'Duplicate' } }),
+    ).rejects.toThrow();
+    await prisma.catalogSubcategory.create({
+      data: { categoryId: category.id, slug: 'same', name: 'Same A' },
+    });
+    await expect(
+      prisma.catalogSubcategory.create({
+        data: { categoryId: category.id, slug: 'same', name: 'Same B' },
+      }),
+    ).rejects.toThrow();
+    const other = await prisma.catalogCategory.create({
+      data: { slug: `${slug}-b`, name: 'Integration Category B' },
+    });
+    await expect(
+      prisma.catalogSubcategory.create({
+        data: { categoryId: other.id, slug: 'same', name: 'Same OK' },
+      }),
+    ).resolves.toBeDefined();
+    await expect(
+      prisma.catalogAttribute.create({ data: { key: 'bad', label: 'Bad', inputType: 'TEXT' } }),
+    ).rejects.toThrow();
+    await expect(prisma.catalogCategory.delete({ where: { id: category.id } })).rejects.toThrow();
+    const publicItems = await catalog.publicCategories();
+    expect(publicItems.items.map((item) => item.slug)).toContain('contas');
+  });
+
+  it('converts concurrent conflicts to categorical service errors and rolls back audit failures', async () => {
+    const admin = await prisma.user.create({
+      data: {
+        email: `catalog-admin-${Date.now()}@example.test`,
+        birthDate: new Date('1990-01-01'),
+        termsVersion: 'integration-test',
+        termsAcceptedAt: new Date(),
+        privacyVersion: 'integration-test',
+        privacyAcceptedAt: new Date(),
+        status: 'ACTIVE',
+      },
+    });
+    const slug = `race-${Date.now()}`;
+    const results = await Promise.allSettled([
+      catalog.createCategory({ slug, name: 'Race A' }, admin.id),
+      catalog.createCategory({ slug, name: 'Race B' }, admin.id),
+    ]);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
+    const fn = `catalog_audit_fail_${Date.now()}`;
+    const trigger = `${fn}_trigger`;
+    try {
+      await prisma.$executeRawUnsafe(
+        `CREATE OR REPLACE FUNCTION "${fn}"() RETURNS trigger AS $$ BEGIN IF NEW."eventType"::text LIKE 'CATALOG_%' THEN RAISE EXCEPTION 'forced catalog audit failure'; END IF; RETURN NEW; END; $$ LANGUAGE plpgsql;`,
+      );
+      await prisma.$executeRawUnsafe(
+        `CREATE TRIGGER "${trigger}" BEFORE INSERT ON "SecurityEvent" FOR EACH ROW EXECUTE FUNCTION "${fn}"();`,
+      );
+      await expect(
+        catalog.createCategory({ slug: `${slug}-rollback`, name: 'Rollback' }, admin.id),
+      ).rejects.toThrow();
+    } finally {
+      await prisma.$executeRawUnsafe(`DROP TRIGGER IF EXISTS "${trigger}" ON "SecurityEvent"`);
+      await prisma.$executeRawUnsafe(`DROP FUNCTION IF EXISTS "${fn}"()`);
+    }
+    await expect(
+      prisma.catalogCategory.findUnique({ where: { slug: `${slug}-rollback` } }),
+    ).resolves.toBeNull();
   });
 });

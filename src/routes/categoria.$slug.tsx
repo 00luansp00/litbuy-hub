@@ -9,12 +9,17 @@ import { SortBar } from "@/components/common/SortBar";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { productService } from "@/services/productService";
+import { ApiError } from "@/lib/api/client";
 import { categoryService } from "@/services/catalogService";
 
 export const Route = createFileRoute("/categoria/$slug")({
   loader: async ({ params }) => {
-    const category = await categoryService.bySlug(params.slug);
-    if (!category) throw notFound();
+    const category = await categoryService.bySlug(params.slug).catch((error) => {
+      if (error instanceof ApiError && error.code === "CATALOG_CATEGORY_NOT_FOUND") {
+        throw notFound();
+      }
+      throw error;
+    });
     const items = await productService.byCategory(params.slug);
     return { category, items };
   },

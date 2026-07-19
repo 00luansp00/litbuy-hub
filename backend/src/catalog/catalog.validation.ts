@@ -2,12 +2,23 @@
 import { BadRequestException } from '@nestjs/common';
 import type { CatalogAttributeInputType } from '@prisma/client';
 import { CATALOG_ALLOWED_ICON_KEYS, CATALOG_RESERVED_SLUGS } from './catalog.constants';
-export function normalizeSlug(v: string) {
+
+export function normalizeCatalogSlugFormat(v: string) {
   const s = (v ?? '').trim().toLowerCase();
-  if (!/^(?!.*--)[a-z0-9](?:[a-z0-9-]{0,58}[a-z0-9])?$/.test(s) || CATALOG_RESERVED_SLUGS.has(s))
+  if (!/^(?!.*--)[a-z0-9](?:[a-z0-9-]{0,58}[a-z0-9])?$/.test(s))
     throw new BadRequestException({ code: 'CATALOG_SLUG_INVALID' });
   return s;
 }
+
+export function validateNewCatalogSlug(v: string) {
+  const s = normalizeCatalogSlugFormat(v);
+  if (CATALOG_RESERVED_SLUGS.has(s))
+    throw new BadRequestException({ code: 'CATALOG_SLUG_INVALID' });
+  return s;
+}
+
+export const normalizeSlug = validateNewCatalogSlug;
+
 export function normalizeName(v: string) {
   const s = (v ?? '').trim().replace(/\s+/g, ' ');
   if (s.length < 2 || s.length > 80 || /[<>]|[\u0000-\u001f\u007f]/.test(s))
@@ -40,7 +51,7 @@ export function normalizeOrder(v?: number) {
   return n;
 }
 export function normalizeKey(v: string) {
-  const s = normalizeSlug(v).replace(/-/g, '_');
+  const s = normalizeCatalogSlugFormat(v).replace(/-/g, '_');
   if (!/^[a-z0-9_]{2,60}$/.test(s))
     throw new BadRequestException({ code: 'CATALOG_ATTRIBUTE_KEY_INVALID' });
   return s;

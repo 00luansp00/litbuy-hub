@@ -53,6 +53,21 @@ const types = [
   "software",
   "other",
 ] as const;
+function normalizeProductType(v: string) {
+  const lower = v.toLowerCase();
+  if (types.includes(lower as never)) return lower as ListingProductType;
+  if (v === "VIRTUAL_CURRENCY") return "virtual_currency";
+  if (v === "GIFT_CARD") return "gift_card";
+  const converted = v.toLowerCase() as ListingProductType;
+  if (types.includes(converted as never)) return converted;
+  invalid();
+}
+function normalizeInputType(v: string) {
+  const lower = v.toLowerCase();
+  if (["text", "number", "select", "boolean"].includes(lower))
+    return lower as ListingAttributeConfig["type"];
+  invalid();
+}
 function invalid(): never {
   throw new ApiError(502, "CATALOG_RESPONSE_INVALID", "Resposta inválida da API de catálogo.");
 }
@@ -128,12 +143,7 @@ function adminSub(v: unknown): AdminCatalogSubcategory {
 }
 function attr(v: unknown): ListingAttributeConfig {
   const o = obj(v);
-  const input = str(o.inputType ?? o.type);
-  if (
-    !["text", "number", "select", "boolean", "TEXT", "NUMBER", "SELECT", "BOOLEAN"].includes(input)
-  )
-    invalid();
-  const type = input.toLowerCase() as ListingAttributeConfig["type"];
+  const type = normalizeInputType(str(o.inputType ?? o.type));
   const options = o.options ?? o.selectOptions;
   const arr =
     options == null
@@ -156,8 +166,7 @@ function adminAttr(v: unknown): AdminCatalogAttribute {
   const o = obj(v);
   const status = str(o.status) as CatalogEntityStatus;
   if (status !== "ACTIVE" && status !== "INACTIVE") invalid();
-  const pt = o.productType == null ? null : str(o.productType);
-  if (pt && !types.includes(pt as never)) invalid();
+  const pt = o.productType == null ? null : normalizeProductType(str(o.productType));
   return {
     ...a,
     id: str(o.id, uuid),
@@ -186,8 +195,7 @@ export const catalogService = {
   async getProductTypes() {
     return items(await apiFetch("/catalog/product-types", { auth: false })).map((v) => {
       const o = obj(v);
-      const id = str(o.id) as ListingProductType;
-      if (!types.includes(id as never)) invalid();
+      const id = normalizeProductType(str(o.id));
       return { id, name: str(o.name) };
     });
   },
@@ -208,17 +216,32 @@ export const catalogService = {
       apiFetch("/admin/catalog/subcategories").then((r) => items(r).map(adminSub)),
     attributes: () => apiFetch("/admin/catalog/attributes").then((r) => items(r).map(adminAttr)),
     createCategory: (b: unknown) =>
-      apiFetch("/admin/catalog/categories", { method: "POST", body: JSON.stringify(b) }),
+      apiFetch("/admin/catalog/categories", { method: "POST", body: JSON.stringify(b) }).then(
+        adminCat,
+      ),
     updateCategory: (id: string, b: unknown) =>
-      apiFetch(`/admin/catalog/categories/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
+      apiFetch(`/admin/catalog/categories/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(b),
+      }).then(adminCat),
     createSubcategory: (b: unknown) =>
-      apiFetch("/admin/catalog/subcategories", { method: "POST", body: JSON.stringify(b) }),
+      apiFetch("/admin/catalog/subcategories", { method: "POST", body: JSON.stringify(b) }).then(
+        adminSub,
+      ),
     updateSubcategory: (id: string, b: unknown) =>
-      apiFetch(`/admin/catalog/subcategories/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
+      apiFetch(`/admin/catalog/subcategories/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(b),
+      }).then(adminSub),
     createAttribute: (b: unknown) =>
-      apiFetch("/admin/catalog/attributes", { method: "POST", body: JSON.stringify(b) }),
+      apiFetch("/admin/catalog/attributes", { method: "POST", body: JSON.stringify(b) }).then(
+        adminAttr,
+      ),
     updateAttribute: (id: string, b: unknown) =>
-      apiFetch(`/admin/catalog/attributes/${id}`, { method: "PATCH", body: JSON.stringify(b) }),
+      apiFetch(`/admin/catalog/attributes/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(b),
+      }).then(adminAttr),
   },
 };
 export const categoryService = {

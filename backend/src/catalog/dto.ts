@@ -7,20 +7,27 @@ import {
   IsUUID,
   MaxLength,
 } from 'class-validator';
-import { CatalogAttributeInputType, CatalogEntityStatus } from '@prisma/client';
+import { CatalogEntityStatus } from '@prisma/client';
+
 export class CategoryDto {
   @IsString() slug!: string;
   @IsString() name!: string;
-  @IsOptional() @IsString() description?: string;
-  @IsOptional() @IsString() iconKey?: string;
-  @IsOptional() @IsString() colorHex?: string;
+  @IsOptional() @IsString() description?: string | null;
+  @IsOptional() @IsString() iconKey?: string | null;
+  @IsOptional() @IsString() colorHex?: string | null;
   @IsOptional() sortOrder?: number;
   @IsOptional() @IsBoolean() featured?: boolean;
   @IsOptional() @IsEnum(CatalogEntityStatus) status?: CatalogEntityStatus;
 }
-export class UpdateCategoryDto extends CategoryDto {
-  @IsOptional() declare slug: string;
-  @IsOptional() declare name: string;
+export class UpdateCategoryDto {
+  @IsOptional() @IsString() slug?: string;
+  @IsOptional() @IsString() name?: string;
+  @IsOptional() @IsString() description?: string | null;
+  @IsOptional() @IsString() iconKey?: string | null;
+  @IsOptional() @IsString() colorHex?: string | null;
+  @IsOptional() sortOrder?: number;
+  @IsOptional() @IsBoolean() featured?: boolean;
+  @IsOptional() @IsEnum(CatalogEntityStatus) status?: CatalogEntityStatus;
 }
 export class SubcategoryDto {
   @IsUUID('4') categoryId!: string;
@@ -29,25 +36,34 @@ export class SubcategoryDto {
   @IsOptional() sortOrder?: number;
   @IsOptional() @IsEnum(CatalogEntityStatus) status?: CatalogEntityStatus;
 }
-export class UpdateSubcategoryDto extends SubcategoryDto {
-  @IsOptional() @IsUUID('4') declare categoryId: string;
-  @IsOptional() declare slug: string;
-  @IsOptional() declare name: string;
+export class UpdateSubcategoryDto {
+  @IsOptional() @IsUUID('4') categoryId?: string;
+  @IsOptional() @IsString() slug?: string;
+  @IsOptional() @IsString() name?: string;
+  @IsOptional() sortOrder?: number;
+  @IsOptional() @IsEnum(CatalogEntityStatus) status?: CatalogEntityStatus;
 }
 export class AttributeDto {
-  @IsOptional() @IsUUID('4') subcategoryId?: string;
-  @IsOptional() @IsString() productType?: string;
+  @IsOptional() @IsUUID('4') subcategoryId?: string | null;
+  @IsOptional() @IsString() productType?: string | null;
   @IsString() key!: string;
   @IsString() label!: string;
-  @IsEnum(CatalogAttributeInputType) inputType!: CatalogAttributeInputType;
-  @IsOptional() @IsString() @MaxLength(120) placeholder?: string;
+  @IsString() inputType!: string;
+  @IsOptional() @IsString() @MaxLength(120) placeholder?: string | null;
   @IsOptional() @IsBoolean() required?: boolean;
   @IsOptional() @IsArray() @IsString({ each: true }) selectOptions?: string[];
   @IsOptional() sortOrder?: number;
   @IsOptional() @IsEnum(CatalogEntityStatus) status?: CatalogEntityStatus;
 }
-export class UpdateAttributeDto extends AttributeDto {
-  @IsOptional() declare key: string;
-  @IsOptional() declare label: string;
-  @IsOptional() @IsEnum(CatalogAttributeInputType) declare inputType: CatalogAttributeInputType;
+export class UpdateAttributeDto {
+  @IsOptional() @IsUUID('4') subcategoryId?: string | null;
+  @IsOptional() @IsString() productType?: string | null;
+  @IsOptional() @IsString() key?: string;
+  @IsOptional() @IsString() label?: string;
+  @IsOptional() @IsString() inputType?: string;
+  @IsOptional() @IsString() @MaxLength(120) placeholder?: string | null;
+  @IsOptional() @IsBoolean() required?: boolean;
+  @IsOptional() @IsArray() @IsString({ each: true }) selectOptions?: string[];
+  @IsOptional() sortOrder?: number;
+  @IsOptional() @IsEnum(CatalogEntityStatus) status?: CatalogEntityStatus;
 }
