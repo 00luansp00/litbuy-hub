@@ -912,6 +912,28 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
     ).resolves.toBe(1);
     expect(JSON.stringify(response.body)).not.toContain('reviewedBy');
     expect(JSON.stringify(response.body)).not.toContain('userEmail');
+
+    await request(app.getHttpServer())
+      .post('/api/v1/v1/seller/listing-drafts')
+      .set('Authorization', seller.auth)
+      .send({ title: 'Rota duplicada' })
+      .expect(HttpStatus.NOT_FOUND);
+
+    const admin = await registerVerifiedAndLogin('integration-listing-admin-route@example.com');
+    await prisma.userRoleAssignment.create({ data: { userId: admin.user.id, role: 'ADMIN' } });
+    const adminLogin = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', admin.register.headers['set-cookie'] as unknown as string[])
+      .send({ email: admin.email, password: admin.password })
+      .expect(HttpStatus.OK);
+    await request(app.getHttpServer())
+      .get('/api/v1/admin/listing-drafts')
+      .set('Authorization', `Bearer ${adminLogin.body.accessToken}`)
+      .expect(HttpStatus.OK);
+    await request(app.getHttpServer())
+      .get('/api/v1/v1/admin/listing-drafts')
+      .set('Authorization', `Bearer ${adminLogin.body.accessToken}`)
+      .expect(HttpStatus.NOT_FOUND);
   });
 
   it('handles concurrent refresh attempts for the same token safely with real PostgreSQL and Redis', async () => {

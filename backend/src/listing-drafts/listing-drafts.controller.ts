@@ -16,7 +16,7 @@ import {
 import { ListingDraftsService } from './listing-drafts.service';
 
 @UseGuards(AccessTokenGuard, PlatformRolesGuard)
-@Controller({ path: 'seller/listing-drafts', version: '1' })
+@Controller('seller/listing-drafts')
 @RequireRoles(PlatformRole.SELLER)
 export class SellerListingDraftsController {
   constructor(private readonly service: ListingDraftsService) {}
@@ -46,7 +46,7 @@ export class SellerListingDraftsController {
 }
 
 @UseGuards(AccessTokenGuard, PlatformRolesGuard)
-@Controller({ path: 'admin/listing-drafts', version: '1' })
+@Controller('admin/listing-drafts')
 @RequireRoles(PlatformRole.ADMIN)
 export class AdminListingDraftsController {
   constructor(private readonly service: ListingDraftsService) {}

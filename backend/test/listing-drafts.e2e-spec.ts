@@ -1,9 +1,11 @@
 import {
+  ConflictException,
   ForbiddenException,
   HttpStatus,
   NotFoundException,
   UnauthorizedException,
   ValidationPipe,
+  VersioningType,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import type { CanActivate, ExecutionContext, INestApplication } from '@nestjs/common';
@@ -103,44 +105,170 @@ class TestRolesGuard implements CanActivate {
 }
 
 function serviceMock() {
+  type DraftMock = Omit<
+    typeof sellerDetail,
+    'status' | 'title' | 'version' | 'rejectionCode' | 'rejectionReason'
+  > & {
+    status: string;
+    title: string;
+    version: number;
+    rejectionCode: string | null;
+    rejectionReason: string | null;
+  };
+  type AdminDraftMock = Omit<
+    typeof adminDetail,
+    'status' | 'title' | 'version' | 'reviewer' | 'rejectionCode' | 'rejectionReason'
+  > & {
+    status: string;
+    title: string;
+    version: number;
+    reviewer: { id: string } | null;
+    reviewStartedAt: string | null;
+    reviewedAt: string | null;
+    approvedAt: string | null;
+    rejectionCode: string | null;
+    rejectionReason: string | null;
+  };
+  let draft: DraftMock = { ...sellerDetail };
+  let adminDraft: AdminDraftMock = {
+    ...adminDetail,
+    reviewStartedAt: null,
+    reviewedAt: null,
+    approvedAt: null,
+  };
+  const conflict = () => new ConflictException({ code: 'LISTING_DRAFT_VERSION_CONFLICT' });
+  const ensureVersion = (expectedVersion?: number) => {
+    if (expectedVersion !== draft.version) throw conflict();
+  };
+  const sellerSummaryFromDraft = () => ({
+    id: draft.id,
+    status: draft.status,
+    model: draft.model,
+    title: draft.title,
+    category: draft.category,
+    subcategory: draft.subcategory,
+    productType: draft.productType,
+    price: draft.price,
+    stock: draft.stock,
+    wizardStep: draft.wizardStep,
+    version: draft.version,
+    submittedAt: draft.submittedAt,
+    updatedAt: draft.updatedAt,
+    rejectionCode: draft.rejectionCode,
+    rejectionReason: draft.rejectionReason,
+  });
+  const adminSummaryFromDraft = () => ({
+    ...sellerSummaryFromDraft(),
+    seller: adminSummary.seller,
+    reviewer: adminDraft.reviewer,
+    reviewStartedAt: adminDraft.reviewStartedAt,
+    reviewedAt: adminDraft.reviewedAt,
+    approvedAt: adminDraft.approvedAt,
+  });
+  const syncAdmin = (patch: Partial<AdminDraftMock> = {}) => {
+    adminDraft = {
+      ...adminDraft,
+      ...draft,
+      seller: adminSummary.seller,
+      reviewer: 'reviewer' in patch ? patch.reviewer! : adminDraft.reviewer,
+      ...patch,
+    };
+    return adminDraft;
+  };
   return {
     list: jest.fn((userId: string) => ({
-      items: userId === 'seller-b' ? [{ ...sellerSummary, id: otherDraftId }] : [sellerSummary],
+      items:
+        userId === 'seller-b'
+          ? [{ ...sellerSummary, id: otherDraftId }]
+          : [sellerSummaryFromDraft()],
       nextCursor: null,
     })),
-    create: jest.fn(() => sellerDetail),
+    create: jest.fn(() => {
+      draft = { ...sellerDetail };
+      syncAdmin({ reviewer: null });
+      return draft;
+    }),
     get: jest.fn((_userId: string, id: string) => {
       if (id === otherDraftId) throw new NotFoundException({ code: 'LISTING_DRAFT_NOT_FOUND' });
-      return sellerDetail;
+      return draft;
     }),
-    update: jest.fn((_userId: string, id: string) => {
+    update: jest.fn(
+      (_userId: string, id: string, dto: { expectedVersion?: number; title?: string }) => {
+        if (id === otherDraftId) throw new NotFoundException({ code: 'LISTING_DRAFT_NOT_FOUND' });
+        ensureVersion(dto.expectedVersion);
+        if (!['DRAFT', 'REJECTED'].includes(draft.status)) {
+          throw new ConflictException({ code: 'LISTING_DRAFT_STATUS_CONFLICT' });
+        }
+        draft = { ...draft, title: dto.title ?? 'Atualizado', version: draft.version + 1 };
+        syncAdmin();
+        return draft;
+      },
+    ),
+    submit: jest.fn((_userId: string, id: string, dto: { expectedVersion?: number }) => {
       if (id === otherDraftId) throw new NotFoundException({ code: 'LISTING_DRAFT_NOT_FOUND' });
-      return { ...sellerDetail, title: 'Atualizado', version: 2 };
+      if (draft.status === 'PENDING_REVIEW') return draft;
+      ensureVersion(dto.expectedVersion);
+      if (!['DRAFT', 'REJECTED'].includes(draft.status)) {
+        throw new ConflictException({ code: 'LISTING_DRAFT_STATUS_CONFLICT' });
+      }
+      draft = {
+        ...draft,
+        status: 'PENDING_REVIEW',
+        version: draft.version + 1,
+        rejectionCode: null,
+        rejectionReason: null,
+      };
+      syncAdmin({ reviewer: null, reviewStartedAt: null, reviewedAt: null, approvedAt: null });
+      return draft;
     }),
-    submit: jest.fn((_userId: string, id: string) => {
-      if (id === otherDraftId) throw new NotFoundException({ code: 'LISTING_DRAFT_NOT_FOUND' });
-      return { ...sellerDetail, status: 'PENDING_REVIEW', version: 3 };
+    adminList: jest.fn(() => ({ items: [adminSummaryFromDraft()], nextCursor: null })),
+    adminGet: jest.fn(() => adminDraft),
+    startReview: jest.fn((_adminId: string, _id: string, dto: { expectedVersion?: number }) => {
+      if (draft.status === 'UNDER_REVIEW') return adminDraft;
+      ensureVersion(dto.expectedVersion);
+      if (draft.status !== 'PENDING_REVIEW') {
+        throw new ConflictException({ code: 'LISTING_DRAFT_STATUS_CONFLICT' });
+      }
+      draft = { ...draft, status: 'UNDER_REVIEW', version: draft.version + 1 };
+      return syncAdmin({ reviewer: { id: 'admin' }, reviewStartedAt: '2026-07-19T12:01:00.000Z' });
     }),
-    adminList: jest.fn(() => ({ items: [adminSummary], nextCursor: null })),
-    adminGet: jest.fn(() => adminDetail),
-    startReview: jest.fn(() => ({
-      ...adminDetail,
-      status: 'UNDER_REVIEW',
-      reviewer: { id: 'admin' },
-      version: 4,
-    })),
-    reject: jest.fn(() => ({
-      ...adminDetail,
-      status: 'REJECTED',
-      reviewer: { id: 'admin' },
-      version: 5,
-    })),
-    approve: jest.fn(() => ({
-      ...adminDetail,
-      status: 'APPROVED',
-      reviewer: { id: 'admin' },
-      version: 7,
-    })),
+    reject: jest.fn(
+      (
+        _adminId: string,
+        _id: string,
+        dto: { expectedVersion?: number; rejectionCode?: string; rejectionReason?: string },
+      ) => {
+        ensureVersion(dto.expectedVersion);
+        if (!['PENDING_REVIEW', 'UNDER_REVIEW'].includes(draft.status)) {
+          throw new ConflictException({ code: 'LISTING_DRAFT_STATUS_CONFLICT' });
+        }
+        draft = {
+          ...draft,
+          status: 'REJECTED',
+          version: draft.version + 1,
+          rejectionCode: dto.rejectionCode ?? 'OTHER',
+          rejectionReason: dto.rejectionReason ?? 'Corrija a descrição',
+        };
+        return syncAdmin({
+          reviewer: { id: 'admin' },
+          reviewedAt: '2026-07-19T12:02:00.000Z',
+          rejectionCode: draft.rejectionCode,
+          rejectionReason: draft.rejectionReason,
+        });
+      },
+    ),
+    approve: jest.fn((_adminId: string, _id: string, dto: { expectedVersion?: number }) => {
+      ensureVersion(dto.expectedVersion);
+      if (!['PENDING_REVIEW', 'UNDER_REVIEW'].includes(draft.status)) {
+        throw new ConflictException({ code: 'LISTING_DRAFT_STATUS_CONFLICT' });
+      }
+      draft = { ...draft, status: 'APPROVED', version: draft.version + 1 };
+      return syncAdmin({
+        reviewer: { id: 'admin' },
+        reviewedAt: '2026-07-19T12:03:00.000Z',
+        approvedAt: '2026-07-19T12:03:00.000Z',
+      });
+    }),
   };
 }
 
@@ -165,6 +293,7 @@ describe('Listing drafts (e2e)', () => {
 
     app = moduleRef.createNestApplication();
     app.setGlobalPrefix('api/v1');
+    app.enableVersioning({ type: VersioningType.URI });
     app.useGlobalPipes(
       new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }),
     );
@@ -176,7 +305,17 @@ describe('Listing drafts (e2e)', () => {
     await app.close();
   });
 
-  it('enforces seller and admin guards', async () => {
+  it('enforces seller and admin guards without duplicate versioned routes', async () => {
+    await request(app.getHttpServer())
+      .get('/api/v1/v1/seller/listing-drafts')
+      .set('x-test-user', 'seller')
+      .set('x-test-roles', 'SELLER')
+      .expect(HttpStatus.NOT_FOUND);
+    await request(app.getHttpServer())
+      .get('/api/v1/v1/admin/listing-drafts')
+      .set('x-test-user', 'admin')
+      .set('x-test-roles', 'ADMIN')
+      .expect(HttpStatus.NOT_FOUND);
     await request(app.getHttpServer())
       .get('/api/v1/seller/listing-drafts')
       .expect(HttpStatus.UNAUTHORIZED);
@@ -315,11 +454,25 @@ describe('Listing drafts (e2e)', () => {
       .send({ expectedVersion: 4, rejectionCode: 'OTHER', rejectionReason: 'Corrija a descrição' })
       .expect(HttpStatus.CREATED);
     await request(app.getHttpServer())
+      .patch(`/api/v1/seller/listing-drafts/${draftId}`)
+      .set('x-test-user', 'seller')
+      .set('x-test-roles', 'SELLER')
+      .send({ expectedVersion: 5, title: 'Corrigido' })
+      .expect(HttpStatus.OK)
+      .expect(({ body }) => expect(body).toMatchObject({ status: 'REJECTED', version: 6 }));
+    await request(app.getHttpServer())
+      .post(`/api/v1/seller/listing-drafts/${draftId}/submit`)
+      .set('x-test-user', 'seller')
+      .set('x-test-roles', 'SELLER')
+      .send({ expectedVersion: 6 })
+      .expect(HttpStatus.CREATED)
+      .expect(({ body }) => expect(body).toMatchObject({ status: 'PENDING_REVIEW', version: 7 }));
+    await request(app.getHttpServer())
       .post(`/api/v1/admin/listing-drafts/${draftId}/approve`)
       .set('x-test-user', 'admin')
       .set('x-test-roles', 'ADMIN')
-      .send({ expectedVersion: 6 })
+      .send({ expectedVersion: 7 })
       .expect(HttpStatus.CREATED)
-      .expect(({ body }) => expect(body).toMatchObject({ status: 'APPROVED' }));
+      .expect(({ body }) => expect(body).toMatchObject({ status: 'APPROVED', version: 8 }));
   });
 });
