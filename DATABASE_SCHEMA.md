@@ -20,11 +20,11 @@ Documento técnico descrevendo a **modelagem futura** do banco de dados da LIT B
 
 **Objetivo:** espelho mínimo de `auth.users` para joins internos.
 
-| Campo        | Tipo         | Observações                          |
-| ------------ | ------------ | ------------------------------------ |
-| id           | uuid (PK)    | FK → `auth.users(id)` on delete cascade |
-| email        | text unique  | Sincronizado via trigger             |
-| created_at   | timestamptz  |                                      |
+| Campo      | Tipo        | Observações                             |
+| ---------- | ----------- | --------------------------------------- |
+| id         | uuid (PK)   | FK → `auth.users(id)` on delete cascade |
+| email      | text unique | Sincronizado via trigger                |
+| created_at | timestamptz |                                         |
 
 **Relacionamentos:** 1–1 com `profiles`, 1–1 com `wallet_accounts`, 1–N com `orders`, `favorites`, `notifications`.
 
@@ -34,16 +34,16 @@ Documento técnico descrevendo a **modelagem futura** do banco de dados da LIT B
 
 **Objetivo:** dados públicos/pessoais do usuário.
 
-| Campo        | Tipo         | Observações                          |
-| ------------ | ------------ | ------------------------------------ |
-| id           | uuid (PK)    | = `users.id`                         |
-| username     | text unique  | Slug público                         |
-| display_name | text         |                                      |
-| avatar_url   | text         |                                      |
-| bio          | text         |                                      |
-| country      | text         | ISO-3166                             |
-| created_at   | timestamptz  |                                      |
-| updated_at   | timestamptz  |                                      |
+| Campo        | Tipo        | Observações  |
+| ------------ | ----------- | ------------ |
+| id           | uuid (PK)   | = `users.id` |
+| username     | text unique | Slug público |
+| display_name | text        |              |
+| avatar_url   | text        |              |
+| bio          | text        |              |
+| country      | text        | ISO-3166     |
+| created_at   | timestamptz |              |
+| updated_at   | timestamptz |              |
 
 **Relacionamentos:** 1–1 com `users`.
 
@@ -74,16 +74,16 @@ Documento técnico descrevendo a **modelagem futura** do banco de dados da LIT B
 
 **Objetivo:** taxonomia do marketplace.
 
-| Campo         | Tipo         | Observações                          |
-| ------------- | ------------ | ------------------------------------ |
-| id            | uuid (PK)    |                                      |
-| slug          | text unique  |                                      |
-| name          | text         |                                      |
-| icon          | text         | Nome do ícone lucide                 |
-| description   | text         |                                      |
-| color         | text         | Token/hex de destaque                |
-| parent_id     | uuid null    | FK → `categories(id)` (hierarquia)   |
-| sort_order    | int          |                                      |
+| Campo       | Tipo        | Observações                        |
+| ----------- | ----------- | ---------------------------------- |
+| id          | uuid (PK)   |                                    |
+| slug        | text unique |                                    |
+| name        | text        |                                    |
+| icon        | text        | Nome do ícone lucide               |
+| description | text        |                                    |
+| color       | text        | Token/hex de destaque              |
+| parent_id   | uuid null   | FK → `categories(id)` (hierarquia) |
+| sort_order  | int         |                                    |
 
 **Relacionamentos:** 1–N com `products`; auto-referência opcional.
 
@@ -93,28 +93,28 @@ Documento técnico descrevendo a **modelagem futura** do banco de dados da LIT B
 
 **Objetivo:** anúncios ativos do marketplace.
 
-| Campo              | Tipo           | Observações                                |
-| ------------------ | -------------- | ------------------------------------------ |
-| id                 | uuid (PK)      |                                            |
-| slug               | text unique    |                                            |
-| seller_id          | uuid           | FK → `sellers(id)`                         |
-| category_id        | uuid           | FK → `categories(id)`                      |
-| title              | text           |                                            |
-| description        | text           | Markdown                                   |
-| price              | numeric(12,2)  |                                            |
-| original_price     | numeric(12,2)  | Para exibir desconto                       |
-| stock              | int            |                                            |
-| instant_delivery   | boolean        |                                            |
-| trust_score        | int            | 0–100                                      |
-| status             | text           | draft / active / paused / removed          |
-| badge              | text           | hot / new / promo / top                    |
-| best_seller        | boolean        |                                            |
-| rating             | numeric(3,2)   | Agregado                                   |
-| reviews_count      | int            | Denormalizado                              |
-| sold_count         | int            | Denormalizado                              |
-| created_at         | timestamptz    |                                            |
-| updated_at         | timestamptz    |                                            |
-| deleted_at         | timestamptz    | Soft delete                                |
+| Campo            | Tipo          | Observações                       |
+| ---------------- | ------------- | --------------------------------- |
+| id               | uuid (PK)     |                                   |
+| slug             | text unique   |                                   |
+| seller_id        | uuid          | FK → `sellers(id)`                |
+| category_id      | uuid          | FK → `categories(id)`             |
+| title            | text          |                                   |
+| description      | text          | Markdown                          |
+| price            | numeric(12,2) |                                   |
+| original_price   | numeric(12,2) | Para exibir desconto              |
+| stock            | int           |                                   |
+| instant_delivery | boolean       |                                   |
+| trust_score      | int           | 0–100                             |
+| status           | text          | draft / active / paused / removed |
+| badge            | text          | hot / new / promo / top           |
+| best_seller      | boolean       |                                   |
+| rating           | numeric(3,2)  | Agregado                          |
+| reviews_count    | int           | Denormalizado                     |
+| sold_count       | int           | Denormalizado                     |
+| created_at       | timestamptz   |                                   |
+| updated_at       | timestamptz   |                                   |
+| deleted_at       | timestamptz   | Soft delete                       |
 
 **Observações:** somente produtos com `status = 'active'` são públicos (ver RLS).
 
@@ -124,14 +124,14 @@ Documento técnico descrevendo a **modelagem futura** do banco de dados da LIT B
 
 **Objetivo:** múltiplas imagens por produto.
 
-| Campo       | Tipo        | Observações                    |
-| ----------- | ----------- | ------------------------------ |
-| id          | uuid (PK)   |                                |
-| product_id  | uuid        | FK → `products(id)` cascade    |
-| url         | text        |                                |
-| alt         | text        |                                |
-| sort_order  | int         | Miniatura = menor              |
-| is_cover    | boolean     |                                |
+| Campo      | Tipo      | Observações                 |
+| ---------- | --------- | --------------------------- |
+| id         | uuid (PK) |                             |
+| product_id | uuid      | FK → `products(id)` cascade |
+| url        | text      |                             |
+| alt        | text      |                             |
+| sort_order | int       | Miniatura = menor           |
+| is_cover   | boolean   |                             |
 
 ---
 
@@ -139,15 +139,15 @@ Documento técnico descrevendo a **modelagem futura** do banco de dados da LIT B
 
 **Objetivo:** avaliações do comprador após pedido concluído.
 
-| Campo       | Tipo          | Observações                          |
-| ----------- | ------------- | ------------------------------------ |
-| id          | uuid (PK)     |                                      |
-| product_id  | uuid          | FK → `products(id)`                  |
-| order_id    | uuid          | FK → `orders(id)` (garante compra)   |
-| author_id   | uuid          | FK → `users(id)`                     |
-| rating      | int           | 1–5 check                            |
-| comment     | text          |                                      |
-| created_at  | timestamptz   |                                      |
+| Campo      | Tipo        | Observações                        |
+| ---------- | ----------- | ---------------------------------- |
+| id         | uuid (PK)   |                                    |
+| product_id | uuid        | FK → `products(id)`                |
+| order_id   | uuid        | FK → `orders(id)` (garante compra) |
+| author_id  | uuid        | FK → `users(id)`                   |
+| rating     | int         | 1–5 check                          |
+| comment    | text        |                                    |
+| created_at | timestamptz |                                    |
 
 **Regras:** uma review por `(order_id, product_id)`. Trigger atualiza `products.rating` e `reviews_count`.
 
@@ -157,24 +157,24 @@ Documento técnico descrevendo a **modelagem futura** do banco de dados da LIT B
 
 **Objetivo:** carrinho persistente por usuário.
 
-| Campo       | Tipo         | Observações                        |
-| ----------- | ------------ | ---------------------------------- |
-| id          | uuid (PK)    |                                    |
-| user_id     | uuid unique  | FK → `users(id)`                   |
-| updated_at  | timestamptz  |                                    |
+| Campo      | Tipo        | Observações      |
+| ---------- | ----------- | ---------------- |
+| id         | uuid (PK)   |                  |
+| user_id    | uuid unique | FK → `users(id)` |
+| updated_at | timestamptz |                  |
 
 ---
 
 ## 9. cart_items
 
-| Campo        | Tipo         | Observações                       |
-| ------------ | ------------ | --------------------------------- |
-| id           | uuid (PK)    |                                   |
-| cart_id      | uuid         | FK → `carts(id)` cascade          |
-| product_id   | uuid         | FK → `products(id)`               |
-| quantity     | int          | check > 0                         |
-| unit_price   | numeric(12,2)| Snapshot do preço                 |
-| added_at     | timestamptz  |                                   |
+| Campo      | Tipo          | Observações              |
+| ---------- | ------------- | ------------------------ |
+| id         | uuid (PK)     |                          |
+| cart_id    | uuid          | FK → `carts(id)` cascade |
+| product_id | uuid          | FK → `products(id)`      |
+| quantity   | int           | check > 0                |
+| unit_price | numeric(12,2) | Snapshot do preço        |
+| added_at   | timestamptz   |                          |
 
 **Único:** `(cart_id, product_id)`.
 
@@ -184,32 +184,32 @@ Documento técnico descrevendo a **modelagem futura** do banco de dados da LIT B
 
 **Objetivo:** pedidos confirmados.
 
-| Campo             | Tipo          | Observações                                   |
-| ----------------- | ------------- | --------------------------------------------- |
-| id                | uuid (PK)     |                                               |
-| buyer_id          | uuid          | FK → `users(id)`                              |
-| status            | text          | pending / paid / delivered / disputed / cancelled |
-| subtotal          | numeric(12,2) |                                               |
-| fees              | numeric(12,2) |                                               |
-| total             | numeric(12,2) |                                               |
-| payment_method    | text          | wallet / card / pix                           |
-| created_at        | timestamptz   |                                               |
-| paid_at           | timestamptz   |                                               |
-| delivered_at      | timestamptz   |                                               |
+| Campo          | Tipo          | Observações                                       |
+| -------------- | ------------- | ------------------------------------------------- |
+| id             | uuid (PK)     |                                                   |
+| buyer_id       | uuid          | FK → `users(id)`                                  |
+| status         | text          | pending / paid / delivered / disputed / cancelled |
+| subtotal       | numeric(12,2) |                                                   |
+| fees           | numeric(12,2) |                                                   |
+| total          | numeric(12,2) |                                                   |
+| payment_method | text          | wallet / card / pix                               |
+| created_at     | timestamptz   |                                                   |
+| paid_at        | timestamptz   |                                                   |
+| delivered_at   | timestamptz   |                                                   |
 
 ---
 
 ## 11. order_items
 
-| Campo         | Tipo          | Observações                                |
-| ------------- | ------------- | ------------------------------------------ |
-| id            | uuid (PK)     |                                            |
-| order_id      | uuid          | FK → `orders(id)` cascade                  |
-| product_id    | uuid          | FK → `products(id)` (restrict)             |
-| seller_id     | uuid          | FK → `sellers(id)` (para split e RLS)      |
-| quantity      | int           |                                            |
-| unit_price    | numeric(12,2) | Snapshot                                   |
-| delivery_data | jsonb         | Cópia entregável (chave, código, etc.)     |
+| Campo         | Tipo          | Observações                            |
+| ------------- | ------------- | -------------------------------------- |
+| id            | uuid (PK)     |                                        |
+| order_id      | uuid          | FK → `orders(id)` cascade              |
+| product_id    | uuid          | FK → `products(id)` (restrict)         |
+| seller_id     | uuid          | FK → `sellers(id)` (para split e RLS)  |
+| quantity      | int           |                                        |
+| unit_price    | numeric(12,2) | Snapshot                               |
+| delivery_data | jsonb         | Cópia entregável (chave, código, etc.) |
 
 ---
 
@@ -217,13 +217,13 @@ Documento técnico descrevendo a **modelagem futura** do banco de dados da LIT B
 
 **Objetivo:** carteira interna por usuário.
 
-| Campo         | Tipo          | Observações               |
-| ------------- | ------------- | ------------------------- |
-| id            | uuid (PK)     |                           |
-| user_id       | uuid unique   | FK → `users(id)`          |
-| balance       | numeric(12,2) | Calculado por transações  |
-| currency      | text          | Default 'BRL'             |
-| updated_at    | timestamptz   |                           |
+| Campo      | Tipo          | Observações              |
+| ---------- | ------------- | ------------------------ |
+| id         | uuid (PK)     |                          |
+| user_id    | uuid unique   | FK → `users(id)`         |
+| balance    | numeric(12,2) | Calculado por transações |
+| currency   | text          | Default 'BRL'            |
+| updated_at | timestamptz   |                          |
 
 **Regra:** o saldo NUNCA é atualizado pelo cliente; apenas via funções server-side.
 
@@ -231,15 +231,15 @@ Documento técnico descrevendo a **modelagem futura** do banco de dados da LIT B
 
 ## 13. wallet_transactions
 
-| Campo         | Tipo          | Observações                                  |
-| ------------- | ------------- | -------------------------------------------- |
-| id            | uuid (PK)     |                                              |
-| wallet_id     | uuid          | FK → `wallet_accounts(id)`                   |
-| type          | text          | credit / debit / hold / release / fee        |
-| amount        | numeric(12,2) | Sempre positivo; sinal vem do `type`         |
-| balance_after | numeric(12,2) | Snapshot pós-transação                       |
-| reference     | text          | order:{id} / payment:{id} / withdrawal:{id}  |
-| created_at    | timestamptz   |                                              |
+| Campo         | Tipo          | Observações                                 |
+| ------------- | ------------- | ------------------------------------------- |
+| id            | uuid (PK)     |                                             |
+| wallet_id     | uuid          | FK → `wallet_accounts(id)`                  |
+| type          | text          | credit / debit / hold / release / fee       |
+| amount        | numeric(12,2) | Sempre positivo; sinal vem do `type`        |
+| balance_after | numeric(12,2) | Snapshot pós-transação                      |
+| reference     | text          | order:{id} / payment:{id} / withdrawal:{id} |
+| created_at    | timestamptz   |                                             |
 
 **Imutável:** sem UPDATE/DELETE via API pública.
 
@@ -249,16 +249,16 @@ Documento técnico descrevendo a **modelagem futura** do banco de dados da LIT B
 
 **Objetivo:** tentativas e resultados de pagamento externo.
 
-| Campo         | Tipo          | Observações                                 |
-| ------------- | ------------- | ------------------------------------------- |
-| id            | uuid (PK)     |                                             |
-| order_id      | uuid          | FK → `orders(id)`                           |
-| provider      | text          | stripe / mercadopago / pix                  |
-| provider_ref  | text          | ID externo                                  |
-| amount        | numeric(12,2) |                                             |
-| status        | text          | pending / succeeded / failed / refunded     |
-| raw_payload   | jsonb         | Webhook cru para auditoria                  |
-| created_at    | timestamptz   |                                             |
+| Campo        | Tipo          | Observações                             |
+| ------------ | ------------- | --------------------------------------- |
+| id           | uuid (PK)     |                                         |
+| order_id     | uuid          | FK → `orders(id)`                       |
+| provider     | text          | stripe / mercadopago / pix              |
+| provider_ref | text          | ID externo                              |
+| amount       | numeric(12,2) |                                         |
+| status       | text          | pending / succeeded / failed / refunded |
+| raw_payload  | jsonb         | Webhook cru para auditoria              |
+| created_at   | timestamptz   |                                         |
 
 ---
 
@@ -266,16 +266,16 @@ Documento técnico descrevendo a **modelagem futura** do banco de dados da LIT B
 
 **Objetivo:** saques do vendedor.
 
-| Campo         | Tipo          | Observações                            |
-| ------------- | ------------- | -------------------------------------- |
-| id            | uuid (PK)     |                                        |
-| user_id       | uuid          | FK → `users(id)`                       |
-| amount        | numeric(12,2) |                                        |
-| method        | text          | pix / bank_transfer                    |
-| destination   | jsonb         | Dados do destino (mascarados na UI)    |
-| status        | text          | requested / approved / paid / rejected |
-| requested_at  | timestamptz   |                                        |
-| processed_at  | timestamptz   |                                        |
+| Campo        | Tipo          | Observações                            |
+| ------------ | ------------- | -------------------------------------- |
+| id           | uuid (PK)     |                                        |
+| user_id      | uuid          | FK → `users(id)`                       |
+| amount       | numeric(12,2) |                                        |
+| method       | text          | pix / bank_transfer                    |
+| destination  | jsonb         | Dados do destino (mascarados na UI)    |
+| status       | text          | requested / approved / paid / rejected |
+| requested_at | timestamptz   |                                        |
+| processed_at | timestamptz   |                                        |
 
 ---
 
@@ -283,14 +283,14 @@ Documento técnico descrevendo a **modelagem futura** do banco de dados da LIT B
 
 **Objetivo:** thread entre comprador e vendedor.
 
-| Campo         | Tipo         | Observações                             |
-| ------------- | ------------ | --------------------------------------- |
-| id            | uuid (PK)    |                                         |
-| buyer_id      | uuid         | FK → `users(id)`                        |
-| seller_id     | uuid         | FK → `sellers(id)`                      |
-| product_id    | uuid null    | Contexto opcional                       |
-| order_id      | uuid null    | Contexto opcional                       |
-| last_message_at | timestamptz|                                         |
+| Campo           | Tipo        | Observações        |
+| --------------- | ----------- | ------------------ |
+| id              | uuid (PK)   |                    |
+| buyer_id        | uuid        | FK → `users(id)`   |
+| seller_id       | uuid        | FK → `sellers(id)` |
+| product_id      | uuid null   | Contexto opcional  |
+| order_id        | uuid null   | Contexto opcional  |
+| last_message_at | timestamptz |                    |
 
 **Único:** `(buyer_id, seller_id, product_id)` quando `product_id` é definido.
 
@@ -298,15 +298,15 @@ Documento técnico descrevendo a **modelagem futura** do banco de dados da LIT B
 
 ## 17. messages
 
-| Campo           | Tipo         | Observações                     |
-| --------------- | ------------ | ------------------------------- |
-| id              | uuid (PK)    |                                 |
-| conversation_id | uuid         | FK → `conversations(id)` cascade|
-| sender_id       | uuid         | FK → `users(id)`                |
-| body            | text         |                                 |
-| attachments     | jsonb        | URLs assinadas                  |
-| read_at         | timestamptz  |                                 |
-| created_at      | timestamptz  |                                 |
+| Campo           | Tipo        | Observações                      |
+| --------------- | ----------- | -------------------------------- |
+| id              | uuid (PK)   |                                  |
+| conversation_id | uuid        | FK → `conversations(id)` cascade |
+| sender_id       | uuid        | FK → `users(id)`                 |
+| body            | text        |                                  |
+| attachments     | jsonb       | URLs assinadas                   |
+| read_at         | timestamptz |                                  |
+| created_at      | timestamptz |                                  |
 
 ---
 
@@ -314,41 +314,41 @@ Documento técnico descrevendo a **modelagem futura** do banco de dados da LIT B
 
 **Objetivo:** disputas abertas em pedidos.
 
-| Campo         | Tipo         | Observações                                     |
-| ------------- | ------------ | ----------------------------------------------- |
-| id            | uuid (PK)    |                                                 |
-| order_id      | uuid         | FK → `orders(id)`                               |
-| opened_by     | uuid         | FK → `users(id)`                                |
-| reason        | text         |                                                 |
-| status        | text         | open / awaiting_seller / awaiting_buyer / resolved_buyer / resolved_seller |
-| resolution    | text         |                                                 |
-| created_at    | timestamptz  |                                                 |
-| resolved_at   | timestamptz  |                                                 |
+| Campo       | Tipo        | Observações                                                                |
+| ----------- | ----------- | -------------------------------------------------------------------------- |
+| id          | uuid (PK)   |                                                                            |
+| order_id    | uuid        | FK → `orders(id)`                                                          |
+| opened_by   | uuid        | FK → `users(id)`                                                           |
+| reason      | text        |                                                                            |
+| status      | text        | open / awaiting_seller / awaiting_buyer / resolved_buyer / resolved_seller |
+| resolution  | text        |                                                                            |
+| created_at  | timestamptz |                                                                            |
+| resolved_at | timestamptz |                                                                            |
 
 ---
 
 ## 19. notifications
 
-| Campo       | Tipo         | Observações                             |
-| ----------- | ------------ | --------------------------------------- |
-| id          | uuid (PK)    |                                         |
-| user_id     | uuid         | FK → `users(id)`                        |
-| type        | text         | order / message / dispute / wallet / system |
-| title       | text         |                                         |
-| body        | text         |                                         |
-| link        | text         | Rota interna                            |
-| read_at     | timestamptz  |                                         |
-| created_at  | timestamptz  |                                         |
+| Campo      | Tipo        | Observações                                 |
+| ---------- | ----------- | ------------------------------------------- |
+| id         | uuid (PK)   |                                             |
+| user_id    | uuid        | FK → `users(id)`                            |
+| type       | text        | order / message / dispute / wallet / system |
+| title      | text        |                                             |
+| body       | text        |                                             |
+| link       | text        | Rota interna                                |
+| read_at    | timestamptz |                                             |
+| created_at | timestamptz |                                             |
 
 ---
 
 ## 20. favorites
 
-| Campo       | Tipo         | Observações                     |
-| ----------- | ------------ | ------------------------------- |
-| user_id     | uuid         | FK → `users(id)` (PK composta)  |
-| product_id  | uuid         | FK → `products(id)` (PK composta)|
-| created_at  | timestamptz  |                                 |
+| Campo      | Tipo        | Observações                       |
+| ---------- | ----------- | --------------------------------- |
+| user_id    | uuid        | FK → `users(id)` (PK composta)    |
+| product_id | uuid        | FK → `products(id)` (PK composta) |
+| created_at | timestamptz |                                   |
 
 **PK composta:** `(user_id, product_id)`.
 
@@ -393,3 +393,7 @@ The marketplace authorization foundation is now persistent: `BUYER`, `SELLER` an
 - Produtos, anúncios, vendas, financeiro, reputação, wallet, saques, documentos, selfie e verificação externa continuam mockados ou pendentes para sprints futuras.
 - Fornecedor de KYC permanece não escolhido (`NOT_ANALYZED`); nenhum documento real deve ser enviado.
 - Consulte `SELLER_ONBOARDING_FOUNDATION.md` para escopo, endpoints, estados e limitações.
+
+## Catalog taxonomy foundation update
+
+Persistent catalog taxonomy is now the source of truth for categories, subcategories, product types, attributes, ordering, active/inactive status and category featured flags. Public consumers use active entities only, and `/admin/catalogo` uses protected administrative endpoints. Products, listings, prices, images, stock, seller metrics, reviews, search, promotions, seller plans and publishing remain demonstrative/mock and must not be treated as real commercial catalog data.

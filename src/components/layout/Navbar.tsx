@@ -1,15 +1,7 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 
-import {
-  Search,
-  Menu,
-  Heart,
-  ShoppingCart,
-  MessageSquare,
-  LayoutGrid,
-  X,
-} from "lucide-react";
+import { Search, Menu, Heart, ShoppingCart, MessageSquare, LayoutGrid, X } from "lucide-react";
 import { Logo } from "@/components/common/Logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,14 +12,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { categories } from "@/data/categories";
+import { useQuery } from "@tanstack/react-query";
+import { catalogService } from "@/services/catalogService";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/AuthContext";
 import { useCart } from "@/providers/CartProvider";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { UserMenu } from "./UserMenu";
-
-
 
 const navLinks = [
   { to: "/", label: "Início" },
@@ -37,6 +28,10 @@ const navLinks = [
 ] as const;
 
 export function Navbar() {
+  const { data: categories = [] } = useQuery({
+    queryKey: ["catalog", "categories", "nav"],
+    queryFn: catalogService.getCategories,
+  });
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -58,8 +53,6 @@ export function Navbar() {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
-
-
 
   return (
     <header
@@ -120,7 +113,6 @@ export function Navbar() {
           />
         </form>
 
-
         {/* Nav links */}
         <nav className="hidden lg:flex items-center gap-1 ml-auto">
           {navLinks.map((l) => (
@@ -138,11 +130,27 @@ export function Navbar() {
 
         {/* Actions */}
         <div className="flex items-center gap-1 ml-auto lg:ml-2">
-          <Button asChild variant="ghost" size="icon" aria-label="Favoritos" className="hidden sm:inline-flex">
-            <Link to="/favoritos"><Heart className="h-5 w-5" /></Link>
+          <Button
+            asChild
+            variant="ghost"
+            size="icon"
+            aria-label="Favoritos"
+            className="hidden sm:inline-flex"
+          >
+            <Link to="/favoritos">
+              <Heart className="h-5 w-5" />
+            </Link>
           </Button>
-          <Button asChild variant="ghost" size="icon" aria-label="Mensagens" className="hidden sm:inline-flex">
-            <Link to="/mensagens"><MessageSquare className="h-5 w-5" /></Link>
+          <Button
+            asChild
+            variant="ghost"
+            size="icon"
+            aria-label="Mensagens"
+            className="hidden sm:inline-flex"
+          >
+            <Link to="/mensagens">
+              <MessageSquare className="h-5 w-5" />
+            </Link>
           </Button>
           {/* Sino: dropdown no desktop, navegação direta no mobile. */}
           <div className="hidden sm:inline-flex">

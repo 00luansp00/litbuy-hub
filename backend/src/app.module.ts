@@ -8,6 +8,7 @@ import { RequestLoggingMiddleware } from './common/middleware/request-logging.mi
 import { AppLogger } from './common/logging/app-logger.service';
 import { AuthModule } from './auth/auth.module';
 import { SellerOnboardingModule } from './seller-onboarding/seller-onboarding.module';
+import { CatalogModule } from './catalog/catalog.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { SellerOnboardingModule } from './seller-onboarding/seller-onboarding.mo
     HealthModule,
     AuthModule,
     SellerOnboardingModule,
+    CatalogModule,
   ],
   providers: [AppLogger],
 })

@@ -934,6 +934,7 @@ export interface ListingAccountInfo {
 }
 
 export interface Subcategory {
+  id?: string;
   slug: string;
   name: string;
   categorySlug: string;
@@ -942,7 +943,8 @@ export interface Subcategory {
 export type ListingAttributeInputType =
   | "text"
   | "number"
-  | "select";
+  | "select"
+  | "boolean";
 
 export interface ListingAttributeConfig {
   key: string;
@@ -950,6 +952,7 @@ export interface ListingAttributeConfig {
   type: ListingAttributeInputType;
   options?: string[];
   placeholder?: string;
+  required?: boolean;
 }
 
 export interface ListingAttributeValue {

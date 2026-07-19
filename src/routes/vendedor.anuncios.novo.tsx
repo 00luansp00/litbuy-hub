@@ -159,7 +159,7 @@ function NovoAnuncioPage() {
   useEffect(() => {
     let m = true;
     listingDraftService
-      .getAttributesForSubcategory(draft.subcategorySlug, draft.productType)
+      .getAttributesForSubcategory(draft.subcategorySlug, draft.productType, draft.categorySlug)
       .then((c) => m && setAttrConfig(c));
     return () => {
       m = false;

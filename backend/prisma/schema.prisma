@@ -111,6 +111,15 @@ enum SecurityEventType {
   SELLER_APPLICATION_APPROVED
   SELLER_APPLICATION_REJECTED
   SELLER_PROFILE_CREATED
+  CATALOG_CATEGORY_CREATED
+  CATALOG_CATEGORY_UPDATED
+  CATALOG_CATEGORY_STATUS_CHANGED
+  CATALOG_SUBCATEGORY_CREATED
+  CATALOG_SUBCATEGORY_UPDATED
+  CATALOG_SUBCATEGORY_STATUS_CHANGED
+  CATALOG_ATTRIBUTE_CREATED
+  CATALOG_ATTRIBUTE_UPDATED
+  CATALOG_ATTRIBUTE_STATUS_CHANGED
 }
 
 enum StepUpScope {
@@ -407,4 +416,87 @@ model StepUpGrant {
   @@index([deviceId])
   @@index([tokenHash])
   @@index([expiresAt, consumedAt, revokedAt])
+}
+
+enum CatalogEntityStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum CatalogProductType {
+  ACCOUNT
+  VIRTUAL_CURRENCY
+  GIFT_CARD
+  KEY
+  SKIN
+  ITEM
+  SERVICE
+  SUBSCRIPTION
+  GAME
+  SOFTWARE
+  OTHER
+}
+
+enum CatalogAttributeInputType {
+  TEXT
+  NUMBER
+  SELECT
+  BOOLEAN
+}
+
+model CatalogCategory {
+  id          String              @id @default(uuid()) @db.Uuid
+  slug        String              @unique
+  name        String
+  description String?
+  iconKey     String?
+  colorHex    String?
+  sortOrder   Int                 @default(0)
+  featured    Boolean             @default(false)
+  status      CatalogEntityStatus @default(ACTIVE)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  subcategories CatalogSubcategory[]
+
+  @@index([status, sortOrder])
+  @@index([featured, status, sortOrder])
+}
+
+model CatalogSubcategory {
+  id         String              @id @default(uuid()) @db.Uuid
+  categoryId String              @db.Uuid
+  slug       String
+  name       String
+  sortOrder  Int                 @default(0)
+  status     CatalogEntityStatus @default(ACTIVE)
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  category   CatalogCategory    @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  attributes CatalogAttribute[]
+
+  @@unique([categoryId, slug])
+  @@index([categoryId, status, sortOrder])
+}
+
+model CatalogAttribute {
+  id            String                    @id @default(uuid()) @db.Uuid
+  subcategoryId String?                   @db.Uuid
+  productType   CatalogProductType?
+  key           String
+  label         String
+  inputType     CatalogAttributeInputType
+  placeholder   String?
+  required      Boolean                   @default(false)
+  selectOptions String[]                  @default([])
+  sortOrder     Int                       @default(0)
+  status        CatalogEntityStatus       @default(ACTIVE)
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+
+  subcategory CatalogSubcategory? @relation(fields: [subcategoryId], references: [id], onDelete: Restrict)
+
+  @@index([subcategoryId, status, sortOrder])
+  @@index([productType, status, sortOrder])
 }

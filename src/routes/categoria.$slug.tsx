@@ -1,5 +1,4 @@
 import { createFileRoute, notFound } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
 import { SlidersHorizontal } from "lucide-react";
 import { Breadcrumb } from "@/components/common/Breadcrumb";
 import { CategoryHero } from "@/components/common/CategoryHero";
@@ -9,7 +8,8 @@ import { ProductGrid } from "@/components/common/ProductGrid";
 import { SortBar } from "@/components/common/SortBar";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { categoryService, productService } from "@/services/productService";
+import { productService } from "@/services/productService";
+import { categoryService } from "@/services/catalogService";
 
 export const Route = createFileRoute("/categoria/$slug")({
   loader: async ({ params }) => {
@@ -19,30 +19,25 @@ export const Route = createFileRoute("/categoria/$slug")({
     return { category, items };
   },
   component: CategoryPage,
+  pendingComponent: () => (
+    <div className="container-lit py-16 text-muted-foreground">Carregando categoria real...</div>
+  ),
   notFoundComponent: CategoryNotFound,
 });
 
 function CategoryPage() {
   const { category, items } = Route.useLoaderData();
 
-  // Mock de loading apenas para demonstração visual.
-  const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 450);
-    return () => clearTimeout(t);
-  }, [category.slug]);
-
   return (
     <div className="container-lit space-y-6 py-6 md:space-y-8 md:py-10">
       <Breadcrumb
-        items={[
-          { label: "Home", to: "/" },
-          { label: "Categorias" },
-          { label: category.name },
-        ]}
+        items={[{ label: "Home", to: "/" }, { label: "Categorias" }, { label: category.name }]}
       />
 
       <CategoryHero category={category} />
+      <p className="rounded-lg border border-border bg-muted/40 px-4 py-2 text-sm text-muted-foreground">
+        A estrutura desta categoria é real. Os anúncios exibidos ainda são demonstrativos.
+      </p>
 
       {/* Botão de filtros para mobile */}
       <div className="lg:hidden">
@@ -70,7 +65,7 @@ function CategoryPage() {
         {/* Listagem */}
         <div className="min-w-0 space-y-5">
           <SortBar total={items.length} />
-          {items.length === 0 && !loading ? (
+          {items.length === 0 ? (
             <EmptyState
               icon="PackageOpen"
               title="Nenhum anúncio encontrado"
@@ -78,12 +73,7 @@ function CategoryPage() {
               action={{ label: "Voltar para categorias", to: "/" }}
             />
           ) : (
-            <ProductGrid
-              products={items}
-              columns={3}
-              loading={loading}
-              skeletonCount={6}
-            />
+            <ProductGrid products={items} columns={3} loading={false} skeletonCount={6} />
           )}
         </div>
       </div>
