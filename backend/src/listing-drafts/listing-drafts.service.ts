@@ -34,7 +34,7 @@ const include = {
   attributes: true,
   serviceDetails: true,
   accountDetails: true,
-  sellerProfile: { include: { user: true } },
+  sellerProfile: true,
   reviewedBy: true,
 };
 type DraftClient = PrismaService | Prisma.TransactionClient;
@@ -395,8 +395,8 @@ export class ListingDraftsService {
         throw this.err('LISTING_SERVICE_DETAILS_NOT_ALLOWED', HttpStatus.CONFLICT);
     }
     if (snapshot.model === ListingDraftModel.DYNAMIC) {
-      if (snapshot.serviceDetails)
-        throw this.err('LISTING_SERVICE_DETAILS_NOT_ALLOWED', HttpStatus.CONFLICT);
+      if (snapshot.price || snapshot.stock != null || snapshot.serviceDetails)
+        throw this.err('LISTING_MODEL_DATA_CONFLICT', HttpStatus.CONFLICT);
     }
     if (snapshot.model === ListingDraftModel.SERVICE) {
       if (snapshot.price || snapshot.stock != null || (snapshot.variants?.length ?? 0) > 0)
@@ -406,6 +406,7 @@ export class ListingDraftsService {
     }
   }
   private validateSubmit(d: DraftWithRelations) {
+    this.assertModelConsistency(d);
     if (d.deliveryMode === ListingDraftDeliveryMode.AUTOMATIC)
       throw this.err('LISTING_AUTOMATIC_DELIVERY_UNAVAILABLE', 409);
     if (!d.categoryId || !d.productType) throw this.err('LISTING_REQUIRED_FIELD_MISSING');

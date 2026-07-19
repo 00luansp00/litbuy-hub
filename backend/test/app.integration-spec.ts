@@ -836,8 +836,25 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
     const response = await request(app.getHttpServer())
       .post('/api/v1/seller/listing-drafts')
       .set('Authorization', seller.auth)
-      .send({ title: 'Rascunho inicial', wizardStep: 2 })
-      .expect(HttpStatus.CREATED);
+      .send({ title: 'Rascunho inicial', wizardStep: 2 });
+
+    const safeCreateDiagnostic = JSON.stringify({
+      status: response.status,
+      code: response.body?.code,
+      message: response.body?.message,
+      body: {
+        id: typeof response.body?.id === 'string' ? response.body.id : undefined,
+        status: response.body?.status,
+        title: response.body?.title,
+        wizardStep: response.body?.wizardStep,
+        version: response.body?.version,
+      },
+    });
+    if (response.status !== Number(HttpStatus.CREATED)) {
+      throw new Error(
+        `Expected ${HttpStatus.CREATED} but received ${response.status}: ${safeCreateDiagnostic}`,
+      );
+    }
 
     expect(response.body).toMatchObject({
       id: expect.any(String),
