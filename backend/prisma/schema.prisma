@@ -120,6 +120,12 @@ enum SecurityEventType {
   CATALOG_ATTRIBUTE_CREATED
   CATALOG_ATTRIBUTE_UPDATED
   CATALOG_ATTRIBUTE_STATUS_CHANGED
+  LISTING_DRAFT_CREATED
+  LISTING_DRAFT_UPDATED
+  LISTING_DRAFT_SUBMITTED
+  LISTING_DRAFT_REVIEW_STARTED
+  LISTING_DRAFT_REJECTED
+  LISTING_DRAFT_APPROVED
 }
 
 enum StepUpScope {
@@ -170,6 +176,7 @@ model User {
   sellerApplication          SellerApplication?      @relation("SellerApplicationOwner")
   reviewedSellerApplications SellerApplication[]     @relation("SellerApplicationReviewer")
   sellerProfile              SellerProfile?
+  reviewedListingDrafts      ListingDraft[]          @relation("ListingDraftReviewer")
 
   @@unique([phoneE164])
   @@index([email])
@@ -222,7 +229,8 @@ model SellerProfile {
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  user          User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  listingDrafts ListingDraft[]
 
   @@index([status])
   @@index([slug])
@@ -458,6 +466,7 @@ model CatalogCategory {
   updatedAt   DateTime            @updatedAt
 
   subcategories CatalogSubcategory[]
+  listingDrafts ListingDraft[]
 
   @@index([status, sortOrder])
   @@index([featured, status, sortOrder])
@@ -473,8 +482,9 @@ model CatalogSubcategory {
   createdAt  DateTime            @default(now())
   updatedAt  DateTime            @updatedAt
 
-  category   CatalogCategory    @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  attributes CatalogAttribute[]
+  category      CatalogCategory    @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  attributes    CatalogAttribute[]
+  listingDrafts ListingDraft[]
 
   @@unique([categoryId, slug])
   @@index([categoryId, status, sortOrder])
@@ -499,4 +509,157 @@ model CatalogAttribute {
 
   @@index([subcategoryId, status, sortOrder])
   @@index([productType, status, sortOrder])
+}
+
+enum ListingDraftStatus {
+  DRAFT
+  PENDING_REVIEW
+  UNDER_REVIEW
+  REJECTED
+  APPROVED
+}
+
+enum ListingDraftModel {
+  NORMAL
+  DYNAMIC
+  SERVICE
+}
+
+enum ListingDraftDeliveryMode {
+  MANUAL
+  AUTOMATIC
+}
+
+enum ListingDraftPromotionPreference {
+  SILVER
+  GOLD
+  DIAMOND
+}
+
+enum ListingDraftSellerPlanPreference {
+  STANDARD
+  LIT_MAX
+}
+
+enum ListingDraftServicePricingType {
+  FIXED
+  QUOTE
+}
+
+enum ListingDraftVariantStatus {
+  ACTIVE
+  PAUSED
+}
+
+enum ListingDraftAccountProvenance {
+  ORIGINAL_OWNER
+  RESELLER
+  THIRD_PARTY
+  OTHER
+}
+
+enum ListingDraftAccountRecoveryLevel {
+  FULL
+  PARTIAL
+  NONE
+  UNKNOWN
+}
+
+enum ListingDraftAccountRecoveryRisk {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model ListingDraft {
+  id                     String                           @id @default(uuid()) @db.Uuid
+  sellerProfileId        String                           @db.Uuid
+  categoryId             String?                          @db.Uuid
+  subcategoryId          String?                          @db.Uuid
+  productType            CatalogProductType?
+  model                  ListingDraftModel                @default(NORMAL)
+  status                 ListingDraftStatus               @default(DRAFT)
+  title                  String?
+  description            String?
+  price                  Decimal?                         @db.Decimal(12, 2)
+  stock                  Int?
+  deliveryMode           ListingDraftDeliveryMode         @default(MANUAL)
+  requestedPromotionTier ListingDraftPromotionPreference  @default(SILVER)
+  requestedSellerPlan    ListingDraftSellerPlanPreference @default(STANDARD)
+  autoMessage            String?
+  notifyInApp            Boolean                          @default(true)
+  notifyBrowser          Boolean                          @default(false)
+  notifyEmailFuture      Boolean                          @default(false)
+  notifyExternalFuture   Boolean                          @default(false)
+  wizardStep             Int                              @default(1)
+  version                Int                              @default(1)
+  submittedAt            DateTime?
+  reviewStartedAt        DateTime?
+  reviewedAt             DateTime?
+  reviewedByUserId       String?                          @db.Uuid
+  rejectionCode          String?
+  rejectionReason        String?
+  approvedAt             DateTime?
+  createdAt              DateTime                         @default(now())
+  updatedAt              DateTime                         @updatedAt
+  sellerProfile          SellerProfile                    @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
+  category               CatalogCategory?                 @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  subcategory            CatalogSubcategory?              @relation(fields: [subcategoryId], references: [id], onDelete: Restrict)
+  reviewedBy             User?                            @relation("ListingDraftReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  variants               ListingDraftVariant[]
+  attributes             ListingDraftAttributeValue[]
+  serviceDetails         ListingDraftServiceDetails?
+  accountDetails         ListingDraftAccountDetails?
+
+  @@index([sellerProfileId, status, updatedAt])
+  @@index([status, submittedAt])
+  @@index([categoryId, subcategoryId])
+}
+
+model ListingDraftVariant {
+  id          String                    @id @default(uuid()) @db.Uuid
+  draftId     String                    @db.Uuid
+  title       String
+  description String?
+  price       Decimal                   @db.Decimal(12, 2)
+  stock       Int
+  status      ListingDraftVariantStatus @default(ACTIVE)
+  sortOrder   Int                       @default(0)
+  draft       ListingDraft              @relation(fields: [draftId], references: [id], onDelete: Cascade)
+
+  @@index([draftId, sortOrder])
+}
+
+model ListingDraftAttributeValue {
+  draftId String       @db.Uuid
+  key     String
+  value   String
+  draft   ListingDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+
+  @@id([draftId, key])
+}
+
+model ListingDraftServiceDetails {
+  draftId           String                          @id @db.Uuid
+  title             String?
+  description       String?
+  pricingType       ListingDraftServicePricingType?
+  basePrice         Decimal?                        @db.Decimal(12, 2)
+  estimatedDelivery String?
+  buyerRequirements String?
+  notes             String?
+  draft             ListingDraft                    @relation(fields: [draftId], references: [id], onDelete: Cascade)
+}
+
+model ListingDraftAccountDetails {
+  draftId        String                            @id @db.Uuid
+  provenance     ListingDraftAccountProvenance?
+  recoveryLevel  ListingDraftAccountRecoveryLevel?
+  emailVerified  Boolean?
+  phoneLinked    Boolean?
+  documentLinked Boolean?
+  fullAccess     Boolean?
+  recoveryRisk   ListingDraftAccountRecoveryRisk?
+  warrantyNote   String?
+  draft          ListingDraft                      @relation(fields: [draftId], references: [id], onDelete: Cascade)
 }

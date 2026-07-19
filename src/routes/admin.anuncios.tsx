@@ -1,157 +1,185 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { toast } from "sonner";
 import { AdminLayout } from "@/components/admin/AdminLayout";
-import { AdminStatusBadge } from "@/components/admin/AdminStatusBadge";
-import { AdminRiskBadge } from "@/components/admin/AdminRiskBadge";
-import { AdminActionMenu } from "@/components/admin/AdminActionMenu";
-import { AdminFilters } from "@/components/admin/AdminFilters";
 import { EmptyState } from "@/components/common/EmptyState";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { adminService } from "@/services/adminService";
-import type { AdminListing } from "@/types";
-
-export const Route = createFileRoute("/admin/anuncios")({
-  component: AdminListingsPage,
-});
-
-const STATUS_OPTS = [
-  { value: "all", label: "Status: todos" },
-  { value: "active", label: "Ativo" },
-  { value: "paused", label: "Pausado" },
-  { value: "in_review", label: "Em análise" },
-  { value: "rejected", label: "Recusado" },
-  { value: "removed", label: "Removido" },
-];
-
-function currency(v: number) {
-  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
-
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  listingDraftApiService,
+  type ListingDraftRecord,
+  type ListingDraftStatus,
+} from "@/services/listingDraftApiService";
+export const Route = createFileRoute("/admin/anuncios")({ component: AdminListingsPage });
+const labels: Record<ListingDraftStatus, string> = {
+  DRAFT: "Rascunho",
+  PENDING_REVIEW: "Pendente",
+  UNDER_REVIEW: "Em análise",
+  REJECTED: "Rejeitado",
+  APPROVED: "Aprovado",
+};
 function AdminListingsPage() {
-  const [items, setItems] = useState<AdminListing[] | null>(null);
+  const [items, setItems] = useState<ListingDraftRecord[] | null>(null);
+  const [selected, setSelected] = useState<ListingDraftRecord | null>(null);
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("all");
-  const [risk, setRisk] = useState("all");
-
-  useEffect(() => {
-    let m = true;
-    adminService.getAdminListings().then((l) => m && setItems(l));
-    return () => {
-      m = false;
-    };
-  }, []);
-
-  const filtered = useMemo(() => {
-    if (!items) return [];
-    const q = search.trim().toLowerCase();
-    return items.filter(
-      (l) =>
-        (status === "all" || l.status === status) &&
-        (risk === "all" || l.risk === risk) &&
-        (!q || l.title.toLowerCase().includes(q) || l.sellerName.toLowerCase().includes(q)),
-    );
-  }, [items, search, status, risk]);
-
+  const [status, setStatus] = useState("PENDING_REVIEW");
+  const [reason, setReason] = useState("");
+  const [pending, setPending] = useState("");
+  const [error, setError] = useState(false);
+  const load = () => {
+    setError(false);
+    listingDraftApiService
+      .adminList({ search, status: status === "all" ? undefined : status })
+      .then((p) => setItems(p.items))
+      .catch(() => setError(true));
+  };
+  useEffect(load, [search, status]);
+  const mutate = (id: string, fn: () => Promise<ListingDraftRecord>) => {
+    setPending(id);
+    fn()
+      .then((d) => {
+        toast.success("Moderação atualizada");
+        setSelected(d);
+        load();
+      })
+      .catch((e) => toast.error(e.message))
+      .finally(() => setPending(""));
+  };
   return (
     <AdminLayout
       title="Anúncios"
-      description="Moderação visual de anúncios da plataforma."
+      description="Fila real de moderação de rascunhos. A aprovação não publica o anúncio no marketplace."
     >
-      <AdminFilters
-        search={search}
-        onSearchChange={setSearch}
-        searchPlaceholder="Buscar por título ou vendedor..."
-        status={status}
-        onStatusChange={setStatus}
-        statusOptions={STATUS_OPTS}
-        risk={risk}
-        onRiskChange={setRisk}
-      />
-
-      <div className="rounded-2xl border border-border bg-card shadow-card">
-        {!items ? (
-          <div className="p-4">
-            <Skeleton className="h-64 rounded-xl" />
-          </div>
-        ) : filtered.length === 0 ? (
-          <EmptyState icon="Package" title="Nenhum anúncio encontrado" />
-        ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Anúncio</TableHead>
-                  <TableHead>Vendedor</TableHead>
-                  <TableHead>Categoria</TableHead>
-                  <TableHead className="text-right">Preço</TableHead>
-                  <TableHead className="text-right">Estoque</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Vendas</TableHead>
-                  <TableHead className="text-right">Denúncias</TableHead>
-                  <TableHead>Risco</TableHead>
-                  <TableHead className="w-10" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((l) => (
-                  <TableRow key={l.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <img
-                          src={l.image}
-                          alt=""
-                          className="h-10 w-10 rounded-md object-cover"
-                          loading="lazy"
-                        />
-                        <p className="max-w-[240px] truncate text-sm font-medium text-foreground">
-                          {l.title}
-                        </p>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{l.sellerName}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{l.categoryName}</TableCell>
-                    <TableCell className="text-right">{currency(l.price)}</TableCell>
-                    <TableCell className="text-right">{l.stock}</TableCell>
-                    <TableCell>
-                      <AdminStatusBadge status={l.status} />
-                    </TableCell>
-                    <TableCell className="text-right">{l.sales}</TableCell>
-                    <TableCell className="text-right">
-                      {l.reports > 0 ? (
-                        <span className="font-semibold text-destructive">{l.reports}</span>
-                      ) : (
-                        <span className="text-muted-foreground">0</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <AdminRiskBadge risk={l.risk} />
-                    </TableCell>
-                    <TableCell>
-                      <AdminActionMenu
-                        actions={[
-                          { label: "Ver produto" },
-                          { label: "Aprovar" },
-                          { label: "Destacar" },
-                          { label: "Pausar" },
-                          { label: "Remover", destructive: true },
-                        ]}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
+      <div className="mb-4 flex gap-2">
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar título..."
+        />
+        <Select value={status} onValueChange={setStatus}>
+          <SelectTrigger className="w-52">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos</SelectItem>
+            {Object.entries(labels).map(([k, v]) => (
+              <SelectItem key={k} value={k}>
+                {v}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button variant="outline" onClick={load}>
+          Retry
+        </Button>
       </div>
+      {error ? (
+        <div className="rounded-2xl border p-6">Erro ao carregar fila.</div>
+      ) : items === null ? (
+        <div className="h-64 animate-pulse rounded-2xl border bg-card" />
+      ) : items.length === 0 ? (
+        <EmptyState icon="Package" title="Nenhum rascunho na fila" />
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-[1fr_420px]">
+          <div className="space-y-3">
+            {items.map((d) => (
+              <button
+                key={d.id}
+                onClick={() => setSelected(d)}
+                className="w-full rounded-2xl border bg-card p-4 text-left hover:border-primary"
+              >
+                <p className="font-semibold">{d.title || "Sem título"}</p>
+                <p className="text-sm text-muted-foreground">
+                  {labels[d.status]} · {d.seller?.storeName ?? "Loja"} ·{" "}
+                  {d.category?.name ?? "Sem categoria"} · v{d.version}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Atualizado: {new Date(d.updatedAt).toLocaleString("pt-BR")}
+                </p>
+              </button>
+            ))}
+          </div>
+          <aside className="rounded-2xl border bg-card p-4">
+            {selected ? (
+              <div className="space-y-3">
+                <h2 className="text-lg font-semibold">{selected.title || "Sem título"}</h2>
+                <p className="text-sm text-muted-foreground">
+                  {labels[selected.status]} · modelo {selected.model} · tipo{" "}
+                  {selected.productType ?? "—"}
+                </p>
+                <p className="text-sm">{selected.description}</p>
+                <p className="text-sm">
+                  Loja: {selected.seller?.storeName} · categoria: {selected.category?.name ?? "—"}/
+                  {selected.subcategory?.name ?? "—"}
+                </p>
+                <p className="text-sm">
+                  Preço {selected.price ?? "—"} · estoque {selected.stock ?? "—"} · entrega{" "}
+                  {selected.deliveryMode}
+                </p>
+                <div className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">
+                  Aprovado pela moderação. A publicação pública ainda não está disponível. Não há
+                  produto público, upload, cofre, pagamento ou KYC nesta fundação.
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    disabled={pending === selected.id || selected.status !== "PENDING_REVIEW"}
+                    onClick={() =>
+                      mutate(selected.id, () =>
+                        listingDraftApiService.startReview(selected.id, selected.version),
+                      )
+                    }
+                  >
+                    Iniciar análise
+                  </Button>
+                  <Button
+                    disabled={
+                      pending === selected.id ||
+                      !["PENDING_REVIEW", "UNDER_REVIEW"].includes(selected.status)
+                    }
+                    onClick={() =>
+                      mutate(selected.id, () =>
+                        listingDraftApiService.approve(selected.id, selected.version),
+                      )
+                    }
+                  >
+                    Aprovar
+                  </Button>
+                </div>
+                <Textarea
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="Motivo obrigatório da rejeição"
+                />
+                <Button
+                  variant="destructive"
+                  disabled={
+                    pending === selected.id ||
+                    reason.trim().length < 5 ||
+                    !["PENDING_REVIEW", "UNDER_REVIEW"].includes(selected.status)
+                  }
+                  onClick={() =>
+                    mutate(selected.id, () =>
+                      listingDraftApiService.reject(selected.id, selected.version, "OTHER", reason),
+                    )
+                  }
+                >
+                  Rejeitar
+                </Button>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Selecione um rascunho para moderar.</p>
+            )}
+          </aside>
+        </div>
+      )}
     </AdminLayout>
   );
 }

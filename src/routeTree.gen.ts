@@ -76,6 +76,7 @@ import { Route as AdminAnunciosRouteImport } from './routes/admin.anuncios'
 import { Route as VendedorAnunciosIndexRouteImport } from './routes/vendedor.anuncios.index'
 import { Route as VendedorVendasIdRouteImport } from './routes/vendedor.vendas.$id'
 import { Route as VendedorAnunciosNovoRouteImport } from './routes/vendedor.anuncios.novo'
+import { Route as VendedorAnunciosIdEditarRouteImport } from './routes/vendedor.anuncios.$id.editar'
 
 const VerificarEmailRoute = VerificarEmailRouteImport.update({
   id: '/verificar-email',
@@ -412,6 +413,12 @@ const VendedorAnunciosNovoRoute = VendedorAnunciosNovoRouteImport.update({
   path: '/novo',
   getParentRoute: () => VendedorAnunciosRoute,
 } as any)
+const VendedorAnunciosIdEditarRoute =
+  VendedorAnunciosIdEditarRouteImport.update({
+    id: '/$id/editar',
+    path: '/$id/editar',
+    getParentRoute: () => VendedorAnunciosRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -481,6 +488,7 @@ export interface FileRoutesByFullPath {
   '/vendedor/anuncios/novo': typeof VendedorAnunciosNovoRoute
   '/vendedor/vendas/$id': typeof VendedorVendasIdRoute
   '/vendedor/anuncios/': typeof VendedorAnunciosIndexRoute
+  '/vendedor/anuncios/$id/editar': typeof VendedorAnunciosIdEditarRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -547,6 +555,7 @@ export interface FileRoutesByTo {
   '/vendedor/anuncios/novo': typeof VendedorAnunciosNovoRoute
   '/vendedor/vendas/$id': typeof VendedorVendasIdRoute
   '/vendedor/anuncios': typeof VendedorAnunciosIndexRoute
+  '/vendedor/anuncios/$id/editar': typeof VendedorAnunciosIdEditarRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -617,6 +626,7 @@ export interface FileRoutesById {
   '/vendedor/anuncios/novo': typeof VendedorAnunciosNovoRoute
   '/vendedor/vendas/$id': typeof VendedorVendasIdRoute
   '/vendedor/anuncios/': typeof VendedorAnunciosIndexRoute
+  '/vendedor/anuncios/$id/editar': typeof VendedorAnunciosIdEditarRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -688,6 +698,7 @@ export interface FileRouteTypes {
     | '/vendedor/anuncios/novo'
     | '/vendedor/vendas/$id'
     | '/vendedor/anuncios/'
+    | '/vendedor/anuncios/$id/editar'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -754,6 +765,7 @@ export interface FileRouteTypes {
     | '/vendedor/anuncios/novo'
     | '/vendedor/vendas/$id'
     | '/vendedor/anuncios'
+    | '/vendedor/anuncios/$id/editar'
   id:
     | '__root__'
     | '/'
@@ -823,6 +835,7 @@ export interface FileRouteTypes {
     | '/vendedor/anuncios/novo'
     | '/vendedor/vendas/$id'
     | '/vendedor/anuncios/'
+    | '/vendedor/anuncios/$id/editar'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1339,6 +1352,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VendedorAnunciosNovoRouteImport
       parentRoute: typeof VendedorAnunciosRoute
     }
+    '/vendedor/anuncios/$id/editar': {
+      id: '/vendedor/anuncios/$id/editar'
+      path: '/$id/editar'
+      fullPath: '/vendedor/anuncios/$id/editar'
+      preLoaderRoute: typeof VendedorAnunciosIdEditarRouteImport
+      parentRoute: typeof VendedorAnunciosRoute
+    }
   }
 }
 
@@ -1408,11 +1428,13 @@ const PedidosRouteWithChildren =
 interface VendedorAnunciosRouteChildren {
   VendedorAnunciosNovoRoute: typeof VendedorAnunciosNovoRoute
   VendedorAnunciosIndexRoute: typeof VendedorAnunciosIndexRoute
+  VendedorAnunciosIdEditarRoute: typeof VendedorAnunciosIdEditarRoute
 }
 
 const VendedorAnunciosRouteChildren: VendedorAnunciosRouteChildren = {
   VendedorAnunciosNovoRoute: VendedorAnunciosNovoRoute,
   VendedorAnunciosIndexRoute: VendedorAnunciosIndexRoute,
+  VendedorAnunciosIdEditarRoute: VendedorAnunciosIdEditarRoute,
 }
 
 const VendedorAnunciosRouteWithChildren =
