@@ -232,7 +232,7 @@ export class ProductMaterializationService {
     adminUserId: string,
     mode: 'approval' | 'reconciliation',
   ) {
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`product-draft:${draftId}`}))`;
+    await this.acquireTransactionLock(tx, `product-draft:${draftId}`);
     const existing = await tx.product.findUnique({
       where: { sourceListingDraftId: draftId },
       include: productInclude,
@@ -368,9 +368,20 @@ export class ProductMaterializationService {
   private stableSuffix(id: string) {
     return id.replace(/-/g, '').slice(0, 8);
   }
+  private async acquireTransactionLock(tx: Tx, key: string): Promise<void> {
+    const rows = await tx.$queryRaw<Array<{ acquired: number }>>`
+      WITH advisory_lock AS MATERIALIZED (
+        SELECT pg_advisory_xact_lock(hashtext(${key}))
+      )
+      SELECT 1::integer AS "acquired"
+      FROM advisory_lock
+    `;
+    if (rows.length !== 1 || rows[0].acquired !== 1)
+      throw new AppError('PRODUCT_LOCK_FAILED', 'PRODUCT_LOCK_FAILED', 500, []);
+  }
   private async uniqueSlug(tx: Tx, title: string, draftId: string) {
     const base = this.slugBase(title);
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`product-slug:${base}`}))`;
+    await this.acquireTransactionLock(tx, `product-slug:${base}`);
     const suffixSource = draftId.replace(/-/g, '');
     const candidates = [
       base,

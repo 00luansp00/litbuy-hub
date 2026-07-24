@@ -16,7 +16,7 @@ import { SellerOnboardingService } from '../src/seller-onboarding/seller-onboard
 import { CatalogService } from '../src/catalog/catalog.service';
 import { ListingDraftsService } from '../src/listing-drafts/listing-drafts.service';
 import { ProductMaterializationService } from '../src/products/product-materialization.service';
-import { SecurityEventType } from '@prisma/client';
+import { SecurityEventType, type Prisma } from '@prisma/client';
 
 function sessionIdFromAccessToken(accessToken: string): string {
   const payload = JSON.parse(Buffer.from(accessToken.split('.')[1], 'base64url').toString()) as {
@@ -3409,6 +3409,7 @@ describe('Persistent listing drafts with real PostgreSQL (integration)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
   let listingDrafts: ListingDraftsService;
+  let productMaterialization: ProductMaterializationService;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -3425,6 +3426,7 @@ describe('Persistent listing drafts with real PostgreSQL (integration)', () => {
     await app.init();
     prisma = app.get(PrismaService);
     listingDrafts = app.get(ListingDraftsService);
+    productMaterialization = app.get(ProductMaterializationService);
   });
 
   beforeEach(async () => {
@@ -3561,6 +3563,74 @@ describe('Persistent listing drafts with real PostgreSQL (integration)', () => {
     });
     return { admin, sellerUser, seller, category, subcategory, draft };
   }
+
+  it('acquires transaction advisory locks without exposing void and serializes equal keys only', async () => {
+    const acquire = Reflect.get(productMaterialization, 'acquireTransactionLock') as (
+      tx: Prisma.TransactionClient,
+      key: string,
+    ) => Promise<void>;
+    const lock = (tx: Prisma.TransactionClient, key: string) =>
+      acquire.call(productMaterialization, tx, key);
+    let releaseFirst!: () => void;
+    const firstRelease = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let firstAcquired!: () => void;
+    const firstReady = new Promise<void>((resolve) => {
+      firstAcquired = resolve;
+    });
+    const first = prisma.$transaction(async (tx) => {
+      await lock(tx, 'product-lock-test:same');
+      firstAcquired();
+      await firstRelease;
+    });
+    await firstReady;
+
+    await expect(
+      prisma.$transaction((tx) => lock(tx, 'product-lock-test:different')),
+    ).resolves.toBeUndefined();
+
+    let secondPid!: number;
+    let secondStarted!: () => void;
+    const secondReady = new Promise<void>((resolve) => {
+      secondStarted = resolve;
+    });
+    let secondAcquired = false;
+    const second = prisma.$transaction(async (tx) => {
+      const [{ pid }] = await tx.$queryRaw<Array<{ pid: number }>>`SELECT pg_backend_pid() AS pid`;
+      secondPid = pid;
+      secondStarted();
+      await lock(tx, 'product-lock-test:same');
+      secondAcquired = true;
+    });
+    await secondReady;
+
+    let observedWaiting = false;
+    for (let attempt = 0; attempt < 100 && !observedWaiting; attempt += 1) {
+      const [activity] = await prisma.$queryRaw<Array<{ waitEvent: string | null }>>`
+        SELECT wait_event AS "waitEvent"
+        FROM pg_stat_activity
+        WHERE pid = ${secondPid}
+      `;
+      observedWaiting = activity?.waitEvent === 'advisory';
+      if (!observedWaiting) await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    expect(observedWaiting).toBe(true);
+    expect(secondAcquired).toBe(false);
+    releaseFirst();
+    await expect(Promise.all([first, second])).resolves.toEqual([undefined, undefined]);
+    expect(secondAcquired).toBe(true);
+
+    await expect(
+      prisma.$transaction(async (tx) => {
+        await lock(tx, 'product-lock-test:rollback');
+        throw new Error('intentional lock rollback');
+      }),
+    ).rejects.toThrow('intentional lock rollback');
+    await expect(
+      prisma.$transaction((tx) => lock(tx, 'product-lock-test:rollback')),
+    ).resolves.toBeUndefined();
+  });
 
   it('materializes one unpublished product with copied approved data and default variant', async () => {
     const { admin, draft, seller, category, subcategory } = await createProductFixture('NORMAL');
