@@ -279,8 +279,9 @@ function AdminListingsPage() {
                     : "—"}
                 </p>
                 <div className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">
-                  Aprovado pela moderação. A publicação pública ainda não está disponível. Não há
-                  produto público, upload, cofre, pagamento ou KYC nesta fundação.
+                  {selected.materializedProduct
+                    ? `Produto real gerado (${selected.materializedProduct.status}). Ele ainda não está publicado e aguarda imagens e publicação.`
+                    : "A aprovação gera um produto real interno como UNPUBLISHED. Não há produto público, upload, cofre, pagamento ou KYC nesta fundação."}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button

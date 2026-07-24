@@ -56,6 +56,7 @@ const summary = {
   reviewStartedAt: null,
   reviewedAt: null,
   approvedAt: null,
+  materializedProduct: null,
 };
 const detail = {
   ...summary,
@@ -100,6 +101,33 @@ describe("/admin/anuncios", () => {
     expect(await screen.findByText("Descrição")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Iniciar análise/i }));
     await waitFor(() => expect(api.startReview).toHaveBeenCalledWith(summary.id, summary.version));
+  });
+
+  it("only claims product generation when a materialized product reference exists", async () => {
+    await renderRoute();
+    fireEvent.click(await screen.findByText("Rascunho"));
+    expect(await screen.findByText(/A aprovação gera um produto real interno/)).toBeInTheDocument();
+    expect(screen.queryByText(/Produto real gerado \(UNPUBLISHED\)/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /produto/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /comprar/i })).not.toBeInTheDocument();
+  });
+
+  it("shows unpublished materialization without public commerce affordances", async () => {
+    api.adminGet.mockResolvedValueOnce({
+      ...detail,
+      status: "APPROVED",
+      materializedProduct: {
+        id: "44444444-4444-4444-8444-444444444444",
+        slug: "conta-epica-44444444",
+        status: "UNPUBLISHED",
+      },
+    });
+    await renderRoute();
+    fireEvent.click(await screen.findByText("Rascunho"));
+    expect(await screen.findByText(/Produto real gerado \(UNPUBLISHED\)/)).toBeInTheDocument();
+    expect(screen.queryByText(/Produto real gerado \(ACTIVE\)/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /produto/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /comprar/i })).not.toBeInTheDocument();
   });
 
   it("requires rejection reason and can reject with selected code", async () => {

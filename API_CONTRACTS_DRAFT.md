@@ -159,3 +159,9 @@ Persistent catalog taxonomy is now the source of truth for categories, subcatego
 Real: rascunhos persistentes de anúncio, edição, submissão, fila administrativa, início de análise, rejeição, correção/reenvio, aprovação de moderação, `expectedVersion`, validação pela taxonomia real e auditoria em `SecurityEvent`.
 
 Futuro/demonstrativo: aprovação não publica produto público; imagens permanecem previews locais sem upload/storage; cofre, credenciais, entrega automática real, planos pagos, pagamentos, compras e KYC não foram implementados. Ver `LISTING_DRAFT_FOUNDATION.md`.
+
+## Internal product endpoints
+
+- `GET /api/v1/seller/products` e `GET /api/v1/seller/products/:id`: requerem `SELLER` e escopam pelo `SellerProfile` autenticado.
+- `GET /api/v1/admin/products` e `GET /api/v1/admin/products/:id`: requerem `ADMIN`.
+- A aprovação de rascunho inclui `materializedProduct: { id, slug, status }` quando o produto existe; status inicial é sempre `UNPUBLISHED`.

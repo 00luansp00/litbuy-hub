@@ -16,3 +16,7 @@
 - Imagens seguem como previews locais; não há upload/storage e object URLs ou IDs locais não são enviados à API.
 - Entrega automática pode ser salva como preferência, mas submissão retorna `LISTING_AUTOMATIC_DELIVERY_UNAVAILABLE`.
 - Cofre, credenciais, códigos, KYC, pagamentos, planos pagos e cobrança de destaque não foram implementados.
+
+## Aprovação com materialização
+
+A aprovação administrativa agora materializa um produto interno `UNPUBLISHED` na mesma transação. Repetir a aprovação retorna o mesmo produto ou reconcilia rascunhos antigos aprovados sem publicação pública.

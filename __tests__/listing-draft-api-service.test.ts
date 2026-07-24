@@ -49,6 +49,7 @@ const base = {
   attributes: [],
   serviceDetails: null,
   accountDetails: null,
+  materializedProduct: null,
 };
 const seller = {
   id: "22222222-2222-4222-8222-222222222222",
@@ -75,6 +76,35 @@ describe("listing draft response parser", () => {
 
   it("accepts valid draft", () => {
     expect(parseListingDraft(base).id).toBe(base.id);
+  });
+
+  it("parses materialized product references defensively", () => {
+    const product = {
+      id: "44444444-4444-4444-8444-444444444444",
+      slug: "conta-epica-44444444",
+      status: "UNPUBLISHED",
+    };
+    expect(
+      parseListingDraft({ ...base, status: "APPROVED", materializedProduct: product })
+        .materializedProduct,
+    ).toEqual(product);
+    expect(
+      parseListingDraft({ ...base, status: "APPROVED", materializedProduct: null })
+        .materializedProduct,
+    ).toBeNull();
+    expect(parseListingDraft({ ...base, status: "APPROVED" }).materializedProduct).toBeNull();
+    expect(() =>
+      parseListingDraft({ ...base, materializedProduct: { ...product, id: "bad" } }),
+    ).toThrow(/Resposta de rascunho inválida/);
+    expect(() =>
+      parseListingDraft({ ...base, materializedProduct: { ...product, slug: "" } }),
+    ).toThrow(/Resposta de rascunho inválida/);
+    expect(() =>
+      parseListingDraft({ ...base, materializedProduct: { ...product, slug: "Conta Épica" } }),
+    ).toThrow(/Resposta de rascunho inválida/);
+    expect(() =>
+      parseListingDraft({ ...base, materializedProduct: { ...product, status: "PUBLISHED" } }),
+    ).toThrow(/Resposta de rascunho inválida/);
   });
 
   it("rejects malformed core fields", () => {
