@@ -3781,7 +3781,7 @@ describe('Persistent listing drafts with real PostgreSQL (integration)', () => {
       version: draft.version,
       approvedAt: null,
       reviewedAt: null,
-      reviewedById: null,
+      reviewedByUserId: null,
     });
 
     const auditSpy = jest
@@ -3815,7 +3815,7 @@ describe('Persistent listing drafts with real PostgreSQL (integration)', () => {
       version: draft.version,
       approvedAt: null,
       reviewedAt: null,
-      reviewedById: null,
+      reviewedByUserId: null,
     });
     await expect(
       prisma.securityEvent.count({
