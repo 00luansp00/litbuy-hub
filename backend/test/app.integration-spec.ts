@@ -3769,13 +3769,37 @@ describe('Persistent listing drafts with real PostgreSQL (integration)', () => {
     await expect(prisma.product.count({ where: { sourceListingDraftId: draft.id } })).resolves.toBe(
       0,
     );
-    const spy = jest
-      .spyOn(prisma.securityEvent, 'create')
-      .mockRejectedValueOnce(new Error('audit failed'));
     await expect(
-      listingDrafts.approve(admin.id, draft.id, { expectedVersion: draft.version }),
-    ).rejects.toThrow('audit failed');
-    spy.mockRestore();
+      prisma.productVariant.count({
+        where: { product: { sourceListingDraftId: draft.id } },
+      }),
+    ).resolves.toBe(0);
+    await expect(
+      prisma.listingDraft.findUniqueOrThrow({ where: { id: draft.id } }),
+    ).resolves.toMatchObject({
+      status: 'UNDER_REVIEW',
+      version: draft.version,
+      approvedAt: null,
+      reviewedAt: null,
+      reviewedById: null,
+    });
+
+    const auditSpy = jest
+      .spyOn(
+        listingDrafts as unknown as {
+          audit: (...args: unknown[]) => Promise<void>;
+        },
+        'audit',
+      )
+      .mockRejectedValueOnce(new Error('audit failed'));
+    try {
+      await expect(
+        listingDrafts.approve(admin.id, draft.id, { expectedVersion: draft.version }),
+      ).rejects.toThrow('audit failed');
+      expect(auditSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      auditSpy.mockRestore();
+    }
     await expect(prisma.product.count({ where: { sourceListingDraftId: draft.id } })).resolves.toBe(
       0,
     );
@@ -3786,7 +3810,21 @@ describe('Persistent listing drafts with real PostgreSQL (integration)', () => {
     ).resolves.toBe(0);
     await expect(
       prisma.listingDraft.findUniqueOrThrow({ where: { id: draft.id } }),
-    ).resolves.toMatchObject({ status: 'UNDER_REVIEW' });
+    ).resolves.toMatchObject({
+      status: 'UNDER_REVIEW',
+      version: draft.version,
+      approvedAt: null,
+      reviewedAt: null,
+      reviewedById: null,
+    });
+    await expect(
+      prisma.securityEvent.count({
+        where: {
+          eventType: { in: ['PRODUCT_MATERIALIZED', 'LISTING_DRAFT_APPROVED'] },
+          metadata: { path: ['draftId'], equals: draft.id },
+        },
+      }),
+    ).resolves.toBe(0);
   });
 
   it('reconciles old approved drafts without product and keeps seller product access scoped to active owners', async () => {
