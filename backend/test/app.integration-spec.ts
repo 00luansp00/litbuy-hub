@@ -3481,12 +3481,23 @@ describe('Persistent listing drafts with real PostgreSQL (integration)', () => {
         status: 'ACTIVE',
       },
     });
+    await prisma.catalogAttribute.create({
+      data: {
+        subcategoryId: subcategory.id,
+        key: 'rank',
+        label: 'Rank',
+        inputType: 'TEXT',
+        required: true,
+        status: 'ACTIVE',
+        sortOrder: 0,
+      },
+    });
     const draft = await prisma.listingDraft.create({
       data: {
         sellerProfileId: seller.id,
         categoryId: category.id,
         subcategoryId: subcategory.id,
-        productType: 'ACCOUNT',
+        productType: model === 'SERVICE' ? 'SERVICE' : 'ACCOUNT',
         model,
         status: 'UNDER_REVIEW',
         title: model === 'SERVICE' ? null : title,
@@ -3698,6 +3709,11 @@ describe('Persistent listing drafts with real PostgreSQL (integration)', () => {
     await expect(prisma.product.count({ where: { sourceListingDraftId: draft.id } })).resolves.toBe(
       0,
     );
+    await expect(
+      prisma.productVariant.count({
+        where: { product: { sourceListingDraftId: draft.id } },
+      }),
+    ).resolves.toBe(0);
     await expect(
       prisma.listingDraft.findUniqueOrThrow({ where: { id: draft.id } }),
     ).resolves.toMatchObject({ status: 'UNDER_REVIEW' });
