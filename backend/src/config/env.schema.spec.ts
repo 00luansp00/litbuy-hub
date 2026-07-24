@@ -53,6 +53,13 @@ describe('validateEnvironment', () => {
     PUBLIC_API_ORIGIN: 'http://localhost:3001',
     AUTH_COOKIE_TOPOLOGY: 'same-host',
     AUTH_EXTERNAL_DELIVERY_TIMEOUT_MS: '5000',
+    PRODUCT_IMAGE_S3_ENDPOINT: 'http://localhost:9000',
+    PRODUCT_IMAGE_S3_REGION: 'us-east-1',
+    PRODUCT_IMAGE_S3_BUCKET: 'litbuy-product-images-test',
+    PRODUCT_IMAGE_S3_ACCESS_KEY: 'test-access',
+    PRODUCT_IMAGE_S3_SECRET_KEY: 'test-secret',
+    PRODUCT_IMAGE_S3_FORCE_PATH_STYLE: 'true',
+    PRODUCT_IMAGE_UPLOAD_URL_TTL_SECONDS: '300',
   };
 
   it('accepts the required backend environment variables', () => {

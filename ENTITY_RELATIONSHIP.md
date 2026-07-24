@@ -121,3 +121,4 @@ Futuro/demonstrativo: aprovação não publica produto público; imagens permane
 ## Product materialization relationship
 
 `ListingDraft (APPROVED) 1 -> 0..1 Product` via `Product.sourceListingDraftId` único. O produto também referencia `SellerProfile`, `CatalogCategory` e opcionalmente `CatalogSubcategory` sem cascata destrutiva.
+`Product 1 ── N ProductImage` (required product relation, restricted deletion).
