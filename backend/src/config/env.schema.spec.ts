@@ -60,6 +60,7 @@ describe('validateEnvironment', () => {
     PRODUCT_IMAGE_S3_SECRET_KEY: 'test-secret',
     PRODUCT_IMAGE_S3_FORCE_PATH_STYLE: 'true',
     PRODUCT_IMAGE_UPLOAD_URL_TTL_SECONDS: '300',
+    PRODUCT_IMAGE_READ_URL_TTL_SECONDS: '120',
   };
 
   it('accepts the required backend environment variables', () => {

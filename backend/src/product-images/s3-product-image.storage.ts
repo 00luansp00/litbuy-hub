@@ -1,5 +1,6 @@
 import {
   DeleteObjectCommand,
+  GetObjectCommand,
   HeadObjectCommand,
   S3Client,
   PutObjectCommand,
@@ -14,9 +15,11 @@ export class S3ProductImageStorage implements ProductImageStorage {
   private readonly client: S3Client;
   private readonly bucket: string;
   private readonly expires: number;
+  private readonly readExpires: number;
   constructor(config: ConfigService) {
     this.bucket = config.get('PRODUCT_IMAGE_S3_BUCKET', 'litbuy-product-images');
     this.expires = Number(config.get('PRODUCT_IMAGE_UPLOAD_URL_TTL_SECONDS', '300'));
+    this.readExpires = Number(config.get('PRODUCT_IMAGE_READ_URL_TTL_SECONDS', '120'));
     this.client = new S3Client({
       endpoint: config.get('PRODUCT_IMAGE_S3_ENDPOINT'),
       region: config.get('PRODUCT_IMAGE_S3_REGION', 'us-east-1'),
@@ -26,6 +29,14 @@ export class S3ProductImageStorage implements ProductImageStorage {
         secretAccessKey: config.getOrThrow('PRODUCT_IMAGE_S3_SECRET_KEY'),
       },
     });
+  }
+  async createReadUrl(key: string) {
+    const readUrl = await getSignedUrl(
+      this.client,
+      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+      { expiresIn: this.readExpires },
+    );
+    return { readUrl, expiresAt: new Date(Date.now() + this.readExpires * 1000) };
   }
   async createUploadUrl(input: { key: string; contentType: string }) {
     const uploadUrl = await getSignedUrl(

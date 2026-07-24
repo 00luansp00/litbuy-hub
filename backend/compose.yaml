@@ -37,7 +37,7 @@ services:
     ports: ['${MINIO_PORT:-9000}:9000', '${MINIO_CONSOLE_PORT:-9001}:9001']
     volumes: [minio_data:/data]
     healthcheck:
-      test: ['CMD', 'mc', 'ready', 'local']
+      test: ['CMD-SHELL', 'curl -fsS http://localhost:9000/minio/health/live >/dev/null']
       interval: 5s
       timeout: 5s
       retries: 10

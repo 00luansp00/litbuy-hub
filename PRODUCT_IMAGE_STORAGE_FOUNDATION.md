@@ -29,3 +29,9 @@ This foundation does **not** publish products or change `UNPUBLISHED`, expose a 
 ## Current limitations
 
 Object deletion precedes the database tombstone, so a transient database failure can require reconciliation. Pending intents need a future expiry/garbage-collection worker. Content is validated from S3 metadata, not decoded or scanned. Production provider and CDN remain deliberately undecided.
+
+## Reliability follow-up
+
+Upload intentions now expire explicitly and are tombstoned opportunistically under the per-product transaction lock. Presigning happens before persistence, while ownership, active seller status, `UNPUBLISHED` status, capacity and order are revalidated in the transaction. Completion cannot revive deleted or expired metadata; invalid metadata is tombstoned before best-effort object cleanup. Deletion commits its tombstone, audit record and deterministic cover promotion before idempotent S3 cleanup. Seller and admin listings expose only short-lived signed GET URLs for READY images.
+
+The seller's internal approved-listing screen includes upload progress, reload-safe signed previews, cover selection, ordering and deletion. It remains disconnected from public product routes, catalog, cart and checkout.

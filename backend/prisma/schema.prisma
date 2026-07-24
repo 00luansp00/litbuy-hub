@@ -729,22 +729,24 @@ model Product {
 }
 
 model ProductImage {
-  id          String             @id @default(uuid()) @db.Uuid
-  productId   String             @db.Uuid
-  objectKey   String             @unique
-  status      ProductImageStatus @default(PENDING_UPLOAD)
-  contentType String
-  sizeBytes   Int
-  altText     String?
-  sortOrder   Int
-  isCover     Boolean            @default(false)
-  uploadedAt  DateTime?
-  deletedAt   DateTime?
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
-  product     Product            @relation(fields: [productId], references: [id], onDelete: Restrict)
+  id              String             @id @default(uuid()) @db.Uuid
+  productId       String             @db.Uuid
+  objectKey       String             @unique
+  status          ProductImageStatus @default(PENDING_UPLOAD)
+  contentType     String
+  sizeBytes       Int
+  altText         String?
+  sortOrder       Int
+  isCover         Boolean            @default(false)
+  uploadedAt      DateTime?
+  uploadExpiresAt DateTime
+  deletedAt       DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  product         Product            @relation(fields: [productId], references: [id], onDelete: Restrict)
 
   @@index([productId, status, sortOrder])
+  @@index([productId, status, uploadExpiresAt])
 }
 
 model ProductVariant {

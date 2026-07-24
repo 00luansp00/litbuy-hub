@@ -2,7 +2,9 @@ import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import {
   Prisma,
+  ProductImage,
   ProductImageStatus,
+  ProductStatus,
   SecurityEventOutcome,
   SecurityEventType,
   SellerProfileStatus,
@@ -12,23 +14,35 @@ import { PrismaService } from '../database/prisma.service';
 import { PRODUCT_IMAGE_LIMIT, nextCover, objectKeyFor, validateImage } from './product-image.rules';
 import { PRODUCT_IMAGE_STORAGE, ProductImageStorage } from './product-image.storage';
 
+type Tx = Prisma.TransactionClient;
 @Injectable()
 export class ProductImagesService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(PRODUCT_IMAGE_STORAGE) private readonly storage: ProductImageStorage,
   ) {}
-  private map(image: {
-    id: string;
-    status: ProductImageStatus;
-    contentType: string;
-    sizeBytes: number;
-    altText: string | null;
-    sortOrder: number;
-    isCover: boolean;
-    uploadedAt: Date | null;
-    createdAt: Date;
-  }) {
+  private async acquireTransactionLock(tx: Tx, key: string): Promise<void> {
+    await tx.$queryRaw<
+      { acquired: number }[]
+    >`WITH advisory_lock AS MATERIALIZED (SELECT pg_advisory_xact_lock(hashtext(${key}))) SELECT 1::integer AS "acquired" FROM advisory_lock`;
+  }
+  private async owner(db: PrismaService | Tx, userId: string, productId: string, mutation = false) {
+    const product = await db.product.findFirst({
+      where: { id: productId, sellerProfile: { userId, status: SellerProfileStatus.ACTIVE } },
+      include: { sellerProfile: true },
+    });
+    if (!product)
+      throw new AppError('PRODUCT_NOT_FOUND', 'PRODUCT_NOT_FOUND', HttpStatus.NOT_FOUND, []);
+    if (mutation && product.status !== ProductStatus.UNPUBLISHED)
+      throw new AppError(
+        'PRODUCT_IMAGE_STATUS_INCOMPATIBLE',
+        'PRODUCT_IMAGE_STATUS_INCOMPATIBLE',
+        409,
+        [],
+      );
+    return product;
+  }
+  private base(image: ProductImage) {
     return {
       id: image.id,
       status: image.status,
@@ -41,14 +55,25 @@ export class ProductImagesService {
       createdAt: image.createdAt.toISOString(),
     };
   }
-  private async owner(userId: string, productId: string) {
-    const product = await this.prisma.product.findFirst({
-      where: { id: productId, sellerProfile: { userId, status: SellerProfileStatus.ACTIVE } },
-      include: { sellerProfile: true },
+  private async map(image: ProductImage) {
+    if (image.status !== ProductImageStatus.READY)
+      return { ...this.base(image), viewUrl: null, viewExpiresAt: null };
+    const view = await this.storage.createReadUrl(image.objectKey);
+    return {
+      ...this.base(image),
+      viewUrl: view.readUrl,
+      viewExpiresAt: view.expiresAt.toISOString(),
+    };
+  }
+  private async expire(tx: Tx, productId: string, now: Date) {
+    await tx.productImage.updateMany({
+      where: {
+        productId,
+        status: ProductImageStatus.PENDING_UPLOAD,
+        uploadExpiresAt: { lte: now },
+      },
+      data: { status: ProductImageStatus.DELETED, deletedAt: now },
     });
-    if (!product)
-      throw new AppError('PRODUCT_NOT_FOUND', 'PRODUCT_NOT_FOUND', HttpStatus.NOT_FOUND, []);
-    return product;
   }
   async createIntent(
     userId: string,
@@ -56,9 +81,18 @@ export class ProductImagesService {
     input: { contentType: string; sizeBytes: number; altText?: string },
   ) {
     validateImage(input.contentType, input.sizeBytes);
-    const product = await this.owner(userId, productId);
-    const image = await this.prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`product-images:${productId}`}, 0))`;
+    await this.owner(this.prisma, userId, productId, true);
+    const id = randomUUID();
+    const objectKey = objectKeyFor(productId, id, input.contentType);
+    const signed = await this.storage.createUploadUrl({
+      key: objectKey,
+      contentType: input.contentType,
+    });
+    await this.prisma.$transaction(async (tx) => {
+      await this.acquireTransactionLock(tx, `product-images:${productId}`);
+      const product = await this.owner(tx, userId, productId, true);
+      const now = new Date();
+      await this.expire(tx, productId, now);
       const count = await tx.productImage.count({
         where: {
           productId,
@@ -67,16 +101,20 @@ export class ProductImagesService {
       });
       if (count >= PRODUCT_IMAGE_LIMIT)
         throw new AppError('PRODUCT_IMAGE_LIMIT_REACHED', 'PRODUCT_IMAGE_LIMIT_REACHED', 409, []);
-      const id = randomUUID();
-      const created = await tx.productImage.create({
+      const maximum = await tx.productImage.aggregate({
+        where: { productId, status: { not: ProductImageStatus.DELETED } },
+        _max: { sortOrder: true },
+      });
+      const image = await tx.productImage.create({
         data: {
           id,
           productId,
-          objectKey: objectKeyFor(productId, id, input.contentType),
+          objectKey,
           contentType: input.contentType,
           sizeBytes: input.sizeBytes,
           altText: input.altText?.trim() || null,
-          sortOrder: count,
+          sortOrder: (maximum._max.sortOrder ?? -1) + 1,
+          uploadExpiresAt: signed.expiresAt,
         },
       });
       await this.audit(
@@ -84,63 +122,56 @@ export class ProductImagesService {
         userId,
         SecurityEventType.PRODUCT_IMAGE_UPLOAD_INTENT_CREATED,
         product.sellerProfileId,
-        created,
+        image,
         SecurityEventOutcome.PENDING,
       );
-      return created;
-    });
-    const signed = await this.storage.createUploadUrl({
-      key: image.objectKey,
-      contentType: image.contentType,
     });
     return {
-      imageId: image.id,
+      imageId: id,
       uploadUrl: signed.uploadUrl,
       method: 'PUT',
-      headers: { 'Content-Type': image.contentType },
+      headers: { 'Content-Type': input.contentType },
       expiresAt: signed.expiresAt.toISOString(),
     };
   }
   async complete(userId: string, productId: string, imageId: string) {
-    const product = await this.owner(userId, productId);
-    const image = await this.prisma.productImage.findFirst({ where: { id: imageId, productId } });
-    if (!image || image.status === ProductImageStatus.DELETED)
+    await this.owner(this.prisma, userId, productId, true);
+    const initial = await this.prisma.productImage.findFirst({ where: { id: imageId, productId } });
+    if (!initial || initial.status === ProductImageStatus.DELETED)
       throw new AppError('PRODUCT_IMAGE_NOT_FOUND', 'PRODUCT_IMAGE_NOT_FOUND', 404, []);
-    if (image.status === ProductImageStatus.READY) return this.map(image);
-    const metadata = await this.storage.headObject(image.objectKey);
-    if (
-      !metadata ||
-      metadata.sizeBytes !== image.sizeBytes ||
-      metadata.contentType !== image.contentType
-    ) {
-      if (metadata) await this.storage.deleteObject(image.objectKey);
-      await this.prisma.securityEvent.create({
-        data: {
+    if (initial.status === ProductImageStatus.READY) return this.map(initial);
+    const metadata = await this.storage.headObject(initial.objectKey);
+    const valid =
+      metadata?.sizeBytes === initial.sizeBytes && metadata.contentType === initial.contentType;
+    const result = await this.prisma.$transaction(async (tx) => {
+      await this.acquireTransactionLock(tx, `product-images:${productId}`);
+      const product = await this.owner(tx, userId, productId, true);
+      const image = await tx.productImage.findFirst({ where: { id: imageId, productId } });
+      if (!image || image.status === ProductImageStatus.DELETED)
+        throw new AppError('PRODUCT_IMAGE_NOT_FOUND', 'PRODUCT_IMAGE_NOT_FOUND', 404, []);
+      if (image.status === ProductImageStatus.READY) return image;
+      const now = new Date();
+      if (image.uploadExpiresAt <= now || !valid) {
+        const deleted = await tx.productImage.update({
+          where: { id: imageId },
+          data: { status: ProductImageStatus.DELETED, deletedAt: now },
+        });
+        await this.audit(
+          tx,
           userId,
-          eventType: SecurityEventType.PRODUCT_IMAGE_UPLOAD_REJECTED,
-          outcome: SecurityEventOutcome.BLOCKED,
-          metadata: {
-            productId,
-            imageId,
-            sellerProfileId: product.sellerProfileId,
-            sizeBytes: image.sizeBytes,
-            contentType: image.contentType,
-            result: 'metadata_mismatch',
-          },
-        },
-      });
-      throw new AppError('PRODUCT_IMAGE_UPLOAD_INVALID', 'PRODUCT_IMAGE_UPLOAD_INVALID', 422, []);
-    }
-    return this.prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`product-images:${productId}`}, 0))`;
-      const current = await tx.productImage.findUniqueOrThrow({ where: { id: imageId } });
-      if (current.status === ProductImageStatus.READY) return this.map(current);
+          SecurityEventType.PRODUCT_IMAGE_UPLOAD_REJECTED,
+          product.sellerProfileId,
+          deleted,
+          SecurityEventOutcome.BLOCKED,
+        );
+        return null;
+      }
       const hasCover = await tx.productImage.count({
         where: { productId, status: ProductImageStatus.READY, isCover: true },
       });
       const ready = await tx.productImage.update({
         where: { id: imageId },
-        data: { status: ProductImageStatus.READY, uploadedAt: new Date(), isCover: hasCover === 0 },
+        data: { status: ProductImageStatus.READY, uploadedAt: now, isCover: hasCover === 0 },
       });
       await this.audit(
         tx,
@@ -150,11 +181,16 @@ export class ProductImagesService {
         ready,
         SecurityEventOutcome.SUCCESS,
       );
-      return this.map(ready);
+      return ready;
     });
+    if (!result) {
+      if (metadata) await this.storage.deleteObject(initial.objectKey).catch(() => undefined);
+      throw new AppError('PRODUCT_IMAGE_UPLOAD_INVALID', 'PRODUCT_IMAGE_UPLOAD_INVALID', 422, []);
+    }
+    return this.map(result);
   }
   async listSeller(userId: string, productId: string) {
-    await this.owner(userId, productId);
+    await this.owner(this.prisma, userId, productId);
     return this.list(productId);
   }
   async listAdmin(productId: string) {
@@ -167,16 +203,19 @@ export class ProductImagesService {
       where: { productId, status: { not: ProductImageStatus.DELETED } },
       orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
     });
-    return { items: images.map((x) => this.map(x)), limit: PRODUCT_IMAGE_LIMIT };
+    return {
+      items: await Promise.all(images.map((image) => this.map(image))),
+      limit: PRODUCT_IMAGE_LIMIT,
+    };
   }
   async cover(userId: string, productId: string, imageId: string) {
-    const product = await this.owner(userId, productId);
-    return this.prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`product-images:${productId}`}, 0))`;
-      const image = await tx.productImage.findFirst({
+    const image = await this.prisma.$transaction(async (tx) => {
+      await this.acquireTransactionLock(tx, `product-images:${productId}`);
+      const product = await this.owner(tx, userId, productId, true);
+      const found = await tx.productImage.findFirst({
         where: { id: imageId, productId, status: ProductImageStatus.READY },
       });
-      if (!image) throw new AppError('PRODUCT_IMAGE_NOT_FOUND', 'PRODUCT_IMAGE_NOT_FOUND', 404, []);
+      if (!found) throw new AppError('PRODUCT_IMAGE_NOT_FOUND', 'PRODUCT_IMAGE_NOT_FOUND', 404, []);
       await tx.productImage.updateMany({
         where: { productId, isCover: true },
         data: { isCover: false },
@@ -193,24 +232,27 @@ export class ProductImagesService {
         updated,
         SecurityEventOutcome.SUCCESS,
       );
-      return this.map(updated);
+      return updated;
     });
+    return this.map(image);
   }
   async reorder(userId: string, productId: string, ids: string[]) {
-    const product = await this.owner(userId, productId);
     if (new Set(ids).size !== ids.length)
       throw new AppError('PRODUCT_IMAGE_ORDER_INVALID', 'PRODUCT_IMAGE_ORDER_INVALID', 400, []);
     await this.prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`product-images:${productId}`}, 0))`;
+      await this.acquireTransactionLock(tx, `product-images:${productId}`);
+      const product = await this.owner(tx, userId, productId, true);
       const current = await tx.productImage.findMany({
         where: { productId, status: { not: ProductImageStatus.DELETED } },
         select: { id: true },
       });
-      if (current.length !== ids.length || ids.some((id) => !current.some((x) => x.id === id)))
+      if (
+        current.length !== ids.length ||
+        ids.some((id) => !current.some((item) => item.id === id))
+      )
         throw new AppError('PRODUCT_IMAGE_ORDER_INVALID', 'PRODUCT_IMAGE_ORDER_INVALID', 400, []);
-      await Promise.all(
-        ids.map((id, sortOrder) => tx.productImage.update({ where: { id }, data: { sortOrder } })),
-      );
+      for (const [sortOrder, id] of ids.entries())
+        await tx.productImage.update({ where: { id }, data: { sortOrder } });
       await tx.securityEvent.create({
         data: {
           userId,
@@ -223,54 +265,49 @@ export class ProductImagesService {
     return this.list(productId);
   }
   async remove(userId: string, productId: string, imageId: string) {
-    const product = await this.owner(userId, productId);
-    const existing = await this.prisma.productImage.findFirst({
-      where: { id: imageId, productId },
-    });
-    if (!existing)
-      throw new AppError('PRODUCT_IMAGE_NOT_FOUND', 'PRODUCT_IMAGE_NOT_FOUND', 404, []);
-    if (existing.status === ProductImageStatus.DELETED) return { deleted: true };
-    await this.storage.deleteObject(existing.objectKey);
-    await this.prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`product-images:${productId}`}, 0))`;
-      const current = await tx.productImage.findUniqueOrThrow({ where: { id: imageId } });
-      if (current.status === ProductImageStatus.DELETED) return;
-      await tx.productImage.update({
-        where: { id: imageId },
-        data: { status: ProductImageStatus.DELETED, deletedAt: new Date(), isCover: false },
-      });
-      if (current.isCover) {
-        const candidates = await tx.productImage.findMany({
-          where: { productId, status: ProductImageStatus.READY, id: { not: imageId } },
-          select: { id: true, sortOrder: true },
+    const objectKey = await this.prisma.$transaction(async (tx) => {
+      await this.acquireTransactionLock(tx, `product-images:${productId}`);
+      const product = await this.owner(tx, userId, productId, true);
+      const image = await tx.productImage.findFirst({ where: { id: imageId, productId } });
+      if (!image) throw new AppError('PRODUCT_IMAGE_NOT_FOUND', 'PRODUCT_IMAGE_NOT_FOUND', 404, []);
+      if (image.status !== ProductImageStatus.DELETED) {
+        await tx.productImage.update({
+          where: { id: imageId },
+          data: { status: ProductImageStatus.DELETED, deletedAt: new Date(), isCover: false },
         });
-        const promoted = nextCover(candidates);
-        if (promoted)
-          await tx.productImage.update({ where: { id: promoted.id }, data: { isCover: true } });
+        if (image.isCover) {
+          const candidates = await tx.productImage.findMany({
+            where: { productId, status: ProductImageStatus.READY, id: { not: imageId } },
+            select: { id: true, sortOrder: true },
+          });
+          const promoted = nextCover(candidates);
+          if (promoted)
+            await tx.productImage.update({ where: { id: promoted.id }, data: { isCover: true } });
+        }
+        await this.audit(
+          tx,
+          userId,
+          SecurityEventType.PRODUCT_IMAGE_DELETED,
+          product.sellerProfileId,
+          image,
+          SecurityEventOutcome.SUCCESS,
+        );
       }
-      await this.audit(
-        tx,
-        userId,
-        SecurityEventType.PRODUCT_IMAGE_DELETED,
-        product.sellerProfileId,
-        current,
-        SecurityEventOutcome.SUCCESS,
-      );
+      return image.objectKey;
     });
+    try {
+      await this.storage.deleteObject(objectKey);
+    } catch {
+      throw new AppError('PRODUCT_IMAGE_CLEANUP_PENDING', 'PRODUCT_IMAGE_CLEANUP_PENDING', 503, []);
+    }
     return { deleted: true };
   }
   private audit(
-    tx: Prisma.TransactionClient,
+    tx: Tx,
     userId: string,
     eventType: SecurityEventType,
     sellerProfileId: string,
-    image: {
-      id: string;
-      productId: string;
-      objectKey: string;
-      sizeBytes: number;
-      contentType: string;
-    },
+    image: Pick<ProductImage, 'id' | 'productId' | 'objectKey' | 'sizeBytes' | 'contentType'>,
     outcome: SecurityEventOutcome,
   ) {
     return tx.securityEvent.create({

@@ -106,6 +106,14 @@ jobs:
       PUBLIC_FRONTEND_ORIGIN: http://localhost:3000
       PUBLIC_API_ORIGIN: http://localhost:3001
       AUTH_COOKIE_TOPOLOGY: same-host
+      PRODUCT_IMAGE_S3_ENDPOINT: http://localhost:9000
+      PRODUCT_IMAGE_S3_REGION: us-east-1
+      PRODUCT_IMAGE_S3_BUCKET: litbuy-product-images-test
+      PRODUCT_IMAGE_S3_ACCESS_KEY: litbuy_ci_minio_access
+      PRODUCT_IMAGE_S3_SECRET_KEY: litbuy_ci_minio_secret_not_for_production
+      PRODUCT_IMAGE_S3_FORCE_PATH_STYLE: "true"
+      PRODUCT_IMAGE_UPLOAD_URL_TTL_SECONDS: "120"
+      PRODUCT_IMAGE_READ_URL_TTL_SECONDS: "120"
     defaults:
       run:
         working-directory: backend
@@ -171,6 +179,18 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      minio:
+        image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+        env:
+          MINIO_ROOT_USER: litbuy_ci_minio_access
+          MINIO_ROOT_PASSWORD: litbuy_ci_minio_secret_not_for_production
+        ports:
+          - 9000:9000
+        options: >-
+          --health-cmd "curl -fsS http://localhost:9000/minio/health/live"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     env:
       NODE_ENV: test
       PORT: "3001"
@@ -222,6 +242,16 @@ jobs:
       PUBLIC_FRONTEND_ORIGIN: http://localhost:3000
       PUBLIC_API_ORIGIN: http://localhost:3001
       AUTH_COOKIE_TOPOLOGY: same-host
+      PRODUCT_IMAGE_S3_ENDPOINT: http://localhost:9000
+      PRODUCT_IMAGE_S3_REGION: us-east-1
+      PRODUCT_IMAGE_S3_BUCKET: litbuy-product-images-test
+      PRODUCT_IMAGE_S3_ACCESS_KEY: litbuy_ci_minio_access
+      PRODUCT_IMAGE_S3_SECRET_KEY: litbuy_ci_minio_secret_not_for_production
+      PRODUCT_IMAGE_S3_FORCE_PATH_STYLE: "true"
+      PRODUCT_IMAGE_UPLOAD_URL_TTL_SECONDS: "120"
+      PRODUCT_IMAGE_READ_URL_TTL_SECONDS: "120"
+      MINIO_ROOT_USER: litbuy_ci_minio_access
+      MINIO_ROOT_PASSWORD: litbuy_ci_minio_secret_not_for_production
     defaults:
       run:
         working-directory: backend
@@ -239,6 +269,17 @@ jobs:
 
       - name: Generate Prisma client
         run: bun run prisma:generate
+
+      - name: Create and verify MinIO bucket
+        run: |
+          docker run --rm --network host \
+            -e MC_HOST_local=http://$MINIO_ROOT_USER:$MINIO_ROOT_PASSWORD@localhost:9000 \
+            minio/mc:RELEASE.2025-04-16T18-13-26Z \
+            mb --ignore-existing local/$PRODUCT_IMAGE_S3_BUCKET
+          docker run --rm --network host \
+            -e MC_HOST_local=http://$MINIO_ROOT_USER:$MINIO_ROOT_PASSWORD@localhost:9000 \
+            minio/mc:RELEASE.2025-04-16T18-13-26Z \
+            stat local/$PRODUCT_IMAGE_S3_BUCKET
 
       - name: Deploy Prisma migrations
         run: bun run prisma:migrate:deploy

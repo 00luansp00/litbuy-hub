@@ -8,6 +8,7 @@ export interface ProductImageStorage {
     key: string;
     contentType: string;
   }): Promise<{ uploadUrl: string; expiresAt: Date }>;
+  createReadUrl(key: string): Promise<{ readUrl: string; expiresAt: Date }>;
   headObject(key: string): Promise<StoredObjectMetadata | null>;
   deleteObject(key: string): Promise<void>;
 }

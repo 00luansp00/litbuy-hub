@@ -55,7 +55,8 @@ type ManagedEnvKey =
   | 'PRODUCT_IMAGE_S3_ACCESS_KEY'
   | 'PRODUCT_IMAGE_S3_SECRET_KEY'
   | 'PRODUCT_IMAGE_S3_FORCE_PATH_STYLE'
-  | 'PRODUCT_IMAGE_UPLOAD_URL_TTL_SECONDS';
+  | 'PRODUCT_IMAGE_UPLOAD_URL_TTL_SECONDS'
+  | 'PRODUCT_IMAGE_READ_URL_TTL_SECONDS';
 
 const defaultTestEnv: Record<ManagedEnvKey, string> = {
   NODE_ENV: 'test',
@@ -115,6 +116,7 @@ const defaultTestEnv: Record<ManagedEnvKey, string> = {
   PRODUCT_IMAGE_S3_SECRET_KEY: 'test-secret',
   PRODUCT_IMAGE_S3_FORCE_PATH_STYLE: 'true',
   PRODUCT_IMAGE_UPLOAD_URL_TTL_SECONDS: '300',
+  PRODUCT_IMAGE_READ_URL_TTL_SECONDS: '120',
 };
 
 function resolveTestEnvValue(key: ManagedEnvKey, overrides: Partial<NodeJS.ProcessEnv>): string {
@@ -252,6 +254,10 @@ export function applyTestEnv(overrides: Partial<NodeJS.ProcessEnv> = {}): void {
   );
   process.env.PRODUCT_IMAGE_UPLOAD_URL_TTL_SECONDS = resolveTestEnvValue(
     'PRODUCT_IMAGE_UPLOAD_URL_TTL_SECONDS',
+    overrides,
+  );
+  process.env.PRODUCT_IMAGE_READ_URL_TTL_SECONDS = resolveTestEnvValue(
+    'PRODUCT_IMAGE_READ_URL_TTL_SECONDS',
     overrides,
   );
 }
