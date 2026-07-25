@@ -146,3 +146,6 @@ Futuro/demonstrativo: aprovação não publica produto público; imagens permane
 
 - `ListingDraft` aprovado passa a gerar exatamente um `Product` interno `UNPUBLISHED`, transacional e idempotente.
 - Publicação pública, imagens, compra, pedido, pagamento e estoque reservado continuam em etapas futuras.
+# Product images (implemented foundation)
+
+S3-compatible direct upload, server-side confirmation, internal seller management, and read-only admin inspection are real. Publication/CDN/transformation remain future work; see `PRODUCT_IMAGE_STORAGE_FOUNDATION.md`.

@@ -154,6 +154,25 @@ export class EnvironmentVariables {
   @IsString() @IsNotEmpty() CURRENT_SELLER_AGREEMENT_VERSION!: string;
   @IsString() @IsNotEmpty() PUBLIC_FRONTEND_ORIGIN!: string;
   @IsString() @IsNotEmpty() PUBLIC_API_ORIGIN!: string;
+  @IsUrl({ require_tld: false }) PRODUCT_IMAGE_S3_ENDPOINT!: string;
+  @IsString() @IsNotEmpty() PRODUCT_IMAGE_S3_REGION!: string;
+  @IsString() @IsNotEmpty() PRODUCT_IMAGE_S3_BUCKET!: string;
+  @IsString() @IsNotEmpty() PRODUCT_IMAGE_S3_ACCESS_KEY!: string;
+  @IsString() @IsNotEmpty() PRODUCT_IMAGE_S3_SECRET_KEY!: string;
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  PRODUCT_IMAGE_S3_FORCE_PATH_STYLE!: boolean;
+  @Transform(({ value }) => Number(value ?? 300))
+  @IsInt()
+  @Min(60)
+  @Max(900)
+  PRODUCT_IMAGE_UPLOAD_URL_TTL_SECONDS!: number;
+  @Transform(({ value }) => Number(value ?? 120))
+  @IsInt()
+  @Min(60)
+  @Max(900)
+  PRODUCT_IMAGE_READ_URL_TTL_SECONDS!: number;
+  @IsOptional() @IsUrl() PRODUCT_IMAGE_PUBLIC_BASE_URL?: string;
   @IsIn(cookieTopologies)
   AUTH_COOKIE_TOPOLOGY!: (typeof cookieTopologies)[number];
 }

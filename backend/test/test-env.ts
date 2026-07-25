@@ -48,7 +48,15 @@ type ManagedEnvKey =
   | 'CURRENT_SELLER_AGREEMENT_VERSION'
   | 'PUBLIC_FRONTEND_ORIGIN'
   | 'PUBLIC_API_ORIGIN'
-  | 'AUTH_COOKIE_TOPOLOGY';
+  | 'AUTH_COOKIE_TOPOLOGY'
+  | 'PRODUCT_IMAGE_S3_ENDPOINT'
+  | 'PRODUCT_IMAGE_S3_REGION'
+  | 'PRODUCT_IMAGE_S3_BUCKET'
+  | 'PRODUCT_IMAGE_S3_ACCESS_KEY'
+  | 'PRODUCT_IMAGE_S3_SECRET_KEY'
+  | 'PRODUCT_IMAGE_S3_FORCE_PATH_STYLE'
+  | 'PRODUCT_IMAGE_UPLOAD_URL_TTL_SECONDS'
+  | 'PRODUCT_IMAGE_READ_URL_TTL_SECONDS';
 
 const defaultTestEnv: Record<ManagedEnvKey, string> = {
   NODE_ENV: 'test',
@@ -101,6 +109,14 @@ const defaultTestEnv: Record<ManagedEnvKey, string> = {
   PUBLIC_FRONTEND_ORIGIN: 'http://localhost:3000',
   PUBLIC_API_ORIGIN: 'http://localhost:3001',
   AUTH_COOKIE_TOPOLOGY: 'same-host',
+  PRODUCT_IMAGE_S3_ENDPOINT: 'http://localhost:9000',
+  PRODUCT_IMAGE_S3_REGION: 'us-east-1',
+  PRODUCT_IMAGE_S3_BUCKET: 'litbuy-product-images-test',
+  PRODUCT_IMAGE_S3_ACCESS_KEY: 'test-access',
+  PRODUCT_IMAGE_S3_SECRET_KEY: 'test-secret',
+  PRODUCT_IMAGE_S3_FORCE_PATH_STYLE: 'true',
+  PRODUCT_IMAGE_UPLOAD_URL_TTL_SECONDS: '300',
+  PRODUCT_IMAGE_READ_URL_TTL_SECONDS: '120',
 };
 
 function resolveTestEnvValue(key: ManagedEnvKey, overrides: Partial<NodeJS.ProcessEnv>): string {
@@ -218,6 +234,32 @@ export function applyTestEnv(overrides: Partial<NodeJS.ProcessEnv> = {}): void {
   process.env.PUBLIC_FRONTEND_ORIGIN = resolveTestEnvValue('PUBLIC_FRONTEND_ORIGIN', overrides);
   process.env.PUBLIC_API_ORIGIN = resolveTestEnvValue('PUBLIC_API_ORIGIN', overrides);
   process.env.AUTH_COOKIE_TOPOLOGY = resolveTestEnvValue('AUTH_COOKIE_TOPOLOGY', overrides);
+  process.env.PRODUCT_IMAGE_S3_ENDPOINT = resolveTestEnvValue(
+    'PRODUCT_IMAGE_S3_ENDPOINT',
+    overrides,
+  );
+  process.env.PRODUCT_IMAGE_S3_REGION = resolveTestEnvValue('PRODUCT_IMAGE_S3_REGION', overrides);
+  process.env.PRODUCT_IMAGE_S3_BUCKET = resolveTestEnvValue('PRODUCT_IMAGE_S3_BUCKET', overrides);
+  process.env.PRODUCT_IMAGE_S3_ACCESS_KEY = resolveTestEnvValue(
+    'PRODUCT_IMAGE_S3_ACCESS_KEY',
+    overrides,
+  );
+  process.env.PRODUCT_IMAGE_S3_SECRET_KEY = resolveTestEnvValue(
+    'PRODUCT_IMAGE_S3_SECRET_KEY',
+    overrides,
+  );
+  process.env.PRODUCT_IMAGE_S3_FORCE_PATH_STYLE = resolveTestEnvValue(
+    'PRODUCT_IMAGE_S3_FORCE_PATH_STYLE',
+    overrides,
+  );
+  process.env.PRODUCT_IMAGE_UPLOAD_URL_TTL_SECONDS = resolveTestEnvValue(
+    'PRODUCT_IMAGE_UPLOAD_URL_TTL_SECONDS',
+    overrides,
+  );
+  process.env.PRODUCT_IMAGE_READ_URL_TTL_SECONDS = resolveTestEnvValue(
+    'PRODUCT_IMAGE_READ_URL_TTL_SECONDS',
+    overrides,
+  );
 }
 
 applyTestEnv();

@@ -165,3 +165,6 @@ Futuro/demonstrativo: aprovação não publica produto público; imagens permane
 - `GET /api/v1/seller/products` e `GET /api/v1/seller/products/:id`: requerem `SELLER` e escopam pelo `SellerProfile` autenticado.
 - `GET /api/v1/admin/products` e `GET /api/v1/admin/products/:id`: requerem `ADMIN`.
 - A aprovação de rascunho inclui `materializedProduct: { id, slug, status }` quando o produto existe; status inicial é sempre `UNPUBLISHED`.
+# Product image endpoints
+
+The protected seller upload-intent, completion, listing, reorder, cover, and deletion contracts and the read-only admin listing contract are implemented as documented in `PRODUCT_IMAGE_STORAGE_FOUNDATION.md`. They do not constitute a public catalog API.

@@ -11,6 +11,7 @@ import { SellerOnboardingModule } from './seller-onboarding/seller-onboarding.mo
 import { CatalogModule } from './catalog/catalog.module';
 import { ListingDraftsModule } from './listing-drafts/listing-drafts.module';
 import { ProductsModule } from './products/products.module';
+import { ProductImagesModule } from './product-images/product-images.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { ProductsModule } from './products/products.module';
     CatalogModule,
     ListingDraftsModule,
     ProductsModule,
+    ProductImagesModule,
   ],
   providers: [AppLogger],
 })
