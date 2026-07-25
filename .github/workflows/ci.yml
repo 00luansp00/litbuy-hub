@@ -179,18 +179,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-      minio:
-        image: minio/minio:RELEASE.2025-04-22T22-12-26Z
-        env:
-          MINIO_ROOT_USER: litbuy_ci_minio_access
-          MINIO_ROOT_PASSWORD: litbuy_ci_minio_secret_not_for_production
-        ports:
-          - 9000:9000
-        options: >-
-          --health-cmd "curl -fsS http://localhost:9000/minio/health/live"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 20
     env:
       NODE_ENV: test
       PORT: "3001"
@@ -270,12 +258,27 @@ jobs:
       - name: Generate Prisma client
         run: bun run prisma:generate
 
-      - name: Create and verify MinIO bucket
+      - name: Start MinIO and initialize private bucket
+        working-directory: ${{ github.workspace }}
         run: |
+          set -euo pipefail
+          docker run -d --name litbuy-ci-minio -p 9000:9000 \
+            -e MINIO_ROOT_USER="$MINIO_ROOT_USER" \
+            -e MINIO_ROOT_PASSWORD="$MINIO_ROOT_PASSWORD" \
+            minio/minio:RELEASE.2025-04-22T22-12-26Z server /data
+          ready=false
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://localhost:9000/minio/health/live >/dev/null; then ready=true; break; fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then docker logs litbuy-ci-minio; exit 1; fi
           docker run --rm --network host \
+            --entrypoint /bin/sh \
             -e MC_HOST_local=http://$MINIO_ROOT_USER:$MINIO_ROOT_PASSWORD@localhost:9000 \
+            -e PRODUCT_IMAGE_S3_BUCKET="$PRODUCT_IMAGE_S3_BUCKET" \
+            -v "$PWD/backend/minio-cors.json:/config/minio-cors.json:ro" \
             minio/mc:RELEASE.2025-04-16T18-13-26Z \
-            mb --ignore-existing local/$PRODUCT_IMAGE_S3_BUCKET
+            -c 'mc mb --ignore-existing "local/$PRODUCT_IMAGE_S3_BUCKET" && mc cors set "local/$PRODUCT_IMAGE_S3_BUCKET" /config/minio-cors.json'
           docker run --rm --network host \
             -e MC_HOST_local=http://$MINIO_ROOT_USER:$MINIO_ROOT_PASSWORD@localhost:9000 \
             minio/mc:RELEASE.2025-04-16T18-13-26Z \
@@ -355,3 +358,8 @@ jobs:
             kill "$(cat /tmp/litbuy-backend.pid)"
             wait "$(cat /tmp/litbuy-backend.pid)" 2>/dev/null || true
           fi
+
+      - name: Stop MinIO
+        if: always()
+        working-directory: ${{ github.workspace }}
+        run: docker rm -f litbuy-ci-minio >/dev/null 2>&1 || true

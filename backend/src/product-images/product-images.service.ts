@@ -22,9 +22,11 @@ export class ProductImagesService {
     @Inject(PRODUCT_IMAGE_STORAGE) private readonly storage: ProductImageStorage,
   ) {}
   private async acquireTransactionLock(tx: Tx, key: string): Promise<void> {
-    await tx.$queryRaw<
+    const rows = await tx.$queryRaw<
       { acquired: number }[]
     >`WITH advisory_lock AS MATERIALIZED (SELECT pg_advisory_xact_lock(hashtext(${key}))) SELECT 1::integer AS "acquired" FROM advisory_lock`;
+    if (rows.length !== 1 || rows[0]?.acquired !== 1)
+      throw new AppError('PRODUCT_IMAGE_LOCK_FAILED', 'PRODUCT_IMAGE_LOCK_FAILED', 503, []);
   }
   private async owner(db: PrismaService | Tx, userId: string, productId: string, mutation = false) {
     const product = await db.product.findFirst({
@@ -65,7 +67,15 @@ export class ProductImagesService {
       viewExpiresAt: view.expiresAt.toISOString(),
     };
   }
-  private async expire(tx: Tx, productId: string, now: Date) {
+  private async expire(tx: Tx, productId: string, now: Date): Promise<string[]> {
+    const expired = await tx.productImage.findMany({
+      where: {
+        productId,
+        status: ProductImageStatus.PENDING_UPLOAD,
+        uploadExpiresAt: { lte: now },
+      },
+      select: { objectKey: true },
+    });
     await tx.productImage.updateMany({
       where: {
         productId,
@@ -74,6 +84,7 @@ export class ProductImagesService {
       },
       data: { status: ProductImageStatus.DELETED, deletedAt: now },
     });
+    return expired.map((image) => image.objectKey);
   }
   async createIntent(
     userId: string,
@@ -88,11 +99,11 @@ export class ProductImagesService {
       key: objectKey,
       contentType: input.contentType,
     });
-    await this.prisma.$transaction(async (tx) => {
+    const expiredKeys = await this.prisma.$transaction(async (tx) => {
       await this.acquireTransactionLock(tx, `product-images:${productId}`);
       const product = await this.owner(tx, userId, productId, true);
       const now = new Date();
-      await this.expire(tx, productId, now);
+      const expired = await this.expire(tx, productId, now);
       const count = await tx.productImage.count({
         where: {
           productId,
@@ -125,12 +136,14 @@ export class ProductImagesService {
         image,
         SecurityEventOutcome.PENDING,
       );
+      return expired;
     });
+    await Promise.allSettled(expiredKeys.map((key) => this.storage.deleteObject(key)));
     return {
       imageId: id,
       uploadUrl: signed.uploadUrl,
       method: 'PUT',
-      headers: { 'Content-Type': input.contentType },
+      headers: { 'Content-Type': input.contentType, 'If-None-Match': '*' },
       expiresAt: signed.expiresAt.toISOString(),
     };
   }

@@ -41,7 +41,12 @@ export class S3ProductImageStorage implements ProductImageStorage {
   async createUploadUrl(input: { key: string; contentType: string }) {
     const uploadUrl = await getSignedUrl(
       this.client,
-      new PutObjectCommand({ Bucket: this.bucket, Key: input.key, ContentType: input.contentType }),
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: input.key,
+        ContentType: input.contentType,
+        IfNoneMatch: '*',
+      }),
       { expiresIn: this.expires },
     );
     return { uploadUrl, expiresAt: new Date(Date.now() + this.expires * 1000) };
