@@ -262,6 +262,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
+          exec > >(tee backend/minio-setup.log) 2>&1
           docker run -d --name litbuy-ci-minio -p 9000:9000 \
             -e MINIO_ROOT_USER="$MINIO_ROOT_USER" \
             -e MINIO_ROOT_PASSWORD="$MINIO_ROOT_PASSWORD" \
@@ -272,17 +273,35 @@ jobs:
             sleep 1
           done
           if [ "$ready" != true ]; then docker logs litbuy-ci-minio; exit 1; fi
+          docker logs litbuy-ci-minio
           docker run --rm --network host \
             --entrypoint /bin/sh \
             -e MC_HOST_local=http://$MINIO_ROOT_USER:$MINIO_ROOT_PASSWORD@localhost:9000 \
             -e PRODUCT_IMAGE_S3_BUCKET="$PRODUCT_IMAGE_S3_BUCKET" \
-            -v "$PWD/backend/minio-cors.json:/config/minio-cors.json:ro" \
+            -v "$PWD/backend/minio-cors.xml:/config/minio-cors.xml:ro" \
             minio/mc:RELEASE.2025-04-16T18-13-26Z \
-            -c 'mc mb --ignore-existing "local/$PRODUCT_IMAGE_S3_BUCKET" && mc cors set "local/$PRODUCT_IMAGE_S3_BUCKET" /config/minio-cors.json'
+            -c 'mc mb --ignore-existing "local/$PRODUCT_IMAGE_S3_BUCKET" && mc cors set "local/$PRODUCT_IMAGE_S3_BUCKET" /config/minio-cors.xml'
+          cors_policy="$(docker run --rm --network host \
+            -e MC_HOST_local=http://$MINIO_ROOT_USER:$MINIO_ROOT_PASSWORD@localhost:9000 \
+            minio/mc:RELEASE.2025-04-16T18-13-26Z \
+            cors get "local/$PRODUCT_IMAGE_S3_BUCKET")"
+          printf '%s\n' "$cors_policy"
+          for expected in 'http://localhost:3000' '<AllowedMethod>GET</AllowedMethod>' '<AllowedMethod>PUT</AllowedMethod>' '<AllowedMethod>HEAD</AllowedMethod>' 'Content-Type' 'If-None-Match' 'ETag'; do
+            grep -Fq "$expected" <<<"$cors_policy" || { echo "Missing CORS value: $expected"; exit 1; }
+          done
           docker run --rm --network host \
             -e MC_HOST_local=http://$MINIO_ROOT_USER:$MINIO_ROOT_PASSWORD@localhost:9000 \
             minio/mc:RELEASE.2025-04-16T18-13-26Z \
             stat local/$PRODUCT_IMAGE_S3_BUCKET
+
+      - name: Upload MinIO setup failure log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: minio-setup-failure
+          path: backend/minio-setup.log
+          if-no-files-found: ignore
+          retention-days: 3
 
       - name: Deploy Prisma migrations
         run: bun run prisma:migrate:deploy

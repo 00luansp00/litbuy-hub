@@ -10,10 +10,17 @@ export type ProductImage = {
   altText: string | null;
   sortOrder: number;
   isCover: boolean;
+  uploadedAt: string | null;
+  createdAt: string;
   viewUrl: string | null;
   viewExpiresAt: string | null;
 };
-type Intent = { imageId: string; uploadUrl: string; headers: Record<string, string> };
+type Intent = {
+  imageId: string;
+  uploadUrl: string;
+  headers: Record<string, string>;
+  expiresAt: string;
+};
 export class ProductImagePayloadError extends Error {
   code = "PRODUCT_IMAGE_RESPONSE_INVALID";
 }
@@ -22,45 +29,92 @@ export class ProductImageConfirmationError extends Error {
     super("Upload enviado, mas a confirmação falhou. Tente confirmar novamente.");
   }
 }
-const invalid = () => {
+const invalid = (): never => {
   throw new ProductImagePayloadError("Resposta de imagens inválida.");
+};
+const uuidV4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const isIso = (value: unknown): value is string =>
+  typeof value === "string" &&
+  !Number.isNaN(Date.parse(value)) &&
+  new Date(value).toISOString() === value;
+const isUrl = (value: unknown): value is string => {
+  if (typeof value !== "string") return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
 };
 export function parseProductImage(value: unknown): ProductImage {
   if (!value || typeof value !== "object") return invalid();
   const x = value as Record<string, unknown>;
+  const ready = x.status === "READY",
+    pending = x.status === "PENDING_UPLOAD";
   if (
-    typeof x.id !== "string" ||
-    !["PENDING_UPLOAD", "READY"].includes(String(x.status)) ||
-    typeof x.contentType !== "string" ||
-    typeof x.sizeBytes !== "number" ||
-    typeof x.sortOrder !== "number" ||
+    !uuidV4.test(String(x.id)) ||
+    (!ready && !pending) ||
+    !PRODUCT_IMAGE_TYPES.includes(x.contentType as (typeof PRODUCT_IMAGE_TYPES)[number]) ||
+    !Number.isInteger(x.sizeBytes) ||
+    Number(x.sizeBytes) <= 0 ||
+    !Number.isInteger(x.sortOrder) ||
+    Number(x.sortOrder) < 0 ||
     typeof x.isCover !== "boolean" ||
-    !(x.viewUrl === null || typeof x.viewUrl === "string") ||
-    !(x.viewExpiresAt === null || typeof x.viewExpiresAt === "string")
+    !(x.altText === null || typeof x.altText === "string") ||
+    !isIso(x.createdAt) ||
+    !(x.uploadedAt === null || isIso(x.uploadedAt))
   )
     return invalid();
-  return x as ProductImage;
+  if (ready && (!isUrl(x.viewUrl) || !isIso(x.viewExpiresAt) || !isIso(x.uploadedAt)))
+    return invalid();
+  if (
+    pending &&
+    (x.viewUrl !== null || x.viewExpiresAt !== null || x.uploadedAt !== null || x.isCover !== false)
+  )
+    return invalid();
+  return {
+    id: String(x.id),
+    status: x.status as ProductImage["status"],
+    contentType: x.contentType as ProductImage["contentType"],
+    sizeBytes: Number(x.sizeBytes),
+    altText: x.altText as string | null,
+    sortOrder: Number(x.sortOrder),
+    isCover: x.isCover,
+    uploadedAt: x.uploadedAt as string | null,
+    createdAt: x.createdAt,
+    viewUrl: x.viewUrl as string | null,
+    viewExpiresAt: x.viewExpiresAt as string | null,
+  };
 }
 export function parseImageList(value: unknown) {
   if (!value || typeof value !== "object") return invalid();
   const x = value as { items?: unknown; limit?: unknown };
-  if (!Array.isArray(x.items) || typeof x.limit !== "number") return invalid();
-  return { items: x.items.map(parseProductImage), limit: x.limit };
+  if (!Array.isArray(x.items) || x.limit !== PRODUCT_IMAGE_LIMIT) return invalid();
+  return { items: x.items.map(parseProductImage), limit: PRODUCT_IMAGE_LIMIT };
 }
 export function parseIntent(value: unknown): Intent {
   if (!value || typeof value !== "object") return invalid();
   const x = value as Record<string, unknown>;
   if (
-    typeof x.imageId !== "string" ||
-    typeof x.uploadUrl !== "string" ||
+    !uuidV4.test(String(x.imageId)) ||
+    !isUrl(x.uploadUrl) ||
+    !isIso(x.expiresAt) ||
     !x.headers ||
-    typeof x.headers !== "object"
+    typeof x.headers !== "object" ||
+    Array.isArray(x.headers)
   )
     return invalid();
-  const headers = Object.fromEntries(
-    Object.entries(x.headers).map(([k, v]) => (typeof v === "string" ? [k, v] : invalid())),
-  );
-  return { imageId: x.imageId, uploadUrl: x.uploadUrl, headers };
+  const entries = Object.entries(x.headers);
+  if (entries.some(([, v]) => typeof v !== "string")) return invalid();
+  const headers = Object.fromEntries(entries) as Record<string, string>;
+  if (
+    !PRODUCT_IMAGE_TYPES.includes(
+      headers["Content-Type"] as (typeof PRODUCT_IMAGE_TYPES)[number],
+    ) ||
+    headers["If-None-Match"] !== "*"
+  )
+    return invalid();
+  return { imageId: String(x.imageId), uploadUrl: x.uploadUrl, headers, expiresAt: x.expiresAt };
 }
 export function validateProductImage(file: Pick<File, "type" | "size">, occupied: number) {
   if (!PRODUCT_IMAGE_TYPES.includes(file.type as (typeof PRODUCT_IMAGE_TYPES)[number]))

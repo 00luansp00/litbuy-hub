@@ -25,6 +25,7 @@ import {
   parseProductImage,
   ProductImagePayloadError,
 } from "@/services/productImageService";
+const iso = "2026-07-27T00:00:00.000Z";
 const ready = {
   id: "11111111-1111-4111-8111-111111111111",
   status: "READY",
@@ -33,8 +34,10 @@ const ready = {
   altText: null,
   sortOrder: 0,
   isCover: true,
+  uploadedAt: iso,
+  createdAt: iso,
   viewUrl: "https://signed.test/image",
-  viewExpiresAt: new Date().toISOString(),
+  viewExpiresAt: iso,
 };
 describe("product image response parsers", () => {
   it("parses list, image and intent", () => {
@@ -45,6 +48,7 @@ describe("product image response parsers", () => {
         imageId: ready.id,
         uploadUrl: "https://upload.test",
         headers: { "Content-Type": "image/png", "If-None-Match": "*" },
+        expiresAt: iso,
       }).headers["If-None-Match"],
     ).toBe("*");
   });

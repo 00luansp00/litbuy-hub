@@ -37,21 +37,41 @@ describe('Product image PostgreSQL + MinIO integration', () => {
     await expect(storage.headObject(key)).resolves.toBeNull();
   });
 
-  it('exposes the restricted local bucket CORS policy', async () => {
-    const response = await fetch(
+  it.each(['PUT', 'GET', 'HEAD'])('allows the explicit origin to preflight %s', async (method) => {
+    const response = await preflight('http://localhost:3000', method);
+    expect(response.headers.get('access-control-allow-origin')).toBe('http://localhost:3000');
+    expect(response.headers.get('access-control-allow-methods')).toContain(method);
+    if (method === 'PUT') {
+      const headers = response.headers.get('access-control-allow-headers')?.toLowerCase() ?? '';
+      expect(headers).toContain('content-type');
+      expect(headers).toContain('if-none-match');
+    }
+  });
+
+  it('rejects an unknown origin and DELETE while the bucket remains private', async () => {
+    const unknown = await preflight('https://evil.example', 'PUT');
+    expect(unknown.headers.get('access-control-allow-origin')).toBeNull();
+    const deletion = await preflight('http://localhost:3000', 'DELETE');
+    expect(deletion.headers.get('access-control-allow-methods') ?? '').not.toContain('DELETE');
+    const unsigned = await fetch(
+      `${process.env.PRODUCT_IMAGE_S3_ENDPOINT}/${process.env.PRODUCT_IMAGE_S3_BUCKET}/private`,
+    );
+    expect([401, 403, 404]).toContain(unsigned.status);
+  });
+
+  function preflight(origin: string, method: string) {
+    return fetch(
       `${process.env.PRODUCT_IMAGE_S3_ENDPOINT}/${process.env.PRODUCT_IMAGE_S3_BUCKET}/cors-check`,
       {
         method: 'OPTIONS',
         headers: {
-          Origin: 'http://localhost:3000',
-          'Access-Control-Request-Method': 'PUT',
+          Origin: origin,
+          'Access-Control-Request-Method': method,
           'Access-Control-Request-Headers': 'content-type,if-none-match',
         },
       },
     );
-    expect(response.headers.get('access-control-allow-origin')).toBe('http://localhost:3000');
-    expect(response.headers.get('access-control-allow-methods')).toContain('PUT');
-  });
+  }
 
   it('serializes the same advisory key while a different key remains available and releases on commit', async () => {
     const first = await prisma.$transaction(async (tx) => {
