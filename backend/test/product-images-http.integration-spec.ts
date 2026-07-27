@@ -10,6 +10,10 @@ import type { AppConfig } from '../src/config/app.config';
 import { GlobalExceptionFilter } from '../src/common/filters/global-exception.filter';
 import { PrismaService } from '../src/database/prisma.service';
 import { RedisService } from '../src/redis/redis.service';
+import {
+  PRODUCT_IMAGE_STORAGE,
+  type ProductImageStorage,
+} from '../src/product-images/product-image.storage';
 
 const password = 'integration password 123';
 describe('Product images HTTP with real auth, PostgreSQL and MinIO', () => {
@@ -17,6 +21,8 @@ describe('Product images HTTP with real auth, PostgreSQL and MinIO', () => {
   let prisma: PrismaService;
   let mailer: AuthMailer;
   let redis: RedisService;
+  let storage: ProductImageStorage;
+  const objectKeys = new Set<string>();
   beforeAll(async () => {
     const ref = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = ref.createNestApplication();
@@ -32,12 +38,21 @@ describe('Product images HTTP with real auth, PostgreSQL and MinIO', () => {
     prisma = app.get(PrismaService);
     mailer = app.get(AuthMailer);
     redis = app.get(RedisService);
+    storage = app.get<ProductImageStorage>(PRODUCT_IMAGE_STORAGE);
   });
   beforeEach(async () => {
     await (await redis.getClient()).flushdb();
     mailer.send = AuthMailer.prototype.send.bind(mailer);
     mailer.sent.splice(0);
     await prisma.$executeRawUnsafe('TRUNCATE TABLE "User", "CatalogCategory" CASCADE');
+  });
+  afterEach(async () => {
+    const cleanup = await Promise.allSettled(
+      [...objectKeys].map((key) => storage.deleteObject(key)),
+    );
+    objectKeys.clear();
+    const unexpected = cleanup.find((result) => result.status === 'rejected');
+    if (unexpected?.status === 'rejected') throw unexpected.reason;
   });
   afterAll(() => app.close());
   async function registerVerifiedUser(label: string) {
@@ -122,6 +137,18 @@ describe('Product images HTTP with real auth, PostgreSQL and MinIO', () => {
     return { ...actor, product: item };
   }
   const images = (id: string) => `/api/v1/seller/products/${id}/images`;
+  async function createUploadIntent(productId: string, auth: string, body: Buffer) {
+    const response = await request(app.getHttpServer())
+      .post(`${images(productId)}/upload-intents`)
+      .set('Authorization', auth)
+      .send({ contentType: 'image/png', sizeBytes: body.byteLength })
+      .expect(201);
+    const image = await prisma.productImage.findUniqueOrThrow({
+      where: { id: response.body.imageId as string },
+    });
+    objectKeys.add(image.objectKey);
+    return response;
+  }
   async function putSignedObject(
     uploadUrl: string,
     signedHeaders: Record<string, string>,
@@ -241,17 +268,12 @@ describe('Product images HTTP with real auth, PostgreSQL and MinIO', () => {
   });
   it('runs PUT, complete, seller/admin list, cover, reorder and DELETE through HTTP', async () => {
     const p = await product('flow');
-    const create = () =>
-      request(app.getHttpServer())
-        .post(`${images(p.product.id)}/upload-intents`)
-        .set('Authorization', p.auth)
-        .send({ contentType: 'image/png', sizeBytes: 5 })
-        .expect(201);
-    const one = await create();
+    const firstBody = Buffer.from('first');
+    const one = await createUploadIntent(p.product.id, p.auth, firstBody);
     expect(one.body.headers).toEqual({ 'Content-Type': 'image/png', 'If-None-Match': '*' });
     expect(new URL(one.body.uploadUrl).host).toBe('localhost:9000');
     expect(one.body.uploadUrl).not.toContain('minio:9000');
-    const put = await putSignedObject(one.body.uploadUrl, one.body.headers, Buffer.from('first'));
+    const put = await putSignedObject(one.body.uploadUrl, one.body.headers, firstBody);
     expect(put.ok).toBe(true);
     expect(
       (
@@ -277,8 +299,9 @@ describe('Product images HTTP with real auth, PostgreSQL and MinIO', () => {
       .expect(200);
     expect(listed.body.items[0].viewUrl).not.toContain('minio:9000');
     expect(await (await fetch(listed.body.items[0].viewUrl)).text()).toBe('first');
-    const two = await create();
-    await putSignedObject(two.body.uploadUrl, two.body.headers, Buffer.from('second'));
+    const secondBody = Buffer.from('second');
+    const two = await createUploadIntent(p.product.id, p.auth, secondBody);
+    await putSignedObject(two.body.uploadUrl, two.body.headers, secondBody);
     await request(app.getHttpServer())
       .post(`${images(p.product.id)}/${two.body.imageId}/complete`)
       .set('Authorization', p.auth)
@@ -301,6 +324,9 @@ describe('Product images HTTP with real auth, PostgreSQL and MinIO', () => {
       .get(`/api/v1/admin/products/${p.product.id}/images`)
       .set('Authorization', p.auth)
       .expect(403);
+    const deletedObjectKey = (
+      await prisma.productImage.findUniqueOrThrow({ where: { id: two.body.imageId } })
+    ).objectKey;
     await request(app.getHttpServer())
       .delete(`${images(p.product.id)}/${two.body.imageId}`)
       .set('Authorization', p.auth)
@@ -308,6 +334,7 @@ describe('Product images HTTP with real auth, PostgreSQL and MinIO', () => {
     expect(
       (await prisma.productImage.findUniqueOrThrow({ where: { id: two.body.imageId } })).status,
     ).toBe('DELETED');
+    expect(await storage.headObject(deletedObjectKey)).toBeNull();
     const afterDelete = await request(app.getHttpServer())
       .get(images(p.product.id))
       .set('Authorization', p.auth);
@@ -316,6 +343,31 @@ describe('Product images HTTP with real auth, PostgreSQL and MinIO', () => {
     expect((await prisma.product.findUniqueOrThrow({ where: { id: p.product.id } })).status).toBe(
       'UNPUBLISHED',
     );
+  });
+  it('rejects an uploaded object whose size differs from the declared size', async () => {
+    const p = await product('size-mismatch');
+    const intent = await createUploadIntent(p.product.id, p.auth, Buffer.from('first'));
+    await putSignedObject(intent.body.uploadUrl, intent.body.headers, Buffer.from('second'));
+    const response = await request(app.getHttpServer())
+      .post(`${images(p.product.id)}/${intent.body.imageId}/complete`)
+      .set('Authorization', p.auth);
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe('PRODUCT_IMAGE_UPLOAD_INVALID');
+    const image = await prisma.productImage.findUniqueOrThrow({
+      where: { id: intent.body.imageId },
+    });
+    expect(image).toMatchObject({ status: 'DELETED', isCover: false });
+    expect(image.deletedAt).not.toBeNull();
+    expect(await storage.headObject(image.objectKey)).toBeNull();
+    expect(
+      await prisma.securityEvent.count({
+        where: {
+          userId: p.user.id,
+          eventType: 'PRODUCT_IMAGE_UPLOAD_REJECTED',
+          outcome: 'BLOCKED',
+        },
+      }),
+    ).toBe(1);
   });
   it('rejects duplicate and incomplete reorder sets', async () => {
     const p = await product('reorder');
