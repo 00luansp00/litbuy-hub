@@ -149,6 +149,15 @@ describe('Product images HTTP with real auth, PostgreSQL and MinIO', () => {
     objectKeys.add(image.objectKey);
     return response;
   }
+  async function createReadyImage(productId: string, auth: string, body: Buffer) {
+    const created = await createUploadIntent(productId, auth, body);
+    await putSignedObject(created.body.uploadUrl, created.body.headers, body);
+    await request(app.getHttpServer())
+      .post(`${images(productId)}/${created.body.imageId}/complete`)
+      .set('Authorization', auth)
+      .expect(201);
+    return created.body.imageId as string;
+  }
   async function putSignedObject(
     uploadUrl: string,
     signedHeaders: Record<string, string>,
@@ -369,22 +378,169 @@ describe('Product images HTTP with real auth, PostgreSQL and MinIO', () => {
       }),
     ).toBe(1);
   });
-  it('rejects duplicate and incomplete reorder sets', async () => {
+  it('rejects image IDOR without changing the foreign image or product', async () => {
+    const owner = await product('idor-owner');
+    const attacker = await product('idor-attacker');
+    const foreign = await createUploadIntent(owner.product.id, owner.auth, Buffer.from('owner'));
+    const local = await createUploadIntent(
+      attacker.product.id,
+      attacker.auth,
+      Buffer.from('local'),
+    );
+    const before = await prisma.productImage.findUniqueOrThrow({
+      where: { id: foreign.body.imageId },
+    });
+    for (const [method, suffix] of [
+      ['post', 'complete'],
+      ['patch', 'cover'],
+      ['delete', ''],
+    ] as const) {
+      const client = request(app.getHttpServer());
+      const response = await client[method](
+        `${images(attacker.product.id)}/${foreign.body.imageId}${suffix ? `/${suffix}` : ''}`,
+      ).set('Authorization', attacker.auth);
+      expect(response.status).toBe(404);
+      expect(JSON.stringify(response.body)).not.toContain(owner.product.id);
+      expect(JSON.stringify(response.body)).not.toContain(before.objectKey);
+    }
+    const reorder = await request(app.getHttpServer())
+      .patch(`${images(attacker.product.id)}/reorder`)
+      .set('Authorization', attacker.auth)
+      .send({ imageIds: [local.body.imageId, foreign.body.imageId] });
+    expect(reorder.status).toBe(400);
+    expect(reorder.body.code).toBe('PRODUCT_IMAGE_ORDER_INVALID');
+    expect(await prisma.productImage.findUniqueOrThrow({ where: { id: before.id } })).toMatchObject(
+      {
+        status: before.status,
+        sortOrder: before.sortOrder,
+        deletedAt: before.deletedAt,
+      },
+    );
+    expect(
+      (await prisma.product.findUniqueOrThrow({ where: { id: owner.product.id } })).status,
+    ).toBe('UNPUBLISHED');
+  });
+  it('rejects duplicate, incomplete, and foreign reorder sets without changing order', async () => {
     const p = await product('reorder');
-    const intent = await request(app.getHttpServer())
-      .post(`${images(p.product.id)}/upload-intents`)
-      .set('Authorization', p.auth)
-      .send({ contentType: 'image/png', sizeBytes: 1 })
-      .expect(201);
+    const other = await product('reorder-other');
+    const firstId = await createReadyImage(p.product.id, p.auth, Buffer.from('first'));
+    const secondId = await createReadyImage(p.product.id, p.auth, Buffer.from('second'));
+    const foreignId = await createReadyImage(other.product.id, other.auth, Buffer.from('foreign'));
+    const original = await prisma.productImage.findMany({
+      where: { productId: p.product.id },
+      orderBy: { sortOrder: 'asc' },
+      select: { id: true, sortOrder: true },
+    });
+    for (const imageIds of [[firstId, firstId], [firstId], [firstId, foreignId]]) {
+      const response = await request(app.getHttpServer())
+        .patch(`${images(p.product.id)}/reorder`)
+        .set('Authorization', p.auth)
+        .send({ imageIds });
+      expect(response.status).toBe(400);
+      expect(response.body.code).toBe('PRODUCT_IMAGE_ORDER_INVALID');
+      expect(
+        await prisma.productImage.findMany({
+          where: { productId: p.product.id },
+          orderBy: { sortOrder: 'asc' },
+          select: { id: true, sortOrder: true },
+        }),
+      ).toEqual(original);
+    }
+    expect(original.map((image) => image.id)).toEqual([firstId, secondId]);
+    expect(
+      await prisma.securityEvent.count({
+        where: { userId: p.user.id, eventType: 'PRODUCT_IMAGES_REORDERED' },
+      }),
+    ).toBe(0);
+  });
+  it('rolls back every reorder update when PostgreSQL rejects the second image', async () => {
+    const p = await product('reorder-rollback');
+    const firstId = await createReadyImage(p.product.id, p.auth, Buffer.from('first'));
+    const secondId = await createReadyImage(p.product.id, p.auth, Buffer.from('second'));
+    const original = await prisma.productImage.findMany({
+      where: { productId: p.product.id },
+      orderBy: { sortOrder: 'asc' },
+      select: { id: true, sortOrder: true },
+    });
+    const suffix = crypto.randomUUID().replaceAll('-', '');
+    const functionName = `fail_product_image_reorder_${suffix}`;
+    const triggerName = `fail_product_image_reorder_trigger_${suffix}`;
+    await prisma.$executeRawUnsafe(`
+      CREATE FUNCTION "${functionName}"() RETURNS trigger AS $$
+      BEGIN
+        IF NEW.id = '${secondId}'::uuid AND NEW."sortOrder" <> OLD."sortOrder" THEN
+          RAISE EXCEPTION 'forced reorder rollback';
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
+      CREATE TRIGGER "${triggerName}"
+      BEFORE UPDATE ON "ProductImage"
+      FOR EACH ROW EXECUTE FUNCTION "${functionName}"();
+    `);
+    try {
+      const response = await request(app.getHttpServer())
+        .patch(`${images(p.product.id)}/reorder`)
+        .set('Authorization', p.auth)
+        .send({ imageIds: [secondId, firstId] });
+      expect(response.status).toBe(500);
+      expect(
+        await prisma.productImage.findMany({
+          where: { productId: p.product.id },
+          orderBy: { sortOrder: 'asc' },
+          select: { id: true, sortOrder: true },
+        }),
+      ).toEqual(original);
+      expect(
+        await prisma.securityEvent.count({
+          where: { userId: p.user.id, eventType: 'PRODUCT_IMAGES_REORDERED' },
+        }),
+      ).toBe(0);
+    } finally {
+      await prisma.$executeRawUnsafe(
+        `DROP TRIGGER IF EXISTS "${triggerName}" ON "ProductImage"; DROP FUNCTION IF EXISTS "${functionName}"();`,
+      );
+    }
+  });
+  it('serializes concurrent cover changes and promotes the remaining READY image', async () => {
+    const p = await product('cover-concurrency');
+    const firstId = await createReadyImage(p.product.id, p.auth, Buffer.from('first'));
+    const secondId = await createReadyImage(p.product.id, p.auth, Buffer.from('second'));
+    const responses = await Promise.all([
+      request(app.getHttpServer())
+        .patch(`${images(p.product.id)}/${firstId}/cover`)
+        .set('Authorization', p.auth),
+      request(app.getHttpServer())
+        .patch(`${images(p.product.id)}/${secondId}/cover`)
+        .set('Authorization', p.auth),
+    ]);
+    expect(responses.every((response) => response.status === 200)).toBe(true);
+    const ready = await prisma.productImage.findMany({
+      where: { productId: p.product.id, status: 'READY' },
+      orderBy: { sortOrder: 'asc' },
+    });
+    expect(ready).toHaveLength(2);
+    expect(ready.filter((image) => image.isCover)).toHaveLength(1);
+    const cover = ready.find((image) => image.isCover)!;
+    const remaining = ready.find((image) => !image.isCover)!;
     await request(app.getHttpServer())
-      .patch(`${images(p.product.id)}/reorder`)
+      .delete(`${images(p.product.id)}/${cover.id}`)
       .set('Authorization', p.auth)
-      .send({ imageIds: [intent.body.imageId, intent.body.imageId] })
-      .expect(400);
+      .expect(200);
+    expect(
+      await prisma.productImage.findUniqueOrThrow({ where: { id: remaining.id } }),
+    ).toMatchObject({ status: 'READY', isCover: true });
     await request(app.getHttpServer())
-      .patch(`${images(p.product.id)}/reorder`)
+      .delete(`${images(p.product.id)}/${remaining.id}`)
       .set('Authorization', p.auth)
-      .send({ imageIds: [] })
-      .expect(400);
+      .expect(200);
+    expect(
+      await prisma.productImage.count({
+        where: { productId: p.product.id, status: 'READY', isCover: true },
+      }),
+    ).toBe(0);
+    expect((await prisma.product.findUniqueOrThrow({ where: { id: p.product.id } })).status).toBe(
+      'UNPUBLISHED',
+    );
   });
 });
