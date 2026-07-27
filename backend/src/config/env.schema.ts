@@ -155,6 +155,7 @@ export class EnvironmentVariables {
   @IsString() @IsNotEmpty() PUBLIC_FRONTEND_ORIGIN!: string;
   @IsString() @IsNotEmpty() PUBLIC_API_ORIGIN!: string;
   @IsUrl({ require_tld: false }) PRODUCT_IMAGE_S3_ENDPOINT!: string;
+  @IsOptional() @IsUrl({ require_tld: false }) PRODUCT_IMAGE_S3_SIGNING_ENDPOINT?: string;
   @IsString() @IsNotEmpty() PRODUCT_IMAGE_S3_REGION!: string;
   @IsString() @IsNotEmpty() PRODUCT_IMAGE_S3_BUCKET!: string;
   @IsString() @IsNotEmpty() PRODUCT_IMAGE_S3_ACCESS_KEY!: string;

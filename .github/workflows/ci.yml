@@ -107,6 +107,7 @@ jobs:
       PUBLIC_API_ORIGIN: http://localhost:3001
       AUTH_COOKIE_TOPOLOGY: same-host
       PRODUCT_IMAGE_S3_ENDPOINT: http://localhost:9000
+      PRODUCT_IMAGE_S3_SIGNING_ENDPOINT: http://localhost:9000
       PRODUCT_IMAGE_S3_REGION: us-east-1
       PRODUCT_IMAGE_S3_BUCKET: litbuy-product-images-test
       PRODUCT_IMAGE_S3_ACCESS_KEY: litbuy_ci_minio_access
@@ -231,6 +232,7 @@ jobs:
       PUBLIC_API_ORIGIN: http://localhost:3001
       AUTH_COOKIE_TOPOLOGY: same-host
       PRODUCT_IMAGE_S3_ENDPOINT: http://localhost:9000
+      PRODUCT_IMAGE_S3_SIGNING_ENDPOINT: http://localhost:9000
       PRODUCT_IMAGE_S3_REGION: us-east-1
       PRODUCT_IMAGE_S3_BUCKET: litbuy-product-images-test
       PRODUCT_IMAGE_S3_ACCESS_KEY: litbuy_ci_minio_access
@@ -321,15 +323,42 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: docker compose -f docker-compose.staging.yml build
 
-      - name: Run staging composition
+      - name: Start staging composition
+        working-directory: ${{ github.workspace }}
+        run: docker compose -f docker-compose.staging.yml up -d --build --wait
+
+      - name: Verify staging health
         working-directory: ${{ github.workspace }}
         run: |
-          docker compose -f docker-compose.staging.yml up -d --build --wait
           curl -fsS http://localhost:13001/api/v1/health/live
           curl -fsS http://localhost:13001/api/v1/health/ready
-          cd backend
+          allowed="$(curl -si -X OPTIONS http://localhost:19000/litbuy-product-images-staging-local/cors-check -H 'Origin: http://localhost:13000' -H 'Access-Control-Request-Method: PUT')"
+          grep -Fiq 'Access-Control-Allow-Origin: http://localhost:13000' <<<"$allowed"
+          for forbidden in http://localhost:3000 https://unknown.example; do
+            response="$(curl -si -X OPTIONS http://localhost:19000/litbuy-product-images-staging-local/cors-check -H "Origin: $forbidden" -H 'Access-Control-Request-Method: PUT')"
+            ! grep -Fiq "Access-Control-Allow-Origin: $forbidden" <<<"$response"
+          done
+
+      - name: Run staging smoke tests
+        working-directory: ${{ github.workspace }}/backend
+        run: |
           INFRA_SMOKE_BASE_URL=http://localhost:13001/api/v1 \
             INFRA_SMOKE_ORIGIN=http://localhost:13000 bun run smoke:infra
+
+      - name: Capture staging composition failure
+        if: failure()
+        working-directory: ${{ github.workspace }}
+        run: |
+          { docker compose -f docker-compose.staging.yml ps -a; docker compose -f docker-compose.staging.yml logs --no-color; } > staging-compose.log 2>&1 || true
+
+      - name: Upload staging composition failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-compose-failure
+          path: staging-compose.log
+          if-no-files-found: ignore
+          retention-days: 3
 
       - name: Build backend for infrastructure smoke tests
         run: bun run build

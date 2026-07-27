@@ -50,6 +50,7 @@ type ManagedEnvKey =
   | 'PUBLIC_API_ORIGIN'
   | 'AUTH_COOKIE_TOPOLOGY'
   | 'PRODUCT_IMAGE_S3_ENDPOINT'
+  | 'PRODUCT_IMAGE_S3_SIGNING_ENDPOINT'
   | 'PRODUCT_IMAGE_S3_REGION'
   | 'PRODUCT_IMAGE_S3_BUCKET'
   | 'PRODUCT_IMAGE_S3_ACCESS_KEY'
@@ -110,6 +111,7 @@ const defaultTestEnv: Record<ManagedEnvKey, string> = {
   PUBLIC_API_ORIGIN: 'http://localhost:3001',
   AUTH_COOKIE_TOPOLOGY: 'same-host',
   PRODUCT_IMAGE_S3_ENDPOINT: 'http://localhost:9000',
+  PRODUCT_IMAGE_S3_SIGNING_ENDPOINT: 'http://localhost:9000',
   PRODUCT_IMAGE_S3_REGION: 'us-east-1',
   PRODUCT_IMAGE_S3_BUCKET: 'litbuy-product-images-test',
   PRODUCT_IMAGE_S3_ACCESS_KEY: 'test-access',
@@ -238,6 +240,11 @@ export function applyTestEnv(overrides: Partial<NodeJS.ProcessEnv> = {}): void {
     'PRODUCT_IMAGE_S3_ENDPOINT',
     overrides,
   );
+  process.env.PRODUCT_IMAGE_S3_SIGNING_ENDPOINT = resolveTestEnvValue(
+    'PRODUCT_IMAGE_S3_SIGNING_ENDPOINT',
+    overrides,
+  );
+
   process.env.PRODUCT_IMAGE_S3_REGION = resolveTestEnvValue('PRODUCT_IMAGE_S3_REGION', overrides);
   process.env.PRODUCT_IMAGE_S3_BUCKET = resolveTestEnvValue('PRODUCT_IMAGE_S3_BUCKET', overrides);
   process.env.PRODUCT_IMAGE_S3_ACCESS_KEY = resolveTestEnvValue(
