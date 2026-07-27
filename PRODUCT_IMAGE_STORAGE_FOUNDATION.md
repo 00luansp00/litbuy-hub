@@ -28,7 +28,7 @@ This foundation does **not** publish products or change `UNPUBLISHED`, expose a 
 
 ## Current limitations
 
-Object deletion precedes the database tombstone, so a transient database failure can require reconciliation. Pending intents need a future expiry/garbage-collection worker. Content is validated from S3 metadata, not decoded or scanned. Production provider and CDN remain deliberately undecided.
+Physical cleanup can fail after the database tombstone and is retried by a repeated authenticated DELETE; broader reconciliation observability remains future work. Expired intentions are cleaned opportunistically rather than by a global scheduler. Content is validated from S3 metadata, not decoded or scanned. Production provider and CDN remain deliberately undecided.
 
 ## Reliability follow-up
 
@@ -36,4 +36,4 @@ Upload intentions now expire explicitly and are tombstoned opportunistically und
 
 The seller's internal approved-listing screen includes upload progress, reload-safe signed previews, cover selection, ordering and deletion. It remains disconnected from public product routes, catalog, cart and checkout.
 
-Presigned uploads require both `Content-Type` and `If-None-Match: *`; S3-compatible conditional creation prevents reuse of a still-valid URL from overwriting the validated object. Development, CI and local staging apply `backend/minio-cors.xml`, limited to the configured localhost frontend origin, GET/PUT/HEAD and the required headers. Production storage must receive an equivalent private-bucket CORS policy for its explicit frontend origins.
+Presigned uploads require both `Content-Type` and `If-None-Match: *`; S3-compatible conditional creation prevents reuse of a still-valid URL from overwriting the validated object. Development, CI and local staging use MinIO Community with the explicit global origin `MINIO_API_CORS_ALLOW_ORIGIN=http://localhost:3000`. The bucket remains private, browser access uses signed PUT/GET URLs, and DELETE remains an authenticated server-side operation. MinIO Community does not provide the same per-bucket CORS granularity here. The future production provider must receive an equivalent per-bucket policy, when supported, restricted to the official frontend origin, GET/PUT/HEAD, `Content-Type`, `If-None-Match`, and `ETag`; no AWS, R2, Wasabi, or other provider has been selected.

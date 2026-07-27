@@ -266,6 +266,7 @@ jobs:
           docker run -d --name litbuy-ci-minio -p 9000:9000 \
             -e MINIO_ROOT_USER="$MINIO_ROOT_USER" \
             -e MINIO_ROOT_PASSWORD="$MINIO_ROOT_PASSWORD" \
+            -e MINIO_API_CORS_ALLOW_ORIGIN="http://localhost:3000" \
             minio/minio:RELEASE.2025-04-22T22-12-26Z server /data
           ready=false
           for attempt in $(seq 1 30); do
@@ -274,21 +275,11 @@ jobs:
           done
           if [ "$ready" != true ]; then docker logs litbuy-ci-minio; exit 1; fi
           docker logs litbuy-ci-minio
+          echo "MINIO_API_CORS_ALLOW_ORIGIN=http://localhost:3000"
           docker run --rm --network host \
-            --entrypoint /bin/sh \
-            -e MC_HOST_local=http://$MINIO_ROOT_USER:$MINIO_ROOT_PASSWORD@localhost:9000 \
-            -e PRODUCT_IMAGE_S3_BUCKET="$PRODUCT_IMAGE_S3_BUCKET" \
-            -v "$PWD/backend/minio-cors.xml:/config/minio-cors.xml:ro" \
-            minio/mc:RELEASE.2025-04-16T18-13-26Z \
-            -c 'mc mb --ignore-existing "local/$PRODUCT_IMAGE_S3_BUCKET" && mc cors set "local/$PRODUCT_IMAGE_S3_BUCKET" /config/minio-cors.xml'
-          cors_policy="$(docker run --rm --network host \
             -e MC_HOST_local=http://$MINIO_ROOT_USER:$MINIO_ROOT_PASSWORD@localhost:9000 \
             minio/mc:RELEASE.2025-04-16T18-13-26Z \
-            cors get "local/$PRODUCT_IMAGE_S3_BUCKET")"
-          printf '%s\n' "$cors_policy"
-          for expected in 'http://localhost:3000' '<AllowedMethod>GET</AllowedMethod>' '<AllowedMethod>PUT</AllowedMethod>' '<AllowedMethod>HEAD</AllowedMethod>' 'Content-Type' 'If-None-Match' 'ETag'; do
-            grep -Fq "$expected" <<<"$cors_policy" || { echo "Missing CORS value: $expected"; exit 1; }
-          done
+            mb --ignore-existing local/$PRODUCT_IMAGE_S3_BUCKET
           docker run --rm --network host \
             -e MC_HOST_local=http://$MINIO_ROOT_USER:$MINIO_ROOT_PASSWORD@localhost:9000 \
             minio/mc:RELEASE.2025-04-16T18-13-26Z \
@@ -329,6 +320,16 @@ jobs:
       - name: Build staging compose images
         working-directory: ${{ github.workspace }}
         run: docker compose -f docker-compose.staging.yml build
+
+      - name: Run staging composition
+        working-directory: ${{ github.workspace }}
+        run: |
+          docker compose -f docker-compose.staging.yml up -d --build --wait
+          curl -fsS http://localhost:13001/api/v1/health/live
+          curl -fsS http://localhost:13001/api/v1/health/ready
+          cd backend
+          INFRA_SMOKE_BASE_URL=http://localhost:13001/api/v1 \
+            INFRA_SMOKE_ORIGIN=http://localhost:13000 bun run smoke:infra
 
       - name: Build backend for infrastructure smoke tests
         run: bun run build
@@ -382,3 +383,8 @@ jobs:
         if: always()
         working-directory: ${{ github.workspace }}
         run: docker rm -f litbuy-ci-minio >/dev/null 2>&1 || true
+
+      - name: Stop staging composition
+        if: always()
+        working-directory: ${{ github.workspace }}
+        run: docker compose -f docker-compose.staging.yml down -v --remove-orphans || true

@@ -37,22 +37,18 @@ describe('Product image PostgreSQL + MinIO integration', () => {
     await expect(storage.headObject(key)).resolves.toBeNull();
   });
 
-  it.each(['PUT', 'GET', 'HEAD'])('allows the explicit origin to preflight %s', async (method) => {
-    const response = await preflight('http://localhost:3000', method);
-    expect(response.headers.get('access-control-allow-origin')).toBe('http://localhost:3000');
-    expect(response.headers.get('access-control-allow-methods')).toContain(method);
-    if (method === 'PUT') {
-      const headers = response.headers.get('access-control-allow-headers')?.toLowerCase() ?? '';
-      expect(headers).toContain('content-type');
-      expect(headers).toContain('if-none-match');
-    }
-  });
+  it.each(['PUT', 'GET', 'HEAD'])(
+    'allows the explicit global origin to preflight %s',
+    async (method) => {
+      const response = await preflight('http://localhost:3000', method);
+      expect(response.headers.get('access-control-allow-origin')).toBe('http://localhost:3000');
+      expect(response.headers.get('access-control-allow-methods')).toContain(method);
+    },
+  );
 
-  it('rejects an unknown origin and DELETE while the bucket remains private', async () => {
+  it('rejects an unknown origin while the bucket remains private', async () => {
     const unknown = await preflight('https://evil.example', 'PUT');
     expect(unknown.headers.get('access-control-allow-origin')).toBeNull();
-    const deletion = await preflight('http://localhost:3000', 'DELETE');
-    expect(deletion.headers.get('access-control-allow-methods') ?? '').not.toContain('DELETE');
     const unsigned = await fetch(
       `${process.env.PRODUCT_IMAGE_S3_ENDPOINT}/${process.env.PRODUCT_IMAGE_S3_BUCKET}/private`,
     );
