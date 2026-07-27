@@ -1,7 +1,7 @@
 import type { ConfigService } from '@nestjs/config';
 import { S3ProductImageStorage } from './s3-product-image.storage';
 
-function createConfig(values: Record<string, string | undefined>): ConfigService {
+function createConfig(values: Record<string, unknown>): ConfigService {
   return {
     get: <T>(key: string, defaultValue?: T): T | undefined => {
       const value = values[key];
@@ -24,7 +24,7 @@ describe('S3ProductImageStorage endpoint separation', () => {
     PRODUCT_IMAGE_S3_BUCKET: 'images',
     PRODUCT_IMAGE_S3_ACCESS_KEY: 'access',
     PRODUCT_IMAGE_S3_SECRET_KEY: 'secret',
-    PRODUCT_IMAGE_S3_FORCE_PATH_STYLE: 'true',
+    PRODUCT_IMAGE_S3_FORCE_PATH_STYLE: true,
     PRODUCT_IMAGE_UPLOAD_URL_TTL_SECONDS: '120',
     PRODUCT_IMAGE_READ_URL_TTL_SECONDS: '120',
   };
@@ -58,5 +58,28 @@ describe('S3ProductImageStorage endpoint separation', () => {
     expect(new URL((await storage.createReadUrl('image.png')).readUrl).host).toBe(
       'localhost:19000',
     );
+  });
+  it.each([
+    [true, true],
+    ['true', true],
+    [false, false],
+    ['false', false],
+    [undefined, true],
+  ] as const)('handles forcePathStyle value %p as %p', async (configured, pathStyle) => {
+    const storage = new S3ProductImageStorage(
+      createConfig({ ...base, PRODUCT_IMAGE_S3_FORCE_PATH_STYLE: configured }),
+    );
+    const uploadUrl = (
+      await storage.createUploadUrl({ key: 'products/id/image.png', contentType: 'image/png' })
+    ).uploadUrl;
+    const url = new URL(uploadUrl);
+    if (pathStyle) {
+      expect(url.host).toBe('localhost:19000');
+      expect(url.pathname).toContain('/images/');
+      expect(url.host).not.toBe('images.localhost:19000');
+    } else {
+      expect(url.host).toBe('images.localhost:19000');
+      expect(url.pathname).not.toContain('/images/');
+    }
   });
 });

@@ -23,9 +23,14 @@ export class S3ProductImageStorage implements ProductImageStorage {
     this.expires = Number(config.get('PRODUCT_IMAGE_UPLOAD_URL_TTL_SECONDS', '300'));
     this.readExpires = Number(config.get('PRODUCT_IMAGE_READ_URL_TTL_SECONDS', '120'));
     const endpoint = config.getOrThrow<string>('PRODUCT_IMAGE_S3_ENDPOINT');
+    const rawForcePathStyle = config.get<boolean | string>(
+      'PRODUCT_IMAGE_S3_FORCE_PATH_STYLE',
+      true,
+    );
+    const forcePathStyle = rawForcePathStyle === true || rawForcePathStyle === 'true';
     const common: S3ClientConfig = {
       region: config.get<string>('PRODUCT_IMAGE_S3_REGION', 'us-east-1'),
-      forcePathStyle: config.get<string>('PRODUCT_IMAGE_S3_FORCE_PATH_STYLE', 'true') === 'true',
+      forcePathStyle,
       credentials: {
         accessKeyId: config.getOrThrow<string>('PRODUCT_IMAGE_S3_ACCESS_KEY'),
         secretAccessKey: config.getOrThrow<string>('PRODUCT_IMAGE_S3_SECRET_KEY'),

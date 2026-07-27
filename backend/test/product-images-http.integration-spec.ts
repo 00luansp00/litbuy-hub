@@ -40,7 +40,8 @@ describe('Product images HTTP with real auth, PostgreSQL and MinIO', () => {
     await prisma.$executeRawUnsafe('TRUNCATE TABLE "User", "CatalogCategory" CASCADE');
   });
   afterAll(() => app.close());
-  async function seller(label: string, role: 'SELLER' | 'ADMIN' | undefined = 'SELLER') {
+  async function registerVerifiedUser(label: string) {
+    void label;
     const email = `image-${crypto.randomUUID()}@example.test`;
     const registration = await request(app.getHttpServer()).post('/api/v1/auth/register').send({
       email,
@@ -64,32 +65,39 @@ describe('Product images HTTP with real auth, PostgreSQL and MinIO', () => {
       .send({ token })
       .expect(200);
     const user = await prisma.user.findUniqueOrThrow({ where: { email } });
-    if (role) await prisma.userRoleAssignment.create({ data: { userId: user.id, role } });
-    let profile;
-    if (role === 'SELLER')
-      profile = await prisma.sellerProfile.create({
-        data: {
-          userId: user.id,
-          storeName: `Store ${label}`,
-          slug: `store-${crypto.randomUUID()}`,
-          status: 'ACTIVE',
-        },
-      });
     const login = await request(app.getHttpServer())
       .post('/api/v1/auth/login')
       .set('Cookie', registration.headers['set-cookie'] as unknown as string[])
       .send({ email, password })
       .expect(200);
-    return { user, profile, auth: `Bearer ${login.body.accessToken as string}` };
+    return { user, auth: `Bearer ${login.body.accessToken as string}` };
+  }
+  async function activeSeller(label: string) {
+    const actor = await registerVerifiedUser(label);
+    await prisma.userRoleAssignment.create({ data: { userId: actor.user.id, role: 'SELLER' } });
+    const profile = await prisma.sellerProfile.create({
+      data: {
+        userId: actor.user.id,
+        storeName: `Store ${label}`,
+        slug: `store-${crypto.randomUUID()}`,
+        status: 'ACTIVE',
+      },
+    });
+    return { ...actor, profile };
+  }
+  async function adminUser(label: string) {
+    const actor = await registerVerifiedUser(label);
+    await prisma.userRoleAssignment.create({ data: { userId: actor.user.id, role: 'ADMIN' } });
+    return actor;
   }
   async function product(label: string) {
-    const actor = await seller(label);
+    const actor = await activeSeller(label);
     const category = await prisma.catalogCategory.create({
       data: { slug: `cat-${crypto.randomUUID()}`, name: 'Images' },
     });
     const draft = await prisma.listingDraft.create({
       data: {
-        sellerProfileId: actor.profile!.id,
+        sellerProfileId: actor.profile.id,
         categoryId: category.id,
         productType: 'ACCOUNT',
         model: 'NORMAL',
@@ -101,7 +109,7 @@ describe('Product images HTTP with real auth, PostgreSQL and MinIO', () => {
     const item = await prisma.product.create({
       data: {
         sourceListingDraftId: draft.id,
-        sellerProfileId: actor.profile!.id,
+        sellerProfileId: actor.profile.id,
         categoryId: category.id,
         productType: 'ACCOUNT',
         model: 'NORMAL',
@@ -136,11 +144,18 @@ describe('Product images HTTP with real auth, PostgreSQL and MinIO', () => {
   it('enforces authentication, role and UUID pipes', async () => {
     const p = await product('security');
     await request(app.getHttpServer()).get(images(p.product.id)).expect(401);
-    const buyer = await seller('buyer', undefined);
-    await request(app.getHttpServer())
+    const buyer = await registerVerifiedUser('without-seller');
+    expect(
+      await prisma.userRoleAssignment.count({
+        where: { userId: buyer.user.id, role: 'SELLER' },
+      }),
+    ).toBe(0);
+    expect(await prisma.sellerProfile.count({ where: { userId: buyer.user.id } })).toBe(0);
+    const forbidden = await request(app.getHttpServer())
       .get(images(p.product.id))
-      .set('Authorization', buyer.auth)
-      .expect(403);
+      .set('Authorization', buyer.auth);
+    expect(forbidden.status).toBe(403);
+    expect(forbidden.body.code).toBe('INSUFFICIENT_ROLE');
     await request(app.getHttpServer())
       .get('/api/v1/seller/products/not-uuid/images')
       .set('Authorization', p.auth)
@@ -176,7 +191,7 @@ describe('Product images HTTP with real auth, PostgreSQL and MinIO', () => {
       .set('Authorization', own.auth)
       .expect(404);
     await prisma.sellerProfile.update({
-      where: { id: own.profile!.id },
+      where: { id: own.profile.id },
       data: { status: 'SUSPENDED' },
     });
     await request(app.getHttpServer())
@@ -184,7 +199,7 @@ describe('Product images HTTP with real auth, PostgreSQL and MinIO', () => {
       .set('Authorization', own.auth)
       .expect(404);
     await prisma.sellerProfile.update({
-      where: { id: own.profile!.id },
+      where: { id: own.profile.id },
       data: { status: 'ACTIVE' },
     });
     for (const status of ['ACTIVE', 'PAUSED', 'REMOVED'] as const) {
@@ -277,7 +292,7 @@ describe('Product images HTTP with real auth, PostgreSQL and MinIO', () => {
       .set('Authorization', p.auth)
       .send({ imageIds: [two.body.imageId, one.body.imageId] })
       .expect(200);
-    const admin = await seller('admin', 'ADMIN');
+    const admin = await adminUser('admin');
     await request(app.getHttpServer())
       .get(`/api/v1/admin/products/${p.product.id}/images`)
       .set('Authorization', admin.auth)
