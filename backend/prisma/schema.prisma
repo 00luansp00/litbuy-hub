@@ -127,6 +127,12 @@ enum SecurityEventType {
   LISTING_DRAFT_REJECTED
   LISTING_DRAFT_APPROVED
   PRODUCT_MATERIALIZED
+  PRODUCT_IMAGE_UPLOAD_INTENT_CREATED
+  PRODUCT_IMAGE_UPLOAD_COMPLETED
+  PRODUCT_IMAGE_UPLOAD_REJECTED
+  PRODUCT_IMAGE_COVER_CHANGED
+  PRODUCT_IMAGES_REORDERED
+  PRODUCT_IMAGE_DELETED
 }
 
 enum StepUpScope {
@@ -681,6 +687,12 @@ enum ProductVariantStatus {
   PAUSED
 }
 
+enum ProductImageStatus {
+  PENDING_UPLOAD
+  READY
+  DELETED
+}
+
 model Product {
   id                   String                   @id @default(uuid()) @db.Uuid
   sourceListingDraftId String                   @unique @db.Uuid
@@ -709,10 +721,32 @@ model Product {
   attributes         ProductAttributeValue[]
   serviceDetails     ProductServiceDetails?
   accountDetails     ProductAccountDetails?
+  images             ProductImage[]
 
   @@index([sellerProfileId, status, updatedAt])
   @@index([status, updatedAt])
   @@index([categoryId, subcategoryId])
+}
+
+model ProductImage {
+  id              String             @id @default(uuid()) @db.Uuid
+  productId       String             @db.Uuid
+  objectKey       String             @unique
+  status          ProductImageStatus @default(PENDING_UPLOAD)
+  contentType     String
+  sizeBytes       Int
+  altText         String?
+  sortOrder       Int
+  isCover         Boolean            @default(false)
+  uploadedAt      DateTime?
+  uploadExpiresAt DateTime
+  deletedAt       DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  product         Product            @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([productId, status, sortOrder])
+  @@index([productId, status, uploadExpiresAt])
 }
 
 model ProductVariant {

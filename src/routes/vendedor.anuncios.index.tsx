@@ -5,6 +5,7 @@ import { AuthGate } from "@/components/auth/AuthGate";
 import { SellerDashboardLayout } from "@/components/seller-dashboard/SellerDashboardLayout";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Button } from "@/components/ui/button";
+import { ProductImageManager } from "@/components/seller-dashboard/product-images/ProductImageManager";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -175,6 +176,9 @@ function ListingsPage() {
                     <p className="mt-2 text-sm text-primary">
                       Aprovado pela moderação. A publicação pública ainda não está disponível.
                     </p>
+                  )}
+                  {draft.materializedProduct?.status === "UNPUBLISHED" && (
+                    <ProductImageManager productId={draft.materializedProduct.id} />
                   )}
                 </div>
                 <div className="flex gap-2">

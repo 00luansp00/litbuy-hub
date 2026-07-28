@@ -14,7 +14,7 @@ services:
       retries: 5
     volumes:
       - litbuy_staging_postgres:/var/lib/postgresql/data
-    ports: ["127.0.0.1:5432:5432"]
+    ports: ["127.0.0.1:${STAGING_POSTGRES_PORT:-15432}:5432"]
   redis:
     image: redis:7.4.2-alpine
     command: ["redis-server", "--appendonly", "yes"]
@@ -25,13 +25,45 @@ services:
       retries: 5
     volumes:
       - litbuy_staging_redis:/data
-    ports: ["127.0.0.1:6379:6379"]
+    ports: ["127.0.0.1:${STAGING_REDIS_PORT:-16379}:6379"]
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: server /data --console-address ':9001'
+    environment:
+      MINIO_ROOT_USER: litbuy_local_staging_access
+      MINIO_ROOT_PASSWORD: litbuy_local_staging_secret_not_for_production
+      MINIO_API_CORS_ALLOW_ORIGIN: ${STAGING_PUBLIC_FRONTEND_ORIGIN:-http://localhost:13000}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes: [litbuy_staging_minio:/data]
+    ports:
+      [
+        "127.0.0.1:${STAGING_MINIO_PORT:-19000}:9000",
+        "127.0.0.1:${STAGING_MINIO_CONSOLE_PORT:-19001}:9001",
+      ]
+  minio-init:
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    depends_on:
+      minio: { condition: service_healthy }
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      [
+        "mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD && mc mb --ignore-existing local/$$PRODUCT_IMAGE_S3_BUCKET && mc stat local/$$PRODUCT_IMAGE_S3_BUCKET",
+      ]
+    environment:
+      MINIO_ROOT_USER: litbuy_local_staging_access
+      MINIO_ROOT_PASSWORD: litbuy_local_staging_secret_not_for_production
+      PRODUCT_IMAGE_S3_BUCKET: litbuy-product-images-staging-local
   migrate:
     build: ./backend
     env_file: ./backend/.env.staging.local.example
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
+      minio-init: { condition: service_completed_successfully }
     command: ["./node_modules/.bin/prisma", "migrate", "deploy"]
     restart: "no"
   backend:
@@ -41,7 +73,8 @@ services:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }
-    ports: ["127.0.0.1:3001:3001"]
+      minio-init: { condition: service_completed_successfully }
+    ports: ["127.0.0.1:${STAGING_BACKEND_PORT:-13001}:3001"]
     healthcheck:
       test:
         [
@@ -55,10 +88,11 @@ services:
     build:
       context: .
       args:
-        VITE_API_BASE_URL: http://localhost:3001/api/v1
+        VITE_API_BASE_URL: ${STAGING_PUBLIC_API_BASE_URL:-http://localhost:13001/api/v1}
     depends_on:
       backend: { condition: service_healthy }
-    ports: ["127.0.0.1:3000:3000"]
+    ports: ["127.0.0.1:${STAGING_FRONTEND_PORT:-13000}:3000"]
 volumes:
   litbuy_staging_postgres:
   litbuy_staging_redis:
+  litbuy_staging_minio:

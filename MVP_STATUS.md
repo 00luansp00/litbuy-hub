@@ -553,3 +553,6 @@ Futuro/demonstrativo: aprovação não publica produto público; imagens permane
 ## Product foundation status
 
 Implementada a materialização interna de produtos `UNPUBLISHED` a partir de rascunhos aprovados. Publicação pública e venda permanecem pendentes.
+# Product image status
+
+Real: internal persistence, S3-compatible upload/HEAD/delete, seller management, admin reading. Future: public publication, catalog, CDN processing, and purchase.

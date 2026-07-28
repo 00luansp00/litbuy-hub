@@ -106,6 +106,15 @@ jobs:
       PUBLIC_FRONTEND_ORIGIN: http://localhost:3000
       PUBLIC_API_ORIGIN: http://localhost:3001
       AUTH_COOKIE_TOPOLOGY: same-host
+      PRODUCT_IMAGE_S3_ENDPOINT: http://localhost:9000
+      PRODUCT_IMAGE_S3_SIGNING_ENDPOINT: http://localhost:9000
+      PRODUCT_IMAGE_S3_REGION: us-east-1
+      PRODUCT_IMAGE_S3_BUCKET: litbuy-product-images-test
+      PRODUCT_IMAGE_S3_ACCESS_KEY: litbuy_ci_minio_access
+      PRODUCT_IMAGE_S3_SECRET_KEY: litbuy_ci_minio_secret_not_for_production
+      PRODUCT_IMAGE_S3_FORCE_PATH_STYLE: "true"
+      PRODUCT_IMAGE_UPLOAD_URL_TTL_SECONDS: "120"
+      PRODUCT_IMAGE_READ_URL_TTL_SECONDS: "120"
     defaults:
       run:
         working-directory: backend
@@ -222,6 +231,17 @@ jobs:
       PUBLIC_FRONTEND_ORIGIN: http://localhost:3000
       PUBLIC_API_ORIGIN: http://localhost:3001
       AUTH_COOKIE_TOPOLOGY: same-host
+      PRODUCT_IMAGE_S3_ENDPOINT: http://localhost:9000
+      PRODUCT_IMAGE_S3_SIGNING_ENDPOINT: http://localhost:9000
+      PRODUCT_IMAGE_S3_REGION: us-east-1
+      PRODUCT_IMAGE_S3_BUCKET: litbuy-product-images-test
+      PRODUCT_IMAGE_S3_ACCESS_KEY: litbuy_ci_minio_access
+      PRODUCT_IMAGE_S3_SECRET_KEY: litbuy_ci_minio_secret_not_for_production
+      PRODUCT_IMAGE_S3_FORCE_PATH_STYLE: "true"
+      PRODUCT_IMAGE_UPLOAD_URL_TTL_SECONDS: "120"
+      PRODUCT_IMAGE_READ_URL_TTL_SECONDS: "120"
+      MINIO_ROOT_USER: litbuy_ci_minio_access
+      MINIO_ROOT_PASSWORD: litbuy_ci_minio_secret_not_for_production
     defaults:
       run:
         working-directory: backend
@@ -239,6 +259,42 @@ jobs:
 
       - name: Generate Prisma client
         run: bun run prisma:generate
+
+      - name: Start MinIO and initialize private bucket
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          exec > >(tee backend/minio-setup.log) 2>&1
+          docker run -d --name litbuy-ci-minio -p 9000:9000 \
+            -e MINIO_ROOT_USER="$MINIO_ROOT_USER" \
+            -e MINIO_ROOT_PASSWORD="$MINIO_ROOT_PASSWORD" \
+            -e MINIO_API_CORS_ALLOW_ORIGIN="http://localhost:3000" \
+            minio/minio:RELEASE.2025-04-22T22-12-26Z server /data
+          ready=false
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://localhost:9000/minio/health/live >/dev/null; then ready=true; break; fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then docker logs litbuy-ci-minio; exit 1; fi
+          docker logs litbuy-ci-minio
+          echo "MINIO_API_CORS_ALLOW_ORIGIN=http://localhost:3000"
+          docker run --rm --network host \
+            -e MC_HOST_local=http://$MINIO_ROOT_USER:$MINIO_ROOT_PASSWORD@localhost:9000 \
+            minio/mc:RELEASE.2025-04-16T18-13-26Z \
+            mb --ignore-existing local/$PRODUCT_IMAGE_S3_BUCKET
+          docker run --rm --network host \
+            -e MC_HOST_local=http://$MINIO_ROOT_USER:$MINIO_ROOT_PASSWORD@localhost:9000 \
+            minio/mc:RELEASE.2025-04-16T18-13-26Z \
+            stat local/$PRODUCT_IMAGE_S3_BUCKET
+
+      - name: Upload MinIO setup failure log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: minio-setup-failure
+          path: backend/minio-setup.log
+          if-no-files-found: ignore
+          retention-days: 3
 
       - name: Deploy Prisma migrations
         run: bun run prisma:migrate:deploy
@@ -266,6 +322,43 @@ jobs:
       - name: Build staging compose images
         working-directory: ${{ github.workspace }}
         run: docker compose -f docker-compose.staging.yml build
+
+      - name: Start staging composition
+        working-directory: ${{ github.workspace }}
+        run: docker compose -f docker-compose.staging.yml up -d --build --wait
+
+      - name: Verify staging health
+        working-directory: ${{ github.workspace }}
+        run: |
+          curl -fsS http://localhost:13001/api/v1/health/live
+          curl -fsS http://localhost:13001/api/v1/health/ready
+          allowed="$(curl -si -X OPTIONS http://localhost:19000/litbuy-product-images-staging-local/cors-check -H 'Origin: http://localhost:13000' -H 'Access-Control-Request-Method: PUT')"
+          grep -Fiq 'Access-Control-Allow-Origin: http://localhost:13000' <<<"$allowed"
+          for forbidden in http://localhost:3000 https://unknown.example; do
+            response="$(curl -si -X OPTIONS http://localhost:19000/litbuy-product-images-staging-local/cors-check -H "Origin: $forbidden" -H 'Access-Control-Request-Method: PUT')"
+            ! grep -Fiq "Access-Control-Allow-Origin: $forbidden" <<<"$response"
+          done
+
+      - name: Run staging smoke tests
+        working-directory: ${{ github.workspace }}/backend
+        run: |
+          INFRA_SMOKE_BASE_URL=http://localhost:13001/api/v1 \
+            INFRA_SMOKE_ORIGIN=http://localhost:13000 bun run smoke:infra
+
+      - name: Capture staging composition failure
+        if: failure()
+        working-directory: ${{ github.workspace }}
+        run: |
+          { docker compose -f docker-compose.staging.yml ps -a; docker compose -f docker-compose.staging.yml logs --no-color; } > staging-compose.log 2>&1 || true
+
+      - name: Upload staging composition failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-compose-failure
+          path: staging-compose.log
+          if-no-files-found: ignore
+          retention-days: 3
 
       - name: Build backend for infrastructure smoke tests
         run: bun run build
@@ -314,3 +407,13 @@ jobs:
             kill "$(cat /tmp/litbuy-backend.pid)"
             wait "$(cat /tmp/litbuy-backend.pid)" 2>/dev/null || true
           fi
+
+      - name: Stop MinIO
+        if: always()
+        working-directory: ${{ github.workspace }}
+        run: docker rm -f litbuy-ci-minio >/dev/null 2>&1 || true
+
+      - name: Stop staging composition
+        if: always()
+        working-directory: ${{ github.workspace }}
+        run: docker compose -f docker-compose.staging.yml down -v --remove-orphans || true

@@ -219,3 +219,6 @@ Futuro/demonstrativo: aprovação não publica produto público; imagens permane
 ## Product foundation handoff
 
 Produtos reais existem apenas como registros internos `UNPUBLISHED` gerados pela aprovação de rascunhos. Não ligar páginas públicas, checkout ou imagens a estes registros antes da sprint específica de publicação/storage.
+# Product images handoff
+
+Run MinIO through `backend/compose.yaml` and configure the `PRODUCT_IMAGE_S3_*` variables. Storage SDK calls are isolated behind `ProductImageStorage`; public publication remains intentionally disconnected.

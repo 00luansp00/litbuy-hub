@@ -409,3 +409,6 @@ Futuro/demonstrativo: aprovação não publica produto público; imagens permane
 - Novos enums: `ProductStatus` (`UNPUBLISHED`, `ACTIVE`, `PAUSED`, `REMOVED`) e `ProductVariantStatus` (`ACTIVE`, `PAUSED`).
 - Novos modelos: `Product`, `ProductVariant`, `ProductAttributeValue`, `ProductServiceDetails`, `ProductAccountDetails`.
 - `Product.sourceListingDraftId` é obrigatório e único; relações comerciais usam `onDelete: Restrict`.
+# ProductImage
+
+`ProductImage` stores provider-neutral object keys, declared MIME/size, lifecycle status, order, cover, and audit timestamps. PostgreSQL checks require positive size/nonnegative order; a partial unique index permits one READY cover per product.

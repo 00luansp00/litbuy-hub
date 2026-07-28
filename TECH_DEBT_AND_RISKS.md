@@ -218,3 +218,6 @@ Futuro/demonstrativo: aprovação não publica produto público; imagens permane
 
 - Backfill em massa de rascunhos aprovados antigos não foi executado; a reconciliação é administrativa e sob demanda.
 - Slugs de produtos removidos não são reutilizados porque a constraint única permanece global.
+# Product image storage risks
+
+Add pending-intent garbage collection and object/database reconciliation before scale. Add content decoding, malware scanning, moderation, thumbnails and a production CDN/provider decision before public publication.
