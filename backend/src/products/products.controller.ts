@@ -1,10 +1,21 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { PlatformRole } from '@prisma/client';
 import { AccessTokenGuard } from '../auth/access-token.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { RequireRoles } from '../auth/platform-roles';
 import { PlatformRolesGuard } from '../auth/platform-roles.guard';
-import { ProductQueryDto } from './dto';
+import { ProductLifecycleDto, ProductQueryDto } from './dto';
+import { ProductLifecycleService } from './product-lifecycle.service';
+import { ProductLifecycleCsrfGuard } from './product-lifecycle-csrf.guard';
 import { ProductMaterializationService } from './product-materialization.service';
 type AuthenticatedUser = { userId: string };
 
@@ -12,12 +23,24 @@ type AuthenticatedUser = { userId: string };
 @Controller('seller/products')
 @RequireRoles(PlatformRole.SELLER)
 export class SellerProductsController {
-  constructor(private readonly service: ProductMaterializationService) {}
+  constructor(
+    private readonly service: ProductMaterializationService,
+    private readonly lifecycle: ProductLifecycleService,
+  ) {}
   @Get() list(@CurrentUser() user: AuthenticatedUser, @Query() q: ProductQueryDto) {
     return this.service.listForSeller(user.userId, q);
   }
   @Get(':id') get(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
     return this.service.getForSeller(user.userId, id);
+  }
+  @Patch(':id/lifecycle')
+  @UseGuards(ProductLifecycleCsrfGuard)
+  transition(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() dto: ProductLifecycleDto,
+  ) {
+    return this.lifecycle.transition(user.userId, id, dto);
   }
 }
 

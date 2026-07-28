@@ -218,6 +218,11 @@ Futuro/demonstrativo: aprovação não publica produto público; imagens permane
 
 - Backfill em massa de rascunhos aprovados antigos não foi executado; a reconciliação é administrativa e sob demanda.
 - Slugs de produtos removidos não são reutilizados porque a constraint única permanece global.
+
 # Product image storage risks
 
 Add pending-intent garbage collection and object/database reconciliation before scale. Add content decoding, malware scanning, moderation, thumbnails and a production CDN/provider decision before public publication.
+
+## Product lifecycle foundation (2026-07-28, PR #28)
+
+O estado `ACTIVE` de produto agora é persistente e controlado pelo vendedor proprietário via backend, com elegibilidade transacional, versão otimista, advisory lock, idempotência e auditoria. Isso **não** conecta catálogo público nem torna qualquer produto comprável. Estoque/reserva, checkout, pagamentos e mutações administrativas de lifecycle continuam pendentes. O contrato autoritativo está em `PRODUCT_LIFECYCLE_FOUNDATION.md`.

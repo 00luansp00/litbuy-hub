@@ -409,6 +409,11 @@ Futuro/demonstrativo: aprovação não publica produto público; imagens permane
 - Novos enums: `ProductStatus` (`UNPUBLISHED`, `ACTIVE`, `PAUSED`, `REMOVED`) e `ProductVariantStatus` (`ACTIVE`, `PAUSED`).
 - Novos modelos: `Product`, `ProductVariant`, `ProductAttributeValue`, `ProductServiceDetails`, `ProductAccountDetails`.
 - `Product.sourceListingDraftId` é obrigatório e único; relações comerciais usam `onDelete: Restrict`.
+
 # ProductImage
 
 `ProductImage` stores provider-neutral object keys, declared MIME/size, lifecycle status, order, cover, and audit timestamps. PostgreSQL checks require positive size/nonnegative order; a partial unique index permits one READY cover per product.
+
+## Product lifecycle foundation (2026-07-28, PR #28)
+
+O estado `ACTIVE` de produto agora é persistente e controlado pelo vendedor proprietário via backend, com elegibilidade transacional, versão otimista, advisory lock, idempotência e auditoria. Isso **não** conecta catálogo público nem torna qualquer produto comprável. Estoque/reserva, checkout, pagamentos e mutações administrativas de lifecycle continuam pendentes. O contrato autoritativo está em `PRODUCT_LIFECYCLE_FOUNDATION.md`.

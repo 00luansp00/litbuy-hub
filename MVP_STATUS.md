@@ -553,6 +553,11 @@ Futuro/demonstrativo: aprovação não publica produto público; imagens permane
 ## Product foundation status
 
 Implementada a materialização interna de produtos `UNPUBLISHED` a partir de rascunhos aprovados. Publicação pública e venda permanecem pendentes.
+
 # Product image status
 
 Real: internal persistence, S3-compatible upload/HEAD/delete, seller management, admin reading. Future: public publication, catalog, CDN processing, and purchase.
+
+## Product lifecycle foundation (2026-07-28, PR #28)
+
+O estado `ACTIVE` de produto agora é persistente e controlado pelo vendedor proprietário via backend, com elegibilidade transacional, versão otimista, advisory lock, idempotência e auditoria. Isso **não** conecta catálogo público nem torna qualquer produto comprável. Estoque/reserva, checkout, pagamentos e mutações administrativas de lifecycle continuam pendentes. O contrato autoritativo está em `PRODUCT_LIFECYCLE_FOUNDATION.md`.
