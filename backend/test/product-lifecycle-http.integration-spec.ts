@@ -3,6 +3,7 @@ import { ValidationPipe, VersioningType } from '@nestjs/common';
 import type { INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
+import { SecurityEventType } from '@prisma/client';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { AuthMailer } from '../src/auth/auth.service';
@@ -224,6 +225,30 @@ describe('Product lifecycle HTTP with real auth and PostgreSQL', () => {
       status: 'REMOVED',
       version: 5,
     });
-    expect(await prisma.securityEvent.count({ where: { userId: f.owner.user.id } })).toBe(4);
+    const lifecycleEventTypes = [
+      SecurityEventType.PRODUCT_ACTIVATED,
+      SecurityEventType.PRODUCT_PAUSED,
+      SecurityEventType.PRODUCT_RESUMED,
+      SecurityEventType.PRODUCT_REMOVED,
+    ];
+    const lifecycleEvents = (
+      await prisma.securityEvent.findMany({
+        where: {
+          userId: f.owner.user.id,
+          eventType: { in: lifecycleEventTypes },
+        },
+        select: { eventType: true, metadata: true },
+      })
+    ).filter(
+      (event) =>
+        event.metadata !== null &&
+        typeof event.metadata === 'object' &&
+        !Array.isArray(event.metadata) &&
+        event.metadata.productId === f.product.id,
+    );
+    expect(lifecycleEvents).toHaveLength(4);
+    expect(lifecycleEvents.map((event) => event.eventType).sort()).toEqual(
+      [...lifecycleEventTypes].sort(),
+    );
   });
 });
