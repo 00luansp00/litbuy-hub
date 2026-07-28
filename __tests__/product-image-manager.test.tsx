@@ -48,6 +48,20 @@ describe("ProductImageManager", () => {
       ready.viewUrl,
     );
   });
+  it("does not offer the cover action for a pending image", async () => {
+    const pending = {
+      ...ready,
+      status: "PENDING_UPLOAD" as const,
+      isCover: false,
+      uploadedAt: null,
+      viewUrl: null,
+      viewExpiresAt: null,
+    };
+    service.list.mockResolvedValue({ items: [pending], limit: 8 });
+    render(<ProductImageManager productId={ready.id} />);
+    expect(await screen.findByText("Upload pendente")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Definir capa" })).not.toBeInTheDocument();
+  });
   it("renders a local preview and revokes it after a failed PUT", async () => {
     let rejectUpload!: (error: Error) => void;
     service.upload.mockImplementation(
