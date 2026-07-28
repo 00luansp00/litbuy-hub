@@ -25,3 +25,22 @@ The bucket remains private. After eligibility succeeds, the service calls the ex
 ## Security, limitations, and out of scope
 
 Both routes are GET-only and require neither bearer token nor CSRF token. They have no mutation, mock fallback, or direct S3 client. Signed URLs are time-limited; pagination is capped and provides neither search nor a total. Frontend integration, search/FTS, reviews, favorites, cart, coupons, orders, checkout, payments, reservation, escrow/wallet, delivery, chat/disputes, image transformation/CDN/cache, and lifecycle mutation remain future work.
+
+## Automated coverage
+
+`public-product-catalog.service.spec.ts` exercises the service itself with controlled Prisma and
+storage collaborators in addition to its pure mapping helpers. The Backend integration suite now
+contains three catalog-specific paths:
+
+- `public-product-catalog-http-controlled.integration-spec.ts` starts the real Nest application and
+  uses PostgreSQL plus controlled signing to cover anonymous HTTP access, every visibility barrier,
+  filters and validation, deterministic ordering, logical pagination, safe contracts, gallery and
+  variant selection, signature counts, safe storage failures, and absence of security events;
+- `public-product-catalog.integration-spec.ts` exercises three pages and persisted eligibility
+  changes directly against PostgreSQL, including interleaved invisible rows and ID tie-breaks;
+- `public-product-catalog-minio.integration-spec.ts` uploads and downloads a real private object
+  through the existing storage abstraction and verifies the configured signed host and subsequent
+  invisibility.
+
+These infrastructure tests require the PostgreSQL, Redis, and MinIO services supplied by Backend
+integration CI. Their presence does not imply that the public frontend consumes the API.
