@@ -1,5 +1,7 @@
 # DEVELOPER_HANDOFF.md — LIT Buy
 
+> Backend public catalog reads are documented in `PUBLIC_CATALOG_READ_FOUNDATION.md`. Visibility does not imply purchasability or stock reservation.
+
 Este é o documento principal de entrega técnica para desenvolvedor,
 freelancer ou agência assumir o projeto.
 

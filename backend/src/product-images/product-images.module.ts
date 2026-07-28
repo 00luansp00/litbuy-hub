@@ -16,5 +16,6 @@ import { S3ProductImageStorage } from './s3-product-image.storage';
     ProductImagesService,
     { provide: PRODUCT_IMAGE_STORAGE, useClass: S3ProductImageStorage },
   ],
+  exports: [PRODUCT_IMAGE_STORAGE],
 })
 export class ProductImagesModule {}

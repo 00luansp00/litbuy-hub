@@ -1,5 +1,7 @@
 # API_CONTRACTS_DRAFT.md — LIT Buy
 
+> Implemented: `GET /api/v1/catalog/products` and `GET /api/v1/catalog/products/:slug`. See `PUBLIC_CATALOG_READ_FOUNDATION.md`; no public frontend consumer is connected yet.
+
 Rascunho de endpoints sugeridos. **Não implementado.** Serve como base
 para o backend futuro (REST/RPC/GraphQL/tRPC — escolha do time).
 

@@ -64,16 +64,17 @@ export function lifecycleTarget(status: ProductStatus, action: ProductLifecycleA
   return fail('PRODUCT_STATUS_TRANSITION_INVALID');
 }
 
-export function assertPublicationEligible(p: PublicationCandidate) {
-  if (p.sellerProfile.status !== SellerProfileStatus.ACTIVE) fail('SELLER_PROFILE_ACTIVE_REQUIRED');
+export function publicationEligibilityCode(p: PublicationCandidate): string | null {
+  if (p.sellerProfile.status !== SellerProfileStatus.ACTIVE)
+    return 'SELLER_PROFILE_ACTIVE_REQUIRED';
   if (!p.sourceListingDraft || p.sourceListingDraft.status !== ListingDraftStatus.APPROVED)
-    return fail('PRODUCT_SOURCE_NOT_APPROVED');
+    return 'PRODUCT_SOURCE_NOT_APPROVED';
   if (
     p.categoryId !== p.sourceListingDraft.categoryId ||
     p.subcategoryId !== p.sourceListingDraft.subcategoryId ||
     p.productType !== p.sourceListingDraft.productType
   )
-    fail('PRODUCT_TAXONOMY_MISMATCH');
+    return 'PRODUCT_TAXONOMY_MISMATCH';
   if (
     !p.category ||
     p.category.status !== CatalogEntityStatus.ACTIVE ||
@@ -81,15 +82,15 @@ export function assertPublicationEligible(p: PublicationCandidate) {
       (p.subcategory.status !== CatalogEntityStatus.ACTIVE ||
         p.subcategory.categoryId !== p.categoryId))
   )
-    fail('PRODUCT_TAXONOMY_INACTIVE');
+    return 'PRODUCT_TAXONOMY_INACTIVE';
   if (!p.title.trim() || !p.description.trim() || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(p.slug))
-    fail('PRODUCT_DATA_INCOMPLETE');
+    return 'PRODUCT_DATA_INCOMPLETE';
   const ready = p.images.filter((image) => image.status === ProductImageStatus.READY);
   if (!ready.length || ready.filter((image) => image.isCover).length !== 1)
-    fail('PRODUCT_READY_COVER_REQUIRED');
+    return 'PRODUCT_READY_COVER_REQUIRED';
   if (p.model === ListingDraftModel.NORMAL) {
     if (!positive(p.price) || !stockValid(p.stock) || p.stock === null || p.variants.length !== 1)
-      fail('PRODUCT_VARIANT_INVALID');
+      return 'PRODUCT_VARIANT_INVALID';
     const variant = p.variants[0];
     if (
       variant.status !== ProductVariantStatus.ACTIVE ||
@@ -97,17 +98,17 @@ export function assertPublicationEligible(p: PublicationCandidate) {
       !stockValid(variant.stock) ||
       variant.stock === null
     )
-      fail('PRODUCT_VARIANT_INVALID');
+      return 'PRODUCT_VARIANT_INVALID';
   } else if (p.model === ListingDraftModel.DYNAMIC) {
     if (
       !p.variants.length ||
       !p.variants.some((variant) => variant.status === ProductVariantStatus.ACTIVE) ||
       p.variants.some((variant) => !positive(variant.price) || !stockValid(variant.stock))
     )
-      fail('PRODUCT_VARIANT_INVALID');
+      return 'PRODUCT_VARIANT_INVALID';
   } else {
     const details = p.serviceDetails;
-    if (!details) return fail('PRODUCT_SERVICE_DETAILS_INVALID');
+    if (!details) return 'PRODUCT_SERVICE_DETAILS_INVALID';
     if (details.pricingType === ListingDraftServicePricingType.FIXED) {
       if (
         !positive(details.basePrice) ||
@@ -115,12 +116,18 @@ export function assertPublicationEligible(p: PublicationCandidate) {
         p.variants[0].status !== ProductVariantStatus.ACTIVE ||
         !positive(p.variants[0].price)
       )
-        fail('PRODUCT_SERVICE_DETAILS_INVALID');
+        return 'PRODUCT_SERVICE_DETAILS_INVALID';
     } else if (
       details.pricingType !== ListingDraftServicePricingType.QUOTE ||
       details.basePrice !== null ||
       p.variants.length !== 0
     )
-      fail('PRODUCT_SERVICE_DETAILS_INVALID');
+      return 'PRODUCT_SERVICE_DETAILS_INVALID';
   }
+  return null;
+}
+
+export function assertPublicationEligible(p: PublicationCandidate) {
+  const code = publicationEligibilityCode(p);
+  if (code) fail(code);
 }
