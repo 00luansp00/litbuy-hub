@@ -131,8 +131,7 @@ describe('Public product catalog HTTP with PostgreSQL and controlled storage', (
     ['inactive category', { categoryStatus: 'INACTIVE' }],
     ['inactive subcategory', { subcategoryStatus: 'INACTIVE' }],
     ['incompatible subcategory', { incompatibleSubcategory: true }],
-    ['missing READY cover', { coverStatus: 'PENDING_UPLOAD' }],
-    ['two READY covers', { coverCount: 2 }],
+    ['missing READY cover', { coverCount: 0 }],
     ['invalid variant', { invalidVariant: true }],
     [
       'invalid service',
@@ -243,7 +242,7 @@ describe('Public product catalog HTTP with PostgreSQL and controlled storage', (
         slug: `hidden-${index}`,
         title: `Hidden ${index}`,
         updatedAt: new Date(Date.UTC(2026, 0, 10 - index, 12)),
-        coverCount: 2,
+        categoryMismatch: true,
       });
     }
     const pages: ListBody[] = [];

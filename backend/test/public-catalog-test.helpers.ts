@@ -148,28 +148,30 @@ export async function createCatalogFixture(
         productId: product.id,
         title: 'Primary variant',
         description: 'Public variant',
-        price: options.invalidVariant ? null : new Prisma.Decimal('19.90'),
-        stock: options.invalidVariant ? -1 : 7,
-        status: 'ACTIVE',
+        price: new Prisma.Decimal('19.90'),
+        stock: 7,
+        status: options.invalidVariant ? 'PAUSED' : 'ACTIVE',
         sortOrder: 10,
       },
     });
   }
   const images = [];
   for (let index = 0; index < (options.coverCount ?? 1); index += 1) {
+    const status = options.coverStatus ?? 'READY';
     images.push(
       await prisma.productImage.create({
         data: {
           productId: product.id,
           objectKey: `catalog/${product.id}/cover-${index}.png`,
-          status: options.coverStatus ?? 'READY',
+          status,
           contentType: 'image/png',
           sizeBytes: 10,
           altText: `Cover ${index}`,
           sortOrder: index,
-          isCover: true,
-          uploadedAt: new Date(),
+          isCover: status === 'READY',
+          uploadedAt: status === 'READY' ? new Date() : null,
           uploadExpiresAt: new Date(Date.now() + 300_000),
+          deletedAt: status === 'DELETED' ? new Date() : null,
         },
       }),
     );
@@ -191,7 +193,7 @@ export async function addImage(
       sizeBytes: 10,
       altText: input.status,
       sortOrder: input.sortOrder,
-      isCover: input.isCover ?? false,
+      isCover: input.status === 'READY' ? (input.isCover ?? false) : false,
       uploadedAt: input.status === 'READY' ? new Date() : null,
       uploadExpiresAt: new Date(Date.now() + 300_000),
       deletedAt: input.status === 'DELETED' ? new Date() : null,

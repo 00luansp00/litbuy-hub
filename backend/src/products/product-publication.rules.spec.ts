@@ -130,6 +130,11 @@ describe('product publication eligibility', () => {
     p.images = [{ status: ProductImageStatus.READY, isCover: false }];
     code(() => assertPublicationEligible(p), 'PRODUCT_READY_COVER_REQUIRED');
   });
+  it('defensively rejects an in-memory aggregate with two READY covers', () => {
+    const p = candidate();
+    p.images.push({ status: ProductImageStatus.READY, isCover: true });
+    expect(publicationEligibilityCode(p)).toBe('PRODUCT_READY_COVER_REQUIRED');
+  });
   it('rejects incomplete content and invalid NORMAL data', () => {
     const p = candidate();
     p.title = ' ';

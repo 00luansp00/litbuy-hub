@@ -24,6 +24,31 @@ describe('Public product catalog pagination with real PostgreSQL', () => {
   beforeEach(() => truncateCatalog(prisma));
   afterAll(() => client.$disconnect());
 
+  it('keeps the PostgreSQL one-READY-cover barrier intact', async () => {
+    const fixture = await createCatalogFixture(prisma);
+    await expect(
+      prisma.productImage.create({
+        data: {
+          productId: fixture.product.id,
+          objectKey: `catalog/${fixture.product.id}/second-cover.png`,
+          status: 'READY',
+          contentType: 'image/png',
+          sizeBytes: 10,
+          altText: 'Forbidden second cover',
+          sortOrder: 1,
+          isCover: true,
+          uploadedAt: new Date(),
+          uploadExpiresAt: new Date(Date.now() + 300_000),
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'P2002' });
+    expect(
+      await prisma.productImage.count({
+        where: { productId: fixture.product.id, status: 'READY', isCover: true },
+      }),
+    ).toBe(1);
+  });
+
   it('keeps three real pages stable while interleaved ineligible rows do not consume offsets', async () => {
     const eligible = [];
     const sameDate = new Date('2026-02-01T00:00:00.000Z');
@@ -43,7 +68,7 @@ describe('Public product catalog pagination with real PostgreSQL', () => {
         slug: `ineligible-${index}`,
         title: 'Repeated title',
         updatedAt: sameDate,
-        coverCount: 2,
+        categoryMismatch: true,
       });
     }
     const pages = await Promise.all(
@@ -100,7 +125,7 @@ describe('Public product catalog pagination with real PostgreSQL', () => {
     });
     await prisma.productImage.update({
       where: { id: fixture.images[0].id },
-      data: { status: 'DELETED' },
+      data: { status: 'DELETED', deletedAt: new Date(), isCover: false },
     });
     expect(await visible()).toBe(0);
   });
