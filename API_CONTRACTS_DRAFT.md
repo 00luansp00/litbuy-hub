@@ -165,6 +165,11 @@ Futuro/demonstrativo: aprovação não publica produto público; imagens permane
 - `GET /api/v1/seller/products` e `GET /api/v1/seller/products/:id`: requerem `SELLER` e escopam pelo `SellerProfile` autenticado.
 - `GET /api/v1/admin/products` e `GET /api/v1/admin/products/:id`: requerem `ADMIN`.
 - A aprovação de rascunho inclui `materializedProduct: { id, slug, status }` quando o produto existe; status inicial é sempre `UNPUBLISHED`.
+
 # Product image endpoints
 
 The protected seller upload-intent, completion, listing, reorder, cover, and deletion contracts and the read-only admin listing contract are implemented as documented in `PRODUCT_IMAGE_STORAGE_FOUNDATION.md`. They do not constitute a public catalog API.
+
+## Product lifecycle foundation (2026-07-28, PR #28)
+
+O estado `ACTIVE` de produto agora é persistente e controlado pelo vendedor proprietário via backend, com elegibilidade transacional, versão otimista, advisory lock, idempotência e auditoria. Isso **não** conecta catálogo público nem torna qualquer produto comprável. Estoque/reserva, checkout, pagamentos e mutações administrativas de lifecycle continuam pendentes. O contrato autoritativo está em `PRODUCT_LIFECYCLE_FOUNDATION.md`.

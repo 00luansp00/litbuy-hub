@@ -122,3 +122,7 @@ Futuro/demonstrativo: aprovação não publica produto público; imagens permane
 
 `ListingDraft (APPROVED) 1 -> 0..1 Product` via `Product.sourceListingDraftId` único. O produto também referencia `SellerProfile`, `CatalogCategory` e opcionalmente `CatalogSubcategory` sem cascata destrutiva.
 `Product 1 ── N ProductImage` (required product relation, restricted deletion).
+
+## Product lifecycle foundation (2026-07-28, PR #28)
+
+O estado `ACTIVE` de produto agora é persistente e controlado pelo vendedor proprietário via backend, com elegibilidade transacional, versão otimista, advisory lock, idempotência e auditoria. Isso **não** conecta catálogo público nem torna qualquer produto comprável. Estoque/reserva, checkout, pagamentos e mutações administrativas de lifecycle continuam pendentes. O contrato autoritativo está em `PRODUCT_LIFECYCLE_FOUNDATION.md`.

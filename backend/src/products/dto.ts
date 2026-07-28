@@ -7,3 +7,13 @@ export class ProductQueryDto {
   @IsOptional() @IsInt() @Min(1) @Max(50) limit?: number;
   @IsOptional() @IsString() cursor?: string;
 }
+export enum ProductLifecycleAction {
+  ACTIVATE = 'ACTIVATE',
+  PAUSE = 'PAUSE',
+  RESUME = 'RESUME',
+  REMOVE = 'REMOVE',
+}
+export class ProductLifecycleDto {
+  @IsEnum(ProductLifecycleAction) action!: ProductLifecycleAction;
+  @IsInt() @Min(1) expectedVersion!: number;
+}

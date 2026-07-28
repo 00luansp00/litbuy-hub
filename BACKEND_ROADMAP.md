@@ -146,6 +146,11 @@ Futuro/demonstrativo: aprovação não publica produto público; imagens permane
 
 - `ListingDraft` aprovado passa a gerar exatamente um `Product` interno `UNPUBLISHED`, transacional e idempotente.
 - Publicação pública, imagens, compra, pedido, pagamento e estoque reservado continuam em etapas futuras.
+
 # Product images (implemented foundation)
 
 S3-compatible direct upload, server-side confirmation, internal seller management, and read-only admin inspection are real. Publication/CDN/transformation remain future work; see `PRODUCT_IMAGE_STORAGE_FOUNDATION.md`.
+
+## Product lifecycle foundation (2026-07-28, PR #28)
+
+O estado `ACTIVE` de produto agora é persistente e controlado pelo vendedor proprietário via backend, com elegibilidade transacional, versão otimista, advisory lock, idempotência e auditoria. Isso **não** conecta catálogo público nem torna qualquer produto comprável. Estoque/reserva, checkout, pagamentos e mutações administrativas de lifecycle continuam pendentes. O contrato autoritativo está em `PRODUCT_LIFECYCLE_FOUNDATION.md`.

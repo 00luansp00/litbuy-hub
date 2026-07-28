@@ -64,3 +64,7 @@ Futuro/demonstrativo: aprovação não publica produto público; imagens permane
 ## Produto após aprovação
 
 `APPROVED` significa conteúdo aprovado e produto interno materializado. O produto nasce `UNPUBLISHED`; `ACTIVE` e publicação pública permanecem futuros.
+
+## Product lifecycle foundation (2026-07-28, PR #28)
+
+O estado `ACTIVE` de produto agora é persistente e controlado pelo vendedor proprietário via backend, com elegibilidade transacional, versão otimista, advisory lock, idempotência e auditoria. Isso **não** conecta catálogo público nem torna qualquer produto comprável. Estoque/reserva, checkout, pagamentos e mutações administrativas de lifecycle continuam pendentes. O contrato autoritativo está em `PRODUCT_LIFECYCLE_FOUNDATION.md`.

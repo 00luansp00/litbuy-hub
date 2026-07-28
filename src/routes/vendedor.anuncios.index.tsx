@@ -6,6 +6,7 @@ import { SellerDashboardLayout } from "@/components/seller-dashboard/SellerDashb
 import { EmptyState } from "@/components/common/EmptyState";
 import { Button } from "@/components/ui/button";
 import { ProductImageManager } from "@/components/seller-dashboard/product-images/ProductImageManager";
+import { ProductLifecycleManager } from "@/components/seller-dashboard/ProductLifecycleManager";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -179,6 +180,27 @@ function ListingsPage() {
                   )}
                   {draft.materializedProduct?.status === "UNPUBLISHED" && (
                     <ProductImageManager productId={draft.materializedProduct.id} />
+                  )}
+                  {draft.materializedProduct && (
+                    <ProductLifecycleManager
+                      productId={draft.materializedProduct.id}
+                      onStateChange={(product) =>
+                        setItems(
+                          (current) =>
+                            current?.map((item) =>
+                              item.id === draft.id && item.materializedProduct
+                                ? {
+                                    ...item,
+                                    materializedProduct: {
+                                      ...item.materializedProduct,
+                                      status: product.status,
+                                    },
+                                  }
+                                : item,
+                            ) ?? null,
+                        )
+                      }
+                    />
                   )}
                 </div>
                 <div className="flex gap-2">
