@@ -504,7 +504,9 @@ describe('Product images HTTP with real auth, PostgreSQL and MinIO', () => {
           `DROP TRIGGER IF EXISTS "${triggerName}" ON "ProductImage"`,
         );
       } finally {
-        await prisma.$executeRawUnsafe(`DROP FUNCTION IF EXISTS "${functionName}"()`);
+        await prisma.$executeRawUnsafe(
+          `DROP FUNCTION IF EXISTS "${functionName}"()`,
+        );
       }
     }
   });
