@@ -25,9 +25,16 @@ const candidate = (): PublicationCandidate => ({
   stock: 0,
   model: ListingDraftModel.NORMAL,
   sellerProfile: { status: SellerProfileStatus.ACTIVE },
-  sourceListingDraft: { status: ListingDraftStatus.APPROVED },
+  sourceListingDraft: {
+    status: ListingDraftStatus.APPROVED,
+    categoryId: 'category',
+    subcategoryId: null,
+    productType: 'ACCOUNT',
+  },
   category: { status: CatalogEntityStatus.ACTIVE },
   categoryId: 'category',
+  subcategoryId: null,
+  productType: 'ACCOUNT',
   subcategory: null,
   images: [{ status: ProductImageStatus.READY, isCover: true }],
   variants: [{ status: ProductVariantStatus.ACTIVE, price: '10.00', stock: 0 }],
@@ -98,6 +105,16 @@ describe('product publication eligibility', () => {
     p.subcategory = { status: CatalogEntityStatus.ACTIVE, categoryId: 'other' };
     code(() => assertPublicationEligible(p), 'PRODUCT_TAXONOMY_INACTIVE');
   });
+  it.each(['categoryId', 'subcategoryId', 'productType'] as const)(
+    'rejects source taxonomy mismatch in %s',
+    (field) => {
+      const p = candidate();
+      if (field === 'categoryId') p.sourceListingDraft!.categoryId = 'other';
+      if (field === 'subcategoryId') p.sourceListingDraft!.subcategoryId = 'other';
+      if (field === 'productType') p.sourceListingDraft!.productType = 'GAME';
+      code(() => assertPublicationEligible(p), 'PRODUCT_TAXONOMY_MISMATCH');
+    },
+  );
   it('requires a READY cover and ignores pending uploads', () => {
     const p = candidate();
     p.images = [{ status: ProductImageStatus.PENDING_UPLOAD, isCover: true }];
@@ -113,6 +130,11 @@ describe('product publication eligibility', () => {
     q.price = '0';
     code(() => assertPublicationEligible(q), 'PRODUCT_VARIANT_INVALID');
   });
+  it('rejects a paused NORMAL variant', () => {
+    const p = candidate();
+    p.variants[0].status = ProductVariantStatus.PAUSED;
+    code(() => assertPublicationEligible(p), 'PRODUCT_VARIANT_INVALID');
+  });
   it('requires an active, valid DYNAMIC variant', () => {
     const p = candidate();
     p.model = ListingDraftModel.DYNAMIC;
@@ -127,6 +149,9 @@ describe('product publication eligibility', () => {
     fixed.price = null;
     fixed.stock = null;
     fixed.serviceDetails = { pricingType: ListingDraftServicePricingType.FIXED, basePrice: null };
+    code(() => assertPublicationEligible(fixed), 'PRODUCT_SERVICE_DETAILS_INVALID');
+    fixed.serviceDetails = { pricingType: ListingDraftServicePricingType.FIXED, basePrice: '10' };
+    fixed.variants[0].status = ProductVariantStatus.PAUSED;
     code(() => assertPublicationEligible(fixed), 'PRODUCT_SERVICE_DETAILS_INVALID');
     const quote = candidate();
     quote.model = ListingDraftModel.SERVICE;

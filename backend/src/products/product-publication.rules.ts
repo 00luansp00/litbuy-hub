@@ -8,6 +8,7 @@ import {
   ProductVariantStatus,
   SellerProfileStatus,
 } from '@prisma/client';
+import type { CatalogProductType } from '@prisma/client';
 import { AppError } from '../common/errors/app-error';
 import { ProductLifecycleAction } from './dto';
 
@@ -21,10 +22,17 @@ export type PublicationCandidate = {
   stock: number | null;
   model: ListingDraftModel;
   sellerProfile: { status: SellerProfileStatus };
-  sourceListingDraft: { status: ListingDraftStatus } | null;
+  sourceListingDraft: {
+    status: ListingDraftStatus;
+    categoryId: string | null;
+    subcategoryId: string | null;
+    productType: CatalogProductType | null;
+  } | null;
   category: { status: CatalogEntityStatus } | null;
   subcategory: { status: CatalogEntityStatus; categoryId: string } | null;
   categoryId: string;
+  subcategoryId: string | null;
+  productType: CatalogProductType;
   images: { status: ProductImageStatus; isCover: boolean }[];
   variants: { status: ProductVariantStatus; price: Decimalish; stock: number | null }[];
   serviceDetails: { pricingType: ListingDraftServicePricingType; basePrice: Decimalish } | null;
@@ -59,7 +67,13 @@ export function lifecycleTarget(status: ProductStatus, action: ProductLifecycleA
 export function assertPublicationEligible(p: PublicationCandidate) {
   if (p.sellerProfile.status !== SellerProfileStatus.ACTIVE) fail('SELLER_PROFILE_ACTIVE_REQUIRED');
   if (!p.sourceListingDraft || p.sourceListingDraft.status !== ListingDraftStatus.APPROVED)
-    fail('PRODUCT_SOURCE_NOT_APPROVED');
+    return fail('PRODUCT_SOURCE_NOT_APPROVED');
+  if (
+    p.categoryId !== p.sourceListingDraft.categoryId ||
+    p.subcategoryId !== p.sourceListingDraft.subcategoryId ||
+    p.productType !== p.sourceListingDraft.productType
+  )
+    fail('PRODUCT_TAXONOMY_MISMATCH');
   if (
     !p.category ||
     p.category.status !== CatalogEntityStatus.ACTIVE ||
@@ -77,7 +91,12 @@ export function assertPublicationEligible(p: PublicationCandidate) {
     if (!positive(p.price) || !stockValid(p.stock) || p.stock === null || p.variants.length !== 1)
       fail('PRODUCT_VARIANT_INVALID');
     const variant = p.variants[0];
-    if (!positive(variant.price) || !stockValid(variant.stock) || variant.stock === null)
+    if (
+      variant.status !== ProductVariantStatus.ACTIVE ||
+      !positive(variant.price) ||
+      !stockValid(variant.stock) ||
+      variant.stock === null
+    )
       fail('PRODUCT_VARIANT_INVALID');
   } else if (p.model === ListingDraftModel.DYNAMIC) {
     if (
@@ -90,7 +109,12 @@ export function assertPublicationEligible(p: PublicationCandidate) {
     const details = p.serviceDetails;
     if (!details) return fail('PRODUCT_SERVICE_DETAILS_INVALID');
     if (details.pricingType === ListingDraftServicePricingType.FIXED) {
-      if (!positive(details.basePrice) || p.variants.length !== 1 || !positive(p.variants[0].price))
+      if (
+        !positive(details.basePrice) ||
+        p.variants.length !== 1 ||
+        p.variants[0].status !== ProductVariantStatus.ACTIVE ||
+        !positive(p.variants[0].price)
+      )
         fail('PRODUCT_SERVICE_DETAILS_INVALID');
     } else if (
       details.pricingType !== ListingDraftServicePricingType.QUOTE ||

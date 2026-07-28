@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   productLifecycleService,
+  lifecycleErrorMessages,
   type ProductLifecycleAction,
   type ProductLifecycleState,
 } from "@/services/productLifecycleService";
@@ -59,9 +60,13 @@ export function ProductLifecycleManager({
     } catch (cause) {
       const error = cause as { code?: string };
       if (error.code === "PRODUCT_VERSION_CONFLICT") {
-        toast.error("O produto foi alterado em outra sessão. Recarregamos o estado atual.");
+        toast.error(lifecycleErrorMessages.PRODUCT_VERSION_CONFLICT);
         await load();
-      } else toast.error("Não foi possível atualizar o produto.");
+      } else
+        toast.error(
+          (error.code && lifecycleErrorMessages[error.code]) ??
+            "Não foi possível atualizar o produto.",
+        );
     } finally {
       setPending(null);
     }

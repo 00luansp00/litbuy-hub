@@ -22,6 +22,8 @@ Retries cujo resultado já está persistido retornam `changed: false`, sem vers�
 
 Ativação e retomada revalidam, dentro da transação: vendedor ativo; rascunho de origem ainda `APPROVED`; categoria/subcategoria ativas e relacionadas; conteúdo e slug; exatamente uma capa `READY`; e coerência de variantes, preço e estoque para `NORMAL`, `DYNAMIC` e serviços `FIXED`. Serviço `QUOTE` é válido sem preço e sem variante fictícia.
 
+Os IDs de categoria e subcategoria e o tipo do produto também devem permanecer iguais aos do rascunho aprovado; divergências retornam `PRODUCT_TAXONOMY_MISMATCH`. A variante única de produto `NORMAL` e serviço `FIXED` deve permanecer `ACTIVE`.
+
 ## Concorrência, versão e auditoria
 
 A transação adquire `pg_advisory_xact_lock(hashtext('product-lifecycle:' || productId))`, relê todo o agregado, verifica `expectedVersion` e usa update condicional. Uma mudança incrementa a versão exatamente uma vez. Conflitos retornam HTTP 409 com `PRODUCT_VERSION_CONFLICT`.

@@ -14,6 +14,16 @@ export type ProductLifecycleState = {
 export class ProductLifecyclePayloadError extends Error {
   readonly code = "PRODUCT_LIFECYCLE_RESPONSE_INVALID";
 }
+export const lifecycleErrorMessages: Record<string, string> = {
+  PRODUCT_READY_COVER_REQUIRED: "Adicione uma imagem pronta e defina uma única capa.",
+  PRODUCT_TAXONOMY_INACTIVE: "A categoria ou subcategoria não está ativa.",
+  PRODUCT_TAXONOMY_MISMATCH: "A taxonomia do produto diverge do anúncio aprovado.",
+  PRODUCT_SOURCE_NOT_APPROVED: "O anúncio de origem não permanece aprovado.",
+  PRODUCT_VARIANT_INVALID: "Revise a variante, o preço e o estoque do produto.",
+  PRODUCT_SERVICE_DETAILS_INVALID: "Revise os detalhes e o preço do serviço.",
+  PRODUCT_VERSION_CONFLICT: "O produto foi alterado em outra sessão. Recarregamos o estado atual.",
+  PRODUCT_REMOVED_TERMINAL: "A remoção deste produto é terminal nesta etapa.",
+};
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const slug = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const invalid = (): never => {
