@@ -1,5 +1,7 @@
 # Product Image Storage Foundation
 
+> Eligible catalog reads reuse `ProductImageStorage.createReadUrl`, signing only ready public response images after eligibility succeeds.
+
 ## Real
 
 Product images are private internal product metadata. Sellers with an active profile can create an upload intent, upload JPEG/PNG/WebP directly through a short-lived S3-compatible presigned `PUT`, and ask the API to verify the object with `HEAD`. The API owns UUIDs and keys, enforces 5 MiB and eight-image limits, persists explicit `PENDING_UPLOAD`, `READY`, and `DELETED` states, and never persists a provider URL.

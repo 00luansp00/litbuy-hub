@@ -1,5 +1,7 @@
 # MVP_STATUS.md — LIT Buy
 
+> The real public catalog has a backend read foundation with eligibility filtering and signed private images. Public frontend pages remain unconnected.
+
 Snapshot do estado atual do MVP visual da LIT Buy. Este documento é
 destinado ao próximo desenvolvedor / time técnico que vai migrar o
 projeto para GitHub/Cursor e ligar as integrações reais.

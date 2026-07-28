@@ -1,5 +1,7 @@
 # BACKEND_ROADMAP.md — LIT Buy
 
+> PR #29 adds the backend-only public catalog read foundation; frontend adoption, search, commerce, and stock reservation remain later milestones. See `PUBLIC_CATALOG_READ_FOUNDATION.md`.
+
 Roadmap recomendado para transformar o MVP visual em produto real, considerando a arquitetura real atual.
 
 ## Stack atual autoritativa

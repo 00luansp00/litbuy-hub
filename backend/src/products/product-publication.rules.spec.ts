@@ -13,6 +13,7 @@ import { ProductLifecycleAction } from './dto';
 import {
   assertPublicationEligible,
   lifecycleTarget,
+  publicationEligibilityCode,
   type PublicationCandidate,
 } from './product-publication.rules';
 
@@ -86,6 +87,13 @@ describe('product lifecycle state machine', () => {
 });
 
 describe('product publication eligibility', () => {
+  it('shares the non-throwing evaluation with the lifecycle assertion', () => {
+    const valid = candidate();
+    expect(publicationEligibilityCode(valid)).toBeNull();
+    valid.images = [];
+    expect(publicationEligibilityCode(valid)).toBe('PRODUCT_READY_COVER_REQUIRED');
+    code(() => assertPublicationEligible(valid), 'PRODUCT_READY_COVER_REQUIRED');
+  });
   it('accepts NORMAL with zero stock', () =>
     expect(() => assertPublicationEligible(candidate())).not.toThrow());
   test.each([
@@ -121,6 +129,11 @@ describe('product publication eligibility', () => {
     code(() => assertPublicationEligible(p), 'PRODUCT_READY_COVER_REQUIRED');
     p.images = [{ status: ProductImageStatus.READY, isCover: false }];
     code(() => assertPublicationEligible(p), 'PRODUCT_READY_COVER_REQUIRED');
+  });
+  it('defensively rejects an in-memory aggregate with two READY covers', () => {
+    const p = candidate();
+    p.images.push({ status: ProductImageStatus.READY, isCover: true });
+    expect(publicationEligibilityCode(p)).toBe('PRODUCT_READY_COVER_REQUIRED');
   });
   it('rejects incomplete content and invalid NORMAL data', () => {
     const p = candidate();

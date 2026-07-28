@@ -1,5 +1,7 @@
 # Product lifecycle foundation
 
+> Public catalog reads reuse the lifecycle pure publication eligibility evaluation. Lifecycle transitions and their error codes remain unchanged.
+
 ## Estado autoritativo
 
 O backend NestJS/PostgreSQL passa a persistir o ciclo de vida dos produtos materializados. `ACTIVE` é agora um estado real no banco, mas **não** significa exposição no catálogo público: ainda não existe leitura pública conectada, compra, reserva de estoque ou pagamento.
