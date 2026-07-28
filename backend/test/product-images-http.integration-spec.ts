@@ -473,12 +473,14 @@ describe('Product images HTTP with real auth, PostgreSQL and MinIO', () => {
         END IF;
         RETURN NEW;
       END;
-      $$ LANGUAGE plpgsql;
-      CREATE TRIGGER "${triggerName}"
-      BEFORE UPDATE ON "ProductImage"
-      FOR EACH ROW EXECUTE FUNCTION "${functionName}"();
+      $$ LANGUAGE plpgsql
     `);
     try {
+      await prisma.$executeRawUnsafe(`
+        CREATE TRIGGER "${triggerName}"
+        BEFORE UPDATE ON "ProductImage"
+        FOR EACH ROW EXECUTE FUNCTION "${functionName}"()
+      `);
       const response = await request(app.getHttpServer())
         .patch(`${images(p.product.id)}/reorder`)
         .set('Authorization', p.auth)
@@ -497,9 +499,13 @@ describe('Product images HTTP with real auth, PostgreSQL and MinIO', () => {
         }),
       ).toBe(0);
     } finally {
-      await prisma.$executeRawUnsafe(
-        `DROP TRIGGER IF EXISTS "${triggerName}" ON "ProductImage"; DROP FUNCTION IF EXISTS "${functionName}"();`,
-      );
+      try {
+        await prisma.$executeRawUnsafe(
+          `DROP TRIGGER IF EXISTS "${triggerName}" ON "ProductImage"`,
+        );
+      } finally {
+        await prisma.$executeRawUnsafe(`DROP FUNCTION IF EXISTS "${functionName}"()`);
+      }
     }
   });
   it('serializes concurrent cover changes and promotes the remaining READY image', async () => {
