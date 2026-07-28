@@ -179,18 +179,19 @@ export function ProductImageManager({ productId }: { productId: string }) {
               <p>Upload pendente</p>
             )}
             <div className="mt-2 flex flex-wrap gap-1">
-              {image.isCover ? (
-                <span className="text-sm">Capa</span>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={!!busy}
-                  onClick={() => void cover(image)}
-                >
-                  Definir capa
-                </Button>
-              )}
+              {image.status === "READY" &&
+                (image.isCover ? (
+                  <span className="text-sm">Capa</span>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!!busy}
+                    onClick={() => void cover(image)}
+                  >
+                    Definir capa
+                  </Button>
+                ))}
               <Button
                 size="sm"
                 variant="outline"
