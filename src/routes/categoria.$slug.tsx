@@ -9,16 +9,13 @@ import {
 import { Breadcrumb } from "@/components/common/Breadcrumb";
 import { CategoryHero } from "@/components/common/CategoryHero";
 import { EmptyState } from "@/components/common/EmptyState";
-import { PublicCatalogGrid } from "@/components/public-catalog";
 import {
-  CategoryCatalogControls,
+  CategoryCatalogContent,
   CategoryCatalogError,
-  CategoryCatalogPagination,
   CategoryCatalogSkeleton,
   productTypeOptions,
   sortOptions,
 } from "@/components/category-catalog";
-import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api/client";
 import { categoryService } from "@/services/catalogService";
 import {
@@ -57,6 +54,17 @@ export function normalizeCategorySearch(search: Record<string, unknown>): Catego
     Number.isSafeInteger(candidate) && candidate >= 1 && candidate <= 100 ? candidate : 1;
   return { subcategory, productType, sort, page };
 }
+export function nextCategorySearch(
+  current: CategorySearch,
+  change: Partial<CategorySearch>,
+  resetPage = true,
+): CategorySearch {
+  return { ...current, ...change, page: resetPage ? 1 : (change.page ?? current.page) };
+}
+export const clearCategorySearch = (): CategorySearch => ({ sort: "RECENT", page: 1 });
+export const retryCategoryCatalog = (invalidate: () => unknown): void => {
+  void invalidate();
+};
 
 export const Route = createFileRoute("/categoria/$slug")({
   validateSearch: normalizeCategorySearch,
@@ -102,13 +110,8 @@ function CategoryPage() {
   const router = useRouter();
   const update = (change: Partial<CategorySearch>, resetPage = true) =>
     navigate({
-      search: (previous) => ({
-        ...previous,
-        ...change,
-        page: resetPage ? 1 : (change.page ?? previous.page),
-      }),
+      search: (previous) => nextCategorySearch(previous, change, resetPage),
     });
-  const filtered = Boolean(search.subcategory || search.productType || search.sort !== "RECENT");
   const changePage = (page: number) => {
     void update({ page }, false);
     document.getElementById("category-catalog")?.scrollIntoView({ behavior: "smooth" });
@@ -125,49 +128,19 @@ function CategoryPage() {
       </div>
       <section id="category-catalog" className="scroll-mt-24">
         {catalogError ? (
-          <CategoryCatalogError onRetry={() => void router.invalidate()} />
+          <CategoryCatalogError onRetry={() => retryCategoryCatalog(() => router.invalidate())} />
         ) : (
           catalog && (
-            <div className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-8">
-              <CategoryCatalogControls
-                subcategories={subcategories}
-                subcategory={search.subcategory}
-                productType={search.productType}
-                sort={search.sort}
-                onChange={(change) => void update(change)}
-              />
-              <div className="min-w-0 space-y-5">
-                <p className="text-sm text-muted-foreground">
-                  Exibindo {catalog.items.length}{" "}
-                  {catalog.items.length === 1 ? "anúncio" : "anúncios"} nesta página
-                </p>
-                {catalog.items.length ? (
-                  <PublicCatalogGrid items={catalog.items} columns={3} />
-                ) : (
-                  <div className="rounded-xl border border-dashed p-10 text-center">
-                    <p className="font-semibold">
-                      {filtered
-                        ? "Nenhum anúncio encontrado para estes filtros."
-                        : "Ainda não existem anúncios públicos nesta categoria."}
-                    </p>
-                    {filtered && (
-                      <Button
-                        className="mt-4"
-                        variant="outline"
-                        onClick={() => void navigate({ search: { sort: "RECENT", page: 1 } })}
-                      >
-                        Limpar filtros
-                      </Button>
-                    )}
-                  </div>
-                )}
-                <CategoryCatalogPagination
-                  page={catalog.pagination.page}
-                  hasNext={catalog.pagination.hasNext}
-                  onPage={changePage}
-                />
-              </div>
-            </div>
+            <CategoryCatalogContent
+              catalog={catalog}
+              subcategories={subcategories}
+              subcategory={search.subcategory}
+              productType={search.productType}
+              sort={search.sort}
+              onFilterChange={(change) => void update(change)}
+              onClearFilters={() => void navigate({ search: clearCategorySearch() })}
+              onPageChange={changePage}
+            />
           )
         )}
       </section>

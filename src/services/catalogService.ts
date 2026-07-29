@@ -134,6 +134,13 @@ function sub(v: unknown): Subcategory & { id: string } {
     categorySlug: optStr(o.categorySlug, slug) ?? "",
   };
 }
+export function parsePublicCategoryResponse(raw: unknown): Category {
+  return cat(raw);
+}
+
+export function parsePublicSubcategoryListResponse(raw: unknown): Subcategory[] {
+  return items(raw).map(sub);
+}
 function adminSub(v: unknown): AdminCatalogSubcategory {
   const s = sub(v);
   const o = obj(v);
@@ -190,14 +197,16 @@ export const catalogService = {
     return items(await apiFetch("/catalog/categories", { auth: false })).map(cat);
   },
   async getCategoryBySlug(slug: string) {
-    return cat(await apiFetch(`/catalog/categories/${encodeURIComponent(slug)}`, { auth: false }));
+    return parsePublicCategoryResponse(
+      await apiFetch(`/catalog/categories/${encodeURIComponent(slug)}`, { auth: false }),
+    );
   },
   async getSubcategoriesByCategory(categorySlug: string) {
-    return items(
+    return parsePublicSubcategoryListResponse(
       await apiFetch(`/catalog/categories/${encodeURIComponent(categorySlug)}/subcategories`, {
         auth: false,
       }),
-    ).map(sub);
+    );
   },
   async getProductTypes() {
     return items(await apiFetch("/catalog/product-types", { auth: false })).map((v) => {

@@ -17,3 +17,11 @@ Os cards reutilizam imagens assinadas e fallback, preço, estoque, categoria, su
 ## Smoke
 
 `bun run smoke:category-catalog` usa o parser do frontend, valida HTTP/CORS, categorias do dataset, subcategoria, tipo, quatro ordenações, paginação determinística e ausência de produtos ocultos. O smoke da Home permanece independente.
+
+## Verificação final dos contratos e da interface
+
+O smoke valida com os parsers do frontend a categoria `demo-jogos` (`Jogos — Demonstração`) e exatamente as subcategorias `demo-contas`, `demo-moedas`, `demo-itens` e `demo-servicos`. Também compara integralmente as sequências de slugs de `RECENT`, `OLDEST`, `TITLE_ASC` e `TITLE_DESC`, rejeitando faltas, sobras, duplicações e produtos ocultos.
+
+A paginação determinística comprova `demo-conta-jogo` na página 1, `demo-moedas-virtuais` na página 2 e `demo-servico-personalizado` na página 4, com `limit=1` e os valores esperados de `hasNext`. Uma página posterior vazia agora informa apenas que aquela página não possui anúncios e preserva o retorno pela paginação.
+
+A cobertura de interface renderiza os controles e paginação reais, os três estados vazios, contagem local, limpeza de filtros, erro/retry, doze skeletons e cards estritamente informativos sem detalhe ou comércio.

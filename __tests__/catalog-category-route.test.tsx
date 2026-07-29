@@ -108,4 +108,80 @@ describe("/categoria/$slug loader", () => {
       mod.Route.loader({ params: { slug: "contas" }, deps: { sort: "RECENT", page: 1 } }),
     ).resolves.toMatchObject({ catalog: null, catalogError: true, subcategories: [] });
   });
+  it("sends supported filters, every sort, page and the fixed limit", async () => {
+    catalog.bySlug.mockResolvedValue({ slug: "jogos", name: "Jogos" });
+    catalog.getSubcategoriesByCategory.mockResolvedValue([{ slug: "servicos", name: "Serviços" }]);
+    publicCatalog.list.mockResolvedValue({
+      items: [],
+      pagination: { page: 4, limit: 12, hasNext: false },
+    });
+    const mod = await import("@/routes/categoria.$slug");
+    for (const sort of ["RECENT", "OLDEST", "TITLE_ASC", "TITLE_DESC"] as const)
+      await mod.Route.loader({
+        params: { slug: "jogos" },
+        deps: { subcategory: "servicos", productType: "SERVICE", sort, page: 4 },
+      });
+    expect(publicCatalog.list).toHaveBeenCalledTimes(4);
+    for (const sort of ["RECENT", "OLDEST", "TITLE_ASC", "TITLE_DESC"])
+      expect(publicCatalog.list).toHaveBeenCalledWith({
+        categorySlug: "jogos",
+        subcategorySlug: "servicos",
+        productType: "SERVICE",
+        sort,
+        page: 4,
+        limit: 12,
+      });
+    expect(products.byCategory).not.toHaveBeenCalled();
+  });
+  it("redirects an incompatible subcategory before products and preserves valid state", async () => {
+    catalog.bySlug.mockResolvedValue({ slug: "jogos", name: "Jogos" });
+    catalog.getSubcategoriesByCategory.mockResolvedValue([{ slug: "contas", name: "Contas" }]);
+    const mod = await import("@/routes/categoria.$slug");
+    await expect(
+      mod.Route.loader({
+        params: { slug: "jogos" },
+        deps: { subcategory: "gift-cards", productType: "SERVICE", sort: "TITLE_DESC", page: 7 },
+      }),
+    ).rejects.toMatchObject({
+      isRedirect: true,
+      options: { search: { sort: "TITLE_DESC", productType: "SERVICE", page: 1 } },
+    });
+    expect(publicCatalog.list).not.toHaveBeenCalled();
+    expect(products.byCategory).not.toHaveBeenCalled();
+  });
+  it("returns the safe state when only product listing fails", async () => {
+    catalog.bySlug.mockResolvedValue({ slug: "jogos", name: "Jogos" });
+    catalog.getSubcategoriesByCategory.mockResolvedValue([{ slug: "contas", name: "Contas" }]);
+    publicCatalog.list.mockRejectedValue(new Error("signed internal URL"));
+    const mod = await import("@/routes/categoria.$slug");
+    await expect(
+      mod.Route.loader({ params: { slug: "jogos" }, deps: { sort: "RECENT", page: 1 } }),
+    ).resolves.toMatchObject({ catalog: null, catalogError: true, subcategories: [] });
+  });
+  it("resets filter/sort changes, preserves filters on pages and clears optional filters", async () => {
+    const mod = await import("@/routes/categoria.$slug");
+    const current = {
+      subcategory: "servicos",
+      productType: "SERVICE" as const,
+      sort: "OLDEST" as const,
+      page: 8,
+    };
+    expect(mod.nextCategorySearch(current, { subcategory: "contas" })).toMatchObject({
+      subcategory: "contas",
+      page: 1,
+    });
+    expect(mod.nextCategorySearch(current, { productType: "GAME" })).toMatchObject({
+      productType: "GAME",
+      page: 1,
+    });
+    expect(mod.nextCategorySearch(current, { sort: "TITLE_ASC" })).toMatchObject({
+      sort: "TITLE_ASC",
+      page: 1,
+    });
+    expect(mod.nextCategorySearch(current, { page: 9 }, false)).toEqual({ ...current, page: 9 });
+    expect(mod.clearCategorySearch()).toEqual({ sort: "RECENT", page: 1 });
+    const invalidate = vi.fn();
+    mod.retryCategoryCatalog(invalidate);
+    expect(invalidate).toHaveBeenCalledOnce();
+  });
 });

@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api/client";
-import { catalogService } from "./catalogService";
+import {
+  catalogService,
+  parsePublicCategoryResponse,
+  parsePublicSubcategoryListResponse,
+} from "./catalogService";
 
 describe("catalogService parser", () => {
   const ok = {
@@ -17,6 +21,55 @@ describe("catalogService parser", () => {
       },
     ],
   };
+  const category = ok.items[0];
+  const subcategory = {
+    id: "00000000-0000-4000-8000-000000000002",
+    slug: "demo-contas",
+    name: "Contas",
+    categorySlug: "demo-jogos",
+  };
+  it("parses one valid public category response", () => {
+    expect(parsePublicCategoryResponse(category)).toMatchObject({ slug: "contas", name: "Contas" });
+  });
+  it("rejects a malformed public category response", () => {
+    expect(() => parsePublicCategoryResponse({ ...category, slug: "Bad Slug" })).toThrow(
+      "Resposta inválida",
+    );
+  });
+  it("parses a valid public subcategory list", () => {
+    expect(parsePublicSubcategoryListResponse({ items: [subcategory] })).toEqual([
+      expect.objectContaining({ slug: "demo-contas", categorySlug: "demo-jogos" }),
+    ]);
+  });
+  it("rejects a malformed public subcategory item and root", () => {
+    expect(() =>
+      parsePublicSubcategoryListResponse({ items: [{ ...subcategory, slug: "Bad" }] }),
+    ).toThrow("Resposta inválida");
+    expect(() => parsePublicSubcategoryListResponse({ items: "invalid" })).toThrow(
+      "Resposta inválida",
+    );
+  });
+  it("uses public category endpoints without authentication", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      return new Response(
+        JSON.stringify(url.endsWith("/subcategories") ? { items: [subcategory] } : category),
+        { status: 200 },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await catalogService.getCategoryBySlug("demo-jogos");
+    await catalogService.getSubcategoriesByCategory("demo-jogos");
+    expect(fetchMock.mock.calls.map(([input]) => String(input))).toEqual([
+      expect.stringContaining("/catalog/categories/demo-jogos"),
+      expect.stringContaining("/catalog/categories/demo-jogos/subcategories"),
+    ]);
+    expect(
+      fetchMock.mock.calls.every(
+        ([, init]) => !(init?.headers as Headers | undefined)?.has("Authorization"),
+      ),
+    ).toBe(true);
+  });
   it("parses valid categories", async () => {
     vi.stubGlobal(
       "fetch",
