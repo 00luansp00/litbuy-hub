@@ -1,6 +1,6 @@
 # Dados locais de demonstração
 
-Esta fundação cria um conjunto **fictício, determinístico e descartável** no PostgreSQL e no bucket privado do MinIO locais. Ela nunca deve ser usada em produção e o frontend ainda não consome o catálogo público real.
+Esta fundação cria um conjunto **fictício, determinístico e descartável** no PostgreSQL e no bucket privado do MinIO locais. Ela nunca deve ser usada em produção. A seção de anúncios recentes da Home consome a listagem pública real; categorias, detalhe e ações comerciais permanecem mockados/desconectados.
 
 ## Proteções e pré-requisitos
 

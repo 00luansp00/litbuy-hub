@@ -1,6 +1,6 @@
 # LIT Buy
 
-> Dados locais determinísticos de PostgreSQL e MinIO: consulte `LOCAL_DEMO_DATA.md` e use `bun run demo:seed`, `demo:verify` e `demo:reset`. O frontend permanece desconectado da API pública.
+> A Home usa a listagem pública real de anúncios recentes; consulte `HOME_PUBLIC_CATALOG_INTEGRATION.md`. Categorias, detalhe, busca e comércio permanecem mockados. Os dados locais determinísticos estão em `LOCAL_DEMO_DATA.md`.
 
 > **⚠️ MVP visual/mockado** — Este projeto é um MVP visual/mockado.
 > **Não possui backend, pagamento real, autenticação real, envio de
