@@ -350,6 +350,9 @@ jobs:
           set -euo pipefail
           bun run demo:seed
           bun run demo:verify
+          HOME_PUBLIC_CATALOG_SMOKE_BASE_URL=http://localhost:13001/api/v1 \
+            HOME_PUBLIC_CATALOG_SMOKE_ORIGIN=http://localhost:13000 \
+            bun run smoke:home-catalog
           bun run demo:seed
           bun run demo:verify
           bun run demo:reset

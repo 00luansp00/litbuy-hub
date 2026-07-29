@@ -40,9 +40,18 @@ describe("publicCatalogService", () => {
       auth: false,
     });
   });
-  it("rejects query values before constructing the URL", async () => {
+  it.each([
+    [{ sort: "UNKNOWN", page: 1, limit: 8 }],
+    [{ sort: "RECENT", page: 0, limit: 8 }],
+    [{ sort: "RECENT", page: 101, limit: 8 }],
+    [{ sort: "RECENT", page: 1.5, limit: 8 }],
+    [{ sort: "RECENT", page: Number.MAX_SAFE_INTEGER + 1, limit: 8 }],
+    [{ sort: "RECENT", page: 1, limit: 0 }],
+    [{ sort: "RECENT", page: 1, limit: 51 }],
+    [{ sort: "RECENT", page: 1, limit: 1.5 }],
+  ])("rejects an invalid query before constructing the URL", async (params) => {
     await expect(
-      publicCatalogService.list({ sort: "RECENT", page: 1.5, limit: 8 }),
+      publicCatalogService.list(params as Parameters<typeof publicCatalogService.list>[0]),
     ).rejects.toThrow("INVALID_PUBLIC_CATALOG_QUERY");
     expect(apiFetch).not.toHaveBeenCalled();
   });
@@ -57,7 +66,21 @@ describe("public catalog parser", () => {
     "parses pricing, stock, optional subcategory, image and pagination",
     (pricing, stock, subcategory) => {
       expect(
-        parsePublicCatalogListResponse(response(item({ pricing, stock, subcategory }))),
+        parsePublicCatalogListResponse(
+          response(
+            item({
+              pricing,
+              stock,
+              subcategory,
+              model:
+                pricing.kind === "FROM"
+                  ? "DYNAMIC"
+                  : pricing.kind === "QUOTE"
+                    ? "SERVICE"
+                    : "NORMAL",
+            }),
+          ),
+        ),
       ).toMatchObject({
         items: [
           {
@@ -83,5 +106,16 @@ describe("public catalog parser", () => {
     [response(item(), { page: 0, limit: 8, hasNext: false })],
   ])("rejects malformed responses without partial content", (raw) => {
     expect(() => parsePublicCatalogListResponse(raw)).toThrow(MALFORMED_PUBLIC_CATALOG_RESPONSE);
+  });
+  it.each([
+    ["NORMAL", { kind: "FROM", amount: "9.90" }],
+    ["NORMAL", { kind: "QUOTE", amount: null }],
+    ["DYNAMIC", { kind: "FIXED", amount: "9.90" }],
+    ["DYNAMIC", { kind: "QUOTE", amount: null }],
+    ["SERVICE", { kind: "FROM", amount: "9.90" }],
+  ])("rejects incoherent %s model and pricing combinations", (model, pricing) => {
+    expect(() => parsePublicCatalogListResponse(response(item({ model, pricing })))).toThrow(
+      MALFORMED_PUBLIC_CATALOG_RESPONSE,
+    );
   });
 });

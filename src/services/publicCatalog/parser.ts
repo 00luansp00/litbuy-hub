@@ -82,6 +82,13 @@ function card(value: unknown): PublicCatalogCard {
     malformed();
   }
   if (Number.isNaN(Date.parse(expiresAt))) malformed();
+  const parsedPricing = pricing(item.pricing);
+  if (
+    (item.model === "NORMAL" && parsedPricing.kind !== "FIXED") ||
+    (item.model === "DYNAMIC" && parsedPricing.kind !== "FROM") ||
+    (item.model === "SERVICE" && parsedPricing.kind === "FROM")
+  )
+    malformed();
   return {
     id: text(item.id),
     slug: text(item.slug),
@@ -89,7 +96,7 @@ function card(value: unknown): PublicCatalogCard {
     shortDescription: text(item.shortDescription),
     productType: item.productType as PublicCatalogProductType,
     model: item.model as PublicCatalogModel,
-    pricing: pricing(item.pricing),
+    pricing: parsedPricing,
     stock: item.stock as number | null,
     category: namedSlug(item.category),
     subcategory: item.subcategory === null ? null : namedSlug(item.subcategory),

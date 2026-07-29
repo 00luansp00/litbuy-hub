@@ -1,7 +1,11 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { PublicCatalogCard } from "@/services/publicCatalog";
-import { PublicCatalogSection, PublicCatalogSkeleton } from "@/components/public-catalog";
+import type { PublicCatalogCard as CatalogCard } from "@/services/publicCatalog";
+import {
+  PublicCatalogCard,
+  PublicCatalogSection,
+  PublicCatalogSkeleton,
+} from "@/components/public-catalog";
 
 const categoryList = vi.fn();
 const catalogList = vi.fn();
@@ -16,7 +20,7 @@ vi.mock("@/services/publicCatalog", async (importOriginal) => ({
   publicCatalogService: { list: catalogList },
 }));
 
-const product = (id: string, pricing: PublicCatalogCard["pricing"]): PublicCatalogCard => ({
+const product = (id: string, pricing: CatalogCard["pricing"]): CatalogCard => ({
   id,
   slug: `produto-${id}`,
   title: `Produto ${id}`,
@@ -96,5 +100,22 @@ describe("Home public catalog", () => {
   it("renders eight skeleton cards", () => {
     render(<PublicCatalogSkeleton />);
     expect(screen.getByLabelText("Carregando anúncios públicos").children).toHaveLength(8);
+  });
+  it("tries a renewed signed image URL after the previous URL failed", () => {
+    const first = product("1", { kind: "FIXED", amount: "49.90" });
+    const { rerender } = render(<PublicCatalogCard product={first} />);
+    fireEvent.error(screen.getByRole("img", { name: first.title }));
+    expect(
+      screen.getByRole("img", { name: `Imagem indisponível: ${first.title}` }),
+    ).toBeInTheDocument();
+
+    const renewed = {
+      ...first,
+      coverImage: { ...first.coverImage, url: "https://storage.local/renewed-signed-url" },
+    };
+    rerender(<PublicCatalogCard product={renewed} />);
+    const image = screen.getByRole("img", { name: first.title });
+    expect(image).toHaveAttribute("src", renewed.coverImage.url);
+    expect(image).not.toHaveAttribute("src", first.coverImage.url);
   });
 });

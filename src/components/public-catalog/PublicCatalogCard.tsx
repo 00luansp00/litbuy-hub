@@ -23,7 +23,8 @@ const modelLabels: Record<CatalogCard["model"], string> = {
 };
 
 export function PublicCatalogCard({ product }: { product: CatalogCard }) {
-  const [imageFailed, setImageFailed] = useState(false);
+  const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
+  const imageFailed = failedImageUrl === product.coverImage.url;
   return (
     <article className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-transform duration-200 hover:-translate-y-1">
       <div className="aspect-[4/3] overflow-hidden bg-gradient-to-br from-primary/10 via-muted to-accent/20">
@@ -41,7 +42,7 @@ export function PublicCatalogCard({ product }: { product: CatalogCard }) {
             alt={product.coverImage.altText ?? product.title}
             className="h-full w-full object-cover"
             loading="lazy"
-            onError={() => setImageFailed(true)}
+            onError={() => setFailedImageUrl(product.coverImage.url)}
           />
         )}
       </div>
