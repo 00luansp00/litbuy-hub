@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { ApiError } from "@/lib/api/client";
+import { ApiError, setAccessToken } from "@/lib/api/client";
 import {
-  catalogService,
   parsePublicCategoryResponse,
   parsePublicSubcategoryListResponse,
-} from "./catalogService";
+} from "./catalog/publicTaxonomyParser";
+import { catalogService } from "./catalogService";
 
 describe("catalogService parser", () => {
   const ok = {
@@ -33,7 +33,7 @@ describe("catalogService parser", () => {
   });
   it("rejects a malformed public category response", () => {
     expect(() => parsePublicCategoryResponse({ ...category, slug: "Bad Slug" })).toThrow(
-      "Resposta inválida",
+      "INVALID_CATALOG_RESPONSE",
     );
   });
   it("parses a valid public subcategory list", () => {
@@ -44,12 +44,13 @@ describe("catalogService parser", () => {
   it("rejects a malformed public subcategory item and root", () => {
     expect(() =>
       parsePublicSubcategoryListResponse({ items: [{ ...subcategory, slug: "Bad" }] }),
-    ).toThrow("Resposta inválida");
+    ).toThrow("INVALID_CATALOG_RESPONSE");
     expect(() => parsePublicSubcategoryListResponse({ items: "invalid" })).toThrow(
-      "Resposta inválida",
+      "INVALID_CATALOG_RESPONSE",
     );
   });
   it("uses public category endpoints without authentication", async () => {
+    setAccessToken("must-not-be-sent");
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       return new Response(
@@ -69,6 +70,21 @@ describe("catalogService parser", () => {
         ([, init]) => !(init?.headers as Headers | undefined)?.has("Authorization"),
       ),
     ).toBe(true);
+    setAccessToken(null);
+  });
+  it.each([
+    ["category", () => catalogService.getCategoryBySlug("demo-jogos")],
+    ["subcategories", () => catalogService.getSubcategoriesByCategory("demo-jogos")],
+  ])("converts malformed public %s into the stable API error", async (_, request) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ invalid: true }), { status: 200 })),
+    );
+    await expect(request()).rejects.toMatchObject({
+      status: 502,
+      code: "CATALOG_RESPONSE_INVALID",
+      message: "Resposta inválida da API de catálogo.",
+    });
   });
   it("parses valid categories", async () => {
     vi.stubGlobal(

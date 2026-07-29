@@ -3,7 +3,7 @@ import { parsePublicCatalogListResponse } from "../src/services/publicCatalog/pa
 import {
   parsePublicCategoryResponse,
   parsePublicSubcategoryListResponse,
-} from "../src/services/catalogService";
+} from "../src/services/catalog/publicTaxonomyParser";
 
 const base = validateInfraSmokeTarget({
   baseUrl: process.env.CATEGORY_PUBLIC_CATALOG_SMOKE_BASE_URL ?? "http://localhost:13001/api/v1",
