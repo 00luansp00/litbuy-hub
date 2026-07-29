@@ -1,57 +1,56 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { Hero } from "@/components/home/Hero";
 import { CategoriesGrid } from "@/components/home/CategoriesGrid";
-import { ProductSection } from "@/components/home/ProductSection";
+import { PublicCatalogSection } from "@/components/public-catalog";
 import { MarketplaceStats } from "@/components/home/MarketplaceStats";
 import { Benefits } from "@/components/home/Benefits";
 import { Newsletter } from "@/components/home/Newsletter";
-import { categoryService, productService } from "@/services/productService";
+import { categoryService } from "@/services/productService";
+import { publicCatalogService } from "@/services/publicCatalog";
+
+async function loadHomeData() {
+  const [categories, catalog] = await Promise.all([
+    categoryService.list(),
+    publicCatalogService
+      .list({ sort: "RECENT", page: 1, limit: 8 })
+      .then((data) => ({ status: "success" as const, data }))
+      .catch(() => ({ status: "error" as const })),
+  ]);
+  return { categories, catalog };
+}
 
 export const Route = createFileRoute("/")({
-  loader: async () => {
-    const [categories, featured, popular, recent] = await Promise.all([
-      categoryService.list(),
-      productService.featured(),
-      productService.popular(),
-      productService.recent(),
-    ]);
-    return { categories, featured, popular, recent };
-  },
+  loader: loadHomeData,
+  pendingComponent: HomePending,
   component: HomePage,
 });
 
 function HomePage() {
-  const { categories, featured, popular, recent } = Route.useLoaderData();
+  const { categories, catalog } = Route.useLoaderData();
+  const router = useRouter();
 
   return (
     <>
       <Hero />
       <CategoriesGrid categories={categories} />
-      <ProductSection
-        eyebrow="Em destaque"
-        title="Produtos em destaque"
-        description="Selecionados a dedo pela nossa curadoria."
-        href="/"
-        products={featured}
-        count={8}
+      <PublicCatalogSection
+        catalog={catalog.status === "success" ? catalog.data : undefined}
+        error={catalog.status === "error"}
+        onRetry={() => void router.invalidate()}
       />
       <MarketplaceStats />
-      <ProductSection
-        eyebrow="Mais vendidos"
-        title="Populares agora"
-        description="O que a comunidade LIT Buy está comprando essa semana."
-        href="/"
-        products={popular}
-        count={8}
-      />
-      <ProductSection
-        eyebrow="Novidades"
-        title="Chegou agora"
-        description="Os últimos anúncios publicados no marketplace."
-        href="/"
-        products={recent}
-        count={8}
-      />
+      <Benefits />
+      <Newsletter />
+    </>
+  );
+}
+
+export function HomePending() {
+  return (
+    <>
+      <Hero />
+      <PublicCatalogSection loading />
+      <MarketplaceStats />
       <Benefits />
       <Newsletter />
     </>

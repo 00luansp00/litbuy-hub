@@ -4,6 +4,8 @@
 
 > PR #29 adds the backend-only public catalog read foundation; frontend adoption, search, commerce, and stock reservation remain later milestones. See `PUBLIC_CATALOG_READ_FOUNDATION.md`.
 
+> A Home agora adotou somente a listagem pública recente. Nenhuma alteração de backend, regra de elegibilidade, paginação, imagem ou funcionalidade comercial foi necessária.
+
 Roadmap recomendado para transformar o MVP visual em produto real, considerando a arquitetura real atual.
 
 ## Stack atual autoritativa

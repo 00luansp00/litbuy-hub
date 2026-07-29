@@ -1,6 +1,8 @@
 # DEVELOPER_HANDOFF.md — LIT Buy
 
-> A fundação isolada de dados locais está em `LOCAL_DEMO_DATA.md`: oito produtos fictícios, imagens privadas no MinIO e reset seletivo. Home, categoria e detalhe ainda não consomem a API.
+> A fundação isolada de dados locais está em `LOCAL_DEMO_DATA.md`: oito produtos fictícios, imagens privadas no MinIO e reset seletivo. Somente a listagem da Home consome a API; categoria e detalhe continuam mockados.
+
+> A fronteira e os estados da integração da Home estão em `HOME_PUBLIC_CATALOG_INTEGRATION.md`; ela não habilita detalhe nem compra.
 
 > Backend public catalog reads are documented in `PUBLIC_CATALOG_READ_FOUNDATION.md`. Visibility does not imply purchasability or stock reservation.
 

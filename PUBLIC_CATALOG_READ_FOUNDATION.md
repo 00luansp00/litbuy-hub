@@ -1,6 +1,6 @@
 # Public catalog read foundation
 
-> O dataset descrito em `LOCAL_DEMO_DATA.md` permite validar esta leitura com seis produtos ativos. O frontend continua desconectado nesta etapa.
+> O dataset descrito em `LOCAL_DEMO_DATA.md` permite validar esta leitura com seis produtos ativos. A listagem da Home agora consome o endpoint; detalhe, categorias, busca e comércio continuam desconectados, conforme `HOME_PUBLIC_CATALOG_INTEGRATION.md`.
 
 ## Endpoints
 

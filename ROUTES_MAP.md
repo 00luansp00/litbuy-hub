@@ -13,6 +13,8 @@ Legenda:
 
 ## 1. Rotas públicas
 
+`/` mantém categorias mockadas, mas sua única seção “Anúncios recentes” usa `GET /api/v1/catalog/products` (`RECENT`, página 1, limite 8). Os cards são informativos e não navegam ao detalhe mockado; loading, vazio, erro e retry estão descritos em `HOME_PUBLIC_CATALOG_INTEGRATION.md`.
+
 | Rota                     | Finalidade             | Auth    | Gate | Service                  | Backend / situação                      |
 | ------------------------ | ---------------------- | ------- | ---- | ------------------------ | --------------------------------------- |
 | `/`                      | Home / landing         | público | —    | product, category        | listagem paginada + destaques + SEO SSR |
