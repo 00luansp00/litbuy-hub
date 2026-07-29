@@ -173,3 +173,7 @@ Os services vivem em `src/services/`. A maioria ainda é mockada; `publicCatalog
 - Todos retornam dados estáticos — não confiar em nada disso em produção.
 - `any` proibido; usar tipos de `src/types/index.ts`.
 - Substituir chamadas por Query hooks ligados aos endpoints reais.
+
+## Catálogo público por categoria
+
+A rota `/categoria/$slug` usa produtos e subcategorias públicos reais, com filtros suportados e paginação sem total. Detalhe e comércio continuam desconectados. Consulte `CATEGORY_PUBLIC_CATALOG_INTEGRATION.md`.

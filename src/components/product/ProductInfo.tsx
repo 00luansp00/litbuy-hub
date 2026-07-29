@@ -21,6 +21,7 @@ export function ProductInfo({ product, className }: ProductInfoProps) {
         <Link
           to="/categoria/$slug"
           params={{ slug: product.categorySlug }}
+          search={{ sort: "RECENT", page: 1 }}
           className="text-xs font-medium uppercase tracking-widest text-muted-foreground hover:text-primary"
         >
           {product.categoryName}
@@ -31,9 +32,7 @@ export function ProductInfo({ product, className }: ProductInfoProps) {
         <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
           <span className="inline-flex items-center gap-1">
             <Star className="h-4 w-4 fill-warning text-warning" />
-            <span className="font-semibold text-foreground">
-              {product.rating.toFixed(1)}
-            </span>
+            <span className="font-semibold text-foreground">{product.rating.toFixed(1)}</span>
             <span>({formatCompact(product.reviewsCount)} avaliações)</span>
           </span>
           <span aria-hidden>•</span>
@@ -69,9 +68,7 @@ export function ProductInfo({ product, className }: ProductInfoProps) {
       </div>
 
       {product.description && (
-        <p className="text-sm leading-relaxed text-muted-foreground">
-          {product.description}
-        </p>
+        <p className="text-sm leading-relaxed text-muted-foreground">{product.description}</p>
       )}
     </div>
   );

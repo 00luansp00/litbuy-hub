@@ -46,3 +46,7 @@ contains three catalog-specific paths:
 
 These infrastructure tests require the PostgreSQL, Redis, and MinIO services supplied by Backend
 integration CI. Their presence does not imply that the public frontend consumes the API.
+
+## Catálogo público por categoria
+
+A rota `/categoria/$slug` usa produtos e subcategorias públicos reais, com filtros suportados e paginação sem total. Detalhe e comércio continuam desconectados. Consulte `CATEGORY_PUBLIC_CATALOG_INTEGRATION.md`.

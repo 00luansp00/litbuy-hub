@@ -43,3 +43,7 @@ Há três categorias (`demo-jogos`, `demo-gift-cards`, `demo-software`) e oito s
 - `DEMO_DATA_NAMESPACE_CONFLICT`: um identificador reservado pertence a outro registro; não será sobrescrito.
 - `DEMO_DATA_CONFIRMATION_REQUIRED`: acrescente `--confirm` ao reset.
 - `DEMO_DATA_VERIFICATION_FAILED`: execute seed novamente e confira PostgreSQL e MinIO.
+
+## Catálogo público por categoria
+
+A rota `/categoria/$slug` usa produtos e subcategorias públicos reais, com filtros suportados e paginação sem total. Detalhe e comércio continuam desconectados. Consulte `CATEGORY_PUBLIC_CATALOG_INTEGRATION.md`.

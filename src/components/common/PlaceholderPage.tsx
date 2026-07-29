@@ -34,7 +34,11 @@ export function PlaceholderPage({
             <Link to="/">Voltar para a home</Link>
           </Button>
           <Button variant="outline" asChild>
-            <Link to="/categoria/$slug" params={{ slug: "contas" }}>
+            <Link
+              to="/categoria/$slug"
+              params={{ slug: "contas" }}
+              search={{ sort: "RECENT", page: 1 }}
+            >
               Explorar categorias
             </Link>
           </Button>

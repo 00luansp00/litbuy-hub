@@ -32,6 +32,7 @@ export function CategoryCard({ category, className }: CategoryCardProps) {
       <Link
         to="/categoria/$slug"
         params={{ slug: category.slug }}
+        search={{ sort: "RECENT", page: 1 }}
         className={cn(
           "group relative flex h-full cursor-pointer flex-col gap-4 overflow-hidden rounded-2xl border border-border bg-card p-5",
           "transition-all duration-300 hover:border-[color:var(--cat-color)]/50 hover:shadow-elegant",
@@ -70,13 +71,9 @@ export function CategoryCard({ category, className }: CategoryCardProps) {
         </div>
 
         <div className="relative space-y-1">
-          <h3 className="text-sm font-semibold text-foreground md:text-base">
-            {category.name}
-          </h3>
+          <h3 className="text-sm font-semibold text-foreground md:text-base">{category.name}</h3>
           {listings != null && (
-            <p className="text-xs text-muted-foreground">
-              {formatCompact(listings)} anúncios
-            </p>
+            <p className="text-xs text-muted-foreground">{formatCompact(listings)} anúncios</p>
           )}
         </div>
       </Link>

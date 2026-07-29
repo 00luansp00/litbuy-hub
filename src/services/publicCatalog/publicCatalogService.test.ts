@@ -40,6 +40,34 @@ describe("publicCatalogService", () => {
       auth: false,
     });
   });
+  it("adds only defined category filters through URLSearchParams", async () => {
+    apiFetch.mockResolvedValue(response());
+    await publicCatalogService.list({
+      categorySlug: "demo-jogos",
+      subcategorySlug: "demo-servicos",
+      productType: "SERVICE",
+      sort: "TITLE_ASC",
+      page: 2,
+      limit: 12,
+    });
+    const path = apiFetch.mock.calls[0][0] as string;
+    expect(path).toBe(
+      "/catalog/products?categorySlug=demo-jogos&subcategorySlug=demo-servicos&productType=SERVICE&sort=TITLE_ASC&page=2&limit=12",
+    );
+    expect(Object.fromEntries(new URLSearchParams(path.split("?")[1]))).toEqual({
+      categorySlug: "demo-jogos",
+      subcategorySlug: "demo-servicos",
+      productType: "SERVICE",
+      sort: "TITLE_ASC",
+      page: "2",
+      limit: "12",
+    });
+  });
+  it("omits optional filters", async () => {
+    apiFetch.mockResolvedValue(response());
+    await publicCatalogService.list({ sort: "OLDEST", page: 1, limit: 12 });
+    expect(apiFetch.mock.calls[0][0]).not.toContain("categorySlug");
+  });
   it.each([
     [{ sort: "UNKNOWN", page: 1, limit: 8 }],
     [{ sort: "RECENT", page: 0, limit: 8 }],
@@ -49,6 +77,14 @@ describe("publicCatalogService", () => {
     [{ sort: "RECENT", page: 1, limit: 0 }],
     [{ sort: "RECENT", page: 1, limit: 51 }],
     [{ sort: "RECENT", page: 1, limit: 1.5 }],
+    [{ sort: "RECENT", page: 1, limit: 8, categorySlug: "" }],
+    [{ sort: "RECENT", page: 1, limit: 8, categorySlug: "Demo" }],
+    [{ sort: "RECENT", page: 1, limit: 8, subcategorySlug: "com espaço" }],
+    [{ sort: "RECENT", page: 1, limit: 8, categorySlug: "demo--jogos" }],
+    [{ sort: "RECENT", page: 1, limit: 8, categorySlug: "-demo" }],
+    [{ sort: "RECENT", page: 1, limit: 8, categorySlug: "demo-" }],
+    [{ sort: "RECENT", page: 1, limit: 8, categorySlug: "a".repeat(61) }],
+    [{ sort: "RECENT", page: 1, limit: 8, productType: "UNKNOWN" }],
   ])("rejects an invalid query before constructing the URL", async (params) => {
     await expect(
       publicCatalogService.list(params as Parameters<typeof publicCatalogService.list>[0]),

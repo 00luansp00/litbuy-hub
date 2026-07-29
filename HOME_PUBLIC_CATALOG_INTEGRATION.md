@@ -26,3 +26,7 @@ Conectar detalhe público por slug, categorias e busca aos contratos reais; só 
 O CI executa `bun run smoke:home-catalog` depois do primeiro `demo:seed`/`demo:verify` e antes do reset. O smoke protegido contra produção chama o endpoint com a origem local permitida, confirma HTTP 200 e CORS, passa a resposta HTTP pelo mesmo `parsePublicCatalogListResponse` do frontend, verifica os seis slugs públicos e a ausência dos dois produtos ocultos e de campos privados, e baixa ao menos uma URL assinada sem imprimi-la.
 
 O serviço aceita somente os sorts públicos e limita `page` a 1–100 e `limit` a 1–50 antes da rede. O parser também exige a coerência `NORMAL/FIXED`, `DYNAMIC/FROM` e `SERVICE/FIXED|QUOTE`. Se a rota revalidada entregar uma nova URL assinada ao mesmo card, o estado de falha da URL antiga não se aplica à nova URL, permitindo uma nova tentativa sem persistência, logs ou loop de retry.
+
+## Catálogo público por categoria
+
+A rota `/categoria/$slug` usa produtos e subcategorias públicos reais, com filtros suportados e paginação sem total. Detalhe e comércio continuam desconectados. Consulte `CATEGORY_PUBLIC_CATALOG_INTEGRATION.md`.

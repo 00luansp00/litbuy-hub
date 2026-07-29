@@ -254,4 +254,5 @@ export const catalogService = {
 export const categoryService = {
   list: catalogService.getCategories,
   bySlug: catalogService.getCategoryBySlug,
+  getSubcategoriesByCategory: catalogService.getSubcategoriesByCategory,
 };

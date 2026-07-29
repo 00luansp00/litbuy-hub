@@ -79,7 +79,11 @@ export function Navbar() {
           <DropdownMenuContent align="start" className="w-56">
             {categories.map((c) => (
               <DropdownMenuItem key={c.id} asChild>
-                <Link to="/categoria/$slug" params={{ slug: c.slug }}>
+                <Link
+                  to="/categoria/$slug"
+                  params={{ slug: c.slug }}
+                  search={{ sort: "RECENT", page: 1 }}
+                >
                   {c.name}
                 </Link>
               </DropdownMenuItem>
@@ -118,7 +122,7 @@ export function Navbar() {
           {navLinks.map((l) => (
             <Button key={l.label} variant="ghost" size="sm" asChild>
               {"params" in l ? (
-                <Link to={l.to} params={l.params}>
+                <Link to={l.to} params={l.params} search={{ sort: "RECENT", page: 1 }}>
                   {l.label}
                 </Link>
               ) : (
@@ -234,7 +238,11 @@ export function Navbar() {
                   asChild
                   onClick={() => setMobileOpen(false)}
                 >
-                  <Link to="/categoria/$slug" params={{ slug: c.slug }}>
+                  <Link
+                    to="/categoria/$slug"
+                    params={{ slug: c.slug }}
+                    search={{ sort: "RECENT", page: 1 }}
+                  >
                     {c.name}
                   </Link>
                 </Button>
