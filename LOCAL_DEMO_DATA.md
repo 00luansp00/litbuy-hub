@@ -16,7 +16,11 @@ bun run demo:verify
 bun run demo:reset
 ```
 
-Dentro da imagem, os equivalentes são `node dist/cli/demo-data.js seed`, `verify` e `reset --confirm`. O seed pode ser repetido: reutiliza IDs e object keys, restaura drift e não duplica registros. Objetos enviados antes de uma falha de banco podem permanecer, mas a próxima execução sobrescreve os mesmos nomes de forma segura. O verify confere contas, papéis, catálogo, imagens e objetos. O reset remove somente IDs reservados e objetos `demo/`, sem `TRUNCATE`, e pode ser repetido.
+Dentro da imagem, os equivalentes são `node dist/cli/demo-data.js seed`, `verify` e `reset --confirm`. O único ponto público do módulo executa o guard antes de criar clientes, portanto seed, verify e reset não possuem um caminho desprotegido. O seed pode ser repetido: reutiliza IDs e object keys, restaura drift (inclusive filhos inesperados) e não duplica registros.
+
+Antes de reutilizar um objeto órfão, o seed compara content type, tamanho e SHA-256 com a imagem canônica. Conteúdo desconhecido causa `DEMO_DATA_NAMESPACE_CONFLICT` e nunca é sobrescrito. O verify usa o `PublicProductCatalogService` real, gera URLs assinadas, baixa os bytes e confirma que a leitura anônima é negada. O CI executa a suíte real e também seed/verify/seed/verify/reset/reset pelo serviço compilado do Compose.
+
+O reset remove somente IDs reservados e object keys canônicas, sem `TRUNCATE`, e pode ser repetido. Ele remove sessões, dispositivos e desafios criados pelo uso real das contas antes de removê-las; `SecurityEvent` é preservado e suas relações opcionais são anuladas pelas constraints existentes. Registros e objetos externos permanecem intactos.
 
 ## Contas
 
@@ -28,7 +32,7 @@ Dentro da imagem, os equivalentes são `node dist/cli/demo-data.js seed`, `verif
 
 Senha pública local: `LitBuyDemo2026!`. Ela é descartável e proibida fora desta demonstração.
 
-Há três categorias (`demo-jogos`, `demo-gift-cards`, `demo-software`) e oito subcategorias. Seis produtos ativos são públicos: conta, gift card, moedas, licença e dois serviços. Os produtos `demo-produto-pausado` e `demo-produto-nao-publicado` são invisíveis. Todos os dados e imagens PNG são locais e fictícios.
+Há três categorias (`demo-jogos`, `demo-gift-cards`, `demo-software`) e oito subcategorias. Seis produtos ativos são públicos: conta, gift card, moedas, licença e dois serviços. Os produtos `demo-produto-pausado` e `demo-produto-nao-publicado` são invisíveis. O produto de conta possui apenas metadados fictícios de procedência e recuperação, sem credenciais. Todos os dados são fictícios e cada produto possui um dos oito PNGs locais, pequenos, visualmente distintos e com hash determinístico.
 
 ## Erros comuns
 

@@ -1,8 +1,12 @@
 import type { CatalogProductType, ListingDraftModel, ProductStatus } from '@prisma/client';
+import { createHash } from 'node:crypto';
+import { deflateSync } from 'node:zlib';
 
 const uuid = (group: number, item: number) =>
   `d3${group.toString(16).padStart(2, '0')}0000-0000-4000-8000-${item.toString().padStart(12, '0')}`;
 export const DEMO_DATE = new Date('2026-01-15T12:00:00.000Z');
+export const demoProductDate = (index: number) =>
+  new Date(DEMO_DATE.getTime() + index * 86_400_000);
 export const DEMO_IDS = {
   users: { buyer: uuid(1, 1), seller: uuid(1, 2), admin: uuid(1, 3) },
   sellerApplication: uuid(2, 1),
@@ -61,6 +65,7 @@ const product = (
   imageId: uuid(12, index),
   slug: `demo-${slug}`,
   objectKey: `demo/products/${index}-${slug}.png`,
+  createdAt: demoProductDate(index),
   title,
   description: `${title}. Conteúdo inteiramente fictício para validação local.`,
   productType,
@@ -187,10 +192,58 @@ export const DEMO_PRODUCTS = [
     [['Opção única', 35, 5]],
   ),
 ] as const;
-export const DEMO_PNG = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEAQH/69fZkwAAAABJRU5ErkJggg==',
-  'base64',
-);
+
+function crc32(buffer: Buffer) {
+  let crc = 0xffffffff;
+  for (const byte of buffer) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+const pngChunk = (type: string, data: Buffer) => {
+  const name = Buffer.from(type);
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(data.length);
+  const checksum = Buffer.alloc(4);
+  checksum.writeUInt32BE(crc32(Buffer.concat([name, data])));
+  return Buffer.concat([length, name, data, checksum]);
+};
+function coloredPng(index: number) {
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(4, 0);
+  header.writeUInt32BE(4, 4);
+  header[8] = 8;
+  header[9] = 6;
+  const pixels: number[] = [];
+  for (let y = 0; y < 4; y += 1) {
+    pixels.push(0);
+    for (let x = 0; x < 4; x += 1)
+      pixels.push(
+        (index * 37 + x * 31) % 256,
+        (index * 71 + y * 43) % 256,
+        (index * 109 + x * y * 17) % 256,
+        255,
+      );
+  }
+  return Buffer.concat([
+    Buffer.from('89504e470d0a1a0a', 'hex'),
+    pngChunk('IHDR', header),
+    pngChunk('IDAT', deflateSync(Buffer.from(pixels))),
+    pngChunk('IEND', Buffer.alloc(0)),
+  ]);
+}
+export const DEMO_IMAGES = DEMO_PRODUCTS.map((product, index) => {
+  const body = coloredPng(index + 1);
+  return {
+    id: product.imageId,
+    productId: product.id,
+    objectKey: product.objectKey,
+    body,
+    sha256: createHash('sha256').update(body).digest('hex'),
+    contentType: 'image/png',
+  };
+});
 export const DEMO_SUMMARY = {
   users: 3,
   sellers: 1,

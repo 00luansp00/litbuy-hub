@@ -1,84 +1,204 @@
+import 'reflect-metadata';
 import {
   DeleteObjectCommand,
+  GetObjectCommand,
   HeadObjectCommand,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
 import { PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { createHash } from 'node:crypto';
 import { hashPassword } from '../auth/auth.utils';
 import {
   DEMO_CATEGORIES,
   DEMO_DATE,
   DEMO_IDS,
-  DEMO_PNG,
+  DEMO_IMAGES,
   DEMO_PRODUCTS,
   DEMO_SUMMARY,
   DEMO_USERS,
 } from './demo-data.fixtures';
+import { PublicCatalogSort } from '../products/public-product-catalog.dto';
+import { PublicProductCatalogService } from '../products/public-product-catalog.service';
 import { assertDemoEnvironment, DemoDataError, parseDemoCommand } from './demo-data.guard';
+import type { DemoRuntimeConfig } from './demo-data.guard';
 
-const prisma = new PrismaClient();
-const bucket = () => process.env.PRODUCT_IMAGE_S3_BUCKET!;
-const storage = () =>
+type Runtime = ReturnType<typeof runtime>;
+const s3 = (config: DemoRuntimeConfig, endpoint: string) =>
   new S3Client({
-    endpoint: process.env.PRODUCT_IMAGE_S3_ENDPOINT,
-    region: process.env.PRODUCT_IMAGE_S3_REGION ?? 'us-east-1',
-    forcePathStyle: process.env.PRODUCT_IMAGE_S3_FORCE_PATH_STYLE !== 'false',
+    endpoint,
+    region: config.s3Region,
+    forcePathStyle: config.forcePathStyle,
     credentials: {
-      accessKeyId: process.env.PRODUCT_IMAGE_S3_ACCESS_KEY!,
-      secretAccessKey: process.env.PRODUCT_IMAGE_S3_SECRET_KEY!,
+      accessKeyId: config.s3AccessKey,
+      secretAccessKey: config.s3SecretKey,
     },
   });
+function runtime(config: DemoRuntimeConfig) {
+  return {
+    config,
+    prisma: new PrismaClient({ datasourceUrl: config.databaseUrl }),
+    internalS3: s3(config, config.s3Endpoint),
+    signingS3: s3(config, config.s3SigningEndpoint),
+  };
+}
 
-export async function assertNoNamespaceConflicts() {
+async function assertNoNamespaceConflicts({ prisma }: Runtime) {
   for (const user of DEMO_USERS) {
-    const found = await prisma.user.findUnique({
-      where: { email: user.email },
-      select: { id: true },
-    });
-    if (found && found.id !== user.id) throw new DemoDataError('DEMO_DATA_NAMESPACE_CONFLICT');
+    const [byEmail, byId] = await Promise.all([
+      prisma.user.findUnique({ where: { email: user.email }, select: { id: true } }),
+      prisma.user.findUnique({ where: { id: user.id }, select: { email: true } }),
+    ]);
+    if ((byEmail && byEmail.id !== user.id) || (byId && byId.email !== user.email))
+      throw new DemoDataError('DEMO_DATA_NAMESPACE_CONFLICT');
   }
   for (const category of DEMO_CATEGORIES) {
-    const found = await prisma.catalogCategory.findUnique({
-      where: { slug: category.slug },
-      select: { id: true },
-    });
-    if (found && found.id !== category.id) throw new DemoDataError('DEMO_DATA_NAMESPACE_CONFLICT');
+    const [bySlug, byId] = await Promise.all([
+      prisma.catalogCategory.findUnique({ where: { slug: category.slug }, select: { id: true } }),
+      prisma.catalogCategory.findUnique({ where: { id: category.id }, select: { slug: true } }),
+    ]);
+    if ((bySlug && bySlug.id !== category.id) || (byId && byId.slug !== category.slug))
+      throw new DemoDataError('DEMO_DATA_NAMESPACE_CONFLICT');
+    for (const sub of category.subcategories) {
+      const [subById, subBySlug] = await Promise.all([
+        prisma.catalogSubcategory.findUnique({ where: { id: sub.id } }),
+        prisma.catalogSubcategory.findUnique({
+          where: { categoryId_slug: { categoryId: category.id, slug: sub.slug } },
+        }),
+      ]);
+      if (
+        (subById && (subById.slug !== sub.slug || subById.categoryId !== category.id)) ||
+        (subBySlug && subBySlug.id !== sub.id)
+      )
+        throw new DemoDataError('DEMO_DATA_NAMESPACE_CONFLICT');
+    }
   }
+  const [application, profile] = await Promise.all([
+    prisma.sellerApplication.findUnique({ where: { id: DEMO_IDS.sellerApplication } }),
+    prisma.sellerProfile.findUnique({ where: { id: DEMO_IDS.sellerProfile } }),
+  ]);
+  if (
+    (application && application.userId !== DEMO_IDS.users.seller) ||
+    (profile && (profile.userId !== DEMO_IDS.users.seller || profile.slug !== 'demo-lit-store'))
+  )
+    throw new DemoDataError('DEMO_DATA_NAMESPACE_CONFLICT');
   for (const product of DEMO_PRODUCTS) {
-    const [slug, key] = await Promise.all([
+    const [slug, key, byId, draft, imageById] = await Promise.all([
       prisma.product.findUnique({ where: { slug: product.slug }, select: { id: true } }),
       prisma.productImage.findUnique({
         where: { objectKey: product.objectKey },
         select: { id: true },
       }),
+      prisma.product.findUnique({
+        where: { id: product.id },
+        select: { slug: true, sourceListingDraftId: true, sellerProfileId: true },
+      }),
+      prisma.listingDraft.findUnique({
+        where: { id: product.draftId },
+        select: { sellerProfileId: true },
+      }),
+      prisma.productImage.findUnique({ where: { id: product.imageId } }),
     ]);
-    if ((slug && slug.id !== product.id) || (key && key.id !== product.imageId))
+    const [wrongVariants, wrongDraftVariants] = await Promise.all([
+      prisma.productVariant.count({
+        where: { id: { in: product.variants.map((v) => v.id) }, NOT: { productId: product.id } },
+      }),
+      prisma.listingDraftVariant.count({
+        where: {
+          id: { in: product.variants.map((v) => v.draftId) },
+          NOT: { draftId: product.draftId },
+        },
+      }),
+    ]);
+    if (
+      (slug && slug.id !== product.id) ||
+      (key && key.id !== product.imageId) ||
+      (byId &&
+        (byId.slug !== product.slug ||
+          byId.sourceListingDraftId !== product.draftId ||
+          byId.sellerProfileId !== DEMO_IDS.sellerProfile)) ||
+      (draft && draft.sellerProfileId !== DEMO_IDS.sellerProfile) ||
+      (imageById &&
+        (imageById.objectKey !== product.objectKey || imageById.productId !== product.id)) ||
+      wrongVariants ||
+      wrongDraftVariants
+    )
       throw new DemoDataError('DEMO_DATA_NAMESPACE_CONFLICT');
   }
 }
 
-async function uploadImages() {
-  const client = storage();
-  await Promise.all(
-    DEMO_PRODUCTS.map((product) =>
-      client.send(
-        new PutObjectCommand({
-          Bucket: bucket(),
-          Key: product.objectKey,
-          Body: DEMO_PNG,
-          ContentType: 'image/png',
-        }),
-      ),
-    ),
+async function objectBytes(body: unknown) {
+  return Buffer.from(
+    await (body as { transformToByteArray(): Promise<Uint8Array> }).transformToByteArray(),
   );
 }
+async function uploadImages({ config, internalS3 }: Runtime) {
+  for (const image of DEMO_IMAGES) {
+    try {
+      const head = await internalS3.send(
+        new HeadObjectCommand({ Bucket: config.bucket, Key: image.objectKey }),
+      );
+      const object = await internalS3.send(
+        new GetObjectCommand({ Bucket: config.bucket, Key: image.objectKey }),
+      );
+      const actual = createHash('sha256')
+        .update(await objectBytes(object.Body))
+        .digest('hex');
+      if (
+        head.ContentType !== image.contentType ||
+        head.ContentLength !== image.body.length ||
+        actual !== image.sha256
+      )
+        throw new DemoDataError('DEMO_DATA_NAMESPACE_CONFLICT');
+    } catch (error) {
+      if (error instanceof DemoDataError) throw error;
+      if ((error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode !== 404)
+        throw error;
+      await internalS3.send(
+        new PutObjectCommand({
+          Bucket: config.bucket,
+          Key: image.objectKey,
+          Body: image.body,
+          ContentType: image.contentType,
+        }),
+      );
+    }
+  }
+}
 
-export async function seed() {
-  await assertNoNamespaceConflicts();
-  await uploadImages();
-  const passwordHash = await hashPassword(process.env.DEMO_USER_PASSWORD!);
+async function assertNoStorageConflicts({ config, internalS3 }: Runtime) {
+  for (const image of DEMO_IMAGES) {
+    try {
+      const head = await internalS3.send(
+        new HeadObjectCommand({ Bucket: config.bucket, Key: image.objectKey }),
+      );
+      const object = await internalS3.send(
+        new GetObjectCommand({ Bucket: config.bucket, Key: image.objectKey }),
+      );
+      const hash = createHash('sha256')
+        .update(await objectBytes(object.Body))
+        .digest('hex');
+      if (
+        head.ContentType !== image.contentType ||
+        head.ContentLength !== image.body.length ||
+        hash !== image.sha256
+      )
+        throw new DemoDataError('DEMO_DATA_NAMESPACE_CONFLICT');
+    } catch (error) {
+      if (error instanceof DemoDataError) throw error;
+      if ((error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode !== 404)
+        throw error;
+    }
+  }
+}
+
+async function seed(context: Runtime) {
+  const { prisma, config } = context;
+  await assertNoNamespaceConflicts(context);
+  await uploadImages(context);
+  const passwordHash = await hashPassword(config.password);
   await prisma.$transaction(async (tx) => {
     for (const user of DEMO_USERS) {
       await tx.user.upsert({
@@ -89,19 +209,24 @@ export async function seed() {
           birthDate: new Date('1995-01-01'),
           status: 'ACTIVE',
           emailVerifiedAt: DEMO_DATE,
-          termsVersion: process.env.CURRENT_TERMS_VERSION!,
+          termsVersion: config.termsVersion,
           termsAcceptedAt: DEMO_DATE,
-          privacyVersion: process.env.CURRENT_PRIVACY_VERSION!,
+          privacyVersion: config.privacyVersion,
           privacyAcceptedAt: DEMO_DATE,
           createdAt: DEMO_DATE,
         },
         update: {
           email: user.email,
+          birthDate: new Date('1995-01-01'),
           status: 'ACTIVE',
           emailVerifiedAt: DEMO_DATE,
           deletedAt: null,
-          termsVersion: process.env.CURRENT_TERMS_VERSION!,
-          privacyVersion: process.env.CURRENT_PRIVACY_VERSION!,
+          termsVersion: config.termsVersion,
+          termsAcceptedAt: DEMO_DATE,
+          privacyVersion: config.privacyVersion,
+          privacyAcceptedAt: DEMO_DATE,
+          createdAt: DEMO_DATE,
+          updatedAt: DEMO_DATE,
         },
       });
       await tx.passwordCredential.upsert({
@@ -112,7 +237,14 @@ export async function seed() {
           passwordChangedAt: DEMO_DATE,
           createdAt: DEMO_DATE,
         },
-        update: { passwordHash, failedLoginAttempts: 0, lockedUntil: null },
+        update: {
+          passwordHash,
+          passwordChangedAt: DEMO_DATE,
+          failedLoginAttempts: 0,
+          lockedUntil: null,
+          createdAt: DEMO_DATE,
+          updatedAt: DEMO_DATE,
+        },
       });
       await tx.userRoleAssignment.deleteMany({ where: { userId: user.id } });
       await tx.userRoleAssignment.createMany({
@@ -128,7 +260,7 @@ export async function seed() {
         requestedSlug: 'demo-lit-store',
         description: 'Loja fictícia para demonstração local.',
         status: 'APPROVED',
-        sellerAgreementVersion: process.env.CURRENT_SELLER_AGREEMENT_VERSION!,
+        sellerAgreementVersion: config.sellerAgreementVersion,
         sellerAgreementAcceptedAt: DEMO_DATE,
         submittedAt: DEMO_DATE,
         reviewedAt: DEMO_DATE,
@@ -136,12 +268,20 @@ export async function seed() {
         createdAt: DEMO_DATE,
       },
       update: {
+        userId: DEMO_IDS.users.seller,
         storeName: 'LIT Demo Store',
         requestedSlug: 'demo-lit-store',
+        description: 'Loja fictícia para demonstração local.',
         status: 'APPROVED',
+        sellerAgreementVersion: config.sellerAgreementVersion,
+        sellerAgreementAcceptedAt: DEMO_DATE,
+        submittedAt: DEMO_DATE,
+        reviewedAt: DEMO_DATE,
         reviewedByUserId: DEMO_IDS.users.admin,
         rejectionCode: null,
         rejectionReason: null,
+        createdAt: DEMO_DATE,
+        updatedAt: DEMO_DATE,
       },
     });
     await tx.sellerProfile.upsert({
@@ -157,11 +297,14 @@ export async function seed() {
         createdAt: DEMO_DATE,
       },
       update: {
+        userId: DEMO_IDS.users.seller,
         storeName: 'LIT Demo Store',
         slug: 'demo-lit-store',
         description: 'Loja fictícia para demonstração local.',
         status: 'ACTIVE',
         verified: true,
+        createdAt: DEMO_DATE,
+        updatedAt: DEMO_DATE,
       },
     });
     for (const category of DEMO_CATEGORIES) {
@@ -175,6 +318,7 @@ export async function seed() {
           sortOrder: category.sortOrder,
           status: 'ACTIVE',
           createdAt: DEMO_DATE,
+          updatedAt: DEMO_DATE,
         },
         update: {
           slug: category.slug,
@@ -182,6 +326,8 @@ export async function seed() {
           description: 'Taxonomia fictícia de demonstração.',
           sortOrder: category.sortOrder,
           status: 'ACTIVE',
+          createdAt: DEMO_DATE,
+          updatedAt: DEMO_DATE,
         },
       });
       for (const sub of category.subcategories)
@@ -212,13 +358,15 @@ export async function seed() {
           description: item.description,
           price: item.price,
           stock: item.stock,
-          submittedAt: DEMO_DATE,
-          reviewedAt: DEMO_DATE,
-          approvedAt: DEMO_DATE,
+          submittedAt: item.createdAt,
+          reviewedAt: item.createdAt,
+          approvedAt: item.createdAt,
           reviewedByUserId: DEMO_IDS.users.admin,
-          createdAt: DEMO_DATE,
+          createdAt: item.createdAt,
+          updatedAt: item.createdAt,
         },
         update: {
+          sellerProfileId: DEMO_IDS.sellerProfile,
           categoryId: item.categoryId,
           subcategoryId: item.subcategoryId,
           productType: item.productType,
@@ -228,7 +376,13 @@ export async function seed() {
           description: item.description,
           price: item.price,
           stock: item.stock,
-          approvedAt: DEMO_DATE,
+          deliveryMode: 'MANUAL',
+          submittedAt: item.createdAt,
+          reviewedAt: item.createdAt,
+          reviewedByUserId: DEMO_IDS.users.admin,
+          approvedAt: item.createdAt,
+          createdAt: item.createdAt,
+          updatedAt: item.createdAt,
         },
       });
       await tx.product.upsert({
@@ -247,9 +401,12 @@ export async function seed() {
           description: item.description,
           price: item.price,
           stock: item.stock,
-          createdAt: DEMO_DATE,
+          createdAt: item.createdAt,
+          updatedAt: item.createdAt,
         },
         update: {
+          sourceListingDraftId: item.draftId,
+          sellerProfileId: DEMO_IDS.sellerProfile,
           categoryId: item.categoryId,
           subcategoryId: item.subcategoryId,
           productType: item.productType,
@@ -260,10 +417,15 @@ export async function seed() {
           description: item.description,
           price: item.price,
           stock: item.stock,
+          deliveryMode: 'MANUAL',
+          createdAt: item.createdAt,
+          updatedAt: item.createdAt,
         },
       });
       await tx.listingDraftVariant.deleteMany({ where: { draftId: item.draftId } });
       await tx.productVariant.deleteMany({ where: { productId: item.id } });
+      await tx.listingDraftAttributeValue.deleteMany({ where: { draftId: item.draftId } });
+      await tx.productAttributeValue.deleteMany({ where: { productId: item.id } });
       for (const variant of item.variants) {
         await tx.listingDraftVariant.create({
           data: {
@@ -290,6 +452,23 @@ export async function seed() {
       }
       await tx.listingDraftServiceDetails.deleteMany({ where: { draftId: item.draftId } });
       await tx.productServiceDetails.deleteMany({ where: { productId: item.id } });
+      await tx.listingDraftAccountDetails.deleteMany({ where: { draftId: item.draftId } });
+      await tx.productAccountDetails.deleteMany({ where: { productId: item.id } });
+      if (item.productType === 'ACCOUNT') {
+        const account = {
+          provenance: 'ORIGINAL_OWNER' as const,
+          recoveryLevel: 'FULL' as const,
+          emailVerified: true,
+          phoneLinked: false,
+          documentLinked: false,
+          fullAccess: true,
+          recoveryRisk: 'LOW' as const,
+          warrantyNote:
+            'Informação exclusivamente demonstrativa; nenhuma credencial real incluída.',
+        };
+        await tx.listingDraftAccountDetails.create({ data: { draftId: item.draftId, ...account } });
+        await tx.productAccountDetails.create({ data: { productId: item.id, ...account } });
+      }
       if (item.service) {
         const basePrice = item.service === 'FIXED' ? 79.9 : null;
         await tx.listingDraftServiceDetails.create({
@@ -311,6 +490,10 @@ export async function seed() {
           },
         });
       }
+      await tx.productImage.deleteMany({
+        where: { productId: item.id, id: { not: item.imageId } },
+      });
+      const image = DEMO_IMAGES.find((candidate) => candidate.id === item.imageId)!;
       await tx.productImage.upsert({
         where: { id: item.imageId },
         create: {
@@ -319,107 +502,233 @@ export async function seed() {
           objectKey: item.objectKey,
           status: 'READY',
           contentType: 'image/png',
-          sizeBytes: DEMO_PNG.length,
+          sizeBytes: image.body.length,
           altText: item.title,
           sortOrder: 0,
           isCover: true,
           uploadedAt: DEMO_DATE,
           uploadExpiresAt: new Date('2099-01-01'),
-          createdAt: DEMO_DATE,
+          createdAt: item.createdAt,
+          updatedAt: item.createdAt,
         },
         update: {
           productId: item.id,
           objectKey: item.objectKey,
           status: 'READY',
           contentType: 'image/png',
-          sizeBytes: DEMO_PNG.length,
+          sizeBytes: image.body.length,
           altText: item.title,
           sortOrder: 0,
           isCover: true,
           uploadedAt: DEMO_DATE,
           uploadExpiresAt: new Date('2099-01-01'),
           deletedAt: null,
+          createdAt: item.createdAt,
+          updatedAt: item.createdAt,
         },
       });
     }
   });
-  await verify();
+  await verify(context);
   return { ok: true, action: 'seed', ...DEMO_SUMMARY };
 }
 
-export async function verify() {
-  const client = storage();
-  const [users, sellers, categories, subcategories, products, publicProducts, images] =
-    await Promise.all([
-      prisma.user.findMany({
-        where: { id: { in: DEMO_USERS.map((x) => x.id) } },
-        include: { passwordCredential: true, roleAssignments: true },
-      }),
-      prisma.sellerProfile.count({
-        where: { id: DEMO_IDS.sellerProfile, status: 'ACTIVE', verified: true },
-      }),
-      prisma.catalogCategory.count({
-        where: { id: { in: DEMO_CATEGORIES.map((x) => x.id) }, status: 'ACTIVE' },
-      }),
-      prisma.catalogSubcategory.count({
-        where: {
-          id: { in: DEMO_CATEGORIES.flatMap((x) => x.subcategories.map((s) => s.id)) },
-          status: 'ACTIVE',
-        },
-      }),
-      prisma.product.count({ where: { id: { in: DEMO_PRODUCTS.map((x) => x.id) } } }),
-      prisma.product.count({
-        where: { id: { in: DEMO_PRODUCTS.map((x) => x.id) }, status: 'ACTIVE' },
-      }),
-      prisma.productImage.count({
-        where: { id: { in: DEMO_PRODUCTS.map((x) => x.imageId) }, status: 'READY', isCover: true },
-      }),
-    ]);
-  const counts = {
-    users: users.length,
-    sellers,
-    categories,
-    subcategories,
-    products,
-    publicProducts,
-    images,
-  };
-  if (JSON.stringify(counts) !== JSON.stringify(DEMO_SUMMARY))
+async function verify(context: Runtime) {
+  const { prisma, config, internalS3, signingS3 } = context;
+  const fail = () => {
     throw new DemoDataError('DEMO_DATA_VERIFICATION_FAILED');
+  };
+  const users = await prisma.user.findMany({
+    where: { id: { in: DEMO_USERS.map((x) => x.id) } },
+    include: { passwordCredential: true, roleAssignments: true },
+  });
+  if (users.length !== DEMO_USERS.length) fail();
   for (const expected of DEMO_USERS) {
-    const user = users.find((x) => x.id === expected.id);
+    const user = users.find((candidate) => candidate.id === expected.id);
     if (
       !user?.passwordCredential ||
-      !(await argon2.verify(
-        user.passwordCredential.passwordHash,
-        process.env.DEMO_USER_PASSWORD!,
-      )) ||
+      user.email !== expected.email ||
       user.status !== 'ACTIVE' ||
       !user.emailVerifiedAt ||
+      user.deletedAt ||
+      user.birthDate.toISOString() !== new Date('1995-01-01').toISOString() ||
+      user.termsVersion !== config.termsVersion ||
+      user.privacyVersion !== config.privacyVersion ||
+      user.passwordCredential.failedLoginAttempts !== 0 ||
+      user.passwordCredential.lockedUntil ||
+      !(await argon2.verify(user.passwordCredential.passwordHash, config.password)) ||
       user.roleAssignments
-        .map((x) => x.role)
+        .map((role) => role.role)
         .sort()
         .join() !== [...expected.roles].sort().join()
     )
-      throw new DemoDataError('DEMO_DATA_VERIFICATION_FAILED');
+      fail();
   }
-  for (const item of DEMO_PRODUCTS) {
-    const head = await client.send(
-      new HeadObjectCommand({ Bucket: bucket(), Key: item.objectKey }),
+  const [application, seller, categories, products] = await Promise.all([
+    prisma.sellerApplication.findUnique({ where: { id: DEMO_IDS.sellerApplication } }),
+    prisma.sellerProfile.findUnique({ where: { id: DEMO_IDS.sellerProfile } }),
+    prisma.catalogCategory.findMany({
+      where: { id: { in: DEMO_CATEGORIES.map((x) => x.id) } },
+      include: { subcategories: true },
+    }),
+    prisma.product.findMany({
+      where: { id: { in: DEMO_PRODUCTS.map((x) => x.id) } },
+      include: {
+        sourceListingDraft: {
+          include: { variants: true, accountDetails: true, serviceDetails: true, attributes: true },
+        },
+        variants: true,
+        accountDetails: true,
+        serviceDetails: true,
+        attributes: true,
+        images: true,
+      },
+    }),
+  ]);
+  if (
+    !application ||
+    application.userId !== DEMO_IDS.users.seller ||
+    application.status !== 'APPROVED' ||
+    application.reviewedByUserId !== DEMO_IDS.users.admin ||
+    !application.sellerAgreementAcceptedAt ||
+    !seller ||
+    seller.userId !== DEMO_IDS.users.seller ||
+    seller.slug !== 'demo-lit-store' ||
+    seller.status !== 'ACTIVE' ||
+    !seller.verified ||
+    categories.length !== 3 ||
+    categories.flatMap((x) => x.subcategories).length !== 8 ||
+    products.length !== 8
+  )
+    fail();
+  for (const expected of DEMO_PRODUCTS) {
+    const product = products.find((candidate) => candidate.id === expected.id);
+    if (!product) {
+      fail();
+      continue;
+    }
+    if (
+      product.slug !== expected.slug ||
+      product.status !== expected.status ||
+      product.title !== expected.title ||
+      product.sourceListingDraft.status !== 'APPROVED' ||
+      product.sourceListingDraft.sellerProfileId !== DEMO_IDS.sellerProfile ||
+      product.variants.length !== expected.variants.length ||
+      product.sourceListingDraft.variants.length !== expected.variants.length ||
+      product.attributes.length ||
+      product.sourceListingDraft.attributes.length ||
+      product.images.length !== 1 ||
+      product.images[0].status !== 'READY' ||
+      !product.images[0].isCover ||
+      product.images[0].objectKey !== expected.objectKey
+    )
+      fail();
+    if (
+      expected.productType === 'ACCOUNT' &&
+      (!product.accountDetails ||
+        !product.sourceListingDraft.accountDetails ||
+        product.accountDetails.recoveryRisk !== 'LOW')
+    )
+      fail();
+    if (
+      expected.service &&
+      (product.serviceDetails?.pricingType !== expected.service ||
+        product.sourceListingDraft.serviceDetails?.pricingType !== expected.service)
+    )
+      fail();
+  }
+  const storageAdapter = {
+    createReadUrl: async (key: string) => ({
+      readUrl: await getSignedUrl(
+        signingS3,
+        new GetObjectCommand({ Bucket: config.bucket, Key: key }),
+        { expiresIn: config.readUrlTtlSeconds },
+      ),
+      expiresAt: new Date(Date.now() + config.readUrlTtlSeconds * 1000),
+    }),
+    createUploadUrl: () => Promise.reject(new Error('unused')),
+    headObject: () => Promise.resolve(null),
+    deleteObject: () => Promise.resolve(undefined),
+  };
+  const catalog = new PublicProductCatalogService(prisma as never, storageAdapter);
+  const lists = await Promise.all(
+    Object.values(PublicCatalogSort).map((sort) => catalog.list({ page: 1, limit: 24, sort })),
+  );
+  const expectedPublic = DEMO_PRODUCTS.filter((product) => product.status === 'ACTIVE');
+  if (
+    lists.some(
+      (list) =>
+        list.items.length !== 6 ||
+        list.items.some((item) => !expectedPublic.some((expected) => expected.slug === item.slug)),
+    )
+  )
+    fail();
+  const byRecent = [...expectedPublic].sort(
+    (a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id),
+  );
+  const byOldest = [...expectedPublic].sort(
+    (a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id),
+  );
+  const byTitle = [...expectedPublic].sort(
+    (a, b) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id),
+  );
+  const expectedOrders = [byRecent, byOldest, byTitle, [...byTitle].reverse()].map((items) =>
+    items.map((item) => item.slug),
+  );
+  if (
+    lists.some(
+      (list, index) => list.items.map((item) => item.slug).join() !== expectedOrders[index].join(),
+    )
+  )
+    fail();
+  const paged = await catalog.list({ page: 1, limit: 2, sort: PublicCatalogSort.RECENT });
+  if (paged.items.length !== 2 || !paged.pagination.hasNext) fail();
+  const detail = await catalog.detail(expectedPublic[0].slug);
+  if (!detail.coverImage.url || JSON.stringify({ lists, detail }).includes('objectKey')) fail();
+  for (const hidden of DEMO_PRODUCTS.filter((product) => product.status !== 'ACTIVE')) {
+    try {
+      await catalog.detail(hidden.slug);
+      fail();
+    } catch (error) {
+      if ((error as { code?: string }).code !== 'PRODUCT_NOT_FOUND') fail();
+    }
+  }
+  for (const image of DEMO_IMAGES) {
+    const head = await internalS3.send(
+      new HeadObjectCommand({ Bucket: config.bucket, Key: image.objectKey }),
     );
-    if (!head.ContentLength || head.ContentType !== 'image/png')
-      throw new DemoDataError('DEMO_DATA_VERIFICATION_FAILED');
+    const object = await internalS3.send(
+      new GetObjectCommand({ Bucket: config.bucket, Key: image.objectKey }),
+    );
+    const bytes = await objectBytes(object.Body);
+    if (
+      head.ContentLength !== image.body.length ||
+      head.ContentType !== image.contentType ||
+      createHash('sha256').update(bytes).digest('hex') !== image.sha256
+    )
+      fail();
+    const downloadUrl = await getSignedUrl(
+      internalS3,
+      new GetObjectCommand({ Bucket: config.bucket, Key: image.objectKey }),
+      { expiresIn: config.readUrlTtlSeconds },
+    );
+    const download = await fetch(downloadUrl);
+    if (!download.ok || !Buffer.from(await download.arrayBuffer()).equals(image.body)) fail();
+    const anonymous = await fetch(`${config.s3Endpoint}/${config.bucket}/${image.objectKey}`);
+    if (anonymous.ok) fail();
   }
   return { ok: true, action: 'verify', ...DEMO_SUMMARY };
 }
 
-export async function reset() {
+async function reset(context: Runtime) {
+  const { prisma, config, internalS3 } = context;
+  await assertNoNamespaceConflicts(context);
+  await assertNoStorageConflicts(context);
   await prisma.$transaction(async (tx) => {
-    const productIds = DEMO_PRODUCTS.map((x) => x.id),
+    const userIds = DEMO_USERS.map((x) => x.id),
+      productIds = DEMO_PRODUCTS.map((x) => x.id),
       draftIds = DEMO_PRODUCTS.map((x) => x.draftId);
-    await tx.productImage.deleteMany({
-      where: { id: { in: DEMO_PRODUCTS.map((x) => x.imageId) } },
-    });
+    await tx.productImage.deleteMany({ where: { productId: { in: productIds } } });
     await tx.productServiceDetails.deleteMany({ where: { productId: { in: productIds } } });
     await tx.productAccountDetails.deleteMany({ where: { productId: { in: productIds } } });
     await tx.productAttributeValue.deleteMany({ where: { productId: { in: productIds } } });
@@ -438,18 +747,29 @@ export async function reset() {
     });
     await tx.sellerProfile.deleteMany({ where: { id: DEMO_IDS.sellerProfile } });
     await tx.sellerApplication.deleteMany({ where: { id: DEMO_IDS.sellerApplication } });
-    await tx.userRoleAssignment.deleteMany({
-      where: { userId: { in: DEMO_USERS.map((x) => x.id) } },
+    const sessions = await tx.session.findMany({
+      where: { userId: { in: userIds } },
+      select: { id: true, deviceId: true },
     });
-    await tx.passwordCredential.deleteMany({
-      where: { userId: { in: DEMO_USERS.map((x) => x.id) } },
+    const sessionIds = sessions.map((x) => x.id),
+      deviceIds = sessions.map((x) => x.deviceId);
+    await tx.stepUpGrant.deleteMany({ where: { userId: { in: userIds } } });
+    await tx.sessionRefreshToken.deleteMany({ where: { sessionId: { in: sessionIds } } });
+    await tx.session.deleteMany({ where: { id: { in: sessionIds } } });
+    await tx.verificationChallenge.deleteMany({ where: { userId: { in: userIds } } });
+    await tx.emailChangeRequest.deleteMany({ where: { userId: { in: userIds } } });
+    await tx.twoFactorRecoveryCode.deleteMany({ where: { userId: { in: userIds } } });
+    await tx.twoFactorSettings.deleteMany({ where: { userId: { in: userIds } } });
+    await tx.device.deleteMany({
+      where: { OR: [{ userId: { in: userIds } }, { id: { in: deviceIds } }] },
     });
-    await tx.user.deleteMany({ where: { id: { in: DEMO_USERS.map((x) => x.id) } } });
+    await tx.userRoleAssignment.deleteMany({ where: { userId: { in: userIds } } });
+    await tx.passwordCredential.deleteMany({ where: { userId: { in: userIds } } });
+    await tx.user.deleteMany({ where: { id: { in: userIds } } });
   });
-  const client = storage();
   await Promise.all(
-    DEMO_PRODUCTS.map((item) =>
-      client.send(new DeleteObjectCommand({ Bucket: bucket(), Key: item.objectKey })),
+    DEMO_IMAGES.map((image) =>
+      internalS3.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: image.objectKey })),
     ),
   );
   return {
@@ -460,14 +780,24 @@ export async function reset() {
   };
 }
 
-export async function run(argv = process.argv.slice(2), env = process.env) {
+export async function runDemoCommand(argv: string[], env: NodeJS.ProcessEnv) {
   const command = parseDemoCommand(argv);
-  assertDemoEnvironment(env);
-  return command === 'seed' ? seed() : command === 'verify' ? verify() : reset();
+  const context = runtime(assertDemoEnvironment(env));
+  try {
+    return command === 'seed'
+      ? await seed(context)
+      : command === 'verify'
+        ? await verify(context)
+        : await reset(context);
+  } finally {
+    await context.prisma.$disconnect();
+    context.internalS3.destroy();
+    context.signingS3.destroy();
+  }
 }
 
 if (require.main === module)
-  run()
+  runDemoCommand(process.argv.slice(2), process.env)
     .then((summary) => console.log(JSON.stringify(summary)))
     .catch((error: unknown) => {
       console.error(
@@ -477,5 +807,4 @@ if (require.main === module)
         }),
       );
       process.exitCode = 1;
-    })
-    .finally(() => prisma.$disconnect());
+    });

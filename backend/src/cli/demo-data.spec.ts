@@ -1,4 +1,5 @@
-import { DEMO_PRODUCTS, DEMO_USERS } from './demo-data.fixtures';
+import { DEMO_IMAGES, DEMO_PRODUCTS, DEMO_USERS } from './demo-data.fixtures';
+import { runDemoCommand } from './demo-data';
 import { assertDemoEnvironment, parseDemoCommand } from './demo-data.guard';
 import type { DemoDataError } from './demo-data.guard';
 
@@ -11,6 +12,9 @@ const env = {
   PRODUCT_IMAGE_S3_BUCKET: 'test',
   PRODUCT_IMAGE_S3_ACCESS_KEY: 'test',
   PRODUCT_IMAGE_S3_SECRET_KEY: 'test',
+  CURRENT_TERMS_VERSION: 'test',
+  CURRENT_PRIVACY_VERSION: 'test',
+  CURRENT_SELLER_AGREEMENT_VERSION: 'test',
 } as NodeJS.ProcessEnv;
 const code = (action: () => void) => {
   try {
@@ -46,13 +50,32 @@ describe('local demo data guards and deterministic fixtures', () => {
     expect(parseDemoCommand(['reset', '--confirm'])).toBe('reset');
     expect(code(() => parseDemoCommand(['reset']))).toBe('DEMO_DATA_CONFIRMATION_REQUIRED');
   });
+  it('cannot invoke any public operation without the guard', async () => {
+    await expect(
+      runDemoCommand(['seed'], { ...env, DEMO_DATA_ENABLED: undefined }),
+    ).rejects.toMatchObject({ code: 'DEMO_DATA_DISABLED' });
+    await expect(
+      runDemoCommand(['reset', '--confirm'], { ...env, NODE_ENV: 'production' }),
+    ).rejects.toMatchObject({ code: 'DEMO_DATA_PRODUCTION_REFUSED' });
+    await expect(runDemoCommand(['reset'], env)).rejects.toMatchObject({
+      code: 'DEMO_DATA_CONFIRMATION_REQUIRED',
+    });
+  });
   it('keeps IDs, slugs, keys and fixtures deterministic and namespaced', () => {
     expect(new Set(DEMO_PRODUCTS.map((x) => x.id)).size).toBe(8);
     expect(
       DEMO_PRODUCTS.every((x) => x.slug.startsWith('demo-') && x.objectKey.startsWith('demo/')),
     ).toBe(true);
     expect(DEMO_USERS.every((x) => x.email.endsWith('@demo.litbuy.local'))).toBe(true);
-    expect(JSON.stringify(DEMO_PRODUCTS)).toBe(JSON.stringify(DEMO_PRODUCTS));
+    expect(new Set(DEMO_IMAGES.map((image) => image.sha256)).size).toBe(8);
+    expect(
+      DEMO_IMAGES.every(
+        (image) => image.body.length > 0 && image.body.subarray(1, 4).toString() === 'PNG',
+      ),
+    ).toBe(true);
+    expect(DEMO_PRODUCTS.map((product) => product.createdAt.toISOString())).toEqual(
+      [...DEMO_PRODUCTS].map((product) => product.createdAt.toISOString()).sort(),
+    );
     expect(JSON.stringify({ products: DEMO_PRODUCTS, users: DEMO_USERS })).not.toMatch(
       /cpf|pix|token|secret|passwordHash/i,
     );
