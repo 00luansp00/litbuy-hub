@@ -1,7 +1,6 @@
 import { DEMO_IMAGES, DEMO_PRODUCTS, DEMO_USERS } from './demo-data.fixtures';
 import { runDemoCommand } from './demo-data';
-import { assertDemoEnvironment, parseDemoCommand } from './demo-data.guard';
-import type { DemoDataError } from './demo-data.guard';
+import { assertDemoEnvironment, DemoDataError, parseDemoCommand } from './demo-data.guard';
 
 const env = {
   NODE_ENV: 'test',
@@ -79,5 +78,15 @@ describe('local demo data guards and deterministic fixtures', () => {
     expect(JSON.stringify({ products: DEMO_PRODUCTS, users: DEMO_USERS })).not.toMatch(
       /cpf|pix|token|secret|passwordHash/i,
     );
+  });
+  it('keeps public summaries and errors free from runtime secrets', () => {
+    const output = JSON.stringify({
+      ok: false,
+      code: new DemoDataError('DEMO_DATA_DISABLED').code,
+    });
+    expect(output).not.toContain(env.DEMO_USER_PASSWORD);
+    expect(output).not.toContain(env.DATABASE_URL);
+    expect(output).not.toContain(env.PRODUCT_IMAGE_S3_ACCESS_KEY);
+    expect(output).not.toContain(env.PRODUCT_IMAGE_S3_SECRET_KEY);
   });
 });

@@ -22,6 +22,8 @@ Antes de reutilizar um objeto órfão, o seed compara content type, tamanho e SH
 
 O reset remove somente IDs reservados e object keys canônicas, sem `TRUNCATE`, e pode ser repetido. Ele remove sessões, dispositivos e desafios criados pelo uso real das contas antes de removê-las; `SecurityEvent` é preservado e suas relações opcionais são anuladas pelas constraints existentes. Registros e objetos externos permanecem intactos.
 
+A integração executa login HTTP real com a conta compradora e confirma a limpeza das relações de autenticação após o reset, preservando o `SecurityEvent` original. Ela também cobre conflitos bidirecionais de e-mail/UUID, perfil por slug, aplicação por vendedor, objeto desconhecido em key reservada, reutilização de objeto órfão canônico e sentinelas externas no PostgreSQL e MinIO.
+
 ## Contas
 
 | Papel         | E-mail                        |

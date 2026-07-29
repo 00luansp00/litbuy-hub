@@ -75,17 +75,25 @@ async function assertNoNamespaceConflicts({ prisma }: Runtime) {
         throw new DemoDataError('DEMO_DATA_NAMESPACE_CONFLICT');
     }
   }
-  const [application, profile] = await Promise.all([
-    prisma.sellerApplication.findUnique({ where: { id: DEMO_IDS.sellerApplication } }),
-    prisma.sellerProfile.findUnique({ where: { id: DEMO_IDS.sellerProfile } }),
-  ]);
+  const [application, applicationByUser, profile, profileByUser, profileBySlug] = await Promise.all(
+    [
+      prisma.sellerApplication.findUnique({ where: { id: DEMO_IDS.sellerApplication } }),
+      prisma.sellerApplication.findUnique({ where: { userId: DEMO_IDS.users.seller } }),
+      prisma.sellerProfile.findUnique({ where: { id: DEMO_IDS.sellerProfile } }),
+      prisma.sellerProfile.findUnique({ where: { userId: DEMO_IDS.users.seller } }),
+      prisma.sellerProfile.findUnique({ where: { slug: 'demo-lit-store' } }),
+    ],
+  );
   if (
     (application && application.userId !== DEMO_IDS.users.seller) ||
-    (profile && (profile.userId !== DEMO_IDS.users.seller || profile.slug !== 'demo-lit-store'))
+    (applicationByUser && applicationByUser.id !== DEMO_IDS.sellerApplication) ||
+    (profile && (profile.userId !== DEMO_IDS.users.seller || profile.slug !== 'demo-lit-store')) ||
+    (profileByUser && profileByUser.id !== DEMO_IDS.sellerProfile) ||
+    (profileBySlug && profileBySlug.id !== DEMO_IDS.sellerProfile)
   )
     throw new DemoDataError('DEMO_DATA_NAMESPACE_CONFLICT');
   for (const product of DEMO_PRODUCTS) {
-    const [slug, key, byId, draft, imageById] = await Promise.all([
+    const [slug, key, byId, draft, productByDraft, imageById] = await Promise.all([
       prisma.product.findUnique({ where: { slug: product.slug }, select: { id: true } }),
       prisma.productImage.findUnique({
         where: { objectKey: product.objectKey },
@@ -98,6 +106,10 @@ async function assertNoNamespaceConflicts({ prisma }: Runtime) {
       prisma.listingDraft.findUnique({
         where: { id: product.draftId },
         select: { sellerProfileId: true },
+      }),
+      prisma.product.findUnique({
+        where: { sourceListingDraftId: product.draftId },
+        select: { id: true },
       }),
       prisma.productImage.findUnique({ where: { id: product.imageId } }),
     ]);
@@ -120,6 +132,7 @@ async function assertNoNamespaceConflicts({ prisma }: Runtime) {
           byId.sourceListingDraftId !== product.draftId ||
           byId.sellerProfileId !== DEMO_IDS.sellerProfile)) ||
       (draft && draft.sellerProfileId !== DEMO_IDS.sellerProfile) ||
+      (productByDraft && productByDraft.id !== product.id) ||
       (imageById &&
         (imageById.objectKey !== product.objectKey || imageById.productId !== product.id)) ||
       wrongVariants ||
@@ -206,6 +219,8 @@ async function seed(context: Runtime) {
         create: {
           id: user.id,
           email: user.email,
+          phoneE164: null,
+          phoneVerifiedAt: null,
           birthDate: new Date('1995-01-01'),
           status: 'ACTIVE',
           emailVerifiedAt: DEMO_DATE,
@@ -214,13 +229,21 @@ async function seed(context: Runtime) {
           privacyVersion: config.privacyVersion,
           privacyAcceptedAt: DEMO_DATE,
           createdAt: DEMO_DATE,
+          updatedAt: DEMO_DATE,
+          deletedAt: null,
+          sensitiveActionHoldUntil: null,
+          lastSensitiveChangeAt: null,
         },
         update: {
           email: user.email,
+          phoneE164: null,
+          phoneVerifiedAt: null,
           birthDate: new Date('1995-01-01'),
           status: 'ACTIVE',
           emailVerifiedAt: DEMO_DATE,
           deletedAt: null,
+          sensitiveActionHoldUntil: null,
+          lastSensitiveChangeAt: null,
           termsVersion: config.termsVersion,
           termsAcceptedAt: DEMO_DATE,
           privacyVersion: config.privacyVersion,
@@ -236,6 +259,7 @@ async function seed(context: Runtime) {
           passwordHash,
           passwordChangedAt: DEMO_DATE,
           createdAt: DEMO_DATE,
+          updatedAt: DEMO_DATE,
         },
         update: {
           passwordHash,
@@ -265,7 +289,10 @@ async function seed(context: Runtime) {
         submittedAt: DEMO_DATE,
         reviewedAt: DEMO_DATE,
         reviewedByUserId: DEMO_IDS.users.admin,
+        rejectionCode: null,
+        rejectionReason: null,
         createdAt: DEMO_DATE,
+        updatedAt: DEMO_DATE,
       },
       update: {
         userId: DEMO_IDS.users.seller,
@@ -295,6 +322,7 @@ async function seed(context: Runtime) {
         status: 'ACTIVE',
         verified: true,
         createdAt: DEMO_DATE,
+        updatedAt: DEMO_DATE,
       },
       update: {
         userId: DEMO_IDS.users.seller,
@@ -315,7 +343,10 @@ async function seed(context: Runtime) {
           slug: category.slug,
           name: category.name,
           description: 'Taxonomia fictícia de demonstração.',
+          iconKey: null,
+          colorHex: null,
           sortOrder: category.sortOrder,
+          featured: false,
           status: 'ACTIVE',
           createdAt: DEMO_DATE,
           updatedAt: DEMO_DATE,
@@ -324,7 +355,10 @@ async function seed(context: Runtime) {
           slug: category.slug,
           name: category.name,
           description: 'Taxonomia fictícia de demonstração.',
+          iconKey: null,
+          colorHex: null,
           sortOrder: category.sortOrder,
+          featured: false,
           status: 'ACTIVE',
           createdAt: DEMO_DATE,
           updatedAt: DEMO_DATE,
@@ -333,13 +367,21 @@ async function seed(context: Runtime) {
       for (const sub of category.subcategories)
         await tx.catalogSubcategory.upsert({
           where: { id: sub.id },
-          create: { ...sub, categoryId: category.id, status: 'ACTIVE', createdAt: DEMO_DATE },
+          create: {
+            ...sub,
+            categoryId: category.id,
+            status: 'ACTIVE',
+            createdAt: DEMO_DATE,
+            updatedAt: DEMO_DATE,
+          },
           update: {
             slug: sub.slug,
             name: sub.name,
             categoryId: category.id,
             sortOrder: sub.sortOrder,
             status: 'ACTIVE',
+            createdAt: DEMO_DATE,
+            updatedAt: DEMO_DATE,
           },
         });
     }
@@ -358,10 +400,23 @@ async function seed(context: Runtime) {
           description: item.description,
           price: item.price,
           stock: item.stock,
+          deliveryMode: 'MANUAL',
+          requestedPromotionTier: 'SILVER',
+          requestedSellerPlan: 'STANDARD',
+          autoMessage: null,
+          notifyInApp: true,
+          notifyBrowser: false,
+          notifyEmailFuture: false,
+          notifyExternalFuture: false,
+          wizardStep: 1,
+          version: 1,
           submittedAt: item.createdAt,
+          reviewStartedAt: item.createdAt,
           reviewedAt: item.createdAt,
           approvedAt: item.createdAt,
           reviewedByUserId: DEMO_IDS.users.admin,
+          rejectionCode: null,
+          rejectionReason: null,
           createdAt: item.createdAt,
           updatedAt: item.createdAt,
         },
@@ -377,10 +432,22 @@ async function seed(context: Runtime) {
           price: item.price,
           stock: item.stock,
           deliveryMode: 'MANUAL',
+          requestedPromotionTier: 'SILVER',
+          requestedSellerPlan: 'STANDARD',
+          autoMessage: null,
+          notifyInApp: true,
+          notifyBrowser: false,
+          notifyEmailFuture: false,
+          notifyExternalFuture: false,
+          wizardStep: 1,
+          version: 1,
           submittedAt: item.createdAt,
+          reviewStartedAt: item.createdAt,
           reviewedAt: item.createdAt,
           reviewedByUserId: DEMO_IDS.users.admin,
           approvedAt: item.createdAt,
+          rejectionCode: null,
+          rejectionReason: null,
           createdAt: item.createdAt,
           updatedAt: item.createdAt,
         },
@@ -401,6 +468,9 @@ async function seed(context: Runtime) {
           description: item.description,
           price: item.price,
           stock: item.stock,
+          deliveryMode: 'MANUAL',
+          autoMessage: null,
+          version: 1,
           createdAt: item.createdAt,
           updatedAt: item.createdAt,
         },
@@ -418,6 +488,8 @@ async function seed(context: Runtime) {
           price: item.price,
           stock: item.stock,
           deliveryMode: 'MANUAL',
+          autoMessage: null,
+          version: 1,
           createdAt: item.createdAt,
           updatedAt: item.createdAt,
         },
@@ -432,6 +504,7 @@ async function seed(context: Runtime) {
             id: variant.draftId,
             draftId: item.draftId,
             title: variant.title,
+            description: null,
             price: variant.price,
             stock: variant.stock,
             sortOrder: variant.sortOrder,
@@ -443,6 +516,7 @@ async function seed(context: Runtime) {
             id: variant.id,
             productId: item.id,
             title: variant.title,
+            description: null,
             price: variant.price,
             stock: variant.stock,
             sortOrder: variant.sortOrder,
@@ -478,6 +552,7 @@ async function seed(context: Runtime) {
             basePrice,
             estimatedDelivery: 'Até 2 dias úteis',
             buyerRequirements: 'Descreva apenas o objetivo fictício da demonstração.',
+            notes: null,
           },
         });
         await tx.productServiceDetails.create({
@@ -487,6 +562,7 @@ async function seed(context: Runtime) {
             basePrice,
             estimatedDelivery: 'Até 2 dias úteis',
             buyerRequirements: 'Descreva apenas o objetivo fictício da demonstração.',
+            notes: null,
           },
         });
       }
@@ -549,8 +625,12 @@ async function verify(context: Runtime) {
       !user?.passwordCredential ||
       user.email !== expected.email ||
       user.status !== 'ACTIVE' ||
+      user.phoneE164 !== null ||
+      user.phoneVerifiedAt !== null ||
       !user.emailVerifiedAt ||
       user.deletedAt ||
+      user.sensitiveActionHoldUntil !== null ||
+      user.lastSensitiveChangeAt !== null ||
       user.birthDate.toISOString() !== new Date('1995-01-01').toISOString() ||
       user.termsVersion !== config.termsVersion ||
       user.privacyVersion !== config.privacyVersion ||
@@ -589,11 +669,17 @@ async function verify(context: Runtime) {
     !application ||
     application.userId !== DEMO_IDS.users.seller ||
     application.status !== 'APPROVED' ||
+    application.storeName !== 'LIT Demo Store' ||
+    application.requestedSlug !== 'demo-lit-store' ||
+    application.description !== 'Loja fictícia para demonstração local.' ||
+    application.sellerAgreementVersion !== config.sellerAgreementVersion ||
     application.reviewedByUserId !== DEMO_IDS.users.admin ||
     !application.sellerAgreementAcceptedAt ||
     !seller ||
     seller.userId !== DEMO_IDS.users.seller ||
     seller.slug !== 'demo-lit-store' ||
+    seller.storeName !== 'LIT Demo Store' ||
+    seller.description !== 'Loja fictícia para demonstração local.' ||
     seller.status !== 'ACTIVE' ||
     !seller.verified ||
     categories.length !== 3 ||
@@ -601,6 +687,38 @@ async function verify(context: Runtime) {
     products.length !== 8
   )
     fail();
+  for (const expected of DEMO_CATEGORIES) {
+    const category = categories.find((candidate) => candidate.id === expected.id);
+    if (!category) {
+      fail();
+      continue;
+    }
+    if (
+      category.slug !== expected.slug ||
+      category.name !== expected.name ||
+      category.description !== 'Taxonomia fictícia de demonstração.' ||
+      category.iconKey !== null ||
+      category.colorHex !== null ||
+      category.featured ||
+      category.sortOrder !== expected.sortOrder ||
+      category.status !== 'ACTIVE'
+    )
+      fail();
+    for (const expectedSubcategory of expected.subcategories) {
+      const subcategory = category.subcategories.find(
+        (candidate) => candidate.id === expectedSubcategory.id,
+      );
+      if (
+        !subcategory ||
+        subcategory.categoryId !== expected.id ||
+        subcategory.slug !== expectedSubcategory.slug ||
+        subcategory.name !== expectedSubcategory.name ||
+        subcategory.sortOrder !== expectedSubcategory.sortOrder ||
+        subcategory.status !== 'ACTIVE'
+      )
+        fail();
+    }
+  }
   for (const expected of DEMO_PRODUCTS) {
     const product = products.find((candidate) => candidate.id === expected.id);
     if (!product) {
@@ -609,10 +727,37 @@ async function verify(context: Runtime) {
     }
     if (
       product.slug !== expected.slug ||
+      product.sourceListingDraftId !== expected.draftId ||
+      product.sellerProfileId !== DEMO_IDS.sellerProfile ||
+      product.categoryId !== expected.categoryId ||
+      product.subcategoryId !== expected.subcategoryId ||
+      product.productType !== expected.productType ||
+      product.model !== expected.model ||
       product.status !== expected.status ||
       product.title !== expected.title ||
+      product.description !== expected.description ||
+      Number(product.price) !== Number(expected.price) ||
+      product.stock !== expected.stock ||
+      product.deliveryMode !== 'MANUAL' ||
+      product.autoMessage !== null ||
+      product.version !== 1 ||
+      product.createdAt.toISOString() !== expected.createdAt.toISOString() ||
+      product.updatedAt.toISOString() !== expected.createdAt.toISOString() ||
       product.sourceListingDraft.status !== 'APPROVED' ||
       product.sourceListingDraft.sellerProfileId !== DEMO_IDS.sellerProfile ||
+      product.sourceListingDraft.categoryId !== expected.categoryId ||
+      product.sourceListingDraft.subcategoryId !== expected.subcategoryId ||
+      product.sourceListingDraft.productType !== expected.productType ||
+      product.sourceListingDraft.model !== expected.model ||
+      product.sourceListingDraft.title !== expected.title ||
+      product.sourceListingDraft.description !== expected.description ||
+      Number(product.sourceListingDraft.price) !== Number(expected.price) ||
+      product.sourceListingDraft.stock !== expected.stock ||
+      product.sourceListingDraft.deliveryMode !== 'MANUAL' ||
+      product.sourceListingDraft.autoMessage !== null ||
+      product.sourceListingDraft.version !== 1 ||
+      product.sourceListingDraft.createdAt.toISOString() !== expected.createdAt.toISOString() ||
+      product.sourceListingDraft.updatedAt.toISOString() !== expected.createdAt.toISOString() ||
       product.variants.length !== expected.variants.length ||
       product.sourceListingDraft.variants.length !== expected.variants.length ||
       product.attributes.length ||
@@ -623,17 +768,78 @@ async function verify(context: Runtime) {
       product.images[0].objectKey !== expected.objectKey
     )
       fail();
+    for (const expectedVariant of expected.variants) {
+      const variant = product.variants.find((candidate) => candidate.id === expectedVariant.id);
+      const draftVariant = product.sourceListingDraft.variants.find(
+        (candidate) => candidate.id === expectedVariant.draftId,
+      );
+      if (
+        !variant ||
+        variant.productId !== expected.id ||
+        variant.title !== expectedVariant.title ||
+        variant.description !== null ||
+        Number(variant.price) !== expectedVariant.price ||
+        variant.stock !== expectedVariant.stock ||
+        variant.status !== 'ACTIVE' ||
+        variant.sortOrder !== expectedVariant.sortOrder ||
+        !draftVariant ||
+        draftVariant.draftId !== expected.draftId ||
+        draftVariant.title !== expectedVariant.title ||
+        draftVariant.description !== null ||
+        Number(draftVariant.price) !== expectedVariant.price ||
+        draftVariant.stock !== expectedVariant.stock ||
+        draftVariant.status !== 'ACTIVE' ||
+        draftVariant.sortOrder !== expectedVariant.sortOrder
+      )
+        fail();
+    }
+    const image = DEMO_IMAGES.find((candidate) => candidate.id === expected.imageId)!;
+    const storedImage = product.images[0];
+    if (
+      storedImage.id !== expected.imageId ||
+      storedImage.productId !== expected.id ||
+      storedImage.contentType !== image.contentType ||
+      storedImage.sizeBytes !== image.body.length ||
+      storedImage.altText !== expected.title ||
+      storedImage.sortOrder !== 0 ||
+      storedImage.deletedAt !== null ||
+      storedImage.uploadedAt?.toISOString() !== DEMO_DATE.toISOString()
+    )
+      fail();
     if (
       expected.productType === 'ACCOUNT' &&
       (!product.accountDetails ||
         !product.sourceListingDraft.accountDetails ||
-        product.accountDetails.recoveryRisk !== 'LOW')
+        product.accountDetails.provenance !== 'ORIGINAL_OWNER' ||
+        product.accountDetails.recoveryLevel !== 'FULL' ||
+        product.accountDetails.emailVerified !== true ||
+        product.accountDetails.phoneLinked !== false ||
+        product.accountDetails.documentLinked !== false ||
+        product.accountDetails.fullAccess !== true ||
+        product.accountDetails.recoveryRisk !== 'LOW' ||
+        product.accountDetails.warrantyNote !==
+          'Informação exclusivamente demonstrativa; nenhuma credencial real incluída.' ||
+        product.sourceListingDraft.accountDetails.provenance !== 'ORIGINAL_OWNER' ||
+        product.sourceListingDraft.accountDetails.recoveryLevel !== 'FULL' ||
+        product.sourceListingDraft.accountDetails.recoveryRisk !== 'LOW')
     )
       fail();
     if (
       expected.service &&
       (product.serviceDetails?.pricingType !== expected.service ||
-        product.sourceListingDraft.serviceDetails?.pricingType !== expected.service)
+        product.sourceListingDraft.serviceDetails?.pricingType !== expected.service ||
+        Number(product.serviceDetails.basePrice) !==
+          Number(expected.service === 'FIXED' ? 79.9 : null) ||
+        product.serviceDetails.estimatedDelivery !== 'Até 2 dias úteis' ||
+        product.serviceDetails.buyerRequirements !==
+          'Descreva apenas o objetivo fictício da demonstração.' ||
+        product.serviceDetails.notes !== null ||
+        Number(product.sourceListingDraft.serviceDetails.basePrice) !==
+          Number(expected.service === 'FIXED' ? 79.9 : null) ||
+        product.sourceListingDraft.serviceDetails.estimatedDelivery !== 'Até 2 dias úteis' ||
+        product.sourceListingDraft.serviceDetails.buyerRequirements !==
+          'Descreva apenas o objetivo fictício da demonstração.' ||
+        product.sourceListingDraft.serviceDetails.notes !== null)
     )
       fail();
   }
@@ -789,6 +995,10 @@ export async function runDemoCommand(argv: string[], env: NodeJS.ProcessEnv) {
       : command === 'verify'
         ? await verify(context)
         : await reset(context);
+  } catch (error) {
+    if ((error as { code?: string }).code === 'P2002')
+      throw new DemoDataError('DEMO_DATA_NAMESPACE_CONFLICT');
+    throw error;
   } finally {
     await context.prisma.$disconnect();
     context.internalS3.destroy();
