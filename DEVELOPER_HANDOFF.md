@@ -1,5 +1,7 @@
 # DEVELOPER_HANDOFF.md — LIT Buy
 
+> A fundação isolada de dados locais está em `LOCAL_DEMO_DATA.md`: oito produtos fictícios, imagens privadas no MinIO e reset seletivo. Home, categoria e detalhe ainda não consomem a API.
+
 > Backend public catalog reads are documented in `PUBLIC_CATALOG_READ_FOUNDATION.md`. Visibility does not imply purchasability or stock reservation.
 
 Este é o documento principal de entrega técnica para desenvolvedor,

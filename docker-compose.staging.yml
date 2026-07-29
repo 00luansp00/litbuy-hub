@@ -84,6 +84,17 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
+  demo-data:
+    profiles: ["demo"]
+    build: ./backend
+    env_file: ./backend/.env.staging.local.example
+    depends_on:
+      postgres: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+      minio-init: { condition: service_completed_successfully }
+    entrypoint: ["node", "dist/cli/demo-data.js"]
+    command: ["verify"]
+    restart: "no"
   frontend:
     build:
       context: .

@@ -25,7 +25,10 @@
     "smoke:infra": "node ../scripts/infra-smoke.mjs",
     "check:prod-entrypoint": "node scripts/check-prod-entrypoint.mjs",
     "roles:grant": "ts-node scripts/manage-roles.ts grant",
-    "roles:revoke": "ts-node scripts/manage-roles.ts revoke"
+    "roles:revoke": "ts-node scripts/manage-roles.ts revoke",
+    "demo:seed": "ts-node src/cli/demo-data.ts seed",
+    "demo:verify": "ts-node src/cli/demo-data.ts verify",
+    "demo:reset": "ts-node src/cli/demo-data.ts reset --confirm"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1095.0",
