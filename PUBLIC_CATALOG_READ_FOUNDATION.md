@@ -1,5 +1,7 @@
 # Public catalog read foundation
 
+> O dataset descrito em `LOCAL_DEMO_DATA.md` permite validar esta leitura com seis produtos ativos. O frontend continua desconectado nesta etapa.
+
 ## Endpoints
 
 The backend exposes read-only, unauthenticated `GET /api/v1/catalog/products` and `GET /api/v1/catalog/products/:slug`. They read materialized products; they do not make an item purchasable, reserve stock, mutate data, or write security/audit events. The public frontend is not connected yet.

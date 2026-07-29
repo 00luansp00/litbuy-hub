@@ -1,5 +1,7 @@
 # LIT Buy
 
+> Dados locais determinísticos de PostgreSQL e MinIO: consulte `LOCAL_DEMO_DATA.md` e use `bun run demo:seed`, `demo:verify` e `demo:reset`. O frontend permanece desconectado da API pública.
+
 > **⚠️ MVP visual/mockado** — Este projeto é um MVP visual/mockado.
 > **Não possui backend, pagamento real, autenticação real, envio de
 > e-mail, upload ou persistência.** Serve como base visual e

@@ -1,5 +1,7 @@
 # MVP_STATUS.md — LIT Buy
 
+> Fundação local de demonstração disponível via CLI/Compose (6 produtos públicos e 2 invisíveis); integração do frontend com o catálogo continua pendente.
+
 > The real public catalog has a backend read foundation with eligibility filtering and signed private images. Public frontend pages remain unconnected.
 
 Snapshot do estado atual do MVP visual da LIT Buy. Este documento é
