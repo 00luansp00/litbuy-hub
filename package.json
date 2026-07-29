@@ -17,6 +17,7 @@
     "format:check:auth": "prettier --check src/lib/api src/services/auth src/providers/AuthProvider.tsx src/providers/AuthContext.tsx src/components/auth/AuthGate.tsx src/routes/login.tsx src/routes/cadastro.tsx src/routes/verificar-email.tsx src/routes/verificacao-login.tsx src/routes/recuperar-senha.tsx src/routes/redefinir-senha.tsx __tests__ vitest.config.ts vitest.setup.ts src/routes/perfil.seguranca.tsx src/routes/confirmar-alteracao-email.tsx src/components/account/security src/services/auth/security.ts src/services/auth/useAccountSecurity.ts src/services/auth/phoneEmailSecurity.ts src/services/auth/usePhoneEmailSecurity.ts",
     "smoke:infra": "node scripts/infra-smoke.mjs",
     "smoke:home-catalog": "bun scripts/home-public-catalog-smoke.ts",
+    "smoke:category-catalog": "bun scripts/category-public-catalog-smoke.ts",
     "demo:seed": "docker compose -f docker-compose.staging.yml --profile demo run --rm demo-data seed",
     "demo:verify": "docker compose -f docker-compose.staging.yml --profile demo run --rm demo-data verify",
     "demo:reset": "docker compose -f docker-compose.staging.yml --profile demo run --rm demo-data reset --confirm"

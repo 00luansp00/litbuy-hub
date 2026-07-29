@@ -129,3 +129,7 @@ A staging simulation is available through `docker-compose.staging.yml` for front
 3. Start local staging simulation with `docker compose -f docker-compose.staging.yml up --build`.
 4. Validate `GET /api/v1/health/live`, `GET /api/v1/health/ready`, and `bun run smoke:infra`. Full auth flows remain covered by backend e2e/integration tests and manual homologation.
 5. Follow `AUTH_STAGING_HOMOLOGATION_RUNBOOK.md` before considering staging approved.
+
+## Catálogo público por categoria
+
+A rota `/categoria/$slug` usa produtos e subcategorias públicos reais, com filtros suportados e paginação sem total. Detalhe e comércio continuam desconectados. Consulte `CATEGORY_PUBLIC_CATALOG_INTEGRATION.md`.

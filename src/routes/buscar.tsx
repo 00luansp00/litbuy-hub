@@ -44,9 +44,9 @@ function SearchPage() {
   const [stats, setStats] = useState<SearchStats | null>(null);
   const [facets, setFacets] = useState<SearchFacets | null>(null);
   const [popular, setPopular] = useState<PopularSearch[]>([]);
-  const [categories, setCategories] = useState<
-    Awaited<ReturnType<typeof categoryService.list>>
-  >([]);
+  const [categories, setCategories] = useState<Awaited<ReturnType<typeof categoryService.list>>>(
+    [],
+  );
   const [loading, setLoading] = useState(false);
   const [filters, setFilters] = useState<SearchFilters>({});
   const [sort, setSort] = useState<SearchSortOption>("relevance");
@@ -91,9 +91,8 @@ function SearchPage() {
           query,
           total: res.total,
           categoriesMatched: new Set(res.products.map((p) => p.categorySlug)).size,
-          sellersMatched: new Set(
-            res.products.map((p) => p.seller?.id).filter(Boolean) as string[],
-          ).size,
+          sellersMatched: new Set(res.products.map((p) => p.seller?.id).filter(Boolean) as string[])
+            .size,
         });
       })
       .finally(() => {
@@ -111,12 +110,7 @@ function SearchPage() {
 
   return (
     <div className="container-lit space-y-6 py-6 md:space-y-8 md:py-10">
-      <Breadcrumb
-        items={[
-          { label: "Home", to: "/" },
-          { label: "Busca" },
-        ]}
-      />
+      <Breadcrumb items={[{ label: "Home", to: "/" }, { label: "Busca" }]} />
 
       <SearchPageHeader query={query} stats={stats} />
 
@@ -138,7 +132,11 @@ function SearchPage() {
               <Link to="/">Voltar para a Home</Link>
             </Button>
             <Button asChild variant="secondary">
-              <Link to="/categoria/$slug" params={{ slug: "contas" }}>
+              <Link
+                to="/categoria/$slug"
+                params={{ slug: "contas" }}
+                search={{ sort: "RECENT", page: 1 }}
+              >
                 Explorar Contas
               </Link>
             </Button>
@@ -179,11 +177,7 @@ function SearchPage() {
             </div>
 
             <div className="min-w-0 space-y-5">
-              <SearchSortBar
-                total={result?.total ?? 0}
-                sort={sort}
-                onSortChange={setSort}
-              />
+              <SearchSortBar total={result?.total ?? 0} sort={sort} onSortChange={setSort} />
 
               {!loading && result && result.total === 0 ? (
                 <EmptyState

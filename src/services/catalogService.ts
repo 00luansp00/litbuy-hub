@@ -1,19 +1,13 @@
 import { apiFetch, ApiError } from "@/lib/api/client";
 import type { Category, ListingAttributeConfig, ListingProductType, Subcategory } from "@/types";
-export const CATALOG_ALLOWED_ICON_KEYS = [
-  "UserCircle2",
-  "Gift",
-  "Coins",
-  "Sparkles",
-  "Package",
-  "Wrench",
-  "Rocket",
-  "BadgeCheck",
-  "MonitorSmartphone",
-  "Gamepad2",
-  "Play",
-  "LayoutGrid",
-] as const;
+import {
+  CatalogResponseValidationError,
+  parsePublicCategoryListResponse,
+  parsePublicCategoryResponse,
+  parsePublicSubcategoryResponse,
+  parsePublicSubcategoryListResponse,
+} from "./catalog/publicTaxonomyParser";
+export { CATALOG_ALLOWED_ICON_KEYS } from "./catalog/publicTaxonomyParser";
 export type CatalogEntityStatus = "ACTIVE" | "INACTIVE";
 export type CatalogProductTypeOption = { id: ListingProductType; name: string };
 export type AdminCatalogCategory = Category & {
@@ -39,7 +33,6 @@ export type AdminCatalogAttribute = ListingAttributeConfig & {
   selectOptions?: string[];
 };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const slug = /^(?!.*--)[a-z0-9](?:[a-z0-9-]{0,58}[a-z0-9])?$/;
 const types = [
   "account",
   "virtual_currency",
@@ -96,23 +89,16 @@ function items(v: unknown) {
   if (!Array.isArray(o.items)) invalid();
   return o.items;
 }
-function cat(v: unknown): Category {
-  const o = obj(v);
-  const icon = optStr(o.iconKey) ?? optStr(o.icon);
-  if (icon && !CATALOG_ALLOWED_ICON_KEYS.includes(icon as never)) invalid();
-  const color = optStr(o.colorHex, /^#[0-9A-Fa-f]{6}$/) ?? optStr(o.color, /^#[0-9A-Fa-f]{6}$/);
-  return {
-    id: str(o.id, uuid),
-    slug: str(o.slug, slug),
-    name: str(o.name),
-    description: optStr(o.description),
-    icon: icon ?? "LayoutGrid",
-    color,
-    listingCount: undefined,
-  };
+function taxonomy<T>(parse: () => T): T {
+  try {
+    return parse();
+  } catch (error) {
+    if (error instanceof CatalogResponseValidationError) invalid();
+    throw error;
+  }
 }
 function adminCat(v: unknown): AdminCatalogCategory {
-  const c = cat(v);
+  const c = taxonomy(() => parsePublicCategoryResponse(v));
   const o = obj(v);
   const status = str(o.status) as CatalogEntityStatus;
   if (status !== "ACTIVE" && status !== "INACTIVE") invalid();
@@ -125,17 +111,8 @@ function adminCat(v: unknown): AdminCatalogCategory {
     colorHex: c.color,
   };
 }
-function sub(v: unknown): Subcategory & { id: string } {
-  const o = obj(v);
-  return {
-    id: str(o.id, uuid),
-    slug: str(o.slug, slug),
-    name: str(o.name),
-    categorySlug: optStr(o.categorySlug, slug) ?? "",
-  };
-}
 function adminSub(v: unknown): AdminCatalogSubcategory {
-  const s = sub(v);
+  const s = taxonomy(() => parsePublicSubcategoryResponse(v));
   const o = obj(v);
   const status = str(o.status) as CatalogEntityStatus;
   if (status !== "ACTIVE" && status !== "INACTIVE") invalid();
@@ -187,17 +164,19 @@ function adminAttr(v: unknown): AdminCatalogAttribute {
 }
 export const catalogService = {
   async getCategories() {
-    return items(await apiFetch("/catalog/categories", { auth: false })).map(cat);
+    const raw = await apiFetch("/catalog/categories", { auth: false });
+    return taxonomy(() => parsePublicCategoryListResponse(raw));
   },
   async getCategoryBySlug(slug: string) {
-    return cat(await apiFetch(`/catalog/categories/${encodeURIComponent(slug)}`, { auth: false }));
+    const raw = await apiFetch(`/catalog/categories/${encodeURIComponent(slug)}`, { auth: false });
+    return taxonomy(() => parsePublicCategoryResponse(raw));
   },
   async getSubcategoriesByCategory(categorySlug: string) {
-    return items(
-      await apiFetch(`/catalog/categories/${encodeURIComponent(categorySlug)}/subcategories`, {
-        auth: false,
-      }),
-    ).map(sub);
+    const raw = await apiFetch(
+      `/catalog/categories/${encodeURIComponent(categorySlug)}/subcategories`,
+      { auth: false },
+    );
+    return taxonomy(() => parsePublicSubcategoryListResponse(raw));
   },
   async getProductTypes() {
     return items(await apiFetch("/catalog/product-types", { auth: false })).map((v) => {
@@ -254,4 +233,5 @@ export const catalogService = {
 export const categoryService = {
   list: catalogService.getCategories,
   bySlug: catalogService.getCategoryBySlug,
+  getSubcategoriesByCategory: catalogService.getSubcategoriesByCategory,
 };

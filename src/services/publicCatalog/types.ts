@@ -40,6 +40,9 @@ export interface PublicCatalogListResponse {
 }
 
 export interface PublicCatalogListParams {
+  categorySlug?: string;
+  subcategorySlug?: string;
+  productType?: PublicCatalogProductType;
   sort: PublicCatalogSort;
   page: number;
   limit: number;
