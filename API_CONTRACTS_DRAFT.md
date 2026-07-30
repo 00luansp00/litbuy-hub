@@ -1,3 +1,19 @@
+# Contratos de API: baseline e histórico
+
+## Implementado
+
+A arquitetura atual usa REST em `/api/v1`. Controllers e DTOs reais do backend são autoridade para endpoints implementados; autenticação é auditada em `AUTHENTICATION_FINAL_AUDIT.md`. O catálogo público real está descrito em `PUBLIC_CATALOG_READ_FOUNDATION.md`, e Home, categoria e detalhe público já o consomem.
+
+## Comércio planejado
+
+Os contratos futuros de carrinho, checkout e pedido estão exclusivamente em `COMMERCE_ARCHITECTURE.md`. Nenhum endpoint financeiro é declarado pronto.
+
+## Snapshot histórico não autoritativo
+
+O bloco abaixo preserva propostas antigas e não deve orientar implementação.
+
+<!-- HISTORICAL_SNAPSHOT_START -->
+
 # API_CONTRACTS_DRAFT.md — LIT Buy
 
 > **Contrato comercial vigente:** `COMMERCE_ARCHITECTURE.md` é a fonte autoritativa. O conteúdo comercial histórico abaixo é preliminar ou substituído quando divergir; pagamentos e ledger não estão implementados, e nenhum gateway foi escolhido.
@@ -177,3 +193,5 @@ The protected seller upload-intent, completion, listing, reorder, cover, and del
 ## Product lifecycle foundation (2026-07-28, PR #28)
 
 O estado `ACTIVE` de produto agora é persistente e controlado pelo vendedor proprietário via backend, com elegibilidade transacional, versão otimista, advisory lock, idempotência e auditoria. Isso **não** conecta catálogo público nem torna qualquer produto comprável. Estoque/reserva, checkout, pagamentos e mutações administrativas de lifecycle continuam pendentes. O contrato autoritativo está em `PRODUCT_LIFECYCLE_FOUNDATION.md`.
+
+<!-- HISTORICAL_SNAPSHOT_END -->

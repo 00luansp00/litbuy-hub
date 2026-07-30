@@ -1,3 +1,19 @@
+# Baseline de banco de dados
+
+## Implementado
+
+O backend NestJS existente usa PostgreSQL e Prisma. Autenticação real, RBAC, seller, taxonomia, drafts, produtos e imagens já são persistentes. `backend/prisma/schema.prisma` é a fonte autoritativa do schema implementado.
+
+## Comércio planejado
+
+Tabelas comerciais de carrinho, pedido, pagamento, Refund e ledger ainda não existem. `COMMERCE_ARCHITECTURE.md` é a fonte dos modelos comerciais futuros; este documento não cria schema ou migration.
+
+## Snapshot histórico não autoritativo
+
+O bloco abaixo registra uma proposta antiga de Supabase e não é plano, contrato ou baseline atual.
+
+<!-- HISTORICAL_SNAPSHOT_START -->
+
 # LIT Buy — Database Schema (Planejamento)
 
 > **Contrato comercial vigente:** `COMMERCE_ARCHITECTURE.md` é a fonte autoritativa. O conteúdo comercial histórico abaixo é preliminar ou substituído quando divergir; pagamentos e ledger não estão implementados, e nenhum gateway foi escolhido.
@@ -419,3 +435,5 @@ Futuro/demonstrativo: aprovação não publica produto público; imagens permane
 ## Product lifecycle foundation (2026-07-28, PR #28)
 
 O estado `ACTIVE` de produto agora é persistente e controlado pelo vendedor proprietário via backend, com elegibilidade transacional, versão otimista, advisory lock, idempotência e auditoria. Isso **não** conecta catálogo público nem torna qualquer produto comprável. Estoque/reserva, checkout, pagamentos e mutações administrativas de lifecycle continuam pendentes. O contrato autoritativo está em `PRODUCT_LIFECYCLE_FOUNDATION.md`.
+
+<!-- HISTORICAL_SNAPSHOT_END -->

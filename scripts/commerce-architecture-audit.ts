@@ -17,6 +17,13 @@ export const legacyDocuments = [
   "DEVELOPER_HANDOFF.md",
   "PUBLIC_FOUNDATION_FINAL_AUDIT.md",
 ] as const;
+const historicalDocuments = new Set([
+  "ORDER_LIFECYCLE.md",
+  "DATABASE_SCHEMA.md",
+  "API_CONTRACTS_DRAFT.md",
+]);
+const startMarker = "<!-- HISTORICAL_SNAPSHOT_START -->";
+const endMarker = "<!-- HISTORICAL_SNAPSHOT_END -->";
 
 type AuditResult = {
   ok: boolean;
@@ -25,108 +32,184 @@ type AuditResult = {
   staleCommerceClaims: number;
   failures: string[];
 };
-
-const decisions: Array<[string, RegExp]> = [
-  ["cart-per-seller", /buyerUserId\s*\+\s*sellerProfileId|comprador[^\n]+único vendedor/i],
-  ["cart-no-reservation", /carrinho[^\n]*não reserva estoque/i],
-  ["server-checkout", /checkout server-side/i],
-  ["server-price", /backend (?:converte|recalcula)[^\n]*preço/i],
-  ["minor-bigint", /BIGINT[^\n]*centavos/i],
-  ["immutable-snapshot", /snapshot imutável/i],
-  ["separate-states", /máquinas de estado separadas/i],
-  ["reservation-ttl", /TTL[^\n]*15 minutos/i],
-  ["idempotency", /Idempotency-Key/i],
-  ["outbox", /transactional outbox/i],
-  ["double-entry", /partidas dobradas/i],
-  ["incremental", /PR #36[\s\S]*PR #37[\s\S]*PR #38/i],
+type Check = [
+  string,
+  RegExp,
+  "architecture" | "boundary" | "roadmap" | "paymentPlan" | "wallet" | "database" | "api",
 ];
 
-const requiredBoundary: Array<[string, RegExp]> = [
-  ["gateway-not-selected", /Nenhum gateway foi selecionado/i],
-  ["retention-versus-escrow", /retenção operacional[\s\S]*escrow regulado\/contratual/i],
-  ["signed-webhooks", /Verificar assinatura/i],
-  ["refund-chargeback-separate", /Reembolso versus chargeback/i],
-  ["withdrawal-kyc", /KYC aprovado/i],
-  ["balanced-ledger", /soma dos débitos = soma dos créditos/i],
+const checks: Check[] = [
+  ["cart-per-seller", /buyerUserId\s*\+\s*sellerProfileId/i, "architecture"],
+  ["cart-no-reservation", /carrinho[^\n]*não reserva estoque/i, "architecture"],
+  ["server-checkout", /checkout server-side/i, "architecture"],
+  ["immutable-snapshot", /snapshot imutável/i, "architecture"],
+  ["separate-states", /máquinas de estado separadas/i, "architecture"],
+  ["reservation-ttl", /TTL[^\n]*15 minutos/i, "architecture"],
+  ["idempotency", /Idempotency-Key/i, "architecture"],
+  ["outbox", /transactional outbox/i, "architecture"],
+  ["cancel-pre-payment-only", /CANCELLED[^\n]*exclusivamente pré-pagamento/i, "architecture"],
+  [
+    "refund-model",
+    /modelo conceitual futuro `Refund`[\s\S]*providerRefundId[\s\S]*requestedByUserId/i,
+    "architecture",
+  ],
+  ["partial-refund", /PARTIALLY_REFUNDED/i, "architecture"],
+  [
+    "over-refund-limit",
+    /soma dos refunds `SUCCEEDED` não pode superar o valor capturado/i,
+    "architecture",
+  ],
+  [
+    "late-payment",
+    /Pedido `EXPIRED` não volta automaticamente para `ACTIVE`[\s\S]*incidente de reconciliação/i,
+    "architecture",
+  ],
+  ["money-bigint", /PostgreSQL `BIGINT`[\s\S]*TypeScript usa `bigint`/i, "architecture"],
+  [
+    "money-json-string",
+    /JSON autoritativa[^\n]*sempre uma string decimal canônica/i,
+    "architecture",
+  ],
+  ["gateway-not-selected", /Nenhum gateway foi selecionado/i, "boundary"],
+  ["balanced-ledger", /soma dos débitos = soma dos créditos/i, "boundary"],
+  ["signed-webhook", /Verificar assinatura/i, "boundary"],
+  ["withdrawal-kyc", /KYC aprovado/i, "boundary"],
+  ["incremental", /PR #36[\s\S]*PR #37[\s\S]*PR #38/i, "roadmap"],
+  ["payment-journal", /journal imutável[\s\S]*entries balanceadas/i, "paymentPlan"],
+  ["wallet-journal", /journal imutável[\s\S]*entries balanceadas/i, "wallet"],
+  ["wallet-kyc-all", /KYC aprovado é obrigatório para qualquer saque real/i, "wallet"],
+  [
+    "database-baseline",
+    /backend NestJS[\s\S]*PostgreSQL e Prisma[\s\S]*Autenticação real/i,
+    "database",
+  ],
+  [
+    "api-baseline",
+    /REST em `\/api\/v1`[\s\S]*Home, categoria e detalhe público já o consomem/i,
+    "api",
+  ],
 ];
 
 const forbidden: Array<[string, RegExp]> = [
+  ["post-payment-cancel", /ACTIVE\s*(?:→|->)\s*CANCELLED|pedido pago[^\n]*pode ser cancelado/i],
+  ["mandatory-seven-years", /retenção[^\n]*(?:7|sete) anos[^\n]*(?:obrigat|mínim)/i],
+  ["raw-ninety-days", /raw payload[^\n]*(?:90|noventa) dias[^\n]*(?:mínim|obrigat)/i],
+  ["optional-kyc", /KYC pode ser requerido conforme valor/i],
+  [
+    "single-line-ledger",
+    /cada mutação\s*=\s*1 linha|toda movimentação[^\n]*gera (?:uma )?entrada/i,
+  ],
+  ["no-database", /nenhuma tabela existe hoje/i],
+  ["future-supabase", /integração futura com Supabase/i],
+  ["supabase-auth-current", /Auth[^\n]*auth\.users[^\n]*Supabase/i],
+  ["no-public-consumer", /nenhum consumidor frontend[^\n]*conectado/i],
+  ["api-style-choice", /REST\/RPC\/GraphQL(?:\/tRPC)?[^\n]*escolha/i],
+  [
+    "ambiguous-money",
+    /amountMinor[^\n]*(?:como|aceita)[^\n]*(?:número|number)\s+ou\s+(?:string|texto)/i,
+  ],
+  ["numeric-amount", /"amountMinor"\s*:\s*-?\d+(?:\.\d+)?(?:e[+-]?\d+)?/i],
+  [
+    "invalid-money-string",
+    /"amountMinor"\s*:\s*"(?:[-+]|\s|0\d|\d+\.\d+|\d+e[+-]?\d+|[^"\d])[^"]*"/i,
+  ],
+  ["late-reactivation", /pagamento tardio[^\n]*(?:reativa|volta)[^\n]*ACTIVE/i],
   ["simple-escrow", /escrow simples/i],
-  ["frontend-price", /frontend (?:define|determina|é autoridade d[eo]) (?:o )?preço/i],
-  ["cart-reserves", /carrinho reserva estoque/i],
-  ["direct-balance-update", /(?:permitir|usar|faz(?:er)?) (?:um )?UPDATE direto (?:do|de) saldo/i],
-  ["single-entry-ledger", /ledger (?:de|com) uma única entrada sem contrapartida/i],
-  ["payment-implemented", /pagamento (?:já |está )implementado/i],
-  ["real-money-ready", /(?:projeto|sistema) (?:está )?pronto para (?:aceitar )?dinheiro real/i],
-  ["gateway-chosen", /gateway escolhido:\s*\S+/i],
 ];
 
 export function safeRead(root: string, name: string): string {
-  if (isAbsolute(name) || relative(root, resolve(root, name)).startsWith("..")) {
+  if (isAbsolute(name) || relative(root, resolve(root, name)).startsWith(".."))
     throw new Error(`Leitura fora da raiz recusada: ${name}`);
-  }
   const target = resolve(root, name);
   if (!existsSync(target)) throw new Error(`Documento ausente: ${name}`);
   const canonicalRoot = realpathSync(root);
   const canonicalTarget = realpathSync(target);
-  if (relative(canonicalRoot, canonicalTarget).startsWith("..")) {
+  if (relative(canonicalRoot, canonicalTarget).startsWith(".."))
     throw new Error(`Leitura fora da raiz recusada: ${name}`);
-  }
   return readFileSync(canonicalTarget, "utf8");
+}
+
+function currentContent(
+  name: string,
+  text: string,
+  authoritative: boolean,
+  failures: string[],
+): string {
+  const starts = text.split(startMarker).length - 1;
+  const ends = text.split(endMarker).length - 1;
+  if (authoritative && (starts || ends))
+    failures.push(`Documento autoritativo não pode conter snapshot: ${name}`);
+  if (starts !== ends) failures.push(`Marcadores históricos desbalanceados: ${name}`);
+  if (historicalDocuments.has(name)) {
+    if (starts !== 1 || ends !== 1)
+      failures.push(`Snapshot histórico obrigatório inválido: ${name}`);
+    const start = text.indexOf(startMarker);
+    const end = text.indexOf(endMarker);
+    if (
+      start < 0 ||
+      end < start ||
+      !/Snapshot histórico não autoritativo/i.test(text.slice(0, Math.max(start, 0)))
+    )
+      failures.push(`Snapshot sem seção atual não autoritativa: ${name}`);
+  }
+  return text.replace(
+    /<!-- HISTORICAL_SNAPSHOT_START -->[\s\S]*?<!-- HISTORICAL_SNAPSHOT_END -->/g,
+    "",
+  );
 }
 
 export function auditCommerceArchitecture(rootInput: string): AuditResult {
   const root = resolve(rootInput);
   const failures: string[] = [];
-  const contents = new Map<string, string>();
-  for (const name of [...authoritativeDocuments, "COMMERCE_IMPLEMENTATION_ROADMAP.md"] as const) {
+  const current = new Map<string, string>();
+  const names = [
+    ...authoritativeDocuments,
+    "COMMERCE_IMPLEMENTATION_ROADMAP.md",
+    ...legacyDocuments,
+  ];
+  for (const name of names)
     try {
-      contents.set(name, safeRead(root, name));
+      const text = safeRead(root, name);
+      current.set(
+        name,
+        currentContent(name, text, authoritativeDocuments.includes(name as never), failures),
+      );
     } catch (error) {
       failures.push(error instanceof Error ? error.message : String(error));
     }
-  }
-  const architecture = contents.get("COMMERCE_ARCHITECTURE.md") ?? "";
-  const boundary = contents.get("FINANCIAL_LEDGER_AND_PAYMENT_BOUNDARY.md") ?? "";
-  const roadmap = contents.get("COMMERCE_IMPLEMENTATION_ROADMAP.md") ?? "";
+  const architecture = current.get("COMMERCE_ARCHITECTURE.md") ?? "";
   if (
     !architecture.startsWith(
       "Status: arquitetura aprovada para implementação incremental\nEscopo: carrinho, checkout, pedidos, estoque e fronteira financeira\nImplementação: ainda não iniciada",
     )
-  ) {
+  )
     failures.push("Status explícito de planejamento inválido");
-  }
+  const corpora = {
+    architecture,
+    boundary: current.get("FINANCIAL_LEDGER_AND_PAYMENT_BOUNDARY.md") ?? "",
+    roadmap: current.get("COMMERCE_IMPLEMENTATION_ROADMAP.md") ?? "",
+    paymentPlan: current.get("PAYMENT_AND_ESCROW_IMPLEMENTATION_PLAN.md") ?? "",
+    wallet: current.get("WALLET_AND_ESCROW_RULES.md") ?? "",
+    database: current.get("DATABASE_SCHEMA.md") ?? "",
+    api: current.get("API_CONTRACTS_DRAFT.md") ?? "",
+  };
   let passed = 0;
-  for (const [label, pattern] of decisions) {
-    const corpus = label === "incremental" ? roadmap : architecture;
-    if (pattern.test(corpus)) passed += 1;
+  for (const [label, pattern, source] of checks)
+    if (pattern.test(corpora[source])) passed += 1;
     else failures.push(`Decisão ausente: ${label}`);
-  }
-  for (const [label, pattern] of requiredBoundary) {
-    if (!pattern.test(boundary)) failures.push(`Fronteira ausente: ${label}`);
-  }
-  const audited = [...contents.values()];
-  for (const name of legacyDocuments) {
-    try {
-      const text = safeRead(root, name);
-      audited.push(text);
-      if (!/COMMERCE_ARCHITECTURE\.md/.test(text))
-        failures.push(`Documento antigo sem fonte autoritativa: ${name}`);
-    } catch (error) {
-      failures.push(error instanceof Error ? error.message : String(error));
-    }
-  }
-  const corpus = audited.join("\n");
+  for (const name of legacyDocuments)
+    if (!(current.get(name) ?? "").includes("COMMERCE_ARCHITECTURE.md"))
+      failures.push(`Documento antigo sem fonte autoritativa: ${name}`);
+  const corpus = [...current.values()].join("\n");
   let staleCommerceClaims = 0;
-  for (const [label, pattern] of forbidden) {
+  for (const [label, pattern] of forbidden)
     if (pattern.test(corpus)) {
       staleCommerceClaims += 1;
       failures.push(`Afirmação proibida: ${label}`);
     }
-  }
   return {
     ok: failures.length === 0,
-    authoritativeDocuments: authoritativeDocuments.filter((name) => contents.has(name)).length,
+    authoritativeDocuments: authoritativeDocuments.filter((name) => current.has(name)).length,
     architectureDecisions: passed,
     staleCommerceClaims,
     failures,

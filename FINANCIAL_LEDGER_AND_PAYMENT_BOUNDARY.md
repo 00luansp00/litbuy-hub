@@ -40,3 +40,11 @@ Payload raw só pode ser armazenado com finalidade, retenção definida, proteç
 ## Saques
 
 Exigem seller ativo, KYC aprovado, step-up/reautenticação, saldo disponível, limites, destino verificado, idempotência, auditoria, antifraude e conciliação. Saldo calculado pelo frontend nunca autoriza saque.
+
+## Contrato monetário na fronteira
+
+PostgreSQL usa `BIGINT`; TypeScript usa `bigint` ou value object. JSON usa exclusivamente string decimal canônica em `amountMinor`, apenas dígitos e sem sinais, ponto, expoente, espaços ou zeros não canônicos. Número JSON e serialização direta de `bigint` são proibidos; moeda e validação backend são obrigatórias.
+
+## Pagamento tardio após expiração
+
+Confirmação após expiração é persistida idempotentemente e verificada no gateway quando necessário. O pedido expirado não é reativado; reserva liberada não é consumida novamente; entrega e recriação artificial de estoque são proibidas. Abre-se incidente de reconciliação, cuja resolução autorizada e auditada pode realizar refund automático ou tratamento operacional. Nenhum estado muda silenciosamente.

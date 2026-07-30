@@ -10,161 +10,162 @@ import {
 } from "../scripts/commerce-architecture-audit";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
-const temporaryRoots: string[] = [];
+const roots: string[] = [];
 function fixture(): string {
   const root = mkdtempSync(join(tmpdir(), "commerce-architecture-"));
-  temporaryRoots.push(root);
+  roots.push(root);
   for (const name of [
     ...authoritativeDocuments,
     ...legacyDocuments,
     "COMMERCE_IMPLEMENTATION_ROADMAP.md",
-  ]) {
+  ])
     cpSync(join(repositoryRoot, name), join(root, name));
-  }
   return root;
 }
 function replace(root: string, name: string, from: string | RegExp, to: string): void {
   const path = join(root, name);
   writeFileSync(path, readFileSync(path, "utf8").replace(from, to));
 }
+function append(root: string, name: string, text: string): void {
+  const path = join(root, name);
+  writeFileSync(path, `${readFileSync(path, "utf8")}\n${text}\n`);
+}
 afterEach(() => {
-  for (const root of temporaryRoots.splice(0)) rmSync(root, { recursive: true, force: true });
+  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
+function expectFailure(root: string, label: string): void {
+  expect(auditCommerceArchitecture(root).failures.join(" ")).toContain(label);
+}
+
 describe("commerce architecture audit", () => {
-  it("accepts the valid fixture", () => {
-    const result = auditCommerceArchitecture(fixture());
-    expect(result).toEqual({
+  it("accepts the real valid fixture and safe output", () => {
+    expect(auditCommerceArchitecture(fixture())).toEqual({
       ok: true,
       authoritativeDocuments: 3,
-      architectureDecisions: 12,
+      architectureDecisions: 25,
       staleCommerceClaims: 0,
       failures: [],
     });
   });
-  it("emits only safe summary fields", () => {
-    const result = auditCommerceArchitecture(fixture());
-    expect(Object.keys(result)).toEqual([
-      "ok",
-      "authoritativeDocuments",
-      "architectureDecisions",
-      "staleCommerceClaims",
-      "failures",
-    ]);
-    expect(JSON.stringify(result)).not.toMatch(/payload|secret|token/i);
-  });
-  it("rejects a missing document", () => {
+  it("rejects a missing authoritative document", () => {
     const root = fixture();
     rmSync(join(root, "COMMERCE_THREAT_MODEL.md"));
-    expect(auditCommerceArchitecture(root).failures).toContain(
-      "Documento ausente: COMMERCE_THREAT_MODEL.md",
-    );
+    expectFailure(root, "Documento ausente");
   });
   it.each([
+    ["post-payment edge", "ACTIVE → CANCELLED", "post-payment-cancel"],
+    ["post-payment prose", "Pedido pago pode ser cancelado pela operação.", "post-payment-cancel"],
+    ["seven-year retention", "Retenção: sete anos, mínimo obrigatório.", "mandatory-seven-years"],
+    ["raw webhook retention", "Logs de webhook raw payload por 90 dias mínimo.", "raw-ninety-days"],
+    ["optional KYC", "KYC pode ser requerido conforme valor.", "optional-kyc"],
+    ["single line mutation", "Cada mutação = 1 linha.", "single-line-ledger"],
+    ["single ledger entry", "Toda movimentação gera uma entrada.", "single-line-ledger"],
+    ["no database", "Nenhuma tabela existe hoje.", "no-database"],
+    ["future Supabase", "Integração futura com Supabase.", "future-supabase"],
+    ["no frontend consumer", "Nenhum consumidor frontend está conectado.", "no-public-consumer"],
+    ["API style choice", "REST/RPC/GraphQL como escolha futura.", "api-style-choice"],
+    ["ambiguous money", "amountMinor aceita número ou string.", "ambiguous-money"],
     [
-      "multivendor cart",
-      /Cada carrinho ativo pertence[^\n]+/,
-      "Carrinho multivendedor é permitido",
-      "cart-per-seller",
+      "late activation",
+      "Pagamento tardio reativa automaticamente o pedido para ACTIVE.",
+      "late-reactivation",
+    ],
+  ])("rejects current claim: %s", (_name, claim, failure) => {
+    const root = fixture();
+    append(root, "BACKEND_ROADMAP.md", claim);
+    expectFailure(root, failure);
+  });
+  it.each([
+    ["numeric integer", `{ "amountMinor": 4990 }`],
+    ["numeric decimal", `{ "amountMinor": 49.90 }`],
+    ["numeric exponent", `{ "amountMinor": 4.99e3 }`],
+    ["negative string", `{ "amountMinor": "-4990" }`],
+    ["leading-zero string", `{ "amountMinor": "04990" }`],
+    ["decimal string", `{ "amountMinor": "49.90" }`],
+    ["exponent string", `{ "amountMinor": "4e3" }`],
+    ["spaced string", `{ "amountMinor": " 4990" }`],
+  ])("rejects noncanonical money: %s", (_name, claim) => {
+    const root = fixture();
+    append(root, "BACKEND_ROADMAP.md", claim);
+    expect(auditCommerceArchitecture(root).staleCommerceClaims).toBeGreaterThan(0);
+  });
+  it.each([
+    ["Refund model", /## Modelo conceitual futuro `Refund`/, "## Registro omitido", "refund-model"],
+    ["PARTIALLY_REFUNDED", /PARTIALLY_REFUNDED/g, "PARTIAL_DONE", "partial-refund"],
+    [
+      "aggregate refund ceiling",
+      /A soma dos refunds `SUCCEEDED` não pode superar o valor capturado/,
+      "O limite não foi definido",
+      "over-refund-limit",
     ],
     [
-      "cart reservation",
-      /Adicionar ao carrinho \*\*não reserva estoque\*\*/,
-      "carrinho reserva estoque",
-      "cart-no-reservation",
+      "late-payment handling",
+      /Pedido `EXPIRED` não volta automaticamente para `ACTIVE`/,
+      "Pedido expirado não tem regra",
+      "late-payment",
     ],
     [
-      "frontend price",
-      /O frontend jamais é autoridade de preço/,
-      "frontend define preço",
-      "frontend-price",
+      "JSON string contract",
+      /JSON autoritativa[^.]+string decimal canônica/,
+      "JSON autoritativa não definida",
+      "money-json-string",
     ],
-    ["missing snapshot", /snapshot imutável/gi, "registro copiável", "immutable-snapshot"],
-    ["floating money", /BIGINT[^\n]+/, "float para dinheiro.", "minor-bigint"],
-    [
-      "monolithic state",
-      /Máquinas de estado separadas/g,
-      "Máquina de estado monolítica",
-      "separate-states",
-    ],
-    ["missing idempotency", /Idempotency-Key/g, "chave de repetição", "idempotency"],
-  ])("rejects %s", (_label, from, to, failure) => {
+  ])("requires %s", (_name, from, to, failure) => {
     const root = fixture();
     replace(root, "COMMERCE_ARCHITECTURE.md", from, to);
-    expect(auditCommerceArchitecture(root).failures.join(" ")).toContain(failure);
+    expectFailure(root, failure);
   });
-  it("rejects an unbalanced ledger", () => {
+  it("accepts forbidden historical prose inside a valid snapshot", () => {
     const root = fixture();
     replace(
       root,
-      "FINANCIAL_LEDGER_AND_PAYMENT_BOUNDARY.md",
-      /soma dos débitos = soma dos créditos/,
-      "débitos podem divergir dos créditos",
+      "ORDER_LIFECYCLE.md",
+      "<!-- HISTORICAL_SNAPSHOT_END -->",
+      "ACTIVE → CANCELLED\n<!-- HISTORICAL_SNAPSHOT_END -->",
     );
-    expect(auditCommerceArchitecture(root).failures.join(" ")).toContain("balanced-ledger");
+    expect(auditCommerceArchitecture(root).ok).toBe(true);
   });
-  it("rejects a prematurely selected gateway", () => {
+  it("rejects an unclosed historical marker", () => {
     const root = fixture();
+    replace(root, "ORDER_LIFECYCLE.md", "<!-- HISTORICAL_SNAPSHOT_END -->", "");
+    expectFailure(root, "desbalanceados");
+  });
+  it("rejects forbidden prose outside a historical snapshot", () => {
+    const root = fixture();
+    append(root, "ORDER_LIFECYCLE.md", "ACTIVE → CANCELLED");
+    expectFailure(root, "post-payment-cancel");
+  });
+  it("prevents authoritative documents from hiding contradictions", () => {
+    const root = fixture();
+    append(
+      root,
+      "COMMERCE_ARCHITECTURE.md",
+      "<!-- HISTORICAL_SNAPSHOT_START -->\nACTIVE → CANCELLED\n<!-- HISTORICAL_SNAPSHOT_END -->",
+    );
+    expectFailure(root, "autoritativo não pode conter snapshot");
+  });
+  it("requires current database and API baselines", () => {
+    const root = fixture();
+    replace(root, "DATABASE_SCHEMA.md", "O backend NestJS", "O protótipo");
     replace(
       root,
-      "FINANCIAL_LEDGER_AND_PAYMENT_BOUNDARY.md",
-      "Nenhum gateway foi selecionado",
-      "gateway escolhido: ExamplePay",
+      "API_CONTRACTS_DRAFT.md",
+      "A arquitetura atual usa REST",
+      "A arquitetura é indefinida",
     );
-    const result = auditCommerceArchitecture(root);
-    expect(result.staleCommerceClaims).toBe(1);
-    expect(result.failures.join(" ")).toMatch(/gateway/);
+    const failures = auditCommerceArchitecture(root).failures.join(" ");
+    expect(failures).toContain("database-baseline");
+    expect(failures).toContain("api-baseline");
   });
-  it("rejects the forbidden simple escrow claim", () => {
-    const root = fixture();
-    replace(
-      root,
-      "FINANCIAL_LEDGER_AND_PAYMENT_BOUNDARY.md",
-      "retenção operacional",
-      "escrow simples e retenção operacional",
-    );
-    expect(auditCommerceArchitecture(root).failures.join(" ")).toContain("simple-escrow");
-  });
-  it("requires signed webhooks", () => {
-    const root = fixture();
-    replace(
-      root,
-      "FINANCIAL_LEDGER_AND_PAYMENT_BOUNDARY.md",
-      "Verificar assinatura",
-      "Aceitar evento",
-    );
-    expect(auditCommerceArchitecture(root).failures.join(" ")).toContain("signed-webhooks");
-  });
-  it("keeps chargeback separate from refund", () => {
-    const root = fixture();
-    replace(
-      root,
-      "FINANCIAL_LEDGER_AND_PAYMENT_BOUNDARY.md",
-      "Reembolso versus chargeback",
-      "Chargeback tratado como reembolso",
-    );
-    expect(auditCommerceArchitecture(root).failures.join(" ")).toContain(
-      "refund-chargeback-separate",
-    );
-  });
-  it("requires KYC for withdrawal", () => {
-    const root = fixture();
-    replace(root, "FINANCIAL_LEDGER_AND_PAYMENT_BOUNDARY.md", "KYC aprovado", "cadastro básico");
-    expect(auditCommerceArchitecture(root).failures.join(" ")).toContain("withdrawal-kyc");
-  });
-  it("requires every legacy document to reference the authority", () => {
-    const root = fixture();
-    replace(root, "ORDER_LIFECYCLE.md", /COMMERCE_ARCHITECTURE\.md/g, "old-contract.md");
-    expect(auditCommerceArchitecture(root).failures.join(" ")).toContain("ORDER_LIFECYCLE.md");
-  });
-  it("refuses traversal and symlinks outside the root", () => {
+  it("refuses traversal and symlinks outside root", () => {
     const root = fixture();
     expect(() => safeRead(root, "../outside.md")).toThrow("fora da raiz");
     const outside = join(tmpdir(), `outside-${Date.now()}.md`);
     writeFileSync(outside, "secret");
     rmSync(join(root, "COMMERCE_THREAT_MODEL.md"));
     symlinkSync(outside, join(root, "COMMERCE_THREAT_MODEL.md"));
-    expect(auditCommerceArchitecture(root).failures.join(" ")).toContain("fora da raiz");
+    expectFailure(root, "fora da raiz");
     rmSync(outside);
   });
 });

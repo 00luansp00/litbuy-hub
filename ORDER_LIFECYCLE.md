@@ -1,3 +1,15 @@
+# Ciclo de vida de pedidos
+
+## Contrato atual
+
+`COMMERCE_ARCHITECTURE.md` é a fonte autoritativa. Cancelamento existe somente antes do pagamento (`PENDING_PAYMENT → CANCELLED`). Depois do pagamento, reversões usam Refund parcial/total ou chargeback independente. Pedido, pagamento, fulfillment e disputa possuem máquinas separadas.
+
+## Snapshot histórico não autoritativo
+
+O bloco abaixo preserva contexto visual antigo e não define regra vigente.
+
+<!-- HISTORICAL_SNAPSHOT_START -->
+
 # ORDER_LIFECYCLE.md — LIT Buy
 
 > **Contrato comercial vigente:** `COMMERCE_ARCHITECTURE.md` é a fonte autoritativa. O conteúdo comercial histórico abaixo é preliminar ou substituído quando divergir; pagamentos e ledger não estão implementados, e nenhum gateway foi escolhido.
@@ -132,3 +144,5 @@ atualiza status → cria/atualiza `Order` correspondente → libera entrega.
 - avaliação disponível
 
 Todos disparam também notificação na plataforma. Envio real ficará no backend.
+
+<!-- HISTORICAL_SNAPSHOT_END -->
