@@ -1,5 +1,7 @@
 # PRE_HANDOFF_AUDIT.md — LIT Buy (Sprint 18.21)
 
+> **Snapshot histórico do Sprint 18.21:** este documento preserva o estado daquele sprint e não representa o estado atual. Consulte `PUBLIC_FOUNDATION_FINAL_AUDIT.md` para a fundação vigente.
+
 Documento de referência para o Sprint 19 — Handoff Técnico Final.
 
 ## Resumo do estado atual
@@ -13,24 +15,24 @@ Documento de referência para o Sprint 19 — Handoff Técnico Final.
 
 ## Áreas concluídas (visual / mock)
 
-| Área | Sprint principal | Status |
-| --- | --- | --- |
-| Home / catálogo / busca | 18.1–18.5 | ✅ |
-| Produto / variação / moeda virtual | 18.6–18.8 | ✅ |
-| Carrinho / Checkout / Pagamento | 18.9–18.11 | ✅ |
-| Pedidos / Chat / Mediação | 18.12, 18.18 | ✅ |
-| Vendedor / Vendas / Financeiro / Equipe | 18.12, 18.13 | ✅ |
-| Admin painel + avançado | 18.13 | ✅ |
-| Wizard de anúncio (normal/dinâmico/serviço) | 18.7, 18.13 | ✅ |
-| KYC / Verificação | 18.13 | ✅ |
-| Notificações + central | 18.14 | ✅ |
-| Denúncias / Report | 18.15 | ✅ |
-| Afiliados | 18.16 | ✅ |
-| Páginas públicas (Ajuda/Termos/Privacidade/etc.) | 18.17 | ✅ |
-| Chat oficial + mediação guiada | 18.18 | ✅ |
-| E-mails transacionais visuais + preferências | 18.19 | ✅ |
-| SEO helper, ErrorBoundary, OfflineNotice, RetryState, 404 | 18.20 | ✅ |
-| QA final + handoff prep | 18.21 | ✅ |
+| Área                                                      | Sprint principal | Status |
+| --------------------------------------------------------- | ---------------- | ------ |
+| Home / catálogo / busca                                   | 18.1–18.5        | ✅     |
+| Produto / variação / moeda virtual                        | 18.6–18.8        | ✅     |
+| Carrinho / Checkout / Pagamento                           | 18.9–18.11       | ✅     |
+| Pedidos / Chat / Mediação                                 | 18.12, 18.18     | ✅     |
+| Vendedor / Vendas / Financeiro / Equipe                   | 18.12, 18.13     | ✅     |
+| Admin painel + avançado                                   | 18.13            | ✅     |
+| Wizard de anúncio (normal/dinâmico/serviço)               | 18.7, 18.13      | ✅     |
+| KYC / Verificação                                         | 18.13            | ✅     |
+| Notificações + central                                    | 18.14            | ✅     |
+| Denúncias / Report                                        | 18.15            | ✅     |
+| Afiliados                                                 | 18.16            | ✅     |
+| Páginas públicas (Ajuda/Termos/Privacidade/etc.)          | 18.17            | ✅     |
+| Chat oficial + mediação guiada                            | 18.18            | ✅     |
+| E-mails transacionais visuais + preferências              | 18.19            | ✅     |
+| SEO helper, ErrorBoundary, OfflineNotice, RetryState, 404 | 18.20            | ✅     |
+| QA final + handoff prep                                   | 18.21            | ✅     |
 
 ## Rotas principais (auditadas)
 
@@ -194,6 +196,7 @@ Documentos de handoff criados nesta sprint:
 README.md atualizado como porta de entrada profissional.
 
 **Status final**:
+
 - ✅ Typecheck limpo.
 - ✅ Nenhuma funcionalidade nova, backend ou persistência adicionada.
 - ✅ Projeto pronto para exportar para GitHub e entregar para

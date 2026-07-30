@@ -52,6 +52,9 @@ jobs:
           VITE_CURRENT_PRIVACY_VERSION: 2026-07-14
           VITE_ENABLE_DEMO_ROLES: "false"
 
+      - name: Audit public foundation
+        run: bun run audit:public-foundation
+
   backend-validation:
     name: Backend validation
     runs-on: ubuntu-24.04
@@ -347,22 +350,9 @@ jobs:
       - name: Exercise compiled local demo data service
         working-directory: ${{ github.workspace }}
         run: |
-          set -euo pipefail
-          bun run demo:seed
-          bun run demo:verify
-          HOME_PUBLIC_CATALOG_SMOKE_BASE_URL=http://localhost:13001/api/v1 \
-            HOME_PUBLIC_CATALOG_SMOKE_ORIGIN=http://localhost:13000 \
-            bun run smoke:home-catalog
-          CATEGORY_PUBLIC_CATALOG_SMOKE_BASE_URL=http://localhost:13001/api/v1 \
-            CATEGORY_PUBLIC_CATALOG_SMOKE_ORIGIN=http://localhost:13000 \
-            bun run smoke:category-catalog
-          PRODUCT_DETAIL_PUBLIC_CATALOG_SMOKE_BASE_URL=http://localhost:13001/api/v1 \
-            PRODUCT_DETAIL_PUBLIC_CATALOG_SMOKE_ORIGIN=http://localhost:13000 \
-            bun run smoke:product-detail-catalog
-          bun run demo:seed
-          bun run demo:verify
-          bun run demo:reset
-          bun run demo:reset
+          bun run demo:prepare
+          bun run demo:check
+          CI=true bun run demo:ci:public-foundation
 
       - name: Run staging smoke tests
         working-directory: ${{ github.workspace }}/backend
