@@ -81,7 +81,7 @@ describe("Home public catalog", () => {
     expect(screen.getByText("Sob orçamento")).toBeInTheDocument();
     expect(screen.queryByText(/avaliaç|vendid|verificado/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
-    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /detalhes/i })).toHaveLength(12);
   });
   it("renders an empty result as a valid state", () => {
     render(

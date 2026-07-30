@@ -29,3 +29,7 @@ A cobertura de interface renderiza os controles e paginação reais, os três es
 ## Parsers isolados do cliente HTTP
 
 Os contratos públicos de categoria e subcategoria vivem em `src/services/catalog/publicTaxonomyParser.ts`, um módulo puro sem cliente HTTP, configuração Vite, ambiente ou efeitos colaterais. O serviço converte seu erro estável de validação para `ApiError` 502/`CATALOG_RESPONSE_INVALID`, enquanto o smoke importa diretamente os mesmos parsers sem exigir `VITE_API_BASE_URL`.
+
+## Detalhe público do produto (PR #33)
+
+A rota legada `/produto/$id` interpreta `$id` como slug e lê somente `GET /api/v1/catalog/products/:slug`, com parser defensivo, galeria assinada, variantes/serviços reais e estados seguros. Apenas cards do catálogo público navegam para ela; superfícies legadas continuam demonstrativas e sem link automático. Compra, carrinho, checkout, loja, avaliações, perguntas e relacionados não estão conectados. Consulte `PRODUCT_DETAIL_PUBLIC_CATALOG_INTEGRATION.md`.

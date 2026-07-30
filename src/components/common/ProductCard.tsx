@@ -1,4 +1,3 @@
-import { Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import { Heart, ShieldCheck, ShoppingCart, Star } from "lucide-react";
 import { toast } from "sonner";
@@ -29,8 +28,7 @@ export function ProductCard({ product }: ProductCardProps) {
   const isAvailable = !unavailability;
   const isDynamic = product.listingModel === "dynamic";
   const isService = product.listingModel === "service" || product.productType === "service";
-  const isVirtualCurrency =
-    product.productType === "virtual_currency" || !!product.virtualCurrency;
+  const isVirtualCurrency = product.productType === "virtual_currency" || !!product.virtualCurrency;
   const isQuote = isServiceQuote(product);
 
   const requiresPage = isDynamic || isVirtualCurrency || isQuote;
@@ -85,11 +83,7 @@ export function ProductCard({ product }: ProductCardProps) {
       transition={{ type: "spring", stiffness: 300, damping: 22 }}
       className="group relative flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card shadow-card transition-all duration-300 hover:border-primary/50 hover:shadow-elegant"
     >
-      <Link
-        to="/produto/$id"
-        params={{ id: product.slug }}
-        className="relative block aspect-square overflow-hidden bg-surface"
-      >
+      <div className="relative block aspect-square overflow-hidden bg-surface">
         <img
           src={displayImage}
           alt={product.title}
@@ -128,7 +122,7 @@ export function ProductCard({ product }: ProductCardProps) {
         >
           <Heart className="h-4 w-4" />
         </button>
-      </Link>
+      </div>
 
       <div className="flex flex-1 flex-col gap-3 p-4">
         <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -142,18 +136,17 @@ export function ProductCard({ product }: ProductCardProps) {
           </span>
         </div>
 
-        <Link
-          to="/produto/$id"
-          params={{ id: product.slug }}
-          className="line-clamp-2 text-sm font-medium leading-snug text-foreground transition-colors hover:text-primary"
-        >
+        <div className="line-clamp-2 text-sm font-medium leading-snug text-foreground">
           {product.title}
-        </Link>
+        </div>
 
         {(modelBadge || product.promotionTier || product.sellerPlan) && (
           <div className="flex flex-wrap gap-1">
             {modelBadge && (
-              <Badge className={cn("text-[10px] font-semibold", modelBadge.tone)} variant="secondary">
+              <Badge
+                className={cn("text-[10px] font-semibold", modelBadge.tone)}
+                variant="secondary"
+              >
                 {modelBadge.label}
               </Badge>
             )}
@@ -198,10 +191,8 @@ export function ProductCard({ product }: ProductCardProps) {
             </div>
           </div>
           {requiresPage ? (
-            <Button asChild size="sm" variant="secondary">
-              <Link to="/produto/$id" params={{ id: product.slug }}>
-                {isQuote ? "Solicitar" : isDynamic ? "Ver opções" : "Ver oferta"}
-              </Link>
+            <Button size="sm" variant="secondary" disabled>
+              {isQuote ? "Solicitar" : isDynamic ? "Ver opções" : "Ver oferta"}
             </Button>
           ) : (
             <Button

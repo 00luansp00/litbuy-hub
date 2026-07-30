@@ -56,7 +56,15 @@ export function PublicCatalogCard({ product }: { product: CatalogCard }) {
             </>
           )}
         </div>
-        <h3 className="line-clamp-2 text-lg font-semibold text-foreground">{product.title}</h3>
+        <h3 className="line-clamp-2 text-lg font-semibold text-foreground">
+          <a
+            href={`/produto/${encodeURIComponent(product.slug)}`}
+            className="hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            aria-label={`Ver detalhes de ${product.title}`}
+          >
+            {product.title}
+          </a>
+        </h3>
         <p className="line-clamp-3 text-sm leading-6 text-muted-foreground">
           {product.shortDescription}
         </p>
@@ -74,9 +82,12 @@ export function PublicCatalogCard({ product }: { product: CatalogCard }) {
           <p className="mt-1 text-lg font-bold text-primary">
             {formatPublicCatalogPrice(product.pricing)}
           </p>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Visualização do catálogo · detalhes em breve
-          </p>
+          <a
+            href={`/produto/${encodeURIComponent(product.slug)}`}
+            className="mt-2 inline-flex text-sm font-medium text-primary hover:underline"
+          >
+            Ver detalhes
+          </a>
         </div>
       </div>
     </article>

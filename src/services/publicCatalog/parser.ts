@@ -1,9 +1,13 @@
 import type {
   PublicCatalogCard,
+  PublicCatalogGalleryImage,
   PublicCatalogListResponse,
   PublicCatalogModel,
   PublicCatalogPricing,
   PublicCatalogProductType,
+  PublicCatalogProductDetail,
+  PublicCatalogServiceDetails,
+  PublicCatalogVariant,
 } from "./types";
 
 export const MALFORMED_PUBLIC_CATALOG_RESPONSE = "MALFORMED_PUBLIC_CATALOG_RESPONSE";
@@ -102,6 +106,104 @@ function card(value: unknown): PublicCatalogCard {
     subcategory: item.subcategory === null ? null : namedSlug(item.subcategory),
     seller: { slug: text(seller.slug), storeName: text(seller.storeName) },
     coverImage: { url, expiresAt, altText: nullableText(image.altText) },
+  };
+}
+
+function variant(value: unknown): PublicCatalogVariant {
+  const item = record(value);
+  if (!decimal.test(typeof item.price === "string" ? item.price : "")) malformed();
+  if (!Number.isSafeInteger(item.stock) || (item.stock as number) < 0) malformed();
+  return {
+    id: text(item.id),
+    title: text(item.title),
+    description: nullableText(item.description),
+    price: item.price as string,
+    stock: item.stock as number,
+  };
+}
+
+function galleryImage(value: unknown): PublicCatalogGalleryImage {
+  const item = record(value);
+  if ("objectKey" in item || typeof item.isCover !== "boolean") malformed();
+  const url = text(item.url);
+  const expiresAt = text(item.expiresAt);
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") malformed();
+  } catch {
+    malformed();
+  }
+  if (Number.isNaN(Date.parse(expiresAt))) malformed();
+  return {
+    id: text(item.id),
+    url,
+    expiresAt,
+    altText: nullableText(item.altText),
+    isCover: item.isCover,
+  };
+}
+
+function serviceDetails(
+  value: unknown,
+  common: PublicCatalogCard,
+): PublicCatalogServiceDetails | null {
+  if (common.model !== "SERVICE") {
+    if (value !== null) malformed();
+    return null;
+  }
+  const item = record(value);
+  const estimatedDelivery = text(item.estimatedDelivery);
+  if (item.pricingType === "FIXED") {
+    if (
+      typeof item.basePrice !== "string" ||
+      !decimal.test(item.basePrice) ||
+      common.pricing.kind !== "FIXED" ||
+      common.pricing.amount !== item.basePrice
+    )
+      malformed();
+    return { pricingType: "FIXED", basePrice: item.basePrice, estimatedDelivery };
+  }
+  if (
+    item.pricingType === "QUOTE" &&
+    item.basePrice === null &&
+    common.pricing.kind === "QUOTE" &&
+    common.pricing.amount === null
+  )
+    return { pricingType: "QUOTE", basePrice: null, estimatedDelivery };
+  return malformed();
+}
+
+export function parsePublicCatalogDetailResponse(raw: unknown): PublicCatalogProductDetail {
+  const root = record(raw);
+  const common = card(root);
+  if (root.deliveryMode !== "MANUAL" && root.deliveryMode !== "AUTOMATIC") malformed();
+  if (!Array.isArray(root.variants) || !Array.isArray(root.gallery) || root.gallery.length === 0)
+    malformed();
+  const variants = root.variants.map(variant);
+  if (common.model === "DYNAMIC" && variants.length === 0) malformed();
+  if (new Set(variants.map((item) => item.id)).size !== variants.length) malformed();
+  const gallery = root.gallery.map(galleryImage);
+  if (
+    new Set(gallery.map((item) => item.id)).size !== gallery.length ||
+    new Set(gallery.map((item) => item.url)).size !== gallery.length
+  )
+    malformed();
+  const covers = gallery.filter((item) => item.isCover);
+  if (covers.length !== 1) malformed();
+  const cover = covers[0];
+  if (
+    cover.url !== common.coverImage.url ||
+    cover.expiresAt !== common.coverImage.expiresAt ||
+    cover.altText !== common.coverImage.altText
+  )
+    malformed();
+  return {
+    ...common,
+    description: text(root.description),
+    deliveryMode: root.deliveryMode,
+    variants,
+    gallery,
+    serviceDetails: serviceDetails(root.serviceDetails, common),
   };
 }
 

@@ -83,7 +83,7 @@ describe("category catalog pagination", () => {
 
 describe("category catalog states", () => {
   const callbacks = { onFilterChange: vi.fn(), onClearFilters: vi.fn(), onPageChange: vi.fn() };
-  it("reports only displayed items and renders informational cards without commerce links", () => {
+  it("reports displayed items and links real cards without commerce actions", () => {
     render(
       <CategoryCatalogContent
         catalog={catalog()}
@@ -93,7 +93,10 @@ describe("category catalog states", () => {
       />,
     );
     expect(screen.getByText("Exibindo 1 anúncio nesta página")).toBeInTheDocument();
-    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /detalhes/i })[0]).toHaveAttribute(
+      "href",
+      "/produto/demo",
+    );
     for (const action of ["Carrinho", "Favorito", "Comprar"])
       expect(screen.queryByText(action, { exact: false })).not.toBeInTheDocument();
   });
@@ -129,9 +132,12 @@ describe("category catalog states", () => {
     render(<CategoryCatalogSkeleton />);
     expect(screen.getByLabelText("Carregando anúncios públicos").children).toHaveLength(12);
   });
-  it("keeps a standalone public card informational", () => {
+  it("links a standalone public card by public slug", () => {
     render(<PublicCatalogCard product={product} />);
-    expect(screen.queryByRole("link")).not.toBeInTheDocument();
-    expect(screen.getByText(/detalhes em breve/i)).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /detalhes/i })[0]).toHaveAttribute(
+      "href",
+      "/produto/demo",
+    );
+    expect(screen.getByText(/ver detalhes/i)).toBeInTheDocument();
   });
 });

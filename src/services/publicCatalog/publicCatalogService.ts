@@ -1,5 +1,5 @@
 import { apiFetch } from "@/lib/api/client";
-import { parsePublicCatalogListResponse } from "./parser";
+import { parsePublicCatalogDetailResponse, parsePublicCatalogListResponse } from "./parser";
 import type { PublicCatalogListParams } from "./types";
 
 const sorts = new Set(["RECENT", "OLDEST", "TITLE_ASC", "TITLE_DESC"]);
@@ -32,6 +32,14 @@ function boundedInteger(value: number, maximum: number): string {
 }
 
 export const publicCatalogService = {
+  async detail(slug: string) {
+    if (typeof slug !== "string" || !slugPattern.test(slug))
+      throw new TypeError("INVALID_PUBLIC_CATALOG_SLUG");
+    const raw = await apiFetch<unknown>(`/catalog/products/${encodeURIComponent(slug)}`, {
+      auth: false,
+    });
+    return parsePublicCatalogDetailResponse(raw);
+  },
   async list(params: PublicCatalogListParams) {
     if (!sorts.has(params.sort)) throw new TypeError("INVALID_PUBLIC_CATALOG_QUERY");
     if (params.productType !== undefined && !productTypes.has(params.productType))

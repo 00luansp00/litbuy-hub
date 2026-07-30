@@ -1,242 +1,43 @@
-import { createFileRoute, notFound } from "@tanstack/react-router";
-import { motion } from "motion/react";
-import { Breadcrumb } from "@/components/common/Breadcrumb";
-import { EmptyState } from "@/components/common/EmptyState";
-import { ProductGrid } from "@/components/common/ProductGrid";
-import { ProductSkeleton } from "@/components/common/ProductSkeleton";
-import { SectionHeader } from "@/components/common/SectionHeader";
-import { SellerInfo } from "@/components/common/SellerInfo";
-import { AccountInfoCard } from "@/components/product/AccountInfoCard";
-import { ProductDescription } from "@/components/product/ProductDescription";
-import { ProductDetailsSpecs } from "@/components/product/ProductDetailsSpecs";
-import { ProductGallery } from "@/components/product/ProductGallery";
-import { ProductInfo } from "@/components/product/ProductInfo";
-import { ProductQuestions } from "@/components/product/ProductQuestions";
-import { ProductReviews } from "@/components/product/ProductReviews";
-import { PurchaseCard } from "@/components/product/PurchaseCard";
-import { SellerLevelBadge } from "@/components/seller/SellerLevelBadge";
-import { SellerVerificationBadge } from "@/components/verification/SellerVerificationBadge";
-import { ReportButton } from "@/components/report/ReportButton";
-import { productService } from "@/services/productService";
-import { reviewService } from "@/services/reviewService";
+/* eslint-disable react-refresh/only-export-components */
+import { createFileRoute, notFound, useRouter } from "@tanstack/react-router";
+import { ApiError } from "@/lib/api/client";
+import { publicCatalogService } from "@/services/publicCatalog";
+import {
+  PublicProductDetailContent,
+  PublicProductDetailError,
+  PublicProductDetailNotFound,
+  PublicProductDetailSkeleton,
+} from "@/components/public-product-detail";
+
+export const retryPublicProductDetail = (invalidate: () => unknown): void => {
+  void invalidate();
+};
 
 export const Route = createFileRoute("/produto/$id")({
   loader: async ({ params }) => {
-    const product = await productService.byId(params.id);
-    if (!product) throw notFound();
-    const [related, reviews] = await Promise.all([
-      productService.related(product.id, 8),
-      reviewService.byProduct(product.id, 6),
-    ]);
-    return { product, related, reviews };
+    try {
+      return { product: await publicCatalogService.detail(params.id), failed: false };
+    } catch (error) {
+      if (error instanceof TypeError && error.message === "INVALID_PUBLIC_CATALOG_SLUG")
+        throw notFound();
+      if (error instanceof ApiError && error.status === 404 && error.code === "PRODUCT_NOT_FOUND")
+        throw notFound();
+      return { product: null, failed: true };
+    }
   },
   component: ProductPage,
-  pendingComponent: ProductPending,
-  notFoundComponent: ProductNotFound,
+  pendingComponent: PublicProductDetailSkeleton,
+  notFoundComponent: PublicProductDetailNotFound,
 });
 
 function ProductPage() {
-  const { product, related, reviews } = Route.useLoaderData();
-
-  // Galeria: usa coverImage + galleryImages se existirem, senão fallback antigo.
-  const gallery =
-    product.galleryImages && product.galleryImages.length > 0
-      ? [product.coverImage ?? product.imageUrl, ...product.galleryImages]
-      : [
-          product.coverImage ?? product.imageUrl,
-          product.imageUrl.replace("/600/600", "/601/600"),
-          product.imageUrl.replace("/600/600", "/600/601"),
-          product.imageUrl.replace("/600/600", "/602/602"),
-        ];
-
-  const description =
-    product.description ??
-    `${product.title} — entrega ${product.instantDelivery ? "instantânea" : "rápida"} e vendedor ${product.verifiedSeller ? "verificado" : "avaliado"} pela LIT Buy.\n\nAntes da compra, verifique as informações e a reputação do anunciante. Todas as transações são protegidas pela nossa garantia da plataforma, com suporte dedicado em caso de qualquer problema.\n\nDúvidas? Use a seção de perguntas públicas abaixo ou envie uma mensagem privada ao vendedor.`;
-
-  const seller: import("@/types").Seller = product.seller ?? {
-    id: "seller-generic",
-    name: "LIT Seller",
-    avatarUrl: undefined,
-    rating: 4.8,
-    verified: true,
-  };
-
-  const enrichedSeller = {
-    ...seller,
-    level: seller.verified ? "Top Seller" : "Vendedor",
-    responseTime: "< 5 min",
-    salesCount: seller.salesCount ?? Math.max(200, product.soldCount * 3),
-    memberSince: seller.memberSince ?? "2022-04-01",
-  };
-
-  const avg =
-    reviews.reduce((acc: number, r: { rating: number }) => acc + r.rating, 0) /
-    Math.max(1, reviews.length);
-
-  return (
-    <div className="container-lit space-y-8 py-6 md:py-10">
-      <p className="rounded-lg border border-border bg-muted/40 px-4 py-2 text-sm text-muted-foreground">
-        Categorias e subcategorias são reais. Produtos, preços, estoque, vendedores e avaliações
-        ainda são demonstrativos.
-      </p>
-      <Breadcrumb
-        items={[
-          { label: "Home", to: "/" },
-          {
-            label: product.categoryName,
-            to: "/categoria/$slug",
-            params: { slug: product.categorySlug },
-          },
-          { label: product.title },
-        ]}
+  const data = Route.useLoaderData();
+  const router = useRouter();
+  if (data.failed || !data.product)
+    return (
+      <PublicProductDetailError
+        onRetry={() => retryPublicProductDetail(() => router.invalidate())}
       />
-
-      <div className="grid gap-6 lg:grid-cols-12 lg:gap-8">
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35 }}
-          className="lg:col-span-5"
-        >
-          <ProductGallery images={gallery} alt={product.title} />
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.05 }}
-          className="lg:col-span-4 space-y-6"
-        >
-          <ProductInfo product={product} />
-
-          <ProductDetailsSpecs product={product} />
-
-          {product.productType === "account" && product.accountInfo && (
-            <AccountInfoCard info={product.accountInfo} />
-          )}
-
-          <div className="rounded-2xl border border-border bg-card p-5">
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold text-foreground">Sobre o vendedor</h3>
-              <div className="flex flex-wrap items-center gap-1.5">
-                <SellerLevelBadge sellerId={enrichedSeller.id} size="sm" />
-                <SellerVerificationBadge sellerId={enrichedSeller.id} size="sm" />
-              </div>
-            </div>
-
-            <SellerInfo
-              seller={enrichedSeller}
-              size="lg"
-              detailed
-              href={enrichedSeller.slug ? "/loja/$slug" : undefined}
-              hrefParams={enrichedSeller.slug ? { slug: enrichedSeller.slug } : undefined}
-            />
-
-            <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-border pt-3">
-              <ReportButton
-                targetType="product"
-                targetId={product.id}
-                targetLabel={product.title}
-                label="Reportar anúncio"
-                variant="ghost"
-                size="sm"
-                source="product_page"
-                context={{
-                  productId: product.id,
-                  productTitle: product.title,
-                  sellerId: enrichedSeller.id,
-                  sellerSlug: enrichedSeller.slug,
-                  category: product.categoryName,
-                  subcategory: product.categorySlug,
-                  productType: product.productType,
-                }}
-              />
-              <ReportButton
-                targetType="seller"
-                targetId={enrichedSeller.id}
-                targetLabel={enrichedSeller.name}
-                label="Reportar vendedor"
-                variant="ghost"
-                size="sm"
-                source="product_page"
-                context={{
-                  sellerId: enrichedSeller.id,
-                  sellerSlug: enrichedSeller.slug,
-                }}
-              />
-            </div>
-          </div>
-        </motion.div>
-
-        <div className="lg:col-span-3">
-          <div className="lg:sticky lg:top-24">
-            <PurchaseCard product={product} />
-          </div>
-        </div>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <ProductDescription content={description} />
-        <ProductReviews
-          reviews={reviews}
-          average={Number.isFinite(avg) ? avg : product.rating}
-          total={product.reviewsCount}
-        />
-      </div>
-
-      <ProductQuestions productId={product.id} />
-
-      <section>
-        <SectionHeader
-          eyebrow="Você também pode gostar"
-          title="Produtos relacionados"
-          description="Outros anúncios na mesma categoria."
-        />
-        {related.length > 0 ? (
-          <ProductGrid products={related} columns={4} />
-        ) : (
-          <EmptyState
-            icon="PackageOpen"
-            title="Sem produtos relacionados"
-            description="Ainda não encontramos outros anúncios semelhantes."
-          />
-        )}
-      </section>
-    </div>
-  );
-}
-
-function ProductPending() {
-  return (
-    <div className="container-lit space-y-6 py-6 md:py-10">
-      <div className="h-4 w-64 animate-pulse rounded bg-surface" />
-      <div className="grid gap-6 lg:grid-cols-12 lg:gap-8">
-        <div className="aspect-square w-full animate-pulse rounded-2xl bg-surface lg:col-span-5" />
-        <div className="space-y-4 lg:col-span-4">
-          <div className="h-8 w-3/4 animate-pulse rounded bg-surface" />
-          <div className="h-4 w-1/2 animate-pulse rounded bg-surface" />
-          <div className="h-24 animate-pulse rounded-xl bg-surface" />
-        </div>
-        <div className="h-72 animate-pulse rounded-2xl bg-surface lg:col-span-3" />
-      </div>
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <ProductSkeleton key={i} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ProductNotFound() {
-  return (
-    <div className="container-lit py-16">
-      <EmptyState
-        icon="SearchX"
-        title="Produto não encontrado"
-        description="O anúncio que você tentou acessar não está mais disponível."
-        action={{ label: "Voltar para o início", to: "/" }}
-      />
-    </div>
-  );
+    );
+  return <PublicProductDetailContent product={data.product} />;
 }
