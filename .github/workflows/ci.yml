@@ -349,7 +349,10 @@ jobs:
 
       - name: Exercise compiled local demo data service
         working-directory: ${{ github.workspace }}
-        run: CI=true bun run demo:ci:public-foundation
+        run: |
+          bun run demo:prepare
+          bun run demo:check
+          CI=true bun run demo:ci:public-foundation
 
       - name: Run staging smoke tests
         working-directory: ${{ github.workspace }}/backend

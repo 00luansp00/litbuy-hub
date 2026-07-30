@@ -2,9 +2,9 @@
 
 > Concluída a fundação isolada de dados locais determinísticos para PostgreSQL e MinIO; ela não adiciona endpoints nem altera lifecycle.
 
-> PR #29 adds the backend-only public catalog read foundation; frontend adoption, search, commerce, and stock reservation remain later milestones. See `PUBLIC_CATALOG_READ_FOUNDATION.md`.
+> A fundação de leitura pública da PR #29 já foi adotada por Home, categoria e detalhe; busca, loja, comércio e reserva de estoque permanecem marcos futuros. Consulte `PUBLIC_CATALOG_READ_FOUNDATION.md`.
 
-> A Home agora adotou somente a listagem pública recente. Nenhuma alteração de backend, regra de elegibilidade, paginação, imagem ou funcionalidade comercial foi necessária.
+> Estado atual: Home, categoria e detalhe já consomem o catálogo público real. Busca, loja e comércio permanecem pendentes.
 
 Roadmap recomendado para transformar o MVP visual em produto real, considerando a arquitetura real atual.
 
@@ -16,7 +16,7 @@ Roadmap recomendado para transformar o MVP visual em produto real, considerando 
 - Redis.
 - API REST `/api/v1`.
 - Arquitetura modular monolith.
-- Storage S3-compatible futuro conforme domínio.
+- MinIO/S3 compatível privado já atende imagens de produto na fundação local; KYC, disputas, evidências e outros domínios exigem planejamento de storage próprio.
 - Sem dependência obrigatória de Supabase.
 
 A fundação real de autenticação já existe em NestJS/PostgreSQL/Redis e está documentada em `AUTHENTICATION_FINAL_AUDIT.md`; não tratar escolha de backend ou implementação de auth terceirizada como trabalho futuro de autenticação.
@@ -26,12 +26,18 @@ A fundação real de autenticação já existe em NestJS/PostgreSQL/Redis e est�
 - Completar RBAC/autorização server-side para marketplace, vendedor e admin.
 - Definir políticas server-side equivalentes a RLS/checks por domínio sensível.
 - Consolidar logs de auditoria append-only para eventos financeiros, seller/admin e moderação.
-- Definir storage S3-compatible para produtos, KYC, evidências e cofre conforme cada domínio entrar no escopo.
+- Manter o storage privado de produtos e planejar separadamente storage para KYC, evidências, disputas e cofre quando cada domínio entrar no escopo.
 - Consolidar variáveis de ambiente e secrets por ambiente.
 
 ## Plano histórico descontinuado / não autoritativo
 
 As versões iniciais deste roadmap assumiam Supabase, auth gerenciada e funções de borda. Esse plano é histórico e não é autoritativo para a arquitetura atual, que usa backend NestJS, PostgreSQL/Prisma, Redis e API REST `/api/v1`.
+
+## Estado da fase de catálogo
+
+- **Concluído:** lifecycle persistente, leitura pública, Home, categoria, detalhe e imagens privadas assinadas no rehearsal local.
+- **Parcialmente concluído:** a adoção frontend real ainda coexiste com superfícies legadas demonstrativas.
+- **Pendente:** busca, loja pública, comércio e storage de domínios alheios a produto.
 
 ## Fase 2 — Catálogo
 

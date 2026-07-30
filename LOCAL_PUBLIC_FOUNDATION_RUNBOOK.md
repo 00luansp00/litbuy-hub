@@ -71,3 +71,7 @@ bun run demo:check
 ## Windows
 
 Use PowerShell, abra o Docker Desktop antes de começar e execute os mesmos comandos na pasta do projeto. O orquestrador não exige sintaxe específica de Bash.
+
+## Observações sobre a verificação
+
+`demo:check` também valida CORS e a infraestrutura local, usando a API na porta `13001` e o frontend na `13000`. Não é necessário instalar `curl`: os health checks usam o `fetch` nativo do Bun. `PUBLIC_FOUNDATION_LOCAL_TARGET_REFUSED` significa que algum alvo configurado não é estritamente loopback local ou possui URL/porta/path inválido. O resumo do modo CI descreve sua execução descartável após dois resets; não representa dados persistentes do ambiente local.
