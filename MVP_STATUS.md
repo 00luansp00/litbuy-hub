@@ -1,4 +1,6 @@
-# MVP_STATUS.md — LIT Buy
+# MVP_STATUS.md — snapshot histórico do MVP visual
+
+> **Snapshot histórico:** o corpo abaixo registra o handoff anterior à fundação backend. Não descreve o estado atual. Para o estado auditado após as PRs #28–#34, consulte `PUBLIC_FOUNDATION_FINAL_AUDIT.md`.
 
 > Fundação local de demonstração disponível via CLI/Compose (6 produtos públicos e 2 invisíveis); somente a listagem da Home consome o catálogo público real, sem ações comerciais.
 

@@ -1,139 +1,59 @@
 # LIT Buy
 
-> A Home usa a listagem pública real de anúncios recentes; consulte `HOME_PUBLIC_CATALOG_INTEGRATION.md`. Home, categoria e detalhe usam o catálogo público real; busca, loja e comércio permanecem mockados/desconectados. Os dados locais determinísticos estão em `LOCAL_DEMO_DATA.md`.
+Marketplace em evolução com uma fundação pública **híbrida**: autenticação, lifecycle de anúncios e catálogo público já usam o backend real; superfícies comerciais ainda são demonstrativas.
 
-> **⚠️ MVP visual/mockado** — Este projeto é um MVP visual/mockado.
-> **Não possui backend, pagamento real, autenticação real, envio de
-> e-mail, upload ou persistência.** Serve como base visual e
-> documental para a próxima fase de desenvolvimento real.
+## Estado atual
 
-Marketplace premium para gamers e criadores digitais: contas, gift
-cards, moedas virtuais, skins e serviços com pagamento protegido e
-entrega instantânea (fluxo visual).
+### Integrações reais
 
-## Status atual
+- backend NestJS, PostgreSQL, Prisma, Redis e autenticação auditada;
+- lifecycle de anúncios e leitura pública de categorias, listagem e detalhe;
+- MinIO/S3 compatível privado, com imagens entregues por URLs assinadas temporárias;
+- dataset local determinístico;
+- Home, categoria e detalhe de produto conectados ao backend local.
 
-- ✅ Frontend avançado (React 19 + TanStack Start + Tailwind + shadcn/ui).
-- ✅ MVP visual completo (home, catálogo, checkout, pedidos, chat,
-  mediação, denúncia, afiliados, notificações, e-mails, admin, KYC).
-- ✅ Documentação de arquitetura, rotas, services, providers, backend
-  roadmap, contratos de API, banco, segurança, pagamentos.
-- ❌ Backend, banco, autenticação, pagamento, upload — todos ausentes
-  (por design).
-- ✅ Typecheck limpo.
-- ✅ Pronto para handoff técnico (GitHub / Cursor / desenvolvedor).
+### Superfícies demonstrativas
 
-## Stack
+Busca, loja pública, favoritos, carrinho, checkout, pedidos, pagamentos e outras superfícies legadas continuam mockadas. Elas não devem ser interpretadas como comércio funcional e não devem receber dados pessoais ou financeiros reais.
 
-- **React 19** + **TypeScript strict**
-- **Vite 7** + **TanStack Start / Router**
-- **Tailwind v4** + **shadcn/ui** (Radix)
-- **TanStack Query**, **react-hook-form**, **Zod**, **Framer Motion**,
-  **Lucide**, **sonner**
+## Stack confirmada
 
-## Como rodar
+React 19, TypeScript, Vite 8, TanStack Start/Router, NestJS, PostgreSQL, Prisma, Redis, MinIO/S3, Docker Compose e GitHub Actions.
+
+## Como executar
+
+### Frontend isolado
+
+Útil para trabalho visual; as chamadas reais exigem uma API configurada.
 
 ```bash
-bun install
-bun run dev         # dev server
-bun run build       # build produção
-bun run build:dev   # build modo dev
-bun run preview     # preview do build
-bun run lint        # ESLint
-bunx tsgo --noEmit  # typecheck
-bun run format      # Prettier
+bun install --frozen-lockfile
+bun run dev
 ```
 
-## Login demo
+### Rehearsal completo
 
-- **Usuário comum**: qualquer e-mail/senha loga.
-- **Admin**: `admin@litbuy.com` (senha qualquer).
-- Autenticação é 100% mockada em memória — recarregar a página desloga.
-
-## Estrutura de pastas
-
-```
-src/
-├── components/       # UI por área (admin, seller, product, etc.)
-│   ├── ui/           # shadcn primitives
-│   ├── common/       # EmptyState, ProductCard, etc.
-│   ├── error/        # ErrorBoundary
-│   ├── status/       # OfflineNotice, RetryState
-│   └── seo/          # buildSeoHead
-├── routes/           # file-based routing (TanStack)
-├── providers/        # AuthProvider, CartProvider, NotificationProvider
-├── services/         # todos os mocks (productService, cartService, …)
-├── data/             # produtos, categorias, sellers estáticos
-├── types/            # tipos compartilhados
-├── lib/              # utils, format, error-page
-└── styles.css        # Tailwind + tokens
+```bash
+bun install --frozen-lockfile
+bun run demo:prepare
 ```
 
-## Rotas principais
+Siga o passo a passo seguro em [`LOCAL_PUBLIC_FOUNDATION_RUNBOOK.md`](./LOCAL_PUBLIC_FOUNDATION_RUNBOOK.md).
 
-- **Públicas**: `/`, `/buscar`, `/produto/$id`, `/categoria/$slug`,
-  `/loja/$slug`, `/afiliados`, `/ajuda`, `/como-comprar`, `/termos`,
-  `/privacidade`, `/contato`, …
-- **Comprador**: `/perfil`, `/pedidos`, `/carrinho`, `/checkout`,
-  `/pagamento/$id`, `/mensagens`, `/notificacoes`, …
-- **Vendedor**: `/vendedor`, `/vendedor/anuncios`, `/vendedor/vendas/$id`,
-  `/vendedor/financeiro`, `/vendedor/equipe`, …
-- **Admin**: `/admin`, `/admin/denuncias` (**oficial**),
-  `/admin/pedidos`, `/admin/relatorios`, `/admin/auditoria`, …
+## Login local
 
-Mapa completo em [`ROUTES_MAP.md`](./ROUTES_MAP.md).
+Contas públicas, fictícias e exclusivamente locais (senha `LitBuyDemo2026!`):
 
-## Documentos principais
+- `comprador@demo.litbuy.local`
+- `vendedor@demo.litbuy.local`
+- `admin@demo.litbuy.local`
 
-Para desenvolvedor entrar rápido no projeto:
+Essas credenciais são descartáveis e proibidas em produção. Não é permitido entrar com senha arbitrária.
 
-1. [`DEVELOPER_HANDOFF.md`](./DEVELOPER_HANDOFF.md) — comece por aqui.
-2. [`ROUTES_MAP.md`](./ROUTES_MAP.md)
-3. [`SERVICES_MAP.md`](./SERVICES_MAP.md)
-4. [`PROVIDERS_MAP.md`](./PROVIDERS_MAP.md)
-5. [`MOCKS_INVENTORY.md`](./MOCKS_INVENTORY.md)
-6. [`BACKEND_ROADMAP.md`](./BACKEND_ROADMAP.md)
-7. [`API_CONTRACTS_DRAFT.md`](./API_CONTRACTS_DRAFT.md)
-8. [`DATABASE_SCHEMA.md`](./DATABASE_SCHEMA.md)
-   - [`DATABASE_IMPLEMENTATION_NOTES.md`](./DATABASE_IMPLEMENTATION_NOTES.md)
-9. [`SECURITY_IMPLEMENTATION_PLAN.md`](./SECURITY_IMPLEMENTATION_PLAN.md)
-10. [`PAYMENT_AND_ESCROW_IMPLEMENTATION_PLAN.md`](./PAYMENT_AND_ESCROW_IMPLEMENTATION_PLAN.md)
-11. [`TECH_DEBT_AND_RISKS.md`](./TECH_DEBT_AND_RISKS.md)
-12. [`HANDOFF_CHECKLIST.md`](./HANDOFF_CHECKLIST.md)
-13. [`PRE_HANDOFF_AUDIT.md`](./PRE_HANDOFF_AUDIT.md)
-14. [`ARCHITECTURE.md`](./ARCHITECTURE.md),
-    [`PROJECT_RULES.md`](./PROJECT_RULES.md),
-    [`MVP_STATUS.md`](./MVP_STATUS.md),
-    [`EDGE_CASES.md`](./EDGE_CASES.md),
-    [`ANALYTICS_EVENTS.md`](./ANALYTICS_EVENTS.md)
+## Rotas e documentação
 
-## Regra principal
+- Home `/`, categoria `/categoria/$slug` e detalhe `/produto/$id` usam catálogo público real (o parâmetro legado `$id` contém um slug).
+- Busca `/buscar`, loja `/loja/$slug`, carrinho `/carrinho` e checkout `/checkout` são demonstrativos.
+- Consulte [`PUBLIC_FOUNDATION_FINAL_AUDIT.md`](./PUBLIC_FOUNDATION_FINAL_AUDIT.md), [`ROUTES_MAP.md`](./ROUTES_MAP.md) e [`SERVICES_MAP.md`](./SERVICES_MAP.md).
 
-**Frontend NÃO é fonte de verdade.** Toda validação, permissão, cálculo
-de dinheiro, escrow, KYC e antifraude deve viver no backend com RLS,
-auditoria e testes. Ver `SECURITY_IMPLEMENTATION_PLAN.md` e
-`PAYMENT_AND_ESCROW_IMPLEMENTATION_PLAN.md`.
-
-## Aviso de demonstração
-
-Enquanto os domínios de marketplace ainda forem mockados, **não insira dados reais** (cartão,
-CPF, documento, selfie, senha, Pix, credenciais de jogo). Todas as
-telas sensíveis de marketplace exibem aviso de demonstração; o backend real de autenticação já existe para os fluxos auditados.
-
-## Authentication staging readiness
-
-A staging simulation is available through `docker-compose.staging.yml` for frontend, backend, PostgreSQL and Redis. Its published ports bind to `127.0.0.1` only and must not be exposed as public staging infrastructure. The current frontend build is produced by the Lovable/TanStack Start Vite configuration under `.output/`; the staging Docker image serves `.output/public` statically for rehearsal only. It is not a public deployment blueprint.
-
-1. Copy and review `backend/.env.staging.example` for real staging or use `backend/.env.staging.local.example` only for isolated local smoke tests.
-2. Run backend migrations with `cd backend && bun run prisma:generate && bun run prisma:migrate:deploy`.
-3. Start local staging simulation with `docker compose -f docker-compose.staging.yml up --build`.
-4. Validate `GET /api/v1/health/live`, `GET /api/v1/health/ready`, and `bun run smoke:infra`. Full auth flows remain covered by backend e2e/integration tests and manual homologation.
-5. Follow `AUTH_STAGING_HOMOLOGATION_RUNBOOK.md` before considering staging approved.
-
-## Catálogo público por categoria
-
-A rota `/categoria/$slug` usa produtos e subcategorias públicos reais, com filtros suportados e paginação sem total. O detalhe público está conectado pelo slug; comércio continua desconectado. Consulte `CATEGORY_PUBLIC_CATALOG_INTEGRATION.md`.
-
-## Detalhe público do produto (PR #33)
-
-A rota legada `/produto/$id` interpreta `$id` como slug e lê somente `GET /api/v1/catalog/products/:slug`, com parser defensivo, galeria assinada, variantes/serviços reais e estados seguros. Apenas cards do catálogo público navegam para ela; superfícies legadas continuam demonstrativas e sem link automático. Compra, carrinho, checkout, loja, avaliações, perguntas e relacionados não estão conectados. Consulte `PRODUCT_DETAIL_PUBLIC_CATALOG_INTEGRATION.md`.
+O backend é a fonte de verdade. Nenhuma tela demonstrativa implica prontidão para produção, pagamento, escrow ou proteção comercial.

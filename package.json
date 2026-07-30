@@ -21,7 +21,15 @@
     "smoke:product-detail-catalog": "bun scripts/product-detail-public-catalog-smoke.ts",
     "demo:seed": "docker compose -f docker-compose.staging.yml --profile demo run --rm demo-data seed",
     "demo:verify": "docker compose -f docker-compose.staging.yml --profile demo run --rm demo-data verify",
-    "demo:reset": "docker compose -f docker-compose.staging.yml --profile demo run --rm demo-data reset --confirm"
+    "demo:reset": "docker compose -f docker-compose.staging.yml --profile demo run --rm demo-data reset --confirm",
+    "demo:up": "docker compose -f docker-compose.staging.yml up -d --build --wait",
+    "demo:down": "docker compose -f docker-compose.staging.yml down",
+    "demo:status": "docker compose -f docker-compose.staging.yml ps",
+    "demo:logs": "docker compose -f docker-compose.staging.yml logs --tail=200 backend frontend",
+    "demo:prepare": "bun scripts/public-foundation-rehearsal.ts prepare",
+    "demo:check": "bun scripts/public-foundation-rehearsal.ts check",
+    "demo:ci:public-foundation": "bun scripts/public-foundation-rehearsal.ts ci",
+    "audit:public-foundation": "bun scripts/public-foundation-audit.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
