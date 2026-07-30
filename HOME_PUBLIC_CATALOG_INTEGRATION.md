@@ -8,18 +8,18 @@ O contrato frontend representa cards, preço discriminado (`FIXED`, `FROM` ou `Q
 
 ## Experiência da Home
 
-As antigas seções “Produtos em destaque”, “Populares agora” e “Chegou agora” foram substituídas por “Anúncios recentes”. O card é somente informativo: não contém link para detalhe, favorito, carrinho, checkout ou alegações de avaliação, vendas, desconto, promoção, reputação ou compra.
+As antigas seções “Produtos em destaque”, “Populares agora” e “Chegou agora” foram substituídas por “Anúncios recentes”. O card usa navegação interna tipada pelo slug para o detalhe público; não contém favorito, carrinho, checkout ou alegações de avaliação, vendas, desconto, promoção, reputação ou compra.
 
 - **Loading:** oito skeletons ocupam a futura grade; nenhum produto mockado aparece.
 - **Vazio:** é exibida uma mensagem amigável e as demais partes da Home permanecem.
 - **Erro:** é exibida uma mensagem segura e uma ação de nova tentativa que invalida a rota; não há fallback mock.
 - **Imagens:** somente a URL assinada recebida é usada em memória, com `altText` ou título e fallback local após um único erro. Ela não é persistida, registrada, decomposta nem publicada por proxy.
 
-Hero, estatísticas, benefícios e newsletter permanecem. As categorias da `CategoriesGrid` **continuam mockadas**. A página `/produto/$id`, categoria, busca, loja e todos os fluxos comerciais **continuam mockados/desconectados**; portanto, a visibilidade no catálogo não implica possibilidade de compra.
+Hero, estatísticas, benefícios e newsletter permanecem. As categorias da `CategoriesGrid` **continuam mockadas**. A página `/produto/$id` e a categoria usam o catálogo público real; busca, loja e todos os fluxos comerciais **continuam mockados/desconectados**; portanto, a visibilidade no catálogo não implica possibilidade de compra.
 
 ## Próximos passos
 
-Conectar detalhe público por slug, categorias e busca aos contratos reais; só depois integrar favoritos, carrinho, estoque, checkout, pedidos e pagamentos com regras autoritativas do backend.
+Conectar busca e loja aos contratos reais; só depois integrar favoritos, carrinho, estoque, checkout, pedidos e pagamentos com regras autoritativas do backend.
 
 ## Smoke real e renovação de imagens
 
@@ -29,4 +29,8 @@ O serviço aceita somente os sorts públicos e limita `page` a 1–100 e `limit`
 
 ## Catálogo público por categoria
 
-A rota `/categoria/$slug` usa produtos e subcategorias públicos reais, com filtros suportados e paginação sem total. Detalhe e comércio continuam desconectados. Consulte `CATEGORY_PUBLIC_CATALOG_INTEGRATION.md`.
+A rota `/categoria/$slug` usa produtos e subcategorias públicos reais, com filtros suportados e paginação sem total. O detalhe público está conectado pelo slug; comércio continua desconectado. Consulte `CATEGORY_PUBLIC_CATALOG_INTEGRATION.md`.
+
+## Detalhe público do produto (PR #33)
+
+A rota legada `/produto/$id` interpreta `$id` como slug e lê somente `GET /api/v1/catalog/products/:slug`, com parser defensivo, galeria assinada, variantes/serviços reais e estados seguros. Apenas cards do catálogo público navegam para ela; superfícies legadas continuam demonstrativas e sem link automático. Compra, carrinho, checkout, loja, avaliações, perguntas e relacionados não estão conectados. Consulte `PRODUCT_DETAIL_PUBLIC_CATALOG_INTEGRATION.md`.

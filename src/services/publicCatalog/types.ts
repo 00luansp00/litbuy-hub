@@ -12,6 +12,7 @@ export type PublicCatalogProductType =
   | "OTHER";
 
 export type PublicCatalogModel = "NORMAL" | "DYNAMIC" | "SERVICE";
+export type PublicCatalogDeliveryMode = "MANUAL" | "AUTOMATIC";
 export type PublicCatalogSort = "RECENT" | "OLDEST" | "TITLE_ASC" | "TITLE_DESC";
 
 export type PublicCatalogPricing =
@@ -32,6 +33,34 @@ export interface PublicCatalogCard {
   subcategory: { slug: string; name: string } | null;
   seller: { slug: string; storeName: string };
   coverImage: { url: string; expiresAt: string; altText: string | null };
+}
+
+export interface PublicCatalogVariant {
+  id: string;
+  title: string;
+  description: string | null;
+  price: string;
+  stock: number;
+}
+
+export interface PublicCatalogGalleryImage {
+  id: string;
+  url: string;
+  expiresAt: string;
+  altText: string | null;
+  isCover: boolean;
+}
+
+export type PublicCatalogServiceDetails =
+  | { pricingType: "FIXED"; basePrice: string; estimatedDelivery: string }
+  | { pricingType: "QUOTE"; basePrice: null; estimatedDelivery: string };
+
+export interface PublicCatalogProductDetail extends PublicCatalogCard {
+  description: string;
+  deliveryMode: PublicCatalogDeliveryMode;
+  variants: PublicCatalogVariant[];
+  gallery: PublicCatalogGalleryImage[];
+  serviceDetails: PublicCatalogServiceDetails | null;
 }
 
 export interface PublicCatalogListResponse {

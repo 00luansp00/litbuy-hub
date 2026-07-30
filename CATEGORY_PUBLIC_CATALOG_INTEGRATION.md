@@ -12,7 +12,7 @@ Os únicos filtros são subcategoria e tipo público (conta, moeda virtual, gift
 
 O carregamento preserva espaço para hero, controles e até 12 cards. O vazio distingue categoria sem anúncios de filtros sem resultados e permite limpar filtros. Falhas de subcategorias ou produtos preservam a categoria e oferecem retry sem revelar detalhes técnicos ou recorrer a mocks.
 
-Os cards reutilizam imagens assinadas e fallback, preço, estoque, categoria, subcategoria, loja, tipo e modelo reais. São informativos: detalhe de produto permanece mockado e não há link, compra, carrinho, favorito, checkout ou avaliação.
+Os cards reutilizam imagens assinadas e fallback, preço, estoque, categoria, subcategoria, loja, tipo e modelo reais. São informativos e navegam pelo slug ao detalhe público real; não há compra, carrinho, favorito, checkout ou avaliação.
 
 ## Smoke
 
@@ -24,8 +24,12 @@ O smoke valida com os parsers do frontend a categoria `demo-jogos` (`Jogos — D
 
 A paginação determinística comprova `demo-conta-jogo` na página 1, `demo-moedas-virtuais` na página 2 e `demo-servico-personalizado` na página 4, com `limit=1` e os valores esperados de `hasNext`. Uma página posterior vazia agora informa apenas que aquela página não possui anúncios e preserva o retorno pela paginação.
 
-A cobertura de interface renderiza os controles e paginação reais, os três estados vazios, contagem local, limpeza de filtros, erro/retry, doze skeletons e cards estritamente informativos sem detalhe ou comércio.
+A cobertura de interface renderiza os controles e paginação reais, os três estados vazios, contagem local, limpeza de filtros, erro/retry, doze skeletons e cards com navegação ao detalhe real, sem comércio.
 
 ## Parsers isolados do cliente HTTP
 
 Os contratos públicos de categoria e subcategoria vivem em `src/services/catalog/publicTaxonomyParser.ts`, um módulo puro sem cliente HTTP, configuração Vite, ambiente ou efeitos colaterais. O serviço converte seu erro estável de validação para `ApiError` 502/`CATALOG_RESPONSE_INVALID`, enquanto o smoke importa diretamente os mesmos parsers sem exigir `VITE_API_BASE_URL`.
+
+## Detalhe público do produto (PR #33)
+
+A rota legada `/produto/$id` interpreta `$id` como slug e lê somente `GET /api/v1/catalog/products/:slug`, com parser defensivo, galeria assinada, variantes/serviços reais e estados seguros. Apenas cards do catálogo público navegam para ela; superfícies legadas continuam demonstrativas e sem link automático. Compra, carrinho, checkout, loja, avaliações, perguntas e relacionados não estão conectados. Consulte `PRODUCT_DETAIL_PUBLIC_CATALOG_INTEGRATION.md`.

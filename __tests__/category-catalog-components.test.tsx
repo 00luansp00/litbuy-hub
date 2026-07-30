@@ -10,6 +10,27 @@ import {
 import { PublicCatalogCard } from "@/components/public-catalog";
 import type { PublicCatalogListResponse } from "@/services/publicCatalog";
 
+const { linkProps } = vi.hoisted(() => ({ linkProps: vi.fn() }));
+vi.mock("@tanstack/react-router", () => ({
+  Link: ({
+    to,
+    params,
+    children,
+    ...props
+  }: {
+    to: string;
+    params?: { id?: string };
+    children: React.ReactNode;
+  }) => {
+    linkProps({ to, params });
+    return (
+      <a href={params?.id ? to.replace("$id", params.id) : to} {...props}>
+        {children}
+      </a>
+    );
+  },
+}));
+
 const subcategories = [
   { id: "1", slug: "demo-contas", name: "Contas", categorySlug: "demo-jogos" },
   { id: "2", slug: "demo-servicos", name: "Serviços", categorySlug: "demo-jogos" },
@@ -83,7 +104,7 @@ describe("category catalog pagination", () => {
 
 describe("category catalog states", () => {
   const callbacks = { onFilterChange: vi.fn(), onClearFilters: vi.fn(), onPageChange: vi.fn() };
-  it("reports only displayed items and renders informational cards without commerce links", () => {
+  it("reports displayed items and links real cards without commerce actions", () => {
     render(
       <CategoryCatalogContent
         catalog={catalog()}
@@ -93,7 +114,10 @@ describe("category catalog states", () => {
       />,
     );
     expect(screen.getByText("Exibindo 1 anúncio nesta página")).toBeInTheDocument();
-    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /detalhes/i })[0]).toHaveAttribute(
+      "href",
+      "/produto/demo",
+    );
     for (const action of ["Carrinho", "Favorito", "Comprar"])
       expect(screen.queryByText(action, { exact: false })).not.toBeInTheDocument();
   });
@@ -129,9 +153,16 @@ describe("category catalog states", () => {
     render(<CategoryCatalogSkeleton />);
     expect(screen.getByLabelText("Carregando anúncios públicos").children).toHaveLength(12);
   });
-  it("keeps a standalone public card informational", () => {
+  it("links a standalone public card by public slug", () => {
     render(<PublicCatalogCard product={product} />);
-    expect(screen.queryByRole("link")).not.toBeInTheDocument();
-    expect(screen.getByText(/detalhes em breve/i)).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /detalhes/i })[0]).toHaveAttribute(
+      "href",
+      "/produto/demo",
+    );
+    expect(screen.getByText(/ver detalhes/i)).toBeInTheDocument();
+    expect(linkProps).toHaveBeenCalledWith({ to: "/produto/$id", params: { id: "demo" } });
+    for (const link of screen.getAllByRole("link"))
+      expect(link).not.toHaveAttribute("href", "/produto/1");
+    expect(screen.queryByText(/carrinho|favoritar|comprar/i)).not.toBeInTheDocument();
   });
 });

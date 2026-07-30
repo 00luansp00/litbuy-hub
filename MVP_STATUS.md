@@ -2,7 +2,7 @@
 
 > Fundação local de demonstração disponível via CLI/Compose (6 produtos públicos e 2 invisíveis); somente a listagem da Home consome o catálogo público real, sem ações comerciais.
 
-> The Home recent-listing section now reads the real public catalog with defensive parsing and signed images. Categories, detail and other public pages remain mocked.
+> The Home recent-listing section now reads the real public catalog with defensive parsing and signed images. Home, category listing and product detail use the real public catalog; search, store and commerce remain mocked.
 
 Snapshot do estado atual do MVP visual da LIT Buy. Este documento é
 destinado ao próximo desenvolvedor / time técnico que vai migrar o
@@ -568,4 +568,8 @@ O estado `ACTIVE` de produto agora é persistente e controlado pelo vendedor pro
 
 ## Catálogo público por categoria
 
-A rota `/categoria/$slug` usa produtos e subcategorias públicos reais, com filtros suportados e paginação sem total. Detalhe e comércio continuam desconectados. Consulte `CATEGORY_PUBLIC_CATALOG_INTEGRATION.md`.
+A rota `/categoria/$slug` usa produtos e subcategorias públicos reais, com filtros suportados e paginação sem total. O detalhe público está conectado pelo slug; comércio continua desconectado. Consulte `CATEGORY_PUBLIC_CATALOG_INTEGRATION.md`.
+
+## Detalhe público do produto (PR #33)
+
+A rota legada `/produto/$id` interpreta `$id` como slug e lê somente `GET /api/v1/catalog/products/:slug`, com parser defensivo, galeria assinada, variantes/serviços reais e estados seguros. Apenas cards do catálogo público navegam para ela; superfícies legadas continuam demonstrativas e sem link automático. Compra, carrinho, checkout, loja, avaliações, perguntas e relacionados não estão conectados. Consulte `PRODUCT_DETAIL_PUBLIC_CATALOG_INTEGRATION.md`.

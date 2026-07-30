@@ -356,6 +356,9 @@ jobs:
           CATEGORY_PUBLIC_CATALOG_SMOKE_BASE_URL=http://localhost:13001/api/v1 \
             CATEGORY_PUBLIC_CATALOG_SMOKE_ORIGIN=http://localhost:13000 \
             bun run smoke:category-catalog
+          PRODUCT_DETAIL_PUBLIC_CATALOG_SMOKE_BASE_URL=http://localhost:13001/api/v1 \
+            PRODUCT_DETAIL_PUBLIC_CATALOG_SMOKE_ORIGIN=http://localhost:13000 \
+            bun run smoke:product-detail-catalog
           bun run demo:seed
           bun run demo:verify
           bun run demo:reset

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Link } from "@tanstack/react-router";
 import { ChevronRight, Home } from "lucide-react";
 import { Fragment } from "react";
@@ -9,6 +10,7 @@ export interface BreadcrumbItem {
   to?: string;
   /** Parâmetros de rota, quando `to` contém segmentos dinâmicos. */
   params?: Record<string, string>;
+  search?: Record<string, string>;
 }
 
 interface BreadcrumbProps {
@@ -41,10 +43,10 @@ export function Breadcrumb({ items, showHomeIcon = true, className }: Breadcrumb
             <Fragment key={`${item.label}-${i}`}>
               <li className="min-w-0">
                 {item.to && !isLast ? (
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   <Link
                     to={item.to as any}
                     params={item.params as any}
+                    search={item.search as any}
                     className="transition-colors hover:text-foreground"
                   >
                     {content}

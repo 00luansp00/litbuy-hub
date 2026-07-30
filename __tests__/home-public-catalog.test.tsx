@@ -13,6 +13,20 @@ const invalidate = vi.fn();
 vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => (options: Record<string, unknown>) => options,
   useRouter: () => ({ invalidate }),
+  Link: ({
+    to,
+    params,
+    children,
+    ...props
+  }: {
+    to: string;
+    params?: { id?: string };
+    children: React.ReactNode;
+  }) => (
+    <a href={params?.id ? to.replace("$id", params.id) : to} {...props}>
+      {children}
+    </a>
+  ),
 }));
 vi.mock("@/services/productService", () => ({ categoryService: { list: categoryList } }));
 vi.mock("@/services/publicCatalog", async (importOriginal) => ({
@@ -81,7 +95,7 @@ describe("Home public catalog", () => {
     expect(screen.getByText("Sob orçamento")).toBeInTheDocument();
     expect(screen.queryByText(/avaliaç|vendid|verificado/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
-    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /detalhes/i })).toHaveLength(12);
   });
   it("renders an empty result as a valid state", () => {
     render(

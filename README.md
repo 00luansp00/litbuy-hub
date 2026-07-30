@@ -1,6 +1,6 @@
 # LIT Buy
 
-> A Home usa a listagem pública real de anúncios recentes; consulte `HOME_PUBLIC_CATALOG_INTEGRATION.md`. Categorias, detalhe, busca e comércio permanecem mockados. Os dados locais determinísticos estão em `LOCAL_DEMO_DATA.md`.
+> A Home usa a listagem pública real de anúncios recentes; consulte `HOME_PUBLIC_CATALOG_INTEGRATION.md`. Home, categoria e detalhe usam o catálogo público real; busca, loja e comércio permanecem mockados/desconectados. Os dados locais determinísticos estão em `LOCAL_DEMO_DATA.md`.
 
 > **⚠️ MVP visual/mockado** — Este projeto é um MVP visual/mockado.
 > **Não possui backend, pagamento real, autenticação real, envio de
@@ -132,4 +132,8 @@ A staging simulation is available through `docker-compose.staging.yml` for front
 
 ## Catálogo público por categoria
 
-A rota `/categoria/$slug` usa produtos e subcategorias públicos reais, com filtros suportados e paginação sem total. Detalhe e comércio continuam desconectados. Consulte `CATEGORY_PUBLIC_CATALOG_INTEGRATION.md`.
+A rota `/categoria/$slug` usa produtos e subcategorias públicos reais, com filtros suportados e paginação sem total. O detalhe público está conectado pelo slug; comércio continua desconectado. Consulte `CATEGORY_PUBLIC_CATALOG_INTEGRATION.md`.
+
+## Detalhe público do produto (PR #33)
+
+A rota legada `/produto/$id` interpreta `$id` como slug e lê somente `GET /api/v1/catalog/products/:slug`, com parser defensivo, galeria assinada, variantes/serviços reais e estados seguros. Apenas cards do catálogo público navegam para ela; superfícies legadas continuam demonstrativas e sem link automático. Compra, carrinho, checkout, loja, avaliações, perguntas e relacionados não estão conectados. Consulte `PRODUCT_DETAIL_PUBLIC_CATALOG_INTEGRATION.md`.

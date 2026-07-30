@@ -1,10 +1,10 @@
 # Public catalog read foundation
 
-> O dataset descrito em `LOCAL_DEMO_DATA.md` permite validar esta leitura com seis produtos ativos. A listagem da Home agora consome o endpoint; detalhe, categorias, busca e comércio continuam desconectados, conforme `HOME_PUBLIC_CATALOG_INTEGRATION.md`.
+> O dataset descrito em `LOCAL_DEMO_DATA.md` permite validar esta leitura com seis produtos ativos. A listagem da Home agora consome o endpoint; Home, categoria e detalhe estão conectados; busca, loja e comércio continuam desconectados, conforme `HOME_PUBLIC_CATALOG_INTEGRATION.md`.
 
 ## Endpoints
 
-The backend exposes read-only, unauthenticated `GET /api/v1/catalog/products` and `GET /api/v1/catalog/products/:slug`. They read materialized products; they do not make an item purchasable, reserve stock, mutate data, or write security/audit events. The public frontend is not connected yet.
+The backend exposes read-only, unauthenticated `GET /api/v1/catalog/products` and `GET /api/v1/catalog/products/:slug`. They read materialized products; they do not make an item purchasable, reserve stock, mutate data, or write security/audit events. The Home listing, category listing and product detail are connected to these read-only endpoints; search, public store and commerce are not connected.
 
 ## List query and pagination
 
@@ -26,7 +26,7 @@ The bucket remains private. After eligibility succeeds, the service calls the ex
 
 ## Security, limitations, and out of scope
 
-Both routes are GET-only and require neither bearer token nor CSRF token. They have no mutation, mock fallback, or direct S3 client. Signed URLs are time-limited; pagination is capped and provides neither search nor a total. Frontend integration, search/FTS, reviews, favorites, cart, coupons, orders, checkout, payments, reservation, escrow/wallet, delivery, chat/disputes, image transformation/CDN/cache, and lifecycle mutation remain future work.
+Both routes are GET-only and require neither bearer token nor CSRF token. They have no mutation, mock fallback, or direct S3 client. Signed URLs are time-limited; pagination is capped and provides neither search nor a total. Search/FTS, public store, reviews, favorites, cart, coupons, orders, checkout, payments, reservation, escrow/wallet, commercial delivery, chat/disputes, image transformation/CDN/cache, and lifecycle mutation remain future work. Home, category and detail read integration is implemented.
 
 ## Automated coverage
 
@@ -45,8 +45,13 @@ contains three catalog-specific paths:
   invisibility.
 
 These infrastructure tests require the PostgreSQL, Redis, and MinIO services supplied by Backend
-integration CI. Their presence does not imply that the public frontend consumes the API.
+integration CI. The Home listing, category listing, and product detail consume the public API;
+search, public store, and commerce do not.
 
 ## Catálogo público por categoria
 
-A rota `/categoria/$slug` usa produtos e subcategorias públicos reais, com filtros suportados e paginação sem total. Detalhe e comércio continuam desconectados. Consulte `CATEGORY_PUBLIC_CATALOG_INTEGRATION.md`.
+A rota `/categoria/$slug` usa produtos e subcategorias públicos reais, com filtros suportados e paginação sem total. O detalhe público está conectado pelo slug; comércio continua desconectado. Consulte `CATEGORY_PUBLIC_CATALOG_INTEGRATION.md`.
+
+## Detalhe público do produto (PR #33)
+
+A rota legada `/produto/$id` interpreta `$id` como slug e lê somente `GET /api/v1/catalog/products/:slug`, com parser defensivo, galeria assinada, variantes/serviços reais e estados seguros. Apenas cards do catálogo público navegam para ela; superfícies legadas continuam demonstrativas e sem link automático. Compra, carrinho, checkout, loja, avaliações, perguntas e relacionados não estão conectados. Consulte `PRODUCT_DETAIL_PUBLIC_CATALOG_INTEGRATION.md`.

@@ -18,6 +18,7 @@
     "smoke:infra": "node scripts/infra-smoke.mjs",
     "smoke:home-catalog": "bun scripts/home-public-catalog-smoke.ts",
     "smoke:category-catalog": "bun scripts/category-public-catalog-smoke.ts",
+    "smoke:product-detail-catalog": "bun scripts/product-detail-public-catalog-smoke.ts",
     "demo:seed": "docker compose -f docker-compose.staging.yml --profile demo run --rm demo-data seed",
     "demo:verify": "docker compose -f docker-compose.staging.yml --profile demo run --rm demo-data verify",
     "demo:reset": "docker compose -f docker-compose.staging.yml --profile demo run --rm demo-data reset --confirm"
