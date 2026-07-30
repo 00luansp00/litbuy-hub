@@ -1,12 +1,12 @@
 # SERVICES_MAP.md — LIT Buy
 
-Os services vivem em `src/services/`. A maioria ainda é mockada; `publicCatalogService`, isolado em `src/services/publicCatalog/`, faz a leitura pública real usada somente pela Home por meio de `apiFetch` e parser defensivo.
+Os services vivem em `src/services/`. A maioria ainda é mockada; `publicCatalogService`, isolado em `src/services/publicCatalog/`, faz a leitura pública real usada pela Home, categoria e detalhe por meio de `apiFetch` e parser defensivo.
 
 ## publicCatalogService (`src/services/publicCatalog/`)
 
 - **Responsabilidade**: listar cards públicos tipados e validar integralmente respostas `unknown`.
 - **Consumido por**: somente `/`, com `sort=RECENT&page=1&limit=8` e `auth:false`.
-- **Limites**: não adapta para `Product`, não persiste URLs assinadas e não habilita detalhe ou comércio.
+- **Limites**: não adapta para `Product`, não persiste URLs assinadas e habilita somente leitura do detalhe, sem comércio.
 
 ## productService (`src/services/productService.ts`)
 
@@ -176,7 +176,7 @@ Os services vivem em `src/services/`. A maioria ainda é mockada; `publicCatalog
 
 ## Catálogo público por categoria
 
-A rota `/categoria/$slug` usa produtos e subcategorias públicos reais, com filtros suportados e paginação sem total. Detalhe e comércio continuam desconectados. Consulte `CATEGORY_PUBLIC_CATALOG_INTEGRATION.md`.
+A rota `/categoria/$slug` usa produtos e subcategorias públicos reais, com filtros suportados e paginação sem total. O detalhe público está conectado pelo slug; comércio continua desconectado. Consulte `CATEGORY_PUBLIC_CATALOG_INTEGRATION.md`.
 
 ## Detalhe público do produto (PR #33)
 

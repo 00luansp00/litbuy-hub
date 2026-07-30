@@ -1,8 +1,8 @@
 # DEVELOPER_HANDOFF.md — LIT Buy
 
-> A fundação isolada de dados locais está em `LOCAL_DEMO_DATA.md`: oito produtos fictícios, imagens privadas no MinIO e reset seletivo. Somente a listagem da Home consome a API; categoria e detalhe continuam mockados.
+> A fundação isolada de dados locais está em `LOCAL_DEMO_DATA.md`: oito produtos fictícios, imagens privadas no MinIO e reset seletivo. Home, categoria e detalhe de produto consomem a API pública real; busca, loja e comércio continuam mockados.
 
-> A fronteira e os estados da integração da Home estão em `HOME_PUBLIC_CATALOG_INTEGRATION.md`; ela não habilita detalhe nem compra.
+> A fronteira da Home está em `HOME_PUBLIC_CATALOG_INTEGRATION.md`; os cards habilitam o detalhe público por slug, mas não habilitam compra.
 
 > Backend public catalog reads are documented in `PUBLIC_CATALOG_READ_FOUNDATION.md`. Visibility does not imply purchasability or stock reservation.
 
@@ -236,7 +236,7 @@ O estado `ACTIVE` de produto agora é persistente e controlado pelo vendedor pro
 
 ## Catálogo público por categoria
 
-A rota `/categoria/$slug` usa produtos e subcategorias públicos reais, com filtros suportados e paginação sem total. Detalhe e comércio continuam desconectados. Consulte `CATEGORY_PUBLIC_CATALOG_INTEGRATION.md`.
+A rota `/categoria/$slug` usa produtos e subcategorias públicos reais, com filtros suportados e paginação sem total. O detalhe público está conectado pelo slug; comércio continua desconectado. Consulte `CATEGORY_PUBLIC_CATALOG_INTEGRATION.md`.
 
 ## Detalhe público do produto (PR #33)
 

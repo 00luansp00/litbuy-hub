@@ -65,6 +65,12 @@ describe("public catalog detail service", () => {
     apiFetch.mockRejectedValue(error);
     await expect(publicCatalogService.detail("demo-product")).rejects.toBe(error);
   });
+  it("rejects an invalid HTTP success contract without returning partial data", async () => {
+    apiFetch.mockResolvedValue(detail({ description: "" }));
+    await expect(publicCatalogService.detail("demo-product")).rejects.toThrow(
+      MALFORMED_PUBLIC_CATALOG_RESPONSE,
+    );
+  });
 });
 
 describe("public catalog detail parser", () => {
@@ -147,5 +153,106 @@ describe("public catalog detail parser", () => {
     expect(
       parsePublicCatalogDetailResponse(detail({ buyerRequirements: "private" })),
     ).not.toHaveProperty("buyerRequirements");
+  });
+  const validVariant = { id: "v1", title: "Opção", description: null, price: "9.90", stock: 1 };
+  const cover = {
+    id: "g1",
+    url: "https://storage.test/image?signature=secret",
+    expiresAt: "2030-01-01T00:00:00Z",
+    altText: null,
+    isCover: true,
+  };
+  const second = {
+    id: "g2",
+    url: "https://storage.test/second?signature=secret",
+    expiresAt: "2030-01-01T00:00:00Z",
+    altText: "Segunda",
+    isCover: false,
+  };
+  it.each([
+    ["duplicate variant id", { variants: [validVariant, { ...validVariant, title: "Outra" }] }],
+    ["empty variant id", { variants: [{ ...validVariant, id: " " }] }],
+    ["empty variant title", { variants: [{ ...validVariant, title: " " }] }],
+    ["empty variant description", { variants: [{ ...validVariant, description: " " }] }],
+    ["duplicate gallery id", { gallery: [cover, { ...second, id: cover.id }] }],
+    ["duplicate gallery URL", { gallery: [cover, { ...second, url: cover.url }] }],
+    ["two covers", { gallery: [cover, { ...second, isCover: true }] }],
+    ["no cover", { gallery: [{ ...cover, isCover: false }] }],
+    ["invalid isCover", { gallery: [{ ...cover, isCover: "true" }] }],
+    ["gallery objectKey", { gallery: [{ ...cover, objectKey: "private/key" }] }],
+    [
+      "different cover URL",
+      { coverImage: { url: second.url, expiresAt: cover.expiresAt, altText: cover.altText } },
+    ],
+    [
+      "different cover expiry",
+      { coverImage: { url: cover.url, expiresAt: "2031-01-01T00:00:00Z", altText: cover.altText } },
+    ],
+    [
+      "different cover alt",
+      { coverImage: { url: cover.url, expiresAt: cover.expiresAt, altText: "Different" } },
+    ],
+    [
+      "missing SERVICE details",
+      {
+        productType: "SERVICE",
+        model: "SERVICE",
+        pricing: { kind: "QUOTE", amount: null },
+        stock: null,
+        serviceDetails: null,
+      },
+    ],
+    [
+      "details on non-service",
+      { serviceDetails: { pricingType: "FIXED", basePrice: "49.90", estimatedDelivery: "2 dias" } },
+    ],
+    [
+      "FIXED null base",
+      {
+        productType: "SERVICE",
+        model: "SERVICE",
+        pricing: { kind: "FIXED", amount: "49.90" },
+        stock: null,
+        serviceDetails: { pricingType: "FIXED", basePrice: null, estimatedDelivery: "2 dias" },
+      },
+    ],
+    [
+      "FIXED divergent base",
+      {
+        productType: "SERVICE",
+        model: "SERVICE",
+        pricing: { kind: "FIXED", amount: "49.90" },
+        stock: null,
+        serviceDetails: { pricingType: "FIXED", basePrice: "50.00", estimatedDelivery: "2 dias" },
+      },
+    ],
+    [
+      "QUOTE populated base",
+      {
+        productType: "SERVICE",
+        model: "SERVICE",
+        pricing: { kind: "QUOTE", amount: null },
+        stock: null,
+        serviceDetails: { pricingType: "QUOTE", basePrice: "49.90", estimatedDelivery: "2 dias" },
+      },
+    ],
+    [
+      "QUOTE details with public FIXED",
+      {
+        productType: "SERVICE",
+        model: "SERVICE",
+        pricing: { kind: "FIXED", amount: "49.90" },
+        stock: null,
+        serviceDetails: { pricingType: "QUOTE", basePrice: null, estimatedDelivery: "2 dias" },
+      },
+    ],
+    [
+      "DYNAMIC without variants",
+      { model: "DYNAMIC", pricing: { kind: "FROM", amount: "9.90" }, variants: [] },
+    ],
+  ])("rejects explicit incoherence: %s", (_label, override) => {
+    expect(() => parsePublicCatalogDetailResponse(detail(override))).toThrow(
+      MALFORMED_PUBLIC_CATALOG_RESPONSE,
+    );
   });
 });

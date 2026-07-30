@@ -10,6 +10,27 @@ import {
 import { PublicCatalogCard } from "@/components/public-catalog";
 import type { PublicCatalogListResponse } from "@/services/publicCatalog";
 
+const { linkProps } = vi.hoisted(() => ({ linkProps: vi.fn() }));
+vi.mock("@tanstack/react-router", () => ({
+  Link: ({
+    to,
+    params,
+    children,
+    ...props
+  }: {
+    to: string;
+    params?: { id?: string };
+    children: React.ReactNode;
+  }) => {
+    linkProps({ to, params });
+    return (
+      <a href={params?.id ? to.replace("$id", params.id) : to} {...props}>
+        {children}
+      </a>
+    );
+  },
+}));
+
 const subcategories = [
   { id: "1", slug: "demo-contas", name: "Contas", categorySlug: "demo-jogos" },
   { id: "2", slug: "demo-servicos", name: "Serviços", categorySlug: "demo-jogos" },
@@ -139,5 +160,9 @@ describe("category catalog states", () => {
       "/produto/demo",
     );
     expect(screen.getByText(/ver detalhes/i)).toBeInTheDocument();
+    expect(linkProps).toHaveBeenCalledWith({ to: "/produto/$id", params: { id: "demo" } });
+    for (const link of screen.getAllByRole("link"))
+      expect(link).not.toHaveAttribute("href", "/produto/1");
+    expect(screen.queryByText(/carrinho|favoritar|comprar/i)).not.toBeInTheDocument();
   });
 });

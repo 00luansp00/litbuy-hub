@@ -13,6 +13,20 @@ const invalidate = vi.fn();
 vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => (options: Record<string, unknown>) => options,
   useRouter: () => ({ invalidate }),
+  Link: ({
+    to,
+    params,
+    children,
+    ...props
+  }: {
+    to: string;
+    params?: { id?: string };
+    children: React.ReactNode;
+  }) => (
+    <a href={params?.id ? to.replace("$id", params.id) : to} {...props}>
+      {children}
+    </a>
+  ),
 }));
 vi.mock("@/services/productService", () => ({ categoryService: { list: categoryList } }));
 vi.mock("@/services/publicCatalog", async (importOriginal) => ({

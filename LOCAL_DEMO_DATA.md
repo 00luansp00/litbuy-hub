@@ -1,6 +1,6 @@
 # Dados locais de demonstração
 
-Esta fundação cria um conjunto **fictício, determinístico e descartável** no PostgreSQL e no bucket privado do MinIO locais. Ela nunca deve ser usada em produção. A seção de anúncios recentes da Home consome a listagem pública real; categorias, detalhe e ações comerciais permanecem mockados/desconectados.
+Esta fundação cria um conjunto **fictício, determinístico e descartável** no PostgreSQL e no bucket privado do MinIO locais. Ela nunca deve ser usada em produção. A seção de anúncios recentes da Home consome a listagem pública real; categorias, busca, loja e ações comerciais permanecem mockadas/desconectadas; categoria e detalhe usam o catálogo público real.
 
 ## Proteções e pré-requisitos
 
@@ -46,7 +46,7 @@ Há três categorias (`demo-jogos`, `demo-gift-cards`, `demo-software`) e oito s
 
 ## Catálogo público por categoria
 
-A rota `/categoria/$slug` usa produtos e subcategorias públicos reais, com filtros suportados e paginação sem total. Detalhe e comércio continuam desconectados. Consulte `CATEGORY_PUBLIC_CATALOG_INTEGRATION.md`.
+A rota `/categoria/$slug` usa produtos e subcategorias públicos reais, com filtros suportados e paginação sem total. O detalhe público está conectado pelo slug; comércio continua desconectado. Consulte `CATEGORY_PUBLIC_CATALOG_INTEGRATION.md`.
 
 ## Detalhe público do produto (PR #33)
 

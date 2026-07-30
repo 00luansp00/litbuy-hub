@@ -163,7 +163,7 @@ O estado `ACTIVE` de produto agora é persistente e controlado pelo vendedor pro
 
 ## Catálogo público por categoria
 
-A rota `/categoria/$slug` usa produtos e subcategorias públicos reais, com filtros suportados e paginação sem total. Detalhe e comércio continuam desconectados. Consulte `CATEGORY_PUBLIC_CATALOG_INTEGRATION.md`.
+A rota `/categoria/$slug` usa produtos e subcategorias públicos reais, com filtros suportados e paginação sem total. O detalhe público está conectado pelo slug; comércio continua desconectado. Consulte `CATEGORY_PUBLIC_CATALOG_INTEGRATION.md`.
 
 ## Detalhe público do produto (PR #33)
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ImageOff } from "lucide-react";
 import type { PublicCatalogProductDetail } from "@/services/publicCatalog";
 
@@ -7,10 +7,22 @@ export function PublicProductDetailGallery({ product }: { product: PublicCatalog
     0,
     product.gallery.findIndex((image) => image.isCover),
   );
-  const [selected, setSelected] = useState(coverIndex);
+  const [selectedId, setSelectedId] = useState(product.gallery[coverIndex]?.id);
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
-  const image = product.gallery[selected] ?? product.gallery[coverIndex];
+  const [failedThumbnailUrls, setFailedThumbnailUrls] = useState<Set<string>>(() => new Set());
+  const selected = product.gallery.findIndex((item) => item.id === selectedId);
+  const image = product.gallery[selected >= 0 ? selected : coverIndex];
   const failed = failedUrl === image.url;
+  useEffect(() => {
+    setSelectedId(product.gallery[coverIndex]?.id);
+    setFailedUrl(null);
+    setFailedThumbnailUrls(new Set());
+  }, [coverIndex, product.gallery, product.id]);
+  useEffect(() => {
+    if (!product.gallery.some((item) => item.id === selectedId)) {
+      setSelectedId(product.gallery[coverIndex]?.id);
+    }
+  }, [coverIndex, product.gallery, selectedId]);
   return (
     <section aria-label="Galeria do produto" className="space-y-3">
       <div className="aspect-square overflow-hidden rounded-2xl border bg-muted">
@@ -37,16 +49,29 @@ export function PublicProductDetailGallery({ product }: { product: PublicCatalog
             <button
               key={item.id}
               type="button"
-              onClick={() => setSelected(index)}
+              onClick={() => setSelectedId(item.id)}
               aria-label={`Exibir imagem ${index + 1} de ${product.title}`}
-              aria-pressed={selected === index}
+              aria-pressed={image.id === item.id}
               className="h-20 w-20 shrink-0 overflow-hidden rounded-lg border-2 border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
-              <img
-                src={item.url}
-                alt={item.altText ?? product.title}
-                className="h-full w-full object-cover"
-              />
+              {failedThumbnailUrls.has(item.url) ? (
+                <span
+                  className="flex h-full items-center justify-center text-muted-foreground"
+                  role="img"
+                  aria-label={`Miniatura indisponível: ${item.altText ?? product.title}`}
+                >
+                  <ImageOff className="h-5 w-5" aria-hidden="true" />
+                </span>
+              ) : (
+                <img
+                  src={item.url}
+                  alt={item.altText ?? product.title}
+                  className="h-full w-full object-cover"
+                  onError={() =>
+                    setFailedThumbnailUrls((current) => new Set(current).add(item.url))
+                  }
+                />
+              )}
             </button>
           ))}
         </div>
