@@ -243,3 +243,7 @@ A rota `/categoria/$slug` usa produtos e subcategorias públicos reais, com filt
 ## Detalhe público do produto (PR #33)
 
 A rota legada `/produto/$id` interpreta `$id` como slug e lê somente `GET /api/v1/catalog/products/:slug`, com parser defensivo, galeria assinada, variantes/serviços reais e estados seguros. Apenas cards do catálogo público navegam para ela; superfícies legadas continuam demonstrativas e sem link automático. Compra, carrinho, checkout, loja, avaliações, perguntas e relacionados não estão conectados. Consulte `PRODUCT_DETAIL_PUBLIC_CATALOG_INTEGRATION.md`.
+
+## Cart handoff (PR #36)
+
+Read `CART_FOUNDATION.md` before changing carts. Preserve buyer ownership filters, BUYER RBAC, session-backed CSRF, the buyer/seller advisory-lock namespace, conditional version increments, partial unique indexes, and the composite variant/product foreign key. Cart pricing is a current non-authoritative preview only. Never add reservation, order, checkout, payment, fees, or definitive price fields to this foundation.

@@ -21,3 +21,7 @@ Adapter e pagamento sandbox somente depois da seleção formal do provedor.
 ## Fases seguintes
 
 Webhook; ledger; split/retenção; entrega; disputa; reembolso; chargeback; wallet; saque; conciliação. Cada fase recebe revisão, testes e PR própria.
+
+## PR #36 — persistent buyer carts (implemented)
+
+The authenticated persistent cart foundation is implemented with database integrity, owner-only BUYER APIs, CSRF mutations, optimistic versions, current-catalog reconciliation, and no stock reservation. Checkout, orders, payments, and real money remain unimplemented. See `CART_FOUNDATION.md`; PR #37 is the next incremental step.

@@ -58,7 +58,9 @@ export async function bootstrap(): Promise<void> {
   if (appConfig.swaggerEnabled) {
     const documentConfig = new DocumentBuilder()
       .setTitle('LIT Buy API')
-      .setDescription('API REST do marketplace LIT Buy. Fundação técnica sem domínios comerciais.')
+      .setDescription(
+        'API REST do marketplace LIT Buy com carrinhos persistentes. Checkout, pedidos e dinheiro real ainda não existem.',
+      )
       .setVersion('0.1.0')
       .addBearerAuth()
       .addCookieAuth(appConfig.apiPrefix ? 'litbuy_refresh' : 'litbuy_refresh')
