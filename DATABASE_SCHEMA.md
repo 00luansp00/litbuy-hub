@@ -1,4 +1,22 @@
+# Baseline de banco de dados
+
+## Implementado
+
+O backend NestJS existente usa PostgreSQL e Prisma. Autenticação real, RBAC, seller, taxonomia, drafts, produtos e imagens já são persistentes. `backend/prisma/schema.prisma` é a fonte autoritativa do schema implementado.
+
+## Comércio planejado
+
+Tabelas comerciais de carrinho, pedido, pagamento, Refund e ledger ainda não existem. `COMMERCE_ARCHITECTURE.md` é a fonte dos modelos comerciais futuros; este documento não cria schema ou migration.
+
+## Snapshot histórico não autoritativo
+
+O bloco abaixo registra uma proposta antiga de Supabase e não é plano, contrato ou baseline atual.
+
+<!-- HISTORICAL_SNAPSHOT_START -->
+
 # LIT Buy — Database Schema (Planejamento)
+
+> **Contrato comercial vigente:** `COMMERCE_ARCHITECTURE.md` é a fonte autoritativa. O conteúdo comercial histórico abaixo é preliminar ou substituído quando divergir; pagamentos e ledger não estão implementados, e nenhum gateway foi escolhido.
 
 Documento técnico descrevendo a **modelagem futura** do banco de dados da LIT Buy. Nenhuma tabela existe hoje — a aplicação usa mocks em `src/data/` acessados via `src/services/`. Este arquivo serve como referência para a sprint futura de integração com Supabase.
 
@@ -9,7 +27,7 @@ Documento técnico descrevendo a **modelagem futura** do banco de dados da LIT B
 - **PK padrão:** `id uuid primary key default gen_random_uuid()`.
 - **Timestamps:** todas as tabelas terão `created_at timestamptz default now()` e, quando fizer sentido, `updated_at timestamptz`.
 - **Soft delete:** tabelas sensíveis (`products`, `orders`, `messages`) terão `deleted_at timestamptz`.
-- **Moeda:** valores monetários em `numeric(12,2)` — nunca `float`.
+- **Moeda:** o plano comercial vigente exige unidades mínimas inteiras em `BIGINT` — nunca `float`/`double`.
 - **Enums:** representados como `text` com `check` ou como tipos `enum` dedicados quando estáveis.
 - **Auth:** `users` referencia `auth.users(id)` do Supabase; nunca duplicar credenciais.
 - **Roles:** armazenados em tabela separada (`user_roles`) — nunca em `profiles`.
@@ -417,3 +435,5 @@ Futuro/demonstrativo: aprovação não publica produto público; imagens permane
 ## Product lifecycle foundation (2026-07-28, PR #28)
 
 O estado `ACTIVE` de produto agora é persistente e controlado pelo vendedor proprietário via backend, com elegibilidade transacional, versão otimista, advisory lock, idempotência e auditoria. Isso **não** conecta catálogo público nem torna qualquer produto comprável. Estoque/reserva, checkout, pagamentos e mutações administrativas de lifecycle continuam pendentes. O contrato autoritativo está em `PRODUCT_LIFECYCLE_FOUNDATION.md`.
+
+<!-- HISTORICAL_SNAPSHOT_END -->

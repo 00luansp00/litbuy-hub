@@ -1,10 +1,25 @@
+# Ciclo de vida de pedidos
+
+## Contrato atual
+
+`COMMERCE_ARCHITECTURE.md` é a fonte autoritativa. Cancelamento existe somente antes do pagamento (`PENDING_PAYMENT → CANCELLED`). Depois do pagamento, reversões usam Refund parcial/total ou chargeback independente. Pedido, pagamento, fulfillment e disputa possuem máquinas separadas.
+
+## Snapshot histórico não autoritativo
+
+O bloco abaixo preserva contexto visual antigo e não define regra vigente.
+
+<!-- HISTORICAL_SNAPSHOT_START -->
+
 # ORDER_LIFECYCLE.md — LIT Buy
+
+> **Contrato comercial vigente:** `COMMERCE_ARCHITECTURE.md` é a fonte autoritativa. O conteúdo comercial histórico abaixo é preliminar ou substituído quando divergir; pagamentos e ledger não estão implementados, e nenhum gateway foi escolhido.
 
 Ciclo de vida futuro de pedidos. **Documentação de planejamento** — não implementado. Nenhum status abaixo existe no frontend hoje.
 
 ## Status
 
 ### `pending_payment`
+
 - **Significado:** pedido criado, aguardando confirmação de pagamento pelo gateway.
 - **Quem vê:** comprador, admin.
 - **Quem age:** comprador (paga ou cancela); sistema (webhook do gateway).
@@ -12,6 +27,7 @@ Ciclo de vida futuro de pedidos. **Documentação de planejamento** — não imp
 - **Segurança:** vendedor **não** deve ver pedido antes de `paid`.
 
 ### `paid`
+
 - **Significado:** pagamento confirmado pelo gateway, valor em escrow na plataforma.
 - **Quem vê:** comprador, vendedor, admin.
 - **Quem age:** sistema (transição automática para `awaiting_seller_delivery`).
@@ -19,6 +35,7 @@ Ciclo de vida futuro de pedidos. **Documentação de planejamento** — não imp
 - **Segurança:** transição só pode ser feita via webhook verificado, nunca pelo frontend.
 
 ### `awaiting_seller_delivery`
+
 - **Significado:** aguardando vendedor entregar produto digital.
 - **Quem vê:** comprador, vendedor, admin.
 - **Quem age:** vendedor (entrega); comprador (pode abrir disputa após SLA).
@@ -26,6 +43,7 @@ Ciclo de vida futuro de pedidos. **Documentação de planejamento** — não imp
 - **Segurança:** SLA de entrega deve ser aplicado pelo backend.
 
 ### `delivered_by_seller`
+
 - **Significado:** vendedor confirmou entrega e forneceu dados/instruções/código.
 - **Quem vê:** comprador, vendedor, admin.
 - **Quem age:** comprador (confirma ou abre disputa).
@@ -33,6 +51,7 @@ Ciclo de vida futuro de pedidos. **Documentação de planejamento** — não imp
 - **Segurança:** evidência de entrega deve ser persistida (ver `DIGITAL_DELIVERY_FLOW.md`).
 
 ### `awaiting_buyer_confirmation`
+
 - **Significado:** comprador tem prazo para confirmar recebimento.
 - **Quem vê:** comprador, vendedor, admin.
 - **Quem age:** comprador (confirma ou disputa); sistema (auto-confirma após prazo).
@@ -40,6 +59,7 @@ Ciclo de vida futuro de pedidos. **Documentação de planejamento** — não imp
 - **Segurança:** auto-confirmação deve ser via job de backend, não frontend.
 
 ### `completed`
+
 - **Significado:** pedido concluído com sucesso. Saldo do vendedor entra no ciclo de liberação (ver `WALLET_AND_ESCROW_RULES.md`).
 - **Quem vê:** comprador, vendedor, admin.
 - **Quem age:** comprador (pode avaliar — ver `REVIEW_RULES.md`).
@@ -47,6 +67,7 @@ Ciclo de vida futuro de pedidos. **Documentação de planejamento** — não imp
 - **Segurança:** liberação de saldo é decisão de servidor.
 
 ### `cancelled`
+
 - **Significado:** pedido cancelado antes do pagamento ou por acordo.
 - **Quem vê:** comprador, admin. Vendedor só se já era visível.
 - **Quem age:** ninguém (terminal).
@@ -54,6 +75,7 @@ Ciclo de vida futuro de pedidos. **Documentação de planejamento** — não imp
 - **Segurança:** cancelamento pós-pagamento vira `refunded`, não `cancelled`.
 
 ### `disputed`
+
 - **Significado:** disputa aberta. Saldo bloqueado. Ver `DISPUTE_FLOW.md`.
 - **Quem vê:** comprador, vendedor, admin.
 - **Quem age:** comprador, vendedor, admin (dentro do fluxo de disputa).
@@ -61,6 +83,7 @@ Ciclo de vida futuro de pedidos. **Documentação de planejamento** — não imp
 - **Segurança:** transição só via decisão registrada (admin ou acordo).
 
 ### `refunded`
+
 - **Significado:** valor devolvido ao comprador (total ou parcial).
 - **Quem vê:** comprador, vendedor, admin.
 - **Quem age:** ninguém (terminal).
@@ -102,6 +125,7 @@ atualiza status → cria/atualiza `Order` correspondente → libera entrega.
 - Dados sensíveis nunca devem aparecer em notificações — títulos e descrições são genéricos e mascarados.
 
 ## Sprint 18.18 — Chat oficial e mediação
+
 - O chat do pedido é o local oficial de negociação e evidência. Todo pedido tem um `OrderChatCard` com prazo de mediação visível.
 - Prazo padrão mockado: 30 dias (produto padrão), 15 dias (digital), 45 dias (serviço). Proteção LIT estende o prazo. Real depende de backend.
 - Abertura de problema (Reportar problema) leva ao `OrderProblemDialog` e simula `simulateReportDeliveryProblem` + `simulateOpenMediation`.
@@ -120,3 +144,5 @@ atualiza status → cria/atualiza `Order` correspondente → libera entrega.
 - avaliação disponível
 
 Todos disparam também notificação na plataforma. Envio real ficará no backend.
+
+<!-- HISTORICAL_SNAPSHOT_END -->

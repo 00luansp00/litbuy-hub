@@ -29,7 +29,8 @@
     "demo:prepare": "bun scripts/public-foundation-rehearsal.ts prepare",
     "demo:check": "bun scripts/public-foundation-rehearsal.ts check",
     "demo:ci:public-foundation": "bun scripts/public-foundation-rehearsal.ts ci",
-    "audit:public-foundation": "bun scripts/public-foundation-audit.ts"
+    "audit:public-foundation": "bun scripts/public-foundation-audit.ts",
+    "audit:commerce-architecture": "bun scripts/commerce-architecture-audit.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

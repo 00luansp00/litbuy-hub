@@ -1,5 +1,7 @@
 # Auditoria final da fundação pública
 
+> **Contrato comercial vigente:** `COMMERCE_ARCHITECTURE.md` é a fonte autoritativa. O conteúdo comercial histórico abaixo é preliminar ou substituído quando divergir; pagamentos e ledger não estão implementados, e nenhum gateway foi escolhido.
+
 ## Baseline
 
 Esta fotografia encerra a sequência: PR #28 (lifecycle de produto), #29 (leitura pública), #30 (dados locais), #31 (Home real), #32 (categoria real), #33 (detalhe real; merge `857a34867ba539b462963780b91447cc97e7d5d1`) e #34 (rehearsal e auditoria). SHAs não confirmados no histórico não são atribuídos.

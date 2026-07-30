@@ -1,5 +1,7 @@
 # DEVELOPER_HANDOFF.md — LIT Buy
 
+> **Contrato comercial vigente:** `COMMERCE_ARCHITECTURE.md` é a fonte autoritativa. O conteúdo comercial histórico abaixo é preliminar ou substituído quando divergir; pagamentos e ledger não estão implementados, e nenhum gateway foi escolhido.
+
 > A fundação isolada de dados locais está em `LOCAL_DEMO_DATA.md`: oito produtos fictícios, imagens privadas no MinIO e reset seletivo. Home, categoria e detalhe de produto consomem a API pública real; busca, loja e comércio continuam mockados.
 
 > A fronteira da Home está em `HOME_PUBLIC_CATALOG_INTEGRATION.md`; os cards habilitam o detalhe público por slug, mas não habilitam compra.
