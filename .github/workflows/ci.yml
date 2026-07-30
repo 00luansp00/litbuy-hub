@@ -55,6 +55,9 @@ jobs:
       - name: Audit public foundation
         run: bun run audit:public-foundation
 
+      - name: Audit commerce architecture
+        run: bun run audit:commerce-architecture
+
   backend-validation:
     name: Backend validation
     runs-on: ubuntu-24.04

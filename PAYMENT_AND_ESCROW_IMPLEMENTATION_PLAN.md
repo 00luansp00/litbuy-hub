@@ -1,5 +1,7 @@
 # PAYMENT_AND_ESCROW_IMPLEMENTATION_PLAN.md — LIT Buy
 
+> **Contrato comercial vigente:** `COMMERCE_ARCHITECTURE.md` é a fonte autoritativa. O conteúdo comercial histórico abaixo é preliminar ou substituído quando divergir; pagamentos e ledger não estão implementados, e nenhum gateway foi escolhido.
+
 **Aviso**: pagamentos, wallet e escrow são a parte **mais crítica** do
 produto. Exige desenvolvedor sênior, revisão de segurança, PCI-DSS (se
 cartão), auditoria financeira e testes rigorosos antes de aceitar
@@ -10,6 +12,7 @@ dinheiro real.
 ## Métodos de pagamento
 
 ### Pix (Brasil)
+
 - Integração via gateway (Stripe, PagBank, Mercado Pago, Asaas, Pagar.me)
   ou PSP autorizado pelo BCB.
 - Gerar QR + copia-e-cola no backend.
@@ -17,11 +20,13 @@ dinheiro real.
 - Timeout curto (15–30 min) — expira e libera estoque.
 
 ### Boleto
+
 - Gateway gera código de barras + linha digitável.
 - Vencimento configurável (D+2 típico).
 - Webhook de compensação (~1 dia útil).
 
 ### Cartão de crédito/débito
+
 - **Tokenização** pelo gateway (frontend recebe apenas token).
 - **Nunca** trafegar/armazenar PAN, CVV, dados sensíveis pelo backend
   se não for PCI-DSS certificado.
@@ -29,6 +34,7 @@ dinheiro real.
 - Antifraude do gateway + próprio.
 
 ## Provedores recomendados
+
 - **Stripe** (internacional, PCI-DSS Level 1).
 - **PagBank / PagSeguro** (BR).
 - **Mercado Pago** (BR + LATAM).
@@ -36,6 +42,7 @@ dinheiro real.
 - **Adyen** (enterprise).
 
 ## Split
+
 - Split automático via provedor quando suportado (Mercado Pago Marketplace,
   Stripe Connect, PagBank Split).
 - Alternativa: split manual server-side + repasse via saque.
@@ -43,18 +50,21 @@ dinheiro real.
 ## Wallet e Escrow
 
 ### Modelo de saldos (por vendedor)
+
 - **pending**: recebido do gateway, aguardando conclusão do pedido.
 - **held**: em mediação/disputa.
 - **available**: liberado para saque após prazo (D+X) e conclusão.
 - **frozen**: bloqueado por antifraude/admin.
 
 ### Ledger
+
 - Tabela `wallet_transactions` **append-only**.
 - Cada mutação = 1 linha (`type`, `amount`, `from_bucket`, `to_bucket`,
   `order_id?`, `withdrawal_id?`, `metadata`).
 - Saldo derivado (view materializada) + reconciliação diária.
 
 ### Fluxo típico de pedido
+
 1. Comprador paga → gateway confirma → `payment.status = paid`.
 2. Backend cria linha em `wallet_transactions` (crédito em `pending`
    do vendedor, líquido = valor − taxa plataforma − Proteção LIT).

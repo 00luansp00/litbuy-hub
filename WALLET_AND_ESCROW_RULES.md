@@ -1,5 +1,7 @@
 # WALLET_AND_ESCROW_RULES.md — LIT Buy
 
+> **Contrato comercial vigente:** `COMMERCE_ARCHITECTURE.md` é a fonte autoritativa. O conteúdo comercial histórico abaixo é preliminar ou substituído quando divergir; pagamentos e ledger não estão implementados, e nenhum gateway foi escolhido.
+
 Regras futuras de saldo, carteira e intermediação. **Documentação de planejamento.** Nenhum cálculo real existe hoje.
 
 ## Composição do valor
@@ -65,6 +67,7 @@ Regras futuras de saldo, carteira e intermediação. **Documentação de planeja
 - Footer aponta para `/lit-points` e `/taxas`.
 
 ## Admin financeiro (Sprint 18.12 — mock)
+
 - `/admin/financeiro` exibe saldo pendente, disponível e bloqueado por disputa apenas como cards mockados.
 - Ajustes de taxa, ativar/inativar método de pagamento, editar LIT Points e níveis de vendedor são visuais.
 - Saques podem ser "pausados" pelo admin em modo demonstração; em produção isso deve travar o motor de payout e gerar audit log.
@@ -80,6 +83,7 @@ Regras futuras de saldo, carteira e intermediação. **Documentação de planeja
 - Confirmação de recebimento, liberação de saldo, uploads reais e decisões de mediação **só podem ocorrer no backend real**.
 
 ## Sprint 18.16 — Comissões de afiliado
+
 - Comissões de afiliado são **separadas** do Saldo LIT e dos LIT Points.
 - Estados demonstrativos: `pending`, `available`, `paid`, `cancelled`, `reversed`.
 - Comissão só pode virar `available` após confirmação do pedido e fim do prazo de disputa.
@@ -87,6 +91,7 @@ Regras futuras de saldo, carteira e intermediação. **Documentação de planeja
 - Comissão nunca deve se misturar visualmente com Saldo LIT (dinheiro) ou LIT Points (fidelidade).
 
 ## Sprint 18.18 — Retenção em mediação
+
 - Quando um pedido entra em mediação, o resumo financeiro da venda (`SellerSaleDetailView`) exibe **Saldo bloqueado em mediação** com o valor da venda e o motivo.
 - Liberação: só ocorre visualmente após confirmação do comprador ou fim do prazo mockado. Nenhum saldo real é liberado ou bloqueado.
 - Prazo padrão mockado depende da categoria (`orderSupportService.getMediationDeadline`) e é estendido pela Proteção LIT.

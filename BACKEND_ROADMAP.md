@@ -1,5 +1,7 @@
 # BACKEND_ROADMAP.md — LIT Buy
 
+> **Contrato comercial vigente:** `COMMERCE_ARCHITECTURE.md` é a fonte autoritativa. O conteúdo comercial histórico abaixo é preliminar ou substituído quando divergir; pagamentos e ledger não estão implementados, e nenhum gateway foi escolhido.
+
 > Concluída a fundação isolada de dados locais determinísticos para PostgreSQL e MinIO; ela não adiciona endpoints nem altera lifecycle.
 
 > A fundação de leitura pública da PR #29 já foi adotada por Home, categoria e detalhe; busca, loja, comércio e reserva de estoque permanecem marcos futuros. Consulte `PUBLIC_CATALOG_READ_FOUNDATION.md`.

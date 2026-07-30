@@ -1,5 +1,7 @@
 # API_CONTRACTS_DRAFT.md — LIT Buy
 
+> **Contrato comercial vigente:** `COMMERCE_ARCHITECTURE.md` é a fonte autoritativa. O conteúdo comercial histórico abaixo é preliminar ou substituído quando divergir; pagamentos e ledger não estão implementados, e nenhum gateway foi escolhido.
+
 > Implemented: `GET /api/v1/catalog/products` and `GET /api/v1/catalog/products/:slug`. See `PUBLIC_CATALOG_READ_FOUNDATION.md`; no public frontend consumer is connected yet.
 
 Rascunho de endpoints sugeridos. **Não implementado.** Serve como base
