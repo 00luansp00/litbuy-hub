@@ -182,6 +182,79 @@ describe('local demo data with real PostgreSQL and MinIO', () => {
     await prisma.catalogCategory.delete({ where: { id: sentinel.id } });
   });
 
+  it('removes a demo buyer cart and remains idempotent across two resets', async () => {
+    await runDemoCommand(['seed'], env);
+    const cart = await prisma.cart.create({
+      data: {
+        buyerUserId: DEMO_USERS[0].id,
+        sellerProfileId: DEMO_IDS.sellerProfile,
+      },
+    });
+    await prisma.cartItem.create({
+      data: { cartId: cart.id, productId: DEMO_PRODUCTS[0].id, quantity: 1 },
+    });
+    await expect(runDemoCommand(['reset', '--confirm'], env)).resolves.toMatchObject({
+      ok: true,
+      action: 'reset',
+    });
+    expect(await prisma.cart.findUnique({ where: { id: cart.id } })).toBeNull();
+    await expect(runDemoCommand(['reset', '--confirm'], env)).resolves.toMatchObject({
+      ok: true,
+      action: 'reset',
+    });
+  });
+
+  it.each(['seller', 'product'] as const)(
+    'fails closed for an external cart reference to a demo %s and recovers after removal',
+    async (reference) => {
+      await runDemoCommand(['seed'], env);
+      const id = crypto.randomUUID();
+      await prisma.user.create({ data: externalUser(id, `external-cart-${id}@example.test`) });
+      let externalSellerId = DEMO_IDS.sellerProfile;
+      if (reference === 'product') {
+        const profile = await prisma.sellerProfile.create({
+          data: { userId: id, storeName: 'External', slug: `external-${id}` },
+        });
+        externalSellerId = profile.id;
+      }
+      const cart = await prisma.cart.create({
+        data: { buyerUserId: id, sellerProfileId: externalSellerId },
+      });
+      if (reference === 'product')
+        await prisma.cartItem.create({
+          data: { cartId: cart.id, productId: DEMO_PRODUCTS[0].id, quantity: 1 },
+        });
+      const productsBefore = await prisma.product.count({
+        where: { id: { in: DEMO_PRODUCTS.map((product) => product.id) } },
+      });
+      const error = await runDemoCommand(['reset', '--confirm'], env).catch(
+        (caught: unknown) => caught,
+      );
+      expect(error).toMatchObject({ code: 'DEMO_DATA_NAMESPACE_CONFLICT' });
+      expect(String(error)).not.toMatch(/foreign key|constraint|@example\.test/i);
+      expect(await prisma.user.findUnique({ where: { id } })).not.toBeNull();
+      expect(await prisma.cart.findUnique({ where: { id: cart.id } })).not.toBeNull();
+      expect(
+        await prisma.sellerProfile.findUnique({ where: { id: DEMO_IDS.sellerProfile } }),
+      ).not.toBeNull();
+      expect(
+        await prisma.product.count({ where: { id: { in: DEMO_PRODUCTS.map((x) => x.id) } } }),
+      ).toBe(productsBefore);
+      await prisma.cart.delete({ where: { id: cart.id } });
+      await expect(runDemoCommand(['reset', '--confirm'], env)).resolves.toMatchObject({
+        ok: true,
+        action: 'reset',
+      });
+      await expect(runDemoCommand(['reset', '--confirm'], env)).resolves.toMatchObject({
+        ok: true,
+        action: 'reset',
+      });
+      expect(await prisma.user.findUnique({ where: { id } })).not.toBeNull();
+      await prisma.sellerProfile.deleteMany({ where: { userId: id } });
+      await prisma.user.delete({ where: { id } });
+    },
+  );
+
   it('resets authentication relations after a real HTTP login and preserves its SecurityEvent', async () => {
     await runDemoCommand(['seed'], env);
     const login = await request(app.getHttpServer())

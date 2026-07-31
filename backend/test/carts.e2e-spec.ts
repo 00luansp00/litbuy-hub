@@ -29,7 +29,7 @@ class TestCsrfGuard implements CanActivate {
   }
 }
 
-describe('Carts HTTP contract', () => {
+describe('Carts controller and DTO contract with mocked guards and service', () => {
   let app: INestApplication;
   const response = {
     id: 'cart',
