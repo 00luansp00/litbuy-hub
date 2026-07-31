@@ -32,3 +32,7 @@
 | Agregado diverge dos Refunds           | pedido incorreto             | agregado derivado transacionalmente                   | job de invariantes               | adulterar status individual/agregado        |
 | Serialização/truncamento de BIGINT     | perda financeira             | JSON decimal string e value object                    | validação de round-trip          | valores acima de Number.MAX_SAFE_INTEGER    |
 | Snapshot histórico usado como contrato | implementação obsoleta       | marcadores e seção atual obrigatórios                 | auditor de conteúdo atual        | mover afirmação proibida para fora do bloco |
+
+## PR #37 — checkout and order core
+
+The backend now contains the server-side checkout and persistent pending-order foundation described in `ORDER_CHECKOUT_FOUNDATION.md`. It uses cart preview fingerprints, immutable snapshots, BIGINT minor units, transactional inventory reservations, idempotency, order events/outbox, buyer-only reads, pre-payment cancellation, and controlled expiration. This does **not** implement payments, a gateway, a financial ledger, webhooks, fulfillment, or a connected frontend. PR #38 remains responsible for real frontend order reading after CI validates this foundation.

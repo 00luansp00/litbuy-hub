@@ -107,7 +107,206 @@ describe('local demo data with real PostgreSQL and MinIO', () => {
     ).toEqual(before);
   });
 
+  it('verifies the demo namespace while a publishable external product is interleaved', async () => {
+    const suffix = crypto.randomUUID();
+    const objectKey = `external/${suffix}.png`;
+    const body = Buffer.from('external-product-image');
+    const user = await prisma.user.create({
+      data: externalUser(crypto.randomUUID(), `external-catalog-${suffix}@example.test`),
+    });
+    const seller = await prisma.sellerProfile.create({
+      data: { userId: user.id, storeName: 'External Store', slug: `external-store-${suffix}` },
+    });
+    const category = await prisma.catalogCategory.create({
+      data: { slug: `external-category-${suffix}`, name: 'External Category' },
+    });
+    const draft = await prisma.listingDraft.create({
+      data: {
+        sellerProfileId: seller.id,
+        categoryId: category.id,
+        productType: 'GAME',
+        model: 'NORMAL',
+        status: 'APPROVED',
+      },
+    });
+    const product = await prisma.product.create({
+      data: {
+        sourceListingDraftId: draft.id,
+        sellerProfileId: seller.id,
+        categoryId: category.id,
+        productType: 'GAME',
+        model: 'NORMAL',
+        status: 'ACTIVE',
+        slug: `external-product-${suffix}`,
+        title: 'External Product',
+        description: 'Legitimate external catalog sentinel.',
+        price: 42,
+        stock: 3,
+        createdAt: new Date('2026-01-18T12:00:00.000Z'),
+        updatedAt: new Date('2026-01-18T12:00:00.000Z'),
+        variants: { create: { title: 'External option', price: 42, stock: 3 } },
+        images: {
+          create: {
+            objectKey,
+            status: 'READY',
+            contentType: 'image/png',
+            sizeBytes: body.length,
+            altText: 'External Product',
+            sortOrder: 0,
+            isCover: true,
+            uploadedAt: new Date(),
+            uploadExpiresAt: new Date('2099-01-01'),
+          },
+        },
+      },
+    });
+    const cart = await prisma.cart.create({
+      data: {
+        buyerUserId: user.id,
+        sellerProfileId: seller.id,
+        status: 'CHECKED_OUT',
+        checkedOutAt: new Date(),
+      },
+    });
+    const order = await prisma.order.create({
+      data: {
+        publicCode: `LIT-${crypto.randomUUID().replaceAll('-', '').slice(0, 14).toUpperCase()}`,
+        sourceCartId: cart.id,
+        sourceCartVersion: 1,
+        buyerUserId: user.id,
+        sellerProfileId: seller.id,
+        subtotalAmountMinor: 4200n,
+        totalAmountMinor: 4200n,
+        expiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+    const orderItem = await prisma.orderItem.create({
+      data: {
+        orderId: order.id,
+        sourceProductId: product.id,
+        sourceProductVersion: product.version,
+        sellerProfileId: seller.id,
+        sellerStoreName: seller.storeName,
+        sellerSlug: seller.slug,
+        productSlug: product.slug,
+        productTitle: product.title,
+        productType: product.productType,
+        productModel: product.model,
+        deliveryMode: product.deliveryMode,
+        unitAmountMinor: 4200n,
+        quantity: 1,
+        lineTotalAmountMinor: 4200n,
+      },
+    });
+    const reservation = await prisma.inventoryReservation.create({
+      data: {
+        orderId: order.id,
+        orderItemId: orderItem.id,
+        productId: product.id,
+        quantity: 1,
+        expiresAt: order.expiresAt,
+      },
+    });
+    const event = await prisma.orderEvent.create({
+      data: { orderId: order.id, type: 'ORDER_CREATED' },
+    });
+    const outbox = await prisma.outboxEvent.create({
+      data: {
+        orderEventId: event.id,
+        aggregateType: 'ORDER',
+        aggregateId: order.id,
+        eventType: 'ORDER_CREATED',
+        payload: { orderId: order.id },
+      },
+    });
+    const idempotency = await prisma.commerceIdempotencyRecord.create({
+      data: {
+        actorUserId: user.id,
+        operation: 'CHECKOUT_CREATE',
+        keyHash: crypto.randomUUID(),
+        requestHash: crypto.randomUUID(),
+        responseStatus: 201,
+        responseBody: { orderCode: order.publicCode },
+        resourceType: 'ORDER',
+        resourceId: order.id,
+        completedAt: new Date(),
+        expiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+    try {
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: objectKey,
+          Body: body,
+          ContentType: 'image/png',
+        }),
+      );
+
+      await expect(runDemoCommand(['seed'], env)).resolves.toMatchObject(DEMO_SUMMARY);
+      await expect(runDemoCommand(['verify'], env)).resolves.toMatchObject(DEMO_SUMMARY);
+      await expect(runDemoCommand(['seed'], env)).resolves.toMatchObject(DEMO_SUMMARY);
+      await expect(runDemoCommand(['verify'], env)).resolves.toMatchObject(DEMO_SUMMARY);
+      expect(await prisma.product.findUnique({ where: { id: product.id } })).toMatchObject({
+        slug: product.slug,
+        title: product.title,
+        price: product.price,
+        stock: product.stock,
+      });
+      expect(await s3.send(new GetObjectCommand({ Bucket: bucket, Key: objectKey }))).toBeDefined();
+      expect(
+        await prisma.product.count({
+          where: {
+            slug: {
+              in: DEMO_PRODUCTS.filter((item) => item.status === 'ACTIVE').map((item) => item.slug),
+            },
+          },
+        }),
+      ).toBe(6);
+      await runDemoCommand(['reset', '--confirm'], env);
+      expect(await prisma.product.findUnique({ where: { id: product.id } })).not.toBeNull();
+      const preservedObject = await s3.send(
+        new GetObjectCommand({ Bucket: bucket, Key: objectKey }),
+      );
+      expect(await bytes(preservedObject.Body)).toEqual(body);
+      expect(await prisma.cart.findUnique({ where: { id: cart.id } })).not.toBeNull();
+      expect(await prisma.order.findUnique({ where: { id: order.id } })).not.toBeNull();
+      expect(await prisma.orderItem.findUnique({ where: { id: orderItem.id } })).not.toBeNull();
+      expect(
+        await prisma.inventoryReservation.findUnique({ where: { id: reservation.id } }),
+      ).not.toBeNull();
+      expect(await prisma.orderEvent.findUnique({ where: { id: event.id } })).not.toBeNull();
+      expect(await prisma.outboxEvent.findUnique({ where: { id: outbox.id } })).not.toBeNull();
+      expect(
+        await prisma.commerceIdempotencyRecord.findUnique({ where: { id: idempotency.id } }),
+      ).not.toBeNull();
+    } finally {
+      await prisma.outboxEvent.deleteMany({ where: { id: outbox.id } });
+      await prisma.orderEvent.deleteMany({ where: { id: event.id } });
+      await prisma.commerceIdempotencyRecord.deleteMany({ where: { id: idempotency.id } });
+      await prisma.inventoryReservation.deleteMany({ where: { id: reservation.id } });
+      await prisma.orderItem.deleteMany({ where: { id: orderItem.id } });
+      await prisma.order.deleteMany({ where: { id: order.id } });
+      await prisma.cart.deleteMany({ where: { id: cart.id } });
+      await prisma.productImage.deleteMany({ where: { productId: product.id } });
+      await prisma.productVariant.deleteMany({ where: { productId: product.id } });
+      await prisma.product.deleteMany({ where: { id: product.id } });
+      await prisma.listingDraft.deleteMany({ where: { id: draft.id } });
+      await prisma.catalogCategory.deleteMany({ where: { id: category.id } });
+      await prisma.sellerProfile.deleteMany({ where: { id: seller.id } });
+      await prisma.user.deleteMany({ where: { id: user.id } });
+      await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: objectKey }));
+      await expect(runDemoCommand(['seed'], env)).resolves.toMatchObject(DEMO_SUMMARY);
+      await expect(runDemoCommand(['verify'], env)).resolves.toMatchObject(DEMO_SUMMARY);
+    }
+  });
+
   it('restores relational drift and removes unexpected demo children', async () => {
+    expect(
+      await prisma.catalogCategory.count({
+        where: { id: { in: DEMO_CATEGORIES.map((category) => category.id) } },
+      }),
+    ).toBe(DEMO_CATEGORIES.length);
     await prisma.catalogCategory.update({
       where: { id: DEMO_CATEGORIES[0].id },
       data: { name: 'drift' },
@@ -198,6 +397,100 @@ describe('local demo data with real PostgreSQL and MinIO', () => {
       action: 'reset',
     });
     expect(await prisma.cart.findUnique({ where: { id: cart.id } })).toBeNull();
+    await expect(runDemoCommand(['reset', '--confirm'], env)).resolves.toMatchObject({
+      ok: true,
+      action: 'reset',
+    });
+  });
+
+  it('removes every demo order artifact in dependency order across two resets', async () => {
+    await runDemoCommand(['seed'], env);
+    const product = await prisma.product.findUniqueOrThrow({ where: { id: DEMO_PRODUCTS[0].id } });
+    const cart = await prisma.cart.create({
+      data: {
+        buyerUserId: DEMO_USERS[0].id,
+        sellerProfileId: DEMO_IDS.sellerProfile,
+        status: 'CHECKED_OUT',
+        checkedOutAt: new Date(),
+      },
+    });
+    const order = await prisma.order.create({
+      data: {
+        publicCode: `LIT-${crypto.randomUUID().replaceAll('-', '').slice(0, 14).toUpperCase()}`,
+        sourceCartId: cart.id,
+        sourceCartVersion: 1,
+        buyerUserId: DEMO_USERS[0].id,
+        sellerProfileId: DEMO_IDS.sellerProfile,
+        subtotalAmountMinor: 1000n,
+        totalAmountMinor: 1000n,
+        expiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+    const item = await prisma.orderItem.create({
+      data: {
+        orderId: order.id,
+        sourceProductId: product.id,
+        sourceProductVersion: product.version,
+        sellerProfileId: DEMO_IDS.sellerProfile,
+        sellerStoreName: 'Demo',
+        sellerSlug: 'demo',
+        productSlug: product.slug,
+        productTitle: product.title,
+        productType: product.productType,
+        productModel: product.model,
+        deliveryMode: product.deliveryMode,
+        unitAmountMinor: 1000n,
+        quantity: 1,
+        lineTotalAmountMinor: 1000n,
+      },
+    });
+    await prisma.inventoryReservation.create({
+      data: {
+        orderId: order.id,
+        orderItemId: item.id,
+        productId: product.id,
+        quantity: 1,
+        expiresAt: order.expiresAt,
+      },
+    });
+    const event = await prisma.orderEvent.create({
+      data: { orderId: order.id, type: 'ORDER_CREATED' },
+    });
+    await prisma.outboxEvent.create({
+      data: {
+        orderEventId: event.id,
+        aggregateType: 'ORDER',
+        aggregateId: order.id,
+        eventType: 'ORDER_CREATED',
+        payload: { orderId: order.id },
+      },
+    });
+    await prisma.commerceIdempotencyRecord.create({
+      data: {
+        actorUserId: DEMO_USERS[0].id,
+        operation: 'CHECKOUT_CREATE',
+        keyHash: crypto.randomUUID(),
+        requestHash: crypto.randomUUID(),
+        responseStatus: 201,
+        responseBody: { orderCode: order.publicCode },
+        resourceType: 'ORDER',
+        resourceId: order.id,
+        completedAt: new Date(),
+        expiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+    await expect(runDemoCommand(['reset', '--confirm'], env)).resolves.toMatchObject({
+      ok: true,
+      action: 'reset',
+    });
+    expect(await prisma.order.findUnique({ where: { id: order.id } })).toBeNull();
+    expect(await prisma.orderItem.count({ where: { orderId: order.id } })).toBe(0);
+    expect(await prisma.inventoryReservation.count({ where: { orderId: order.id } })).toBe(0);
+    expect(await prisma.orderEvent.count({ where: { orderId: order.id } })).toBe(0);
+    expect(await prisma.outboxEvent.count({ where: { aggregateId: order.id } })).toBe(0);
+    expect(
+      await prisma.commerceIdempotencyRecord.count({ where: { actorUserId: DEMO_USERS[0].id } }),
+    ).toBe(0);
     await expect(runDemoCommand(['reset', '--confirm'], env)).resolves.toMatchObject({
       ok: true,
       action: 'reset',

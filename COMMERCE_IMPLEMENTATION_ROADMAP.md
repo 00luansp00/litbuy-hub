@@ -25,3 +25,7 @@ Webhook; ledger; split/retenção; entrega; disputa; reembolso; chargeback; wall
 ## PR #36 — persistent buyer carts (implemented)
 
 The authenticated persistent cart foundation is implemented with database integrity, owner-only BUYER APIs, CSRF mutations, optimistic versions, current-catalog reconciliation, and no stock reservation. Checkout, orders, payments, and real money remain unimplemented. See `CART_FOUNDATION.md`; PR #37 is the next incremental step.
+
+## PR #37 — checkout and order core
+
+The backend now contains the server-side checkout and persistent pending-order foundation described in `ORDER_CHECKOUT_FOUNDATION.md`. It uses cart preview fingerprints, immutable snapshots, BIGINT minor units, transactional inventory reservations, idempotency, order events/outbox, buyer-only reads, pre-payment cancellation, and controlled expiration. This does **not** implement payments, a gateway, a financial ledger, webhooks, fulfillment, or a connected frontend. PR #38 remains responsible for real frontend order reading after CI validates this foundation.

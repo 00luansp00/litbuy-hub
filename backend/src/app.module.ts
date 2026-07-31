@@ -13,6 +13,8 @@ import { ListingDraftsModule } from './listing-drafts/listing-drafts.module';
 import { ProductsModule } from './products/products.module';
 import { ProductImagesModule } from './product-images/product-images.module';
 import { CartsModule } from './carts/carts.module';
+import { CheckoutModule } from './checkout/checkout.module';
+import { OrdersModule } from './orders/orders.module';
 
 @Module({
   imports: [
@@ -27,6 +29,8 @@ import { CartsModule } from './carts/carts.module';
     ProductsModule,
     ProductImagesModule,
     CartsModule,
+    CheckoutModule,
+    OrdersModule,
   ],
   providers: [AppLogger],
 })
