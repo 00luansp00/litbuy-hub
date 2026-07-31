@@ -441,3 +441,7 @@ O estado `ACTIVE` de produto agora é persistente e controlado pelo vendedor pro
 ## Cart foundation (PR #36)
 
 `Cart` links a buyer `User` and `SellerProfile`, has `CartStatus` (`ACTIVE`, with `CHECKED_OUT` and `ABANDONED` reserved), and an optimistic `version`. `CartItem` links the cart, product, optional product variant, and quantity only. Partial unique indexes protect the active buyer/seller pair and selections with/without variants; checks protect version and quantity; a composite foreign key guarantees that a selected variant belongs to its product. No money, snapshot, inventory reservation, checkout, or order data is stored.
+
+## PR #37 — checkout and order core
+
+The backend now contains the server-side checkout and persistent pending-order foundation described in `ORDER_CHECKOUT_FOUNDATION.md`. It uses cart preview fingerprints, immutable snapshots, BIGINT minor units, transactional inventory reservations, idempotency, order events/outbox, buyer-only reads, pre-payment cancellation, and controlled expiration. This does **not** implement payments, a gateway, a financial ledger, webhooks, fulfillment, or a connected frontend. PR #38 remains responsible for real frontend order reading after CI validates this foundation.

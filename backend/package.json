@@ -28,7 +28,8 @@
     "roles:revoke": "ts-node scripts/manage-roles.ts revoke",
     "demo:seed": "ts-node src/cli/demo-data.ts seed",
     "demo:verify": "ts-node src/cli/demo-data.ts verify",
-    "demo:reset": "ts-node src/cli/demo-data.ts reset --confirm"
+    "demo:reset": "ts-node src/cli/demo-data.ts reset --confirm",
+    "orders:expire": "ts-node src/orders/order-expiration.cli.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1095.0",

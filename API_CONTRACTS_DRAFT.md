@@ -199,3 +199,7 @@ O estado `ACTIVE` de produto agora é persistente e controlado pelo vendedor pro
 ## Implemented cart API (PR #36)
 
 The implemented owner-only BUYER endpoints are `GET /api/v1/carts`, `GET /api/v1/carts/:sellerSlug`, and CSRF-protected `POST`, `PATCH`, and `DELETE` item mutations under that seller route. Mutations require `expectedVersion`; zero declares absence of an active cart. Amount previews are current-catalog BRL minor-unit strings and are non-authoritative. This does not implement checkout, order, reservation, or payment APIs.
+
+## PR #37 — checkout and order core
+
+The backend now contains the server-side checkout and persistent pending-order foundation described in `ORDER_CHECKOUT_FOUNDATION.md`. It uses cart preview fingerprints, immutable snapshots, BIGINT minor units, transactional inventory reservations, idempotency, order events/outbox, buyer-only reads, pre-payment cancellation, and controlled expiration. This does **not** implement payments, a gateway, a financial ledger, webhooks, fulfillment, or a connected frontend. PR #38 remains responsible for real frontend order reading after CI validates this foundation.

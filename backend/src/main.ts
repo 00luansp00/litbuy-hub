@@ -59,7 +59,7 @@ export async function bootstrap(): Promise<void> {
     const documentConfig = new DocumentBuilder()
       .setTitle('LIT Buy API')
       .setDescription(
-        'API REST do marketplace LIT Buy com carrinhos persistentes. Checkout, pedidos e dinheiro real ainda não existem.',
+        'API REST do marketplace LIT Buy com carrinhos, checkout server-side e pedidos pendentes. Pagamentos e dinheiro real não existem.',
       )
       .setVersion('0.1.0')
       .addBearerAuth()

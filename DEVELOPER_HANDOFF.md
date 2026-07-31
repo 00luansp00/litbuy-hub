@@ -247,3 +247,7 @@ A rota legada `/produto/$id` interpreta `$id` como slug e lê somente `GET /api/
 ## Cart handoff (PR #36)
 
 Read `CART_FOUNDATION.md` before changing carts. Preserve buyer ownership filters, BUYER RBAC, session-backed CSRF, the buyer/seller advisory-lock namespace, conditional version increments, partial unique indexes, and the composite variant/product foreign key. Cart pricing is a current non-authoritative preview only. Never add reservation, order, checkout, payment, fees, or definitive price fields to this foundation.
+
+## PR #37 — checkout and order core
+
+The backend now contains the server-side checkout and persistent pending-order foundation described in `ORDER_CHECKOUT_FOUNDATION.md`. It uses cart preview fingerprints, immutable snapshots, BIGINT minor units, transactional inventory reservations, idempotency, order events/outbox, buyer-only reads, pre-payment cancellation, and controlled expiration. This does **not** implement payments, a gateway, a financial ledger, webhooks, fulfillment, or a connected frontend. PR #38 remains responsible for real frontend order reading after CI validates this foundation.

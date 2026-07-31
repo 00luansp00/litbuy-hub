@@ -17,6 +17,7 @@ import type {
   RemoveCartItemDto,
   UpdateCartItemDto,
 } from './carts.dto';
+import { checkoutFingerprint } from '../checkout/checkout-fingerprint';
 
 export const cartProductInclude = {
   sellerProfile: { select: { userId: true, status: true } },
@@ -29,7 +30,14 @@ export const cartProductInclude = {
   variants: {
     select: { id: true, productId: true, title: true, status: true, price: true, stock: true },
   },
-  serviceDetails: { select: { pricingType: true, basePrice: true } },
+  serviceDetails: {
+    select: {
+      pricingType: true,
+      basePrice: true,
+      estimatedDelivery: true,
+      buyerRequirements: true,
+    },
+  },
 } satisfies Prisma.ProductInclude;
 export type CartProductPayload = Prisma.ProductGetPayload<{ include: typeof cartProductInclude }>;
 export const cartResponseInclude = {
@@ -42,7 +50,10 @@ export const cartResponseInclude = {
     },
   },
 } satisfies Prisma.CartInclude;
-export type CartResponsePayload = Prisma.CartGetPayload<{ include: typeof cartResponseInclude }>;
+type PrismaCartResponsePayload = Prisma.CartGetPayload<{ include: typeof cartResponseInclude }>;
+export type CartResponsePayload = Omit<PrismaCartResponsePayload, 'checkedOutAt'> & {
+  checkedOutAt?: Date | null;
+};
 type Tx = Prisma.TransactionClient;
 type MutableCart = Pick<Cart, 'id' | 'buyerUserId' | 'sellerProfileId' | 'status' | 'version'>;
 type MutableCartItem = Pick<
@@ -312,7 +323,7 @@ export class CartsService {
         issues,
       };
     });
-    return {
+    const response = {
       id: cart.id,
       status: cart.status,
       version: cart.version,
@@ -323,6 +334,25 @@ export class CartsService {
       checkoutReady: ready,
       createdAt: cart.createdAt.toISOString(),
       updatedAt: cart.updatedAt.toISOString(),
+    };
+    return {
+      ...response,
+      previewFingerprint: checkoutFingerprint({
+        cartId: cart.id,
+        cartVersion: cart.version,
+        sellerId: cart.sellerProfile.id,
+        currency: 'BRL',
+        items: cart.items.map((item, index) => ({
+          id: item.id,
+          productId: item.product.id,
+          productVersion: item.product.version,
+          variantId: item.productVariantId,
+          quantity: item.quantity,
+          unitAmountMinor: items[index].currentUnitAmountMinor,
+          purchasable: items[index].purchasable,
+          issues: items[index].issues,
+        })),
+      }),
     };
   }
   private audit(

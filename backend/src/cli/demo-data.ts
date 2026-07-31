@@ -945,6 +945,33 @@ async function reset(context: Runtime) {
       select: { id: true },
     });
     if (externalCartReference) throw new DemoDataError('DEMO_DATA_NAMESPACE_CONFLICT');
+    const externalOrderReference = await tx.order.findFirst({
+      where: {
+        buyerUserId: { notIn: userIds },
+        OR: [
+          { sellerProfileId: DEMO_IDS.sellerProfile },
+          { items: { some: { sourceProductId: { in: productIds } } } },
+          { reservations: { some: { productId: { in: productIds } } } },
+        ],
+      },
+      select: { id: true },
+    });
+    if (externalOrderReference) throw new DemoDataError('DEMO_DATA_NAMESPACE_CONFLICT');
+    const demoOrderIds = (
+      await tx.order.findMany({ where: { buyerUserId: { in: userIds } }, select: { id: true } })
+    ).map(({ id }) => id);
+    const demoOrderEventIds = (
+      await tx.orderEvent.findMany({
+        where: { orderId: { in: demoOrderIds } },
+        select: { id: true },
+      })
+    ).map(({ id }) => id);
+    await tx.outboxEvent.deleteMany({ where: { orderEventId: { in: demoOrderEventIds } } });
+    await tx.orderEvent.deleteMany({ where: { id: { in: demoOrderEventIds } } });
+    await tx.commerceIdempotencyRecord.deleteMany({ where: { actorUserId: { in: userIds } } });
+    await tx.inventoryReservation.deleteMany({ where: { orderId: { in: demoOrderIds } } });
+    await tx.orderItem.deleteMany({ where: { orderId: { in: demoOrderIds } } });
+    await tx.order.deleteMany({ where: { id: { in: demoOrderIds } } });
     // Cart ownership, rather than a global truncate, keeps non-demo buyers untouched.
     await tx.cartItem.deleteMany({ where: { cart: { buyerUserId: { in: userIds } } } });
     await tx.cart.deleteMany({ where: { buyerUserId: { in: userIds } } });
