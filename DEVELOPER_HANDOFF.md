@@ -255,3 +255,5 @@ The backend now contains the server-side checkout and persistent pending-order f
 # Handoff — leitura real de pedidos
 
 A integração frontend somente de leitura está descrita em `BUYER_ORDER_READ_FRONTEND.md`. Não adicionar ações de pagamento/cancelamento às queries existentes: mutações futuras devem invalidar `buyerOrderKeys.all` e o detalhe afetado, mantendo contratos e autorização no backend.
+
+Preserve `orderCode.ts` como fonte única do formato público e a verificação de igualdade no detalhe. `parseOrderPage` impede que valores inseguros da URL alcancem o service. As suítes de interface usam jsdom, Testing Library e QueryClient real; não dependem de browser externo.

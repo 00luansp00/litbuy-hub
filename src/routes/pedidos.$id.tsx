@@ -21,7 +21,7 @@ function OrderDetailPage() {
     </AuthGate>
   );
 }
-function OrderDetailContent({ orderCode }: { orderCode: string }) {
+export function OrderDetailContent({ orderCode }: { orderCode: string }) {
   const query = useBuyerOrder(orderCode);
   if (query.isPending)
     return (
@@ -34,14 +34,20 @@ function OrderDetailContent({ orderCode }: { orderCode: string }) {
     const notFound =
       (query.error instanceof ApiError && query.error.status === 404) ||
       query.error instanceof TypeError;
+    if (notFound)
+      return (
+        <div role="alert" className="container-lit py-10">
+          <h1 className="text-xl font-bold">Pedido indisponível</h1>
+          <p className="mt-2">Pedido não encontrado ou indisponível para esta conta.</p>
+          <Link to="/pedidos" className="mt-4 inline-block text-primary hover:underline">
+            Voltar para Meus pedidos
+          </Link>
+        </div>
+      );
     return (
       <div className="container-lit py-10">
         <BuyerOrderErrorState
-          message={
-            notFound
-              ? "Pedido não encontrado ou indisponível para esta conta."
-              : "Não foi possível carregar o pedido com segurança."
-          }
+          message="Não foi possível carregar o pedido com segurança."
           retry={() => void query.refetch()}
         />
       </div>

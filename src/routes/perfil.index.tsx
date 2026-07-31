@@ -121,7 +121,7 @@ function PerfilPage() {
   );
 }
 
-function RecentBuyerOrders() {
+export function RecentBuyerOrders() {
   const query = useBuyerOrders(1, 5);
   return (
     <section aria-labelledby="recent-orders-title" className="space-y-3">

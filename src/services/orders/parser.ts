@@ -7,14 +7,10 @@ import {
   type BuyerOrderItem,
   type BuyerOrderListResponse,
 } from "./types";
+import { parseBuyerOrderCode } from "./orderCode";
+import { BuyerOrderParseError } from "./parserError";
 
-export class BuyerOrderParseError extends Error {
-  readonly code = "MALFORMED_RESPONSE";
-  constructor() {
-    super("MALFORMED_RESPONSE");
-    this.name = "BuyerOrderParseError";
-  }
-}
+export { BuyerOrderParseError } from "./parserError";
 const fail = (): never => {
   throw new BuyerOrderParseError();
 };
@@ -69,7 +65,7 @@ export function parseBuyerOrder(value: unknown): BuyerOrder {
   const items = v.items;
   if (!Array.isArray(items) || items.length === 0) throw new BuyerOrderParseError();
   return {
-    orderCode: text(v.orderCode),
+    orderCode: parseBuyerOrderCode(v.orderCode),
     seller: seller(v.seller),
     currency: currency(v.currency),
     subtotalAmountMinor: parseMoneyMinor(v.subtotalAmountMinor),

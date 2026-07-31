@@ -33,3 +33,5 @@ The backend now contains the server-side checkout and persistent pending-order f
 # Incremento PR #38 — leitura frontend
 
 Preparada em branch a leitura real de pedidos nas três superfícies do comprador, sem marcar a PR como concluída antes do CI verde. Checkout, pagamento, cancelamento e demais mutações permanecem fora do escopo.
+
+A correção final adiciona validação centralizada de `orderCode`, correspondência entre código solicitado e retornado, normalização segura da página e testes jsdom das três superfícies. O status continua pendente do novo CI da PR #38.

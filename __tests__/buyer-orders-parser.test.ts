@@ -8,6 +8,7 @@ import {
   formatBrlMinor,
   parseBuyerOrder,
   parseBuyerOrderList,
+  parseBuyerOrderCode,
 } from "@/services/orders";
 const valid = () => ({
   orderCode: "LIT-23456789ABCDEF",
@@ -99,5 +100,57 @@ describe("buyer order parser", () => {
     });
     expect(() => parseBuyerOrder(null)).toThrow("MALFORMED_RESPONSE");
     expect(() => parseBuyerOrderList([])).toThrow("MALFORMED_RESPONSE");
+  });
+  it.each([
+    "BAD-23456789ABCDEF",
+    "LIT-23456789ABCDE",
+    "LIT-23456789ABCDEFG",
+    "LIT-03456789ABCDEF",
+    "LIT-13456789ABCDEF",
+    "LIT-23456789ABCDEI",
+    "LIT-23456789ABCDEO",
+    "LIT-23456789abcDEF",
+    " LIT-23456789ABCDEF",
+    "LIT-23456789ABCDEF ",
+    "",
+  ])("rejects invalid public order code %j", (orderCode) => {
+    expect(() => parseBuyerOrderCode(orderCode)).toThrow("MALFORMED_RESPONSE");
+    expect(() => parseBuyerOrder({ ...valid(), orderCode })).toThrow("MALFORMED_RESPONSE");
+    expect(() =>
+      parseBuyerOrderList({ page: 1, limit: 20, items: [{ ...valid(), orderCode }] }),
+    ).toThrow("MALFORMED_RESPONSE");
+  });
+  it("rejects empty historical seller fields", () => {
+    malformed((o) => {
+      o.seller.slug = "";
+    });
+    malformed((o) => {
+      o.seller.storeName = "";
+    });
+  });
+  it("validates pagination boundaries and exact ISO dates", () => {
+    expect(parseBuyerOrderList({ page: 1, limit: 50, items: [] })).toEqual({
+      page: 1,
+      limit: 50,
+      items: [],
+    });
+    expect(() => parseBuyerOrderList({ page: 0, limit: 20, items: [] })).toThrow(
+      "MALFORMED_RESPONSE",
+    );
+    expect(() => parseBuyerOrderList({ page: 1, limit: 51, items: [] })).toThrow(
+      "MALFORMED_RESPONSE",
+    );
+    malformed((o) => {
+      o.expiresAt = "2026-08-01";
+    });
+  });
+  it("accepts 100 money digits and rejects 101", () => {
+    const hundred = "9".repeat(100);
+    expect(parseBuyerOrder({ ...valid(), totalAmountMinor: hundred }).totalAmountMinor).toBe(
+      hundred,
+    );
+    malformed((o) => {
+      o.totalAmountMinor = "9".repeat(101);
+    });
   });
 });

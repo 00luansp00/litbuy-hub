@@ -8,18 +8,25 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ORDER_STATUSES, orderState, useBuyerOrders, type OrderStatus } from "@/services/orders";
 
 type Search = { page?: number; status?: OrderStatus };
+export function parseOrderPage(value: unknown): number {
+  const parsed = typeof value === "string" && /^\d+$/.test(value) ? Number(value) : value;
+  return typeof parsed === "number" &&
+    Number.isSafeInteger(parsed) &&
+    parsed >= 1 &&
+    parsed <= 10_000
+    ? parsed
+    : 1;
+}
+export function parseOrderStatus(value: unknown): OrderStatus | undefined {
+  return typeof value === "string" && ORDER_STATUSES.includes(value as OrderStatus)
+    ? (value as OrderStatus)
+    : undefined;
+}
+
 export const Route = createFileRoute("/pedidos")({
   validateSearch: (raw: Record<string, unknown>): Search => ({
-    page:
-      typeof raw.page === "string" && /^\d+$/.test(raw.page) && Number(raw.page) > 0
-        ? Number(raw.page)
-        : typeof raw.page === "number" && Number.isInteger(raw.page) && raw.page > 0
-          ? raw.page
-          : 1,
-    status:
-      typeof raw.status === "string" && ORDER_STATUSES.includes(raw.status as OrderStatus)
-        ? (raw.status as OrderStatus)
-        : undefined,
+    page: parseOrderPage(raw.page),
+    status: parseOrderStatus(raw.status),
   }),
   component: PedidosPage,
 });
@@ -30,7 +37,7 @@ function PedidosPage() {
     </AuthGate>
   );
 }
-function PedidosContent() {
+export function PedidosContent() {
   const search = Route.useSearch();
   const page = search.page ?? 1;
   const status = search.status;

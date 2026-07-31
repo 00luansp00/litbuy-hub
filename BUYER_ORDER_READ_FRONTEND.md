@@ -23,3 +23,9 @@ A lista oferece filtro por status, paginação conservadora (próxima somente qu
 ## Arquivos e testes
 
 O módulo fica em `src/services/orders`, os componentes reais em `src/components/orders/BuyerOrder*` e as três rotas são os únicos consumidores de interface. `__tests__/buyer-orders-parser.test.ts` cobre contrato, enums e casos malformados; `__tests__/buyer-orders-service.test.ts` cobre URLs, autenticação padrão, parsing e preservação de erros HTTP.
+
+## Validação defensiva complementar
+
+`orderCode.ts` centraliza o padrão público `LIT-` e o parser rejeita prefixos, tamanhos, caracteres e caixa incompatíveis. O detalhe também exige que o código da resposta seja idêntico ao solicitado; divergências permanecem `MALFORMED_RESPONSE`. A página da URL é normalizada por uma função pura para um inteiro seguro entre 1 e 10.000.
+
+As três superfícies possuem suítes jsdom próprias com Testing Library e `QueryClientProvider`: `buyer-orders-list-ui.test.tsx`, `buyer-order-detail-ui.test.tsx` e `buyer-orders-profile-ui.test.tsx`. Elas cobrem o gate de autenticação, loading, dados reais, vazio, erros, retry, paginação, filtro, dinheiro grande, 404 seguro e ausência das ações mockadas. A correção permanece pendente do novo CI da PR #38 antes de ser declarada implementada e validada.

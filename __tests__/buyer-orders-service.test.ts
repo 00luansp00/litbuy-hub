@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { apiFetch } from "@/lib/api/client";
 import { buyerOrdersService, createBuyerOrdersService } from "@/services/orders";
+import { makeOrder } from "./buyer-orders-ui-fixtures";
 vi.mock("@/lib/api/client", async (original) => {
   const actual = await original<typeof import("@/lib/api/client")>();
   return { ...actual, apiFetch: vi.fn() };
@@ -43,5 +44,26 @@ describe("buyerOrdersService", () => {
     );
     await expect(buyerOrdersService.detail("invalid")).rejects.toThrow("INVALID_ORDER_CODE");
     expect(mocked).not.toHaveBeenCalled();
+  });
+  it("reads a matching detail from the encoded GET endpoint", async () => {
+    const fetcher = vi.fn(async () => makeOrder());
+    const service = createBuyerOrdersService(fetcher);
+    await expect(service.detail("LIT-23456789ABCDEF")).resolves.toEqual(makeOrder());
+    expect(fetcher).toHaveBeenCalledWith("/orders/LIT-23456789ABCDEF");
+    expect(fetcher.mock.calls[0]).toHaveLength(1);
+  });
+  it("rejects a different order code as MALFORMED_RESPONSE", async () => {
+    const service = createBuyerOrdersService(async () =>
+      makeOrder({ orderCode: "LIT-23456789ABCDEG" }),
+    );
+    await expect(service.detail("LIT-23456789ABCDEF")).rejects.toMatchObject({
+      code: "MALFORMED_RESPONSE",
+    });
+  });
+  it("contains no mutation, payment, mock-data or auth bypass request", async () => {
+    mocked.mockResolvedValue(response);
+    await buyerOrdersService.list({ page: 1, limit: 20 });
+    const serializedCalls = JSON.stringify(mocked.mock.calls);
+    expect(serializedCalls).not.toMatch(/POST|PATCH|DELETE|payment|checkout|auth/);
   });
 });
