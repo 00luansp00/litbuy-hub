@@ -36,7 +36,9 @@ describe('Checkout and orders HTTP with real auth, guards, CSRF and PostgreSQL',
     mailer.sent.splice(0);
     await prisma.$executeRawUnsafe('TRUNCATE TABLE "User", "CatalogCategory" CASCADE');
   });
-  afterAll(() => app.close());
+  afterAll(async () => {
+    await app.close();
+  });
   async function cart(
     actor: Awaited<ReturnType<typeof createActor>>,
     model: 'NORMAL' | 'SERVICE' = 'NORMAL',

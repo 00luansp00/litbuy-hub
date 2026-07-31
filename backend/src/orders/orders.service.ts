@@ -11,6 +11,7 @@ import {
   SecurityEventType,
 } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
+import { acquireAdvisoryTransactionLock } from '../database/advisory-lock';
 import { AppError } from '../common/errors/app-error';
 import { canonicalRequestHash } from '../commerce/idempotency-key';
 import { mapOrder, orderReadInclude } from './order-read.mapper';
@@ -41,7 +42,10 @@ export class OrdersService {
     const keyHash = key.hash,
       requestHash = canonicalRequestHash({ code, ...dto });
     return this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${'idempotency:' + userId + ':ORDER_CANCEL:' + keyHash}))`;
+      await acquireAdvisoryTransactionLock(
+        tx,
+        'idempotency:' + userId + ':ORDER_CANCEL:' + keyHash,
+      );
       const prior = await tx.commerceIdempotencyRecord.findUnique({
         where: {
           actorUserId_operation_keyHash: {
@@ -60,7 +64,7 @@ export class OrdersService {
         select: { id: true },
       });
       if (!found) this.fail('ORDER_NOT_FOUND', 404);
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${'order:' + found.id}))`;
+      await acquireAdvisoryTransactionLock(tx, 'order:' + found.id);
       const order = await tx.order.findFirst({
         where: { id: found.id, buyerUserId: userId },
         include: orderReadInclude,

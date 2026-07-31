@@ -12,6 +12,7 @@ import {
   SecurityEventType,
 } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
+import { acquireAdvisoryTransactionLock } from '../database/advisory-lock';
 import { AppError } from '../common/errors/app-error';
 import { assertCartSelection } from '../carts/cart-purchasability';
 import type { CartSelection } from '../carts/cart-purchasability';
@@ -36,7 +37,10 @@ export class CheckoutService {
     const keyHash = key.hash,
       requestHash = canonicalRequestHash(dto);
     return this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${'idempotency:' + userId + ':CHECKOUT_CREATE:' + keyHash}))`;
+      await acquireAdvisoryTransactionLock(
+        tx,
+        'idempotency:' + userId + ':CHECKOUT_CREATE:' + keyHash,
+      );
       const prior = await tx.commerceIdempotencyRecord.findUnique({
         where: {
           actorUserId_operation_keyHash: {
@@ -52,7 +56,7 @@ export class CheckoutService {
       }
       const seller = await tx.sellerProfile.findUnique({ where: { slug: dto.sellerSlug } });
       if (!seller) this.fail('CART_NOT_CHECKOUT_READY', 422);
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${'buyer-cart:' + userId + ':' + seller.id}))`;
+      await acquireAdvisoryTransactionLock(tx, 'buyer-cart:' + userId + ':' + seller.id);
       const cart = await tx.cart.findFirst({
         where: { buyerUserId: userId, sellerProfileId: seller.id, status: CartStatus.ACTIVE },
         include: cartResponseInclude,
@@ -98,7 +102,7 @@ export class CheckoutService {
         }))
         .sort((a, b) => a.key.localeCompare(b.key));
       for (const selected of reservable) {
-        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${'checkout-stock:' + selected.key}))`;
+        await acquireAdvisoryTransactionLock(tx, 'checkout-stock:' + selected.key);
         const active = await tx.inventoryReservation.aggregate({
           where: {
             productId: selected.item.productId,

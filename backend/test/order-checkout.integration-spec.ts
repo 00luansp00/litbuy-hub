@@ -28,7 +28,9 @@ describe('Order checkout domain with real PostgreSQL', () => {
     expiration = app.get(OrderExpirationService);
   });
   beforeEach(() => prisma.$executeRawUnsafe('TRUNCATE TABLE "User", "CatalogCategory" CASCADE'));
-  afterAll(() => app.close());
+  afterAll(async () => {
+    await app.close();
+  });
   const key = () => parseIdempotencyKey(`checkout:${crypto.randomUUID()}`);
   const checkoutResponse = (value: Awaited<ReturnType<CheckoutService['create']>>) =>
     value as CheckoutResponse;
@@ -366,6 +368,29 @@ describe('Order checkout domain with real PostgreSQL', () => {
     });
     await prisma.$executeRawUnsafe(`DROP TRIGGER "reject_lifecycle_outbox" ON "OutboxEvent"`);
     await prisma.$executeRawUnsafe(`DROP FUNCTION "reject_lifecycle_outbox"()`);
+  });
+  it('executes all six advisory-lock paths without void deserialization or P2010', async () => {
+    const normal = await ready('NORMAL');
+    const checkoutKey = key();
+    const created = checkoutResponse(
+      await checkout.create(normal.buyer.id, checkoutKey, normal.dto),
+    );
+    const replay = await checkout.create(normal.buyer.id, checkoutKey, normal.dto);
+    expect(replay).toEqual(created);
+    await expect(
+      orders.cancel(normal.buyer.id, created.orderCode, key(), { expectedVersion: 1 }),
+    ).resolves.toMatchObject({ status: 'CANCELLED' });
+
+    await prisma.$executeRawUnsafe('TRUNCATE TABLE "User", "CatalogCategory" CASCADE');
+    const dynamic = await ready('DYNAMIC');
+    const dynamicOrder = checkoutResponse(
+      await checkout.create(dynamic.buyer.id, key(), dynamic.dto),
+    );
+    await prisma.order.update({
+      where: { publicCode: dynamicOrder.orderCode },
+      data: { expiresAt: new Date(0) },
+    });
+    await expect(expiration.expire()).resolves.toMatchObject({ expired: 1 });
   });
   it('executes monetary, quantity, currency and uniqueness constraints in PostgreSQL', async () => {
     const f = await ready();

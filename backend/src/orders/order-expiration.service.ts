@@ -8,6 +8,7 @@ import {
   SecurityEventType,
 } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
+import { acquireAdvisoryTransactionLock } from '../database/advisory-lock';
 @Injectable()
 export class OrderExpirationService {
   constructor(private readonly prisma: PrismaService) {}
@@ -21,7 +22,7 @@ export class OrderExpirationService {
     let expired = 0;
     for (const { id } of ids)
       expired += await this.prisma.$transaction(async (tx) => {
-        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${'order:' + id}))`;
+        await acquireAdvisoryTransactionLock(tx, 'order:' + id);
         const order = await tx.order.findFirst({
           where: { id, status: OrderStatus.PENDING_PAYMENT, expiresAt: { lte: new Date() } },
         });
