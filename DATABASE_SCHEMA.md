@@ -437,3 +437,7 @@ Futuro/demonstrativo: aprovação não publica produto público; imagens permane
 O estado `ACTIVE` de produto agora é persistente e controlado pelo vendedor proprietário via backend, com elegibilidade transacional, versão otimista, advisory lock, idempotência e auditoria. Isso **não** conecta catálogo público nem torna qualquer produto comprável. Estoque/reserva, checkout, pagamentos e mutações administrativas de lifecycle continuam pendentes. O contrato autoritativo está em `PRODUCT_LIFECYCLE_FOUNDATION.md`.
 
 <!-- HISTORICAL_SNAPSHOT_END -->
+
+## Cart foundation (PR #36)
+
+`Cart` links a buyer `User` and `SellerProfile`, has `CartStatus` (`ACTIVE`, with `CHECKED_OUT` and `ABANDONED` reserved), and an optimistic `version`. `CartItem` links the cart, product, optional product variant, and quantity only. Partial unique indexes protect the active buyer/seller pair and selections with/without variants; checks protect version and quantity; a composite foreign key guarantees that a selected variant belongs to its product. No money, snapshot, inventory reservation, checkout, or order data is stored.

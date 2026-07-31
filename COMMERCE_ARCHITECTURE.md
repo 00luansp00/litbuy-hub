@@ -153,3 +153,7 @@ Nenhum endpoint de pagamento está pronto ou é definido como implementado aqui.
 Pagamento, ledger, webhooks, refund, chargeback e saque obedecem a `FINANCIAL_LEDGER_AND_PAYMENT_BOUNDARY.md`; riscos a `COMMERCE_THREAT_MODEL.md`; sequência a `COMMERCE_IMPLEMENTATION_ROADMAP.md`.
 
 A fronteira financeira exige ledger futuro de partidas dobradas, balanceado e append-only; os detalhes permanecem no documento de fronteira.
+
+## Implementation checkpoint — PR #36
+
+The persistent authenticated buyer-cart slice described above is now implemented. It preserves one active cart per buyer/seller, current-catalog reconciliation, optimistic concurrency, and the explicit absence of reservation. The frozen checkout, immutable order snapshot, financial ledger, and payment boundaries are unchanged and remain unimplemented; cart content is current mutable intent and is not part of historical order snapshots. See `CART_FOUNDATION.md`.

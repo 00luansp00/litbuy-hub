@@ -195,3 +195,7 @@ The protected seller upload-intent, completion, listing, reorder, cover, and del
 O estado `ACTIVE` de produto agora é persistente e controlado pelo vendedor proprietário via backend, com elegibilidade transacional, versão otimista, advisory lock, idempotência e auditoria. Isso **não** conecta catálogo público nem torna qualquer produto comprável. Estoque/reserva, checkout, pagamentos e mutações administrativas de lifecycle continuam pendentes. O contrato autoritativo está em `PRODUCT_LIFECYCLE_FOUNDATION.md`.
 
 <!-- HISTORICAL_SNAPSHOT_END -->
+
+## Implemented cart API (PR #36)
+
+The implemented owner-only BUYER endpoints are `GET /api/v1/carts`, `GET /api/v1/carts/:sellerSlug`, and CSRF-protected `POST`, `PATCH`, and `DELETE` item mutations under that seller route. Mutations require `expectedVersion`; zero declares absence of an active cart. Amount previews are current-catalog BRL minor-unit strings and are non-authoritative. This does not implement checkout, order, reservation, or payment APIs.

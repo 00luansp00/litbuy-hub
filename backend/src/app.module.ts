@@ -12,6 +12,7 @@ import { CatalogModule } from './catalog/catalog.module';
 import { ListingDraftsModule } from './listing-drafts/listing-drafts.module';
 import { ProductsModule } from './products/products.module';
 import { ProductImagesModule } from './product-images/product-images.module';
+import { CartsModule } from './carts/carts.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { ProductImagesModule } from './product-images/product-images.module';
     ListingDraftsModule,
     ProductsModule,
     ProductImagesModule,
+    CartsModule,
   ],
   providers: [AppLogger],
 })

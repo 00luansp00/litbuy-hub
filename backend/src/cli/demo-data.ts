@@ -934,6 +934,20 @@ async function reset(context: Runtime) {
     const userIds = DEMO_USERS.map((x) => x.id),
       productIds = DEMO_PRODUCTS.map((x) => x.id),
       draftIds = DEMO_PRODUCTS.map((x) => x.draftId);
+    const externalCartReference = await tx.cart.findFirst({
+      where: {
+        buyerUserId: { notIn: userIds },
+        OR: [
+          { sellerProfileId: DEMO_IDS.sellerProfile },
+          { items: { some: { productId: { in: productIds } } } },
+        ],
+      },
+      select: { id: true },
+    });
+    if (externalCartReference) throw new DemoDataError('DEMO_DATA_NAMESPACE_CONFLICT');
+    // Cart ownership, rather than a global truncate, keeps non-demo buyers untouched.
+    await tx.cartItem.deleteMany({ where: { cart: { buyerUserId: { in: userIds } } } });
+    await tx.cart.deleteMany({ where: { buyerUserId: { in: userIds } } });
     await tx.productImage.deleteMany({ where: { productId: { in: productIds } } });
     await tx.productServiceDetails.deleteMany({ where: { productId: { in: productIds } } });
     await tx.productAccountDetails.deleteMany({ where: { productId: { in: productIds } } });

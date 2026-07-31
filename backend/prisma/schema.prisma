@@ -137,6 +137,16 @@ enum SecurityEventType {
   PRODUCT_PAUSED
   PRODUCT_RESUMED
   PRODUCT_REMOVED
+  CART_CREATED
+  CART_ITEM_ADDED
+  CART_ITEM_UPDATED
+  CART_ITEM_REMOVED
+}
+
+enum CartStatus {
+  ACTIVE
+  CHECKED_OUT
+  ABANDONED
 }
 
 enum StepUpScope {
@@ -188,6 +198,7 @@ model User {
   reviewedSellerApplications SellerApplication[]     @relation("SellerApplicationReviewer")
   sellerProfile              SellerProfile?
   reviewedListingDrafts      ListingDraft[]          @relation("ListingDraftReviewer")
+  carts                      Cart[]                  @relation("CartBuyer")
 
   @@unique([phoneE164])
   @@index([email])
@@ -243,6 +254,7 @@ model SellerProfile {
   user          User           @relation(fields: [userId], references: [id], onDelete: Restrict)
   listingDrafts ListingDraft[]
   products      Product[]
+  carts         Cart[]
 
   @@index([status])
   @@index([slug])
@@ -726,6 +738,7 @@ model Product {
   serviceDetails     ProductServiceDetails?
   accountDetails     ProductAccountDetails?
   images             ProductImage[]
+  cartItems          CartItem[]
 
   @@index([sellerProfileId, status, updatedAt])
   @@index([status, updatedAt])
@@ -763,9 +776,46 @@ model ProductVariant {
   status      ProductVariantStatus @default(ACTIVE)
   sortOrder   Int                  @default(0)
   product     Product              @relation(fields: [productId], references: [id], onDelete: Restrict)
+  cartItems   CartItem[]
 
+  @@unique([id, productId])
   @@index([productId, sortOrder])
   @@index([productId, status])
+}
+
+model Cart {
+  id              String     @id @default(uuid()) @db.Uuid
+  buyerUserId     String     @db.Uuid
+  sellerProfileId String     @db.Uuid
+  status          CartStatus @default(ACTIVE)
+  version         Int        @default(1)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  buyer         User          @relation("CartBuyer", fields: [buyerUserId], references: [id], onDelete: Restrict)
+  sellerProfile SellerProfile @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
+  items         CartItem[]
+
+  @@index([buyerUserId, updatedAt, id])
+  @@index([sellerProfileId, status])
+}
+
+model CartItem {
+  id               String   @id @default(uuid()) @db.Uuid
+  cartId           String   @db.Uuid
+  productId        String   @db.Uuid
+  productVariantId String?  @db.Uuid
+  quantity         Int
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  cart    Cart            @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variant ProductVariant? @relation(fields: [productVariantId, productId], references: [id, productId], onDelete: Restrict)
+
+  @@index([cartId])
+  @@index([productId])
+  @@index([productVariantId, productId])
 }
 
 model ProductAttributeValue {
