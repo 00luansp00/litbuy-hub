@@ -233,69 +233,80 @@ describe('local demo data with real PostgreSQL and MinIO', () => {
         expiresAt: new Date(Date.now() + 60_000),
       },
     });
-    await s3.send(
-      new PutObjectCommand({
-        Bucket: bucket,
-        Key: objectKey,
-        Body: body,
-        ContentType: 'image/png',
-      }),
-    );
+    try {
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: objectKey,
+          Body: body,
+          ContentType: 'image/png',
+        }),
+      );
 
-    await expect(runDemoCommand(['seed'], env)).resolves.toMatchObject(DEMO_SUMMARY);
-    await expect(runDemoCommand(['verify'], env)).resolves.toMatchObject(DEMO_SUMMARY);
-    await expect(runDemoCommand(['seed'], env)).resolves.toMatchObject(DEMO_SUMMARY);
-    await expect(runDemoCommand(['verify'], env)).resolves.toMatchObject(DEMO_SUMMARY);
-    expect(await prisma.product.findUnique({ where: { id: product.id } })).toMatchObject({
-      slug: product.slug,
-      title: product.title,
-      price: product.price,
-      stock: product.stock,
-    });
-    expect(await s3.send(new GetObjectCommand({ Bucket: bucket, Key: objectKey }))).toBeDefined();
-    expect(
-      await prisma.product.count({
-        where: {
-          slug: {
-            in: DEMO_PRODUCTS.filter((item) => item.status === 'ACTIVE').map((item) => item.slug),
+      await expect(runDemoCommand(['seed'], env)).resolves.toMatchObject(DEMO_SUMMARY);
+      await expect(runDemoCommand(['verify'], env)).resolves.toMatchObject(DEMO_SUMMARY);
+      await expect(runDemoCommand(['seed'], env)).resolves.toMatchObject(DEMO_SUMMARY);
+      await expect(runDemoCommand(['verify'], env)).resolves.toMatchObject(DEMO_SUMMARY);
+      expect(await prisma.product.findUnique({ where: { id: product.id } })).toMatchObject({
+        slug: product.slug,
+        title: product.title,
+        price: product.price,
+        stock: product.stock,
+      });
+      expect(await s3.send(new GetObjectCommand({ Bucket: bucket, Key: objectKey }))).toBeDefined();
+      expect(
+        await prisma.product.count({
+          where: {
+            slug: {
+              in: DEMO_PRODUCTS.filter((item) => item.status === 'ACTIVE').map((item) => item.slug),
+            },
           },
-        },
-      }),
-    ).toBe(6);
-    await runDemoCommand(['reset', '--confirm'], env);
-    expect(await prisma.product.findUnique({ where: { id: product.id } })).not.toBeNull();
-    const preservedObject = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: objectKey }));
-    expect(await bytes(preservedObject.Body)).toEqual(body);
-    expect(await prisma.cart.findUnique({ where: { id: cart.id } })).not.toBeNull();
-    expect(await prisma.order.findUnique({ where: { id: order.id } })).not.toBeNull();
-    expect(await prisma.orderItem.findUnique({ where: { id: orderItem.id } })).not.toBeNull();
-    expect(
-      await prisma.inventoryReservation.findUnique({ where: { id: reservation.id } }),
-    ).not.toBeNull();
-    expect(await prisma.orderEvent.findUnique({ where: { id: event.id } })).not.toBeNull();
-    expect(await prisma.outboxEvent.findUnique({ where: { id: outbox.id } })).not.toBeNull();
-    expect(
-      await prisma.commerceIdempotencyRecord.findUnique({ where: { id: idempotency.id } }),
-    ).not.toBeNull();
-
-    await prisma.outboxEvent.delete({ where: { id: outbox.id } });
-    await prisma.orderEvent.delete({ where: { id: event.id } });
-    await prisma.commerceIdempotencyRecord.delete({ where: { id: idempotency.id } });
-    await prisma.inventoryReservation.delete({ where: { id: reservation.id } });
-    await prisma.orderItem.delete({ where: { id: orderItem.id } });
-    await prisma.order.delete({ where: { id: order.id } });
-    await prisma.cart.delete({ where: { id: cart.id } });
-    await prisma.productImage.deleteMany({ where: { productId: product.id } });
-    await prisma.productVariant.deleteMany({ where: { productId: product.id } });
-    await prisma.product.delete({ where: { id: product.id } });
-    await prisma.listingDraft.delete({ where: { id: draft.id } });
-    await prisma.catalogCategory.delete({ where: { id: category.id } });
-    await prisma.sellerProfile.delete({ where: { id: seller.id } });
-    await prisma.user.delete({ where: { id: user.id } });
-    await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: objectKey }));
+        }),
+      ).toBe(6);
+      await runDemoCommand(['reset', '--confirm'], env);
+      expect(await prisma.product.findUnique({ where: { id: product.id } })).not.toBeNull();
+      const preservedObject = await s3.send(
+        new GetObjectCommand({ Bucket: bucket, Key: objectKey }),
+      );
+      expect(await bytes(preservedObject.Body)).toEqual(body);
+      expect(await prisma.cart.findUnique({ where: { id: cart.id } })).not.toBeNull();
+      expect(await prisma.order.findUnique({ where: { id: order.id } })).not.toBeNull();
+      expect(await prisma.orderItem.findUnique({ where: { id: orderItem.id } })).not.toBeNull();
+      expect(
+        await prisma.inventoryReservation.findUnique({ where: { id: reservation.id } }),
+      ).not.toBeNull();
+      expect(await prisma.orderEvent.findUnique({ where: { id: event.id } })).not.toBeNull();
+      expect(await prisma.outboxEvent.findUnique({ where: { id: outbox.id } })).not.toBeNull();
+      expect(
+        await prisma.commerceIdempotencyRecord.findUnique({ where: { id: idempotency.id } }),
+      ).not.toBeNull();
+    } finally {
+      await prisma.outboxEvent.deleteMany({ where: { id: outbox.id } });
+      await prisma.orderEvent.deleteMany({ where: { id: event.id } });
+      await prisma.commerceIdempotencyRecord.deleteMany({ where: { id: idempotency.id } });
+      await prisma.inventoryReservation.deleteMany({ where: { id: reservation.id } });
+      await prisma.orderItem.deleteMany({ where: { id: orderItem.id } });
+      await prisma.order.deleteMany({ where: { id: order.id } });
+      await prisma.cart.deleteMany({ where: { id: cart.id } });
+      await prisma.productImage.deleteMany({ where: { productId: product.id } });
+      await prisma.productVariant.deleteMany({ where: { productId: product.id } });
+      await prisma.product.deleteMany({ where: { id: product.id } });
+      await prisma.listingDraft.deleteMany({ where: { id: draft.id } });
+      await prisma.catalogCategory.deleteMany({ where: { id: category.id } });
+      await prisma.sellerProfile.deleteMany({ where: { id: seller.id } });
+      await prisma.user.deleteMany({ where: { id: user.id } });
+      await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: objectKey }));
+      await expect(runDemoCommand(['seed'], env)).resolves.toMatchObject(DEMO_SUMMARY);
+      await expect(runDemoCommand(['verify'], env)).resolves.toMatchObject(DEMO_SUMMARY);
+    }
   });
 
   it('restores relational drift and removes unexpected demo children', async () => {
+    expect(
+      await prisma.catalogCategory.count({
+        where: { id: { in: DEMO_CATEGORIES.map((category) => category.id) } },
+      }),
+    ).toBe(DEMO_CATEGORIES.length);
     await prisma.catalogCategory.update({
       where: { id: DEMO_CATEGORIES[0].id },
       data: { name: 'drift' },
