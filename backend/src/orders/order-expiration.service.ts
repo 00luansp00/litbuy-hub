@@ -31,7 +31,7 @@ export class OrderExpirationService {
           where: { id },
           data: { status: OrderStatus.EXPIRED, expiredAt: now, version: { increment: 1 } },
         });
-        await tx.inventoryReservation.updateMany({
+        const released = await tx.inventoryReservation.updateMany({
           where: { orderId: id, status: InventoryReservationStatus.ACTIVE },
           data: {
             status: InventoryReservationStatus.EXPIRED,
@@ -52,6 +52,29 @@ export class OrderExpirationService {
             status: OutboxEventStatus.PENDING,
           },
         });
+        if (released.count > 0) {
+          const releaseEvent = await tx.orderEvent.create({
+            data: {
+              orderId: id,
+              type: OrderEventType.INVENTORY_RELEASED,
+              metadata: { orderId: id, reason: 'ORDER_EXPIRED' },
+            },
+          });
+          await tx.outboxEvent.create({
+            data: {
+              orderEventId: releaseEvent.id,
+              aggregateType: 'ORDER',
+              aggregateId: id,
+              eventType: OrderEventType.INVENTORY_RELEASED,
+              payload: {
+                orderId: id,
+                eventId: releaseEvent.id,
+                type: OrderEventType.INVENTORY_RELEASED,
+              },
+              status: OutboxEventStatus.PENDING,
+            },
+          });
+        }
         await tx.securityEvent.create({
           data: {
             userId: order.buyerUserId,

@@ -1,6 +1,6 @@
 # Order checkout foundation (PR #37)
 
-Status: implementation delivered for CI validation. This foundation creates no payment and integrates no gateway.
+Status: implementado, aguardando validação integral do CI. This foundation creates no payment and integrates no gateway; CI #163 remains red until the correction commit is validated.
 
 ## Contract and scope
 
@@ -10,7 +10,7 @@ Checkout reloads the active single-seller cart, verifies its optimistic version 
 
 ## Persistence and concurrency
 
-`Order` starts `PENDING_PAYMENT / NOT_CREATED / NOT_AVAILABLE / NONE`, expires after 15 minutes by default, and has a random `LIT-` public code and unique source cart. `NORMAL` reserves product stock, `DYNAMIC` reserves variant stock, `FIXED` creates no reservation, and `QUOTE` creates no order. Stock columns are never decremented. Transaction-scoped advisory locks are acquired in stable inventory-key order; live `ACTIVE` reservations are subtracted before inserts, preventing overselling.
+`Order` starts `PENDING_PAYMENT / NOT_CREATED / NOT_AVAILABLE / NONE`, expires after 15 minutes by default, and has a random `LIT-` public code and unique source cart. `NORMAL` reserves product stock, `DYNAMIC` reserves variant stock, `FIXED` creates no reservation, and `QUOTE` creates no order. Stock columns are never decremented. Transaction-scoped advisory locks are acquired in stable inventory-key order; live `ACTIVE` reservations are subtracted before inserts. The complete overselling and concurrency proof awaits the infrastructure-backed CI run.
 
 Idempotency stores only SHA-256 key and canonical request hashes, is scoped by actor and operation, and persists a safe replay response transactionally. Domain events are append-only and each owns one transactional pending outbox row. No worker or external publication exists. Audit failures roll back the commerce transaction.
 
@@ -21,3 +21,7 @@ Cancellation is limited to unpaid pending orders, increments the order version o
 Ownership is included directly in every order query, so seller/admin roles receive no bypass. Expected conflicts use stable domain codes including cart/version/fingerprint, stock, order, and idempotency errors. Database checks enforce BRL, integer totals, versions, quantities, uniqueness, and product-variant integrity.
 
 There is deliberately no payment table, gateway, webhook, ledger, wallet, refund, delivery, frontend checkout, or frontend orders integration. PR #38 remains the frontend order-reading stage after this backend foundation passes CI.
+
+## Validation status
+
+The lint/type corrections and focused unit tests are implemented locally. PostgreSQL/Redis/MinIO HTTP integration, rollback-trigger, constraint-execution, staging, smoke, and double-reset evidence must only be recorded here after the corresponding CI jobs pass; this document does not currently claim those proofs as completed.

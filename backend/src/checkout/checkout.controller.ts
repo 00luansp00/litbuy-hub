@@ -25,7 +25,6 @@ export class CheckoutController {
     @Headers('idempotency-key') key: unknown,
     @Body() dto: CreateCheckoutDto,
   ) {
-    parseIdempotencyKey(key);
-    return this.checkout.create(user.userId, key as string, dto);
+    return this.checkout.create(user.userId, parseIdempotencyKey(key), dto);
   }
 }

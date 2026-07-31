@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Headers, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  HttpCode,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger';
 import { PlatformRole } from '@prisma/client';
 import { AccessTokenGuard } from '../auth/access-token.guard';
@@ -23,6 +33,7 @@ export class OrdersController {
     return this.orders.get(u.userId, c);
   }
   @Post(':orderCode/cancel')
+  @HttpCode(200)
   @UseGuards(CartCsrfGuard)
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   cancel(
@@ -31,7 +42,6 @@ export class OrdersController {
     @Headers('idempotency-key') k: unknown,
     @Body() d: CancelOrderDto,
   ) {
-    parseIdempotencyKey(k);
-    return this.orders.cancel(u.userId, c, k as string, d);
+    return this.orders.cancel(u.userId, c, parseIdempotencyKey(k), d);
   }
 }

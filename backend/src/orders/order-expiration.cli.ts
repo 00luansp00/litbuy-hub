@@ -1,9 +1,10 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaService } from '../database/prisma.service';
 import { OrderExpirationService } from './order-expiration.service';
 async function main() {
-  const prisma = new PrismaClient();
+  const prisma = new PrismaService();
   try {
-    const result = await new OrderExpirationService(prisma as never).expire();
+    await prisma.$connect();
+    const result = await new OrderExpirationService(prisma).expire();
     process.stdout.write(`${JSON.stringify(result)}\n`);
   } finally {
     await prisma.$disconnect();

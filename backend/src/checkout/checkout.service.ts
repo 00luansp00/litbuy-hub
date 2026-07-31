@@ -5,6 +5,7 @@ import {
   InventoryReservationStatus,
   ListingDraftModel,
   ListingDraftServicePricingType,
+  Order,
   OrderEventType,
   Prisma,
   SecurityEventOutcome,
@@ -13,19 +14,26 @@ import {
 import { PrismaService } from '../database/prisma.service';
 import { AppError } from '../common/errors/app-error';
 import { assertCartSelection } from '../carts/cart-purchasability';
+import type { CartSelection } from '../carts/cart-purchasability';
 import { cartResponseInclude } from '../carts/carts.service';
+import type { CartResponsePayload } from '../carts/carts.service';
 import { checkoutFingerprint } from './checkout-fingerprint';
-import { canonicalRequestHash, sha256 } from '../commerce/idempotency-key';
+import { canonicalRequestHash } from '../commerce/idempotency-key';
+import type { ParsedIdempotencyKey } from '../commerce/idempotency-key';
 import { orderItemSnapshot } from './order-snapshot';
 import { generateOrderCode } from '../orders/order-code';
 import type { CreateCheckoutDto } from './checkout.dto';
 
 type Tx = Prisma.TransactionClient;
+type CheckoutCartItem = CartResponsePayload['items'][number];
+type ValidatedSelection = { item: CheckoutCartItem; selection: CartSelection };
+type PublicSeller = Pick<CartResponsePayload['sellerProfile'], 'id' | 'slug' | 'storeName'>;
+export type CheckoutResponse = ReturnType<CheckoutService['response']>;
 @Injectable()
 export class CheckoutService {
   constructor(private readonly prisma: PrismaService) {}
-  async create(userId: string, rawKey: string, dto: CreateCheckoutDto) {
-    const keyHash = sha256(rawKey),
+  async create(userId: string, key: ParsedIdempotencyKey, dto: CreateCheckoutDto) {
+    const keyHash = key.hash,
       requestHash = canonicalRequestHash(dto);
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${'idempotency:' + userId + ':CHECKOUT_CREATE:' + keyHash}))`;
@@ -116,8 +124,9 @@ export class CheckoutService {
         0n,
       );
       const expiresAt = new Date(Date.now() + this.ttlMinutes() * 60_000);
-      let order;
+      let order: Order | undefined;
       for (let attempt = 0; attempt < 5; attempt++) {
+        await tx.$executeRawUnsafe('SAVEPOINT checkout_public_code');
         try {
           order = await tx.order.create({
             data: {
@@ -131,14 +140,15 @@ export class CheckoutService {
               expiresAt,
             },
           });
+          await tx.$executeRawUnsafe('RELEASE SAVEPOINT checkout_public_code');
           break;
-        } catch (e) {
-          if (
-            !(e instanceof Prisma.PrismaClientKnownRequestError) ||
-            e.code !== 'P2002' ||
-            attempt === 4
-          )
-            throw e;
+        } catch (error) {
+          await tx.$executeRawUnsafe('ROLLBACK TO SAVEPOINT checkout_public_code');
+          if (!this.isUniqueViolation(error)) throw error;
+          const target = this.uniqueTarget(error);
+          if (target.includes('sourceCartId')) this.fail('CHECKOUT_CONFLICT', 409);
+          if (!target.includes('publicCode')) this.fail('CHECKOUT_CONFLICT', 409);
+          if (attempt === 4) this.fail('CHECKOUT_CONFLICT', 409);
         }
       }
       if (!order) this.fail('CHECKOUT_CONFLICT', 409);
@@ -209,7 +219,7 @@ export class CheckoutService {
           keyHash,
           requestHash,
           responseStatus: 201,
-          responseBody: response as Prisma.InputJsonObject,
+          responseBody: response,
           resourceType: 'ORDER',
           resourceId: order.id,
           completedAt: new Date(),
@@ -219,7 +229,7 @@ export class CheckoutService {
       return response;
     });
   }
-  private response(order: any, seller: any, selections: any[]) {
+  response(order: Order, seller: PublicSeller, selections: ValidatedSelection[]) {
     return {
       orderCode: order.publicCode,
       seller: { slug: seller.slug, storeName: seller.storeName },
@@ -267,6 +277,17 @@ export class CheckoutService {
   private ttlMinutes() {
     const value = Number(process.env.CHECKOUT_RESERVATION_TTL_MINUTES ?? '15');
     return Number.isInteger(value) && value > 0 ? value : 15;
+  }
+  private isUniqueViolation(error: unknown): error is Prisma.PrismaClientKnownRequestError {
+    return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+  }
+  private uniqueTarget(error: Prisma.PrismaClientKnownRequestError): string[] {
+    const target = error.meta?.target;
+    return Array.isArray(target)
+      ? target.filter((value): value is string => typeof value === 'string')
+      : typeof target === 'string'
+        ? [target]
+        : [];
   }
   private fail(code: string, status: number): never {
     throw new AppError(code, code, status);

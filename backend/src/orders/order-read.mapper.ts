@@ -1,4 +1,14 @@
-export function mapOrder(order: any) {
+import type { Prisma } from '@prisma/client';
+
+export const orderReadInclude = {
+  sellerProfile: { select: { slug: true, storeName: true } },
+  items: { orderBy: [{ createdAt: 'asc' as const }, { id: 'asc' as const }] },
+} satisfies Prisma.OrderInclude;
+
+export type OrderReadPayload = Prisma.OrderGetPayload<{ include: typeof orderReadInclude }>;
+export type OrderReadResponse = ReturnType<typeof mapOrder>;
+
+export function mapOrder(order: OrderReadPayload) {
   return {
     orderCode: order.publicCode,
     seller: { slug: order.sellerProfile.slug, storeName: order.sellerProfile.storeName },
@@ -17,7 +27,7 @@ export function mapOrder(order: any) {
     expiredAt: order.expiredAt?.toISOString() ?? null,
     createdAt: order.createdAt.toISOString(),
     updatedAt: order.updatedAt.toISOString(),
-    items: order.items.map((item: any) => ({
+    items: order.items.map((item) => ({
       productSlug: item.productSlug,
       productTitle: item.productTitle,
       variantTitle: item.variantTitle,
