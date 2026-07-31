@@ -78,6 +78,14 @@ const code = (fn: () => unknown) => {
 };
 
 describe('cart purchasability', () => {
+  it.each([ProductStatus.UNPUBLISHED, ProductStatus.PAUSED, ProductStatus.REMOVED])(
+    'hides a non-active %s product behind PRODUCT_NOT_PURCHASABLE',
+    (status) => {
+      const candidate = product({ status });
+      expect(basePurchasable(candidate, seller)).toBe(false);
+      expect(code(() => select(candidate))).toBe('PRODUCT_NOT_PURCHASABLE');
+    },
+  );
   it('accepts a publicly eligible NORMAL selection', () =>
     expect(select(product()).unitMinor).toBe(4990n));
   it('rejects a NORMAL variant', () =>

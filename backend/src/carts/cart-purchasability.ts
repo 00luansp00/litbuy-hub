@@ -1,6 +1,7 @@
 import {
   ListingDraftModel,
   ListingDraftServicePricingType,
+  ProductStatus,
   ProductVariantStatus,
 } from '@prisma/client';
 import type { PublicationCandidate } from '../products/product-publication.rules';
@@ -41,7 +42,9 @@ const money = (value: { toString(): string } | string | number | null): bigint |
 };
 export function basePurchasable(product: CartProductCandidate, sellerProfileId: string): boolean {
   return (
-    product.sellerProfileId === sellerProfileId && publicationEligibilityCode(product) === null
+    product.status === ProductStatus.ACTIVE &&
+    product.sellerProfileId === sellerProfileId &&
+    publicationEligibilityCode(product) === null
   );
 }
 export function assertCartSelection(
