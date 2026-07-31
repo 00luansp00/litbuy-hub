@@ -230,6 +230,8 @@ describe('Order checkout domain with real PostgreSQL', () => {
   it('reads immutable snapshots after mutable catalog changes', async () => {
     const f = await ready();
     const created = checkoutResponse(await checkout.create(f.buyer.id, key(), f.dto));
+    const originalSellerSlug = f.seller.slug;
+    const originalProductSlug = f.product.slug;
     await prisma.product.update({
       where: { id: f.product.id },
       data: {
@@ -241,13 +243,34 @@ describe('Order checkout domain with real PostgreSQL', () => {
     });
     await prisma.sellerProfile.update({
       where: { id: f.seller.id },
-      data: { storeName: 'Changed Store' },
+      data: { storeName: 'Changed Store', slug: `changed-store-${crypto.randomUUID()}` },
     });
     const detail = await orders.get(f.buyer.id, created.orderCode);
     expect(detail).toMatchObject({
-      seller: { storeName: 'Snapshot Store' },
-      items: [{ productTitle: 'Original title', unitAmountMinor: '1000' }],
+      seller: { slug: originalSellerSlug, storeName: 'Snapshot Store' },
+      items: [
+        {
+          productTitle: 'Original title',
+          productSlug: originalProductSlug,
+          unitAmountMinor: '1000',
+          lineTotalAmountMinor: '1000',
+        },
+      ],
     });
+    const list = await orders.list(f.buyer.id, { page: 1, limit: 20 });
+    expect(list.items[0]).toMatchObject(detail);
+    const cancellationKey = key();
+    const cancelled = orderResponse(
+      await orders.cancel(f.buyer.id, created.orderCode, cancellationKey, { expectedVersion: 1 }),
+    );
+    expect(cancelled).toMatchObject({
+      seller: { slug: originalSellerSlug, storeName: 'Snapshot Store' },
+      items: [{ productTitle: 'Original title', productSlug: originalProductSlug }],
+    });
+    const replay = orderResponse(
+      await orders.cancel(f.buyer.id, created.orderCode, cancellationKey, { expectedVersion: 1 }),
+    );
+    expect(replay).toEqual(cancelled);
     const serialized = JSON.stringify(detail);
     for (const field of [
       'objectKey',
@@ -259,6 +282,56 @@ describe('Order checkout domain with real PostgreSQL', () => {
       'keyHash',
     ])
       expect(serialized).not.toContain(field);
+  });
+  it('fails closed for missing or inconsistent seller snapshots', async () => {
+    const missing = await ready('SERVICE', 'FIXED');
+    const missingOrder = checkoutResponse(
+      await checkout.create(missing.buyer.id, key(), missing.dto),
+    );
+    const persistedMissing = await prisma.order.findUniqueOrThrow({
+      where: { publicCode: missingOrder.orderCode },
+      include: { items: true },
+    });
+    await prisma.orderItem.delete({ where: { id: persistedMissing.items[0].id } });
+    await expect(orders.get(missing.buyer.id, missingOrder.orderCode)).rejects.toMatchObject({
+      code: 'ORDER_SNAPSHOT_INVALID',
+      statusCode: 500,
+      details: [],
+    });
+
+    await prisma.$executeRawUnsafe('TRUNCATE TABLE "User", "CatalogCategory" CASCADE');
+    const inconsistent = await ready('SERVICE', 'FIXED');
+    const inconsistentOrder = checkoutResponse(
+      await checkout.create(inconsistent.buyer.id, key(), inconsistent.dto),
+    );
+    const persistedInconsistent = await prisma.order.findUniqueOrThrow({
+      where: { publicCode: inconsistentOrder.orderCode },
+      include: { items: true },
+    });
+    const original = persistedInconsistent.items[0];
+    await prisma.orderItem.create({
+      data: {
+        orderId: persistedInconsistent.id,
+        sourceProductId: original.sourceProductId,
+        sourceProductVersion: original.sourceProductVersion,
+        sellerProfileId: original.sellerProfileId,
+        sellerStoreName: 'Corrupted Store',
+        sellerSlug: original.sellerSlug,
+        productSlug: original.productSlug,
+        productTitle: original.productTitle,
+        productType: original.productType,
+        productModel: original.productModel,
+        deliveryMode: original.deliveryMode,
+        unitAmountMinor: original.unitAmountMinor,
+        quantity: original.quantity,
+        lineTotalAmountMinor: original.lineTotalAmountMinor,
+        currency: original.currency,
+        pricingPolicyVersion: original.pricingPolicyVersion,
+      },
+    });
+    await expect(
+      orders.get(inconsistent.buyer.id, inconsistentOrder.orderCode),
+    ).rejects.toMatchObject({ code: 'ORDER_SNAPSHOT_INVALID', statusCode: 500, details: [] });
   });
   it('cancels and expires idempotently while releasing reservations and preserving carts and stock', async () => {
     const f = await ready();

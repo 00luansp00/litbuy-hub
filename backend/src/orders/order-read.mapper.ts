@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client';
+import { AppError } from '../common/errors/app-error';
 
 export const orderReadInclude = {
-  sellerProfile: { select: { slug: true, storeName: true } },
   items: { orderBy: [{ createdAt: 'asc' as const }, { id: 'asc' as const }] },
 } satisfies Prisma.OrderInclude;
 
@@ -9,9 +9,18 @@ export type OrderReadPayload = Prisma.OrderGetPayload<{ include: typeof orderRea
 export type OrderReadResponse = ReturnType<typeof mapOrder>;
 
 export function mapOrder(order: OrderReadPayload) {
+  const firstItem = order.items[0];
+  if (!firstItem) throw invalidSnapshot();
+  const inconsistentSellerSnapshot = order.items.some(
+    (item) =>
+      item.sellerProfileId !== firstItem.sellerProfileId ||
+      item.sellerSlug !== firstItem.sellerSlug ||
+      item.sellerStoreName !== firstItem.sellerStoreName,
+  );
+  if (inconsistentSellerSnapshot) throw invalidSnapshot();
   return {
     orderCode: order.publicCode,
-    seller: { slug: order.sellerProfile.slug, storeName: order.sellerProfile.storeName },
+    seller: { slug: firstItem.sellerSlug, storeName: firstItem.sellerStoreName },
     currency: order.currency,
     subtotalAmountMinor: order.subtotalAmountMinor.toString(),
     discountAmountMinor: order.discountAmountMinor.toString(),
@@ -42,4 +51,8 @@ export function mapOrder(order: OrderReadPayload) {
       serviceBuyerRequirements: item.serviceBuyerRequirements,
     })),
   };
+}
+
+function invalidSnapshot(): AppError {
+  return new AppError('ORDER_SNAPSHOT_INVALID', 'ORDER_SNAPSHOT_INVALID', 500);
 }
