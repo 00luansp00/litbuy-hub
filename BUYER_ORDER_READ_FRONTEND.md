@@ -28,4 +28,10 @@ O módulo fica em `src/services/orders`, os componentes reais em `src/components
 
 `orderCode.ts` centraliza o padrão público `LIT-` e o parser rejeita prefixos, tamanhos, caracteres e caixa incompatíveis. O detalhe também exige que o código da resposta seja idêntico ao solicitado; divergências permanecem `MALFORMED_RESPONSE`. A página da URL é normalizada por uma função pura para um inteiro seguro entre 1 e 10.000.
 
-As três superfícies possuem suítes jsdom próprias com Testing Library e `QueryClientProvider`: `buyer-orders-list-ui.test.tsx`, `buyer-order-detail-ui.test.tsx` e `buyer-orders-profile-ui.test.tsx`. Elas cobrem o gate de autenticação, loading, dados reais, vazio, erros, retry, paginação, filtro, dinheiro grande, 404 seguro e ausência das ações mockadas. A correção permanece pendente do novo CI da PR #38 antes de ser declarada implementada e validada.
+As três superfícies possuem suítes jsdom próprias com Testing Library e `QueryClientProvider`: `buyer-orders-list-ui.test.tsx`, `buyer-order-detail-ui.test.tsx` e `buyer-orders-profile-ui.test.tsx`. Elas cobrem o gate de autenticação, loading, dados reais, vazio, erros, retry, paginação, filtro, dinheiro grande, 404 seguro e ausência das ações mockadas.
+
+## Validação final da PR #38
+
+A PR #38 foi implementada e validada no HEAD `0e741e9d60bd87009e60e27edc43cea89ee1aad4` pelo CI #172 completamente verde. O frontend concluiu 47 arquivos de teste e 493 testes, incluindo os 44 testes específicos desta integração. Backend e infraestrutura também foram integralmente aprovados, incluindo validação, integração real, migrations, PostgreSQL, Redis, MinIO, staging, health checks e smokes.
+
+A integração validada continua exclusivamente de leitura: não adiciona mutações, pagamento, gateway, checkout ou cancelamento real. Nenhum arquivo de backend, Prisma schema ou migration foi alterado. A PR permanece aberta e não foi mesclada.

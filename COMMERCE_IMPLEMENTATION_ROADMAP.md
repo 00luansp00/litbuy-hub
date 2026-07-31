@@ -1,6 +1,6 @@
 # Roadmap incremental do comércio
 
-**Status: plano futuro; implementação ainda não iniciada.** A fonte autoritativa é `COMMERCE_ARCHITECTURE.md`. Não agrupar as fases em uma única PR.
+**Status: roadmap incremental; PRs #36, #37 e #38 implementadas, com fases financeiras futuras ainda não iniciadas.** A fonte autoritativa é `COMMERCE_ARCHITECTURE.md`. Não agrupar as fases em uma única PR.
 
 ## PR #36 — carrinhos persistentes
 
@@ -28,10 +28,10 @@ The authenticated persistent cart foundation is implemented with database integr
 
 ## PR #37 — checkout and order core
 
-The backend now contains the server-side checkout and persistent pending-order foundation described in `ORDER_CHECKOUT_FOUNDATION.md`. It uses cart preview fingerprints, immutable snapshots, BIGINT minor units, transactional inventory reservations, idempotency, order events/outbox, buyer-only reads, pre-payment cancellation, and controlled expiration. This does **not** implement payments, a gateway, a financial ledger, webhooks, fulfillment, or a connected frontend. PR #38 remains responsible for real frontend order reading after CI validates this foundation.
+The backend contains the server-side checkout and persistent pending-order foundation described in `ORDER_CHECKOUT_FOUNDATION.md`. It uses cart preview fingerprints, immutable snapshots, BIGINT minor units, transactional inventory reservations, idempotency, order events/outbox, buyer-only reads, pre-payment cancellation, and controlled expiration. It does **not** implement payments, a gateway, a financial ledger, webhooks or fulfillment. The read-only frontend consumer was subsequently implemented by PR #38.
 
 # Incremento PR #38 — leitura frontend
 
-Preparada em branch a leitura real de pedidos nas três superfícies do comprador, sem marcar a PR como concluída antes do CI verde. Checkout, pagamento, cancelamento e demais mutações permanecem fora do escopo.
+Implementada e validada no CI #172, a PR #38 conecta a leitura real em `/pedidos`, o detalhe real em `/pedidos/$id` e cinco pedidos reais em `/perfil`. O módulo usa parser defensivo de respostas `unknown`, dinheiro com `BigInt`, validação centralizada de `orderCode`, correspondência entre código solicitado e retornado, paginação segura e tratamento indistinguível de 404/IDOR.
 
-A correção final adiciona validação centralizada de `orderCode`, correspondência entre código solicitado e retornado, normalização segura da página e testes jsdom das três superfícies. O status continua pendente do novo CI da PR #38.
+A PR permanece aberta e sem merge. Não há mutações, checkout ou pagamento nesta integração. O próximo incremento financeiro somente pode começar depois de decisão formal sobre o provedor de pagamento e deve ser entregue em PR separada.
