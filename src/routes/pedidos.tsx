@@ -1,38 +1,109 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { AccountLayout } from "@/components/account/AccountLayout";
-import { AccountHeader } from "@/components/account/AccountHeader";
-import { RecentOrdersCard } from "@/components/account/RecentOrdersCard";
-import { accountService } from "@/services/accountService";
+import { BuyerOrderErrorState } from "@/components/orders/BuyerOrderErrorState";
+import { BuyerOrderList } from "@/components/orders/BuyerOrderList";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ORDER_STATUSES, orderState, useBuyerOrders, type OrderStatus } from "@/services/orders";
 
+type Search = { page?: number; status?: OrderStatus };
 export const Route = createFileRoute("/pedidos")({
-  loader: async () => {
-    const [summary, orders] = await Promise.all([
-      accountService.getAccountSummary(),
-      accountService.getRecentOrders(10),
-    ]);
-    return { summary, orders };
-  },
+  validateSearch: (raw: Record<string, unknown>): Search => ({
+    page:
+      typeof raw.page === "string" && /^\d+$/.test(raw.page) && Number(raw.page) > 0
+        ? Number(raw.page)
+        : typeof raw.page === "number" && Number.isInteger(raw.page) && raw.page > 0
+          ? raw.page
+          : 1,
+    status:
+      typeof raw.status === "string" && ORDER_STATUSES.includes(raw.status as OrderStatus)
+        ? (raw.status as OrderStatus)
+        : undefined,
+  }),
   component: PedidosPage,
 });
-
 function PedidosPage() {
-  const { summary, orders } = Route.useLoaderData();
   return (
     <AuthGate>
-      <AccountLayout
-        header={
-          <AccountHeader
-            memberSince={summary.memberSince}
-            verified={summary.verified}
-            level={summary.level}
-          />
-        }
-        title="Meus pedidos"
-        description="Acompanhe todas as suas compras na LIT Buy."
-      >
-        <RecentOrdersCard orders={orders} hideHeader />
-      </AccountLayout>
+      <PedidosContent />
     </AuthGate>
+  );
+}
+function PedidosContent() {
+  const search = Route.useSearch();
+  const page = search.page ?? 1;
+  const status = search.status;
+  const navigate = useNavigate({ from: "/pedidos" });
+  const query = useBuyerOrders(page, 20, status);
+  const go = (nextPage: number, nextStatus = status) =>
+    navigate({ search: { page: nextPage, status: nextStatus } });
+  return (
+    <AccountLayout
+      title="Meus pedidos"
+      description="Pedidos registrados pela API para esta conta."
+      actions={
+        <label className="text-sm">
+          Status{" "}
+          <select
+            className="ml-2 rounded-md border bg-background p-2"
+            value={status ?? ""}
+            onChange={(e) => go(1, e.target.value ? (e.target.value as OrderStatus) : undefined)}
+          >
+            <option value="">Todos</option>
+            {ORDER_STATUSES.map((value) => (
+              <option key={value} value={value}>
+                {orderState[value][0]}
+              </option>
+            ))}
+          </select>
+        </label>
+      }
+    >
+      {query.isPending && (
+        <div aria-live="polite">
+          <span className="sr-only">Carregando pedidos...</span>
+          {[1, 2, 3].map((n) => (
+            <Skeleton key={n} className="mb-3 h-28" />
+          ))}
+        </div>
+      )}
+      {query.isError && <BuyerOrderErrorState retry={() => void query.refetch()} />}
+      {query.data && query.data.items.length === 0 && (
+        <div className="rounded-xl border p-8 text-center">
+          <h3 className="font-semibold">
+            {page > 1 ? "Esta página não possui pedidos" : "Nenhum pedido encontrado"}
+          </h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {page > 1
+              ? "Volte à página anterior para continuar."
+              : "Quando houver pedidos, eles aparecerão aqui."}
+          </p>
+          {page > 1 && (
+            <Button className="mt-4" variant="outline" onClick={() => go(page - 1)}>
+              Voltar uma página
+            </Button>
+          )}
+        </div>
+      )}
+      {query.data && query.data.items.length > 0 && (
+        <>
+          <BuyerOrderList orders={query.data.items} />
+          <nav aria-label="Paginação de pedidos" className="flex justify-between">
+            <Button variant="outline" disabled={page <= 1} onClick={() => go(page - 1)}>
+              Página anterior
+            </Button>
+            <span className="self-center text-sm">Página {page}</span>
+            <Button
+              variant="outline"
+              disabled={query.data.items.length < query.data.limit}
+              onClick={() => go(page + 1)}
+            >
+              Próxima página
+            </Button>
+          </nav>
+        </>
+      )}
+    </AccountLayout>
   );
 }

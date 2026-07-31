@@ -30,3 +30,7 @@ Essas superfícies são reais no rehearsal local, mas somente leitura pública n
 ## Regra de segurança
 
 Não inserir dados pessoais ou financeiros reais nas áreas demonstrativas. Todo item crítico exige arquitetura de pedidos/ledger, testes, segurança e revisão profissional antes de produção.
+
+# Atualização — pedidos do comprador
+
+As superfícies `/pedidos`, `/pedidos/$id` e “Pedidos recentes” de `/perfil` deixaram de consumir pedidos mockados. Elas não usam imagens/produtos do catálogo como fallback. Outras áreas demonstrativas e `src/services/orderService.ts` continuam inventariadas fora do escopo desta entrega.

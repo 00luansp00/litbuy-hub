@@ -26,3 +26,7 @@ O projeto é híbrido. Services reais e legados demonstrativos coexistem; o back
 ## Services reais adicionais
 
 Autenticação usa os módulos em `src/services/auth/` e a API NestJS. Lifecycle persistente, catálogo e imagens estão documentados nas auditorias próprias. Nenhum service frontend deve ser tratado como autoridade para dinheiro, permissão, estoque ou publicação.
+
+# Atualização — buyer orders
+
+`src/services/orders` é o módulo real e isolado de leitura de pedidos: tipos, parser defensivo, formatação BRL com `BigInt`, service autenticado e queries TanStack. `src/services/orderService.ts` permanece apenas legado e não é importado pelas rotas reais.

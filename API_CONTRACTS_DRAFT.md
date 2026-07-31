@@ -203,3 +203,7 @@ The implemented owner-only BUYER endpoints are `GET /api/v1/carts`, `GET /api/v1
 ## PR #37 — checkout and order core
 
 The backend now contains the server-side checkout and persistent pending-order foundation described in `ORDER_CHECKOUT_FOUNDATION.md`. It uses cart preview fingerprints, immutable snapshots, BIGINT minor units, transactional inventory reservations, idempotency, order events/outbox, buyer-only reads, pre-payment cancellation, and controlled expiration. This does **not** implement payments, a gateway, a financial ledger, webhooks, fulfillment, or a connected frontend. PR #38 remains responsible for real frontend order reading after CI validates this foundation.
+
+# Consumidor frontend — pedidos
+
+O frontend consome `GET /api/v1/orders` (`page`, `limit`, `status`) e `GET /api/v1/orders/:orderCode` como `unknown`, validando integralmente a resposta mapeada pelo backend. Não deriva campos, não aceita enum desconhecido e não implementa endpoints de mutação. 404 `ORDER_NOT_FOUND` recebe tratamento indistinguível para inexistência e indisponibilidade à conta.

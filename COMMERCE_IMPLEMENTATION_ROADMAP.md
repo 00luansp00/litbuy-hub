@@ -29,3 +29,7 @@ The authenticated persistent cart foundation is implemented with database integr
 ## PR #37 — checkout and order core
 
 The backend now contains the server-side checkout and persistent pending-order foundation described in `ORDER_CHECKOUT_FOUNDATION.md`. It uses cart preview fingerprints, immutable snapshots, BIGINT minor units, transactional inventory reservations, idempotency, order events/outbox, buyer-only reads, pre-payment cancellation, and controlled expiration. This does **not** implement payments, a gateway, a financial ledger, webhooks, fulfillment, or a connected frontend. PR #38 remains responsible for real frontend order reading after CI validates this foundation.
+
+# Incremento PR #38 — leitura frontend
+
+Preparada em branch a leitura real de pedidos nas três superfícies do comprador, sem marcar a PR como concluída antes do CI verde. Checkout, pagamento, cancelamento e demais mutações permanecem fora do escopo.
