@@ -25,3 +25,5 @@ There is deliberately no payment table, gateway, webhook, ledger, wallet, refund
 ## Validation status
 
 The lint/type corrections and focused unit tests are implemented locally. PostgreSQL/Redis/MinIO HTTP integration, rollback-trigger, constraint-execution, staging, smoke, and double-reset evidence must only be recorded here after the corresponding CI jobs pass; this document does not currently claim those proofs as completed.
+
+The real-infrastructure suites `checkout-orders-http.integration-spec.ts` and `order-checkout.integration-spec.ts` now exercise the real `AppModule`, authentication/session/CSRF guards, checkout snapshots, NORMAL/DYNAMIC/FIXED/QUOTE behavior, concurrent inventory reservations, same-cart and idempotency concurrency, buyer-scoped reads, cancellation, expiration, rollback triggers, and PostgreSQL constraints. `local-demo-data.integration-spec.ts` additionally creates and removes the complete demo order graph. These tests are implemented and await the next full CI run before their results or totals are described as proven.

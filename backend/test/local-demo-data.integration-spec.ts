@@ -204,6 +204,100 @@ describe('local demo data with real PostgreSQL and MinIO', () => {
     });
   });
 
+  it('removes every demo order artifact in dependency order across two resets', async () => {
+    await runDemoCommand(['seed'], env);
+    const product = await prisma.product.findUniqueOrThrow({ where: { id: DEMO_PRODUCTS[0].id } });
+    const cart = await prisma.cart.create({
+      data: {
+        buyerUserId: DEMO_USERS[0].id,
+        sellerProfileId: DEMO_IDS.sellerProfile,
+        status: 'CHECKED_OUT',
+        checkedOutAt: new Date(),
+      },
+    });
+    const order = await prisma.order.create({
+      data: {
+        publicCode: `LIT-${crypto.randomUUID().replaceAll('-', '').slice(0, 14).toUpperCase()}`,
+        sourceCartId: cart.id,
+        sourceCartVersion: 1,
+        buyerUserId: DEMO_USERS[0].id,
+        sellerProfileId: DEMO_IDS.sellerProfile,
+        subtotalAmountMinor: 1000n,
+        totalAmountMinor: 1000n,
+        expiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+    const item = await prisma.orderItem.create({
+      data: {
+        orderId: order.id,
+        sourceProductId: product.id,
+        sourceProductVersion: product.version,
+        sellerProfileId: DEMO_IDS.sellerProfile,
+        sellerStoreName: 'Demo',
+        sellerSlug: 'demo',
+        productSlug: product.slug,
+        productTitle: product.title,
+        productType: product.productType,
+        productModel: product.model,
+        deliveryMode: product.deliveryMode,
+        unitAmountMinor: 1000n,
+        quantity: 1,
+        lineTotalAmountMinor: 1000n,
+      },
+    });
+    await prisma.inventoryReservation.create({
+      data: {
+        orderId: order.id,
+        orderItemId: item.id,
+        productId: product.id,
+        quantity: 1,
+        expiresAt: order.expiresAt,
+      },
+    });
+    const event = await prisma.orderEvent.create({
+      data: { orderId: order.id, type: 'ORDER_CREATED' },
+    });
+    await prisma.outboxEvent.create({
+      data: {
+        orderEventId: event.id,
+        aggregateType: 'ORDER',
+        aggregateId: order.id,
+        eventType: 'ORDER_CREATED',
+        payload: { orderId: order.id },
+      },
+    });
+    await prisma.commerceIdempotencyRecord.create({
+      data: {
+        actorUserId: DEMO_USERS[0].id,
+        operation: 'CHECKOUT_CREATE',
+        keyHash: crypto.randomUUID(),
+        requestHash: crypto.randomUUID(),
+        responseStatus: 201,
+        responseBody: { orderCode: order.publicCode },
+        resourceType: 'ORDER',
+        resourceId: order.id,
+        completedAt: new Date(),
+        expiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+    await expect(runDemoCommand(['reset', '--confirm'], env)).resolves.toMatchObject({
+      ok: true,
+      action: 'reset',
+    });
+    expect(await prisma.order.findUnique({ where: { id: order.id } })).toBeNull();
+    expect(await prisma.orderItem.count({ where: { orderId: order.id } })).toBe(0);
+    expect(await prisma.inventoryReservation.count({ where: { orderId: order.id } })).toBe(0);
+    expect(await prisma.orderEvent.count({ where: { orderId: order.id } })).toBe(0);
+    expect(await prisma.outboxEvent.count({ where: { aggregateId: order.id } })).toBe(0);
+    expect(
+      await prisma.commerceIdempotencyRecord.count({ where: { actorUserId: DEMO_USERS[0].id } }),
+    ).toBe(0);
+    await expect(runDemoCommand(['reset', '--confirm'], env)).resolves.toMatchObject({
+      ok: true,
+      action: 'reset',
+    });
+  });
+
   it.each(['seller', 'product'] as const)(
     'fails closed for an external cart reference to a demo %s and recovers after removal',
     async (reference) => {

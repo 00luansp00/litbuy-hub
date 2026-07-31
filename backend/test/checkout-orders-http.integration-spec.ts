@@ -1,0 +1,253 @@
+import cookieParser from 'cookie-parser';
+import { ValidationPipe, VersioningType } from '@nestjs/common';
+import type { INestApplication } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { Test } from '@nestjs/testing';
+import request from 'supertest';
+import { AppModule } from '../src/app.module';
+import { AuthMailer } from '../src/auth/auth.service';
+import { GlobalExceptionFilter } from '../src/common/filters/global-exception.filter';
+import type { AppConfig } from '../src/config/app.config';
+import { PrismaService } from '../src/database/prisma.service';
+import { RedisService } from '../src/redis/redis.service';
+import { authHeaders, commerceFixture, createActor } from './order-checkout-test.helpers';
+
+describe('Checkout and orders HTTP with real auth, guards, CSRF and PostgreSQL', () => {
+  jest.setTimeout(120_000);
+  let app: INestApplication, prisma: PrismaService, mailer: AuthMailer, redis: RedisService;
+  beforeAll(async () => {
+    const ref = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    app = ref.createNestApplication();
+    const config = app.get(ConfigService).getOrThrow<AppConfig>('app');
+    app.setGlobalPrefix(config.apiPrefix);
+    app.enableVersioning({ type: VersioningType.URI });
+    app.use(cookieParser());
+    app.useGlobalPipes(
+      new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }),
+    );
+    app.useGlobalFilters(new GlobalExceptionFilter());
+    await app.init();
+    prisma = app.get(PrismaService);
+    mailer = app.get(AuthMailer);
+    redis = app.get(RedisService);
+  });
+  beforeEach(async () => {
+    await (await redis.getClient()).flushdb();
+    mailer.sent.splice(0);
+    await prisma.$executeRawUnsafe('TRUNCATE TABLE "User", "CatalogCategory" CASCADE');
+  });
+  afterAll(() => app.close());
+  async function cart(
+    actor: Awaited<ReturnType<typeof createActor>>,
+    model: 'NORMAL' | 'SERVICE' = 'NORMAL',
+    pricing?: 'FIXED' | 'QUOTE',
+  ) {
+    const f = await commerceFixture(prisma, model, pricing);
+    if (model === 'SERVICE' && pricing === 'QUOTE') {
+      const stored = await prisma.cart.create({
+        data: {
+          buyerUserId: actor.user.id,
+          sellerProfileId: f.seller.id,
+          items: { create: { productId: f.product.id, quantity: 1 } },
+        },
+      });
+      return {
+        ...f,
+        preview: { id: stored.id, version: 1, previewFingerprint: 'sha256:'.padEnd(71, '0') },
+      };
+    }
+    const added = await request(app.getHttpServer())
+      .post(`/api/v1/carts/${f.seller.slug}/items`)
+      .set(authHeaders(actor))
+      .send({ productId: f.product.id, quantity: 1, expectedVersion: 0 })
+      .expect(201);
+    return {
+      ...f,
+      preview: added.body as { id: string; version: number; previewFingerprint: string },
+    };
+  }
+  const body = (f: Awaited<ReturnType<typeof cart>>) => ({
+    sellerSlug: f.seller.slug,
+    expectedCartVersion: f.preview.version,
+    expectedPreviewFingerprint: f.preview.previewFingerprint,
+  });
+  const checkout = (
+    actor: Awaited<ReturnType<typeof createActor>>,
+    f: Awaited<ReturnType<typeof cart>>,
+    idempotencyKey = `checkout:${crypto.randomUUID()}`,
+  ) =>
+    request(app.getHttpServer())
+      .post('/api/v1/checkout-sessions')
+      .set(authHeaders(actor))
+      .set('Idempotency-Key', idempotencyKey)
+      .send(body(f));
+  it('enforces anonymous access, BUYER RBAC and persisted-session CSRF', async () => {
+    const actor = await createActor(app, prisma, mailer),
+      other = await createActor(app, prisma, mailer),
+      f = await cart(actor);
+    await request(app.getHttpServer()).post('/api/v1/checkout-sessions').send(body(f)).expect(401);
+    await checkout(actor, f).set('X-CSRF-Token', '').expect(401);
+    await checkout(actor, f).set('X-CSRF-Token', 'incorrect').expect(401);
+    await checkout(actor, f).set('X-CSRF-Token', other.csrf).expect(401);
+    await prisma.userRoleAssignment.delete({
+      where: { userId_role: { userId: actor.user.id, role: 'BUYER' } },
+    });
+    await prisma.userRoleAssignment.create({ data: { userId: actor.user.id, role: 'ADMIN' } });
+    await checkout(actor, f).expect(403);
+    await prisma.userRoleAssignment.create({ data: { userId: actor.user.id, role: 'BUYER' } });
+    await checkout(actor, f).expect(201);
+  });
+  it('validates version, fingerprint, idempotency headers and safe checkout responses', async () => {
+    const actor = await createActor(app, prisma, mailer),
+      f = await cart(actor);
+    await request(app.getHttpServer())
+      .post('/api/v1/checkout-sessions')
+      .set(authHeaders(actor))
+      .send(body(f))
+      .expect(400)
+      .expect(({ body: response }) => expect(response.code).toBe('IDEMPOTENCY_KEY_REQUIRED'));
+    await request(app.getHttpServer())
+      .post('/api/v1/checkout-sessions')
+      .set(authHeaders(actor))
+      .set('Idempotency-Key', 'short')
+      .send(body(f))
+      .expect(400);
+    await checkout(actor, f)
+      .send({ ...body(f), expectedCartVersion: 99 })
+      .expect(409)
+      .expect(({ body: response }) => expect(response.code).toBe('CART_VERSION_CONFLICT'));
+    await checkout(actor, f)
+      .send({ ...body(f), expectedPreviewFingerprint: 'sha256:'.padEnd(71, '0') })
+      .expect(409)
+      .expect(({ body: response }) => expect(response.code).toBe('CHECKOUT_PREVIEW_CHANGED'));
+    const key = `checkout:${crypto.randomUUID()}`;
+    const first = await checkout(actor, f, key).expect(201);
+    const replay = await checkout(actor, f, key).expect(201);
+    expect(replay.body).toEqual(first.body);
+    expect(first.body).toMatchObject({
+      totalAmountMinor: expect.any(String),
+      items: [{ unitAmountMinor: expect.any(String) }],
+    });
+    const serialized = JSON.stringify(first.body);
+    for (const field of [
+      'objectKey',
+      'accountDetails',
+      'csrfTokenHash',
+      'sessionId',
+      'keyHash',
+      'reservation',
+      'outbox',
+      'securityEvent',
+    ])
+      expect(serialized).not.toContain(field);
+    await checkout(actor, f, key)
+      .send({ ...body(f), expectedCartVersion: 2 })
+      .expect(409)
+      .expect(({ body: response }) => expect(response.code).toBe('IDEMPOTENCY_KEY_REUSED'));
+    expect(await prisma.cart.findUniqueOrThrow({ where: { id: f.preview.id } })).toMatchObject({
+      status: 'CHECKED_OUT',
+      version: 2,
+    });
+  });
+  it('reuses one response for simultaneous identical HTTP requests', async () => {
+    const actor = await createActor(app, prisma, mailer),
+      f = await cart(actor),
+      key = `checkout:${crypto.randomUUID()}`;
+    const responses = await Promise.all([checkout(actor, f, key), checkout(actor, f, key)]);
+    expect(responses.map((value) => value.status)).toEqual([201, 201]);
+    expect(responses[0].body).toEqual(responses[1].body);
+    expect(await prisma.order.count()).toBe(1);
+    expect(await prisma.commerceIdempotencyRecord.count()).toBe(1);
+  });
+  it('lists and reads only owner snapshots and cancels idempotently with HTTP 200', async () => {
+    const owner = await createActor(app, prisma, mailer),
+      intruder = await createActor(app, prisma, mailer),
+      f = await cart(owner);
+    const created = await checkout(owner, f).expect(201);
+    const code = String(created.body.orderCode);
+    const list = await request(app.getHttpServer())
+      .get('/api/v1/orders')
+      .set('Authorization', owner.authorization)
+      .expect(200);
+    expect(list.body.items).toHaveLength(1);
+    await request(app.getHttpServer())
+      .get(`/api/v1/orders/${code}`)
+      .set('Authorization', owner.authorization)
+      .expect(200);
+    await request(app.getHttpServer())
+      .get(`/api/v1/orders/${code}`)
+      .set('Authorization', intruder.authorization)
+      .expect(404);
+    const key = `cancel:${crypto.randomUUID()}`;
+    const endpoint = `/api/v1/orders/${code}/cancel`;
+    await request(app.getHttpServer())
+      .post(endpoint)
+      .set(authHeaders(owner))
+      .set('Idempotency-Key', key)
+      .send({ expectedVersion: 99 })
+      .expect(409);
+    const cancelled = await request(app.getHttpServer())
+      .post(endpoint)
+      .set(authHeaders(owner))
+      .set('Idempotency-Key', key)
+      .send({ expectedVersion: 1 })
+      .expect(200);
+    expect(cancelled.body).toMatchObject({ status: 'CANCELLED', version: 2 });
+    await request(app.getHttpServer())
+      .post(endpoint)
+      .set(authHeaders(owner))
+      .set('Idempotency-Key', key)
+      .send({ expectedVersion: 1 })
+      .expect(200);
+    await request(app.getHttpServer())
+      .post(endpoint)
+      .set(authHeaders(owner))
+      .set('Idempotency-Key', `cancel:${crypto.randomUUID()}`)
+      .send({ expectedVersion: 1 })
+      .expect(200);
+    await request(app.getHttpServer())
+      .post(endpoint)
+      .set(authHeaders(owner))
+      .set('Idempotency-Key', key)
+      .send({ expectedVersion: 2 })
+      .expect(409)
+      .expect(({ body: response }) => expect(response.code).toBe('IDEMPOTENCY_KEY_REUSED'));
+    expect(await prisma.orderEvent.count({ where: { type: 'ORDER_CANCELLED' } })).toBe(1);
+  });
+  it('rejects empty, missing and QUOTE carts without partial orders', async () => {
+    const actor = await createActor(app, prisma, mailer),
+      missing = await commerceFixture(prisma),
+      quote = await cart(actor, 'SERVICE', 'QUOTE');
+    await request(app.getHttpServer())
+      .post('/api/v1/checkout-sessions')
+      .set(authHeaders(actor))
+      .set('Idempotency-Key', `checkout:${crypto.randomUUID()}`)
+      .send({
+        sellerSlug: missing.seller.slug,
+        expectedCartVersion: 1,
+        expectedPreviewFingerprint: 'sha256:'.padEnd(71, '0'),
+      })
+      .expect(422);
+    const emptySeller = await commerceFixture(prisma);
+    await prisma.cart.create({
+      data: { buyerUserId: actor.user.id, sellerProfileId: emptySeller.seller.id },
+    });
+    const empty = await request(app.getHttpServer())
+      .get(`/api/v1/carts/${emptySeller.seller.slug}`)
+      .set('Authorization', actor.authorization)
+      .expect(200);
+    await request(app.getHttpServer())
+      .post('/api/v1/checkout-sessions')
+      .set(authHeaders(actor))
+      .set('Idempotency-Key', `checkout:${crypto.randomUUID()}`)
+      .send({
+        sellerSlug: emptySeller.seller.slug,
+        expectedCartVersion: empty.body.version,
+        expectedPreviewFingerprint: empty.body.previewFingerprint,
+      })
+      .expect(422)
+      .expect(({ body: response }) => expect(response.code).toBe('CART_EMPTY'));
+    await checkout(actor, quote).expect(422);
+    expect(await prisma.order.count()).toBe(0);
+  });
+});
