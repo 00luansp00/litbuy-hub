@@ -609,10 +609,26 @@ async function seed(context: Runtime) {
   return { ok: true, action: 'seed', ...DEMO_SUMMARY };
 }
 
+async function listAllPublicProducts(
+  catalog: PublicProductCatalogService,
+  sort: PublicCatalogSort,
+) {
+  const items: Awaited<ReturnType<PublicProductCatalogService['list']>>['items'] = [];
+  let page = 1;
+  while (true) {
+    const result = await catalog.list({ page, limit: 50, sort });
+    items.push(...result.items);
+    if (!result.pagination.hasNext) return items;
+    page += 1;
+  }
+}
+
 async function verify(context: Runtime) {
   const { prisma, config, internalS3, signingS3 } = context;
-  const fail = () => {
-    throw new DemoDataError('DEMO_DATA_VERIFICATION_FAILED');
+  const fail = (stage = 'unspecified') => {
+    const error = new DemoDataError('DEMO_DATA_VERIFICATION_FAILED');
+    error.cause = stage;
+    throw error;
   };
   const users = await prisma.user.findMany({
     where: { id: { in: DEMO_USERS.map((x) => x.id) } },
@@ -857,18 +873,25 @@ async function verify(context: Runtime) {
     deleteObject: () => Promise.resolve(undefined),
   };
   const catalog = new PublicProductCatalogService(prisma as never, storageAdapter);
-  const lists = await Promise.all(
-    Object.values(PublicCatalogSort).map((sort) => catalog.list({ page: 1, limit: 24, sort })),
-  );
   const expectedPublic = DEMO_PRODUCTS.filter((product) => product.status === 'ACTIVE');
-  if (
-    lists.some(
-      (list) =>
-        list.items.length !== 6 ||
-        list.items.some((item) => !expectedPublic.some((expected) => expected.slug === item.slug)),
-    )
-  )
-    fail();
+  const expectedDemoSlugs = new Set(expectedPublic.map((product) => product.slug));
+  const hiddenDemoSlugs = new Set(
+    DEMO_PRODUCTS.filter((product) => product.status !== 'ACTIVE').map((product) => product.slug),
+  );
+  const lists = await Promise.all(
+    Object.values(PublicCatalogSort).map(async (sort) => {
+      const allItems = await listAllPublicProducts(catalog, sort);
+      if (allItems.some((item) => hiddenDemoSlugs.has(item.slug)))
+        fail('public catalog membership');
+      const demoItems = allItems.filter((item) => expectedDemoSlugs.has(item.slug));
+      if (
+        demoItems.length !== expectedPublic.length ||
+        new Set(demoItems.map((item) => item.slug)).size !== expectedPublic.length
+      )
+        fail('public catalog membership');
+      return demoItems;
+    }),
+  );
   const byRecent = [...expectedPublic].sort(
     (a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id),
   );
@@ -883,20 +906,72 @@ async function verify(context: Runtime) {
   );
   if (
     lists.some(
-      (list, index) => list.items.map((item) => item.slug).join() !== expectedOrders[index].join(),
+      (items, index) => items.map((item) => item.slug).join() !== expectedOrders[index].join(),
     )
   )
-    fail();
+    fail('public catalog ordering');
   const paged = await catalog.list({ page: 1, limit: 2, sort: PublicCatalogSort.RECENT });
-  if (paged.items.length !== 2 || !paged.pagination.hasNext) fail();
-  const detail = await catalog.detail(expectedPublic[0].slug);
-  if (!detail.coverImage.url || JSON.stringify({ lists, detail }).includes('objectKey')) fail();
+  if (paged.items.length !== 2 || !paged.pagination.hasNext) fail('public catalog pagination');
+  for (const expected of expectedPublic) {
+    const detail = await catalog.detail(expected.slug);
+    const category = DEMO_CATEGORIES.find((item) => item.id === expected.categoryId);
+    const subcategory = category?.subcategories.find((item) => item.id === expected.subcategoryId);
+    const expectedPricing =
+      expected.model === 'DYNAMIC'
+        ? {
+            kind: 'FROM',
+            amount: Math.min(...expected.variants.map((item) => item.price)).toFixed(2),
+          }
+        : expected.service === 'QUOTE'
+          ? { kind: 'QUOTE', amount: null }
+          : {
+              kind: 'FIXED',
+              amount: (expected.service === 'FIXED' ? 79.9 : expected.price)?.toFixed(2) ?? null,
+            };
+    const expectedStock =
+      expected.model === 'NORMAL'
+        ? expected.stock
+        : expected.model === 'DYNAMIC'
+          ? expected.variants.reduce((sum, item) => sum + item.stock, 0)
+          : null;
+    if (
+      detail.slug !== expected.slug ||
+      detail.title !== expected.title ||
+      detail.productType !== expected.productType ||
+      detail.model !== expected.model ||
+      JSON.stringify(detail.pricing) !== JSON.stringify(expectedPricing) ||
+      detail.stock !== expectedStock ||
+      detail.category.slug !== category?.slug ||
+      detail.subcategory?.slug !== subcategory?.slug ||
+      detail.seller.slug !== 'demo-lit-store' ||
+      detail.seller.storeName !== 'LIT Demo Store' ||
+      !detail.coverImage.url ||
+      detail.coverImage.altText !== expected.title ||
+      detail.variants.length !== expected.variants.length ||
+      detail.variants.some((variant, index) => {
+        const wanted = expected.variants[index];
+        return (
+          !wanted ||
+          variant.title !== wanted.title ||
+          variant.price !== wanted.price.toFixed(2) ||
+          variant.stock !== wanted.stock
+        );
+      }) ||
+      (expected.service
+        ? detail.serviceDetails?.pricingType !== expected.service ||
+          detail.serviceDetails.basePrice !== (expected.service === 'FIXED' ? '79.90' : null) ||
+          detail.serviceDetails.estimatedDelivery !== 'Até 2 dias úteis'
+        : detail.serviceDetails !== null) ||
+      JSON.stringify(detail).includes('objectKey')
+    )
+      fail('public detail');
+  }
   for (const hidden of DEMO_PRODUCTS.filter((product) => product.status !== 'ACTIVE')) {
     try {
       await catalog.detail(hidden.slug);
-      fail();
+      fail('public hidden detail');
     } catch (error) {
-      if ((error as { code?: string }).code !== 'PRODUCT_NOT_FOUND') fail();
+      if ((error as { code?: string }).code !== 'PRODUCT_NOT_FOUND') fail('public hidden detail');
     }
   }
   for (const image of DEMO_IMAGES) {
