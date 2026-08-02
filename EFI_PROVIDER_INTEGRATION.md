@@ -1,53 +1,65 @@
 # Efí provider integration boundary
 
-## Scope and authentication
+## Scope
 
-`backend/src/financial/providers/efi` implements `PaymentProviderPort` without exposing Efí DTOs to Order, Checkout, Ledger, or the domain. OAuth client-credentials authentication is isolated in the HTTP client; access tokens are memory-only and never logged or persisted. Mutating requests carry an idempotency key and every request carries a new correlation ID.
+`backend/src/financial/providers/efi` is a sandbox boundary. Payment operations implement the provider-neutral `PaymentProviderPort`; external-event resolution implements the separate provider-neutral `PaymentProviderNotificationPort`. Efí DTOs do not enter Order, Checkout, Ledger, or domain services. No public callback endpoint, real checkout payment, Pix transfer, cash-out, payout, seller split, refund, or irreversible ledger effect is enabled.
 
-This is a sandbox foundation, not an activation. Checkout continues to create no real payment. There is no payout endpoint, Pix Cash-Out call, seller split, or irreversible webhook side effect.
+## Separate Billing and Pix profiles
 
-## Sandbox and production configuration
+The APIs are different protocols and never share a configurable arbitrary host:
 
-The provider is off unless `EFI_ENABLED=true`. Sandbox and production use distinct Efí base URLs and must use separate credentials, webhook secrets, certificates, and private keys in the deployment secret manager. Required settings are:
+| Profile             | Sandbox/homologation                    | Production                            | OAuth                |
+| ------------------- | --------------------------------------- | ------------------------------------- | -------------------- |
+| Cobranças (Billing) | `https://cobrancas-h.api.efipay.com.br` | `https://cobrancas.api.efipay.com.br` | `POST /v1/authorize` |
+| Pix                 | `https://pix-h.api.efipay.com.br`       | `https://pix.api.efipay.com.br`       | `POST /oauth/token`  |
 
-| Setting                                        | Purpose                                                      |
-| ---------------------------------------------- | ------------------------------------------------------------ |
-| `EFI_ENVIRONMENT`                              | exactly `sandbox` or `production`                            |
-| `EFI_CLIENT_ID`, `EFI_CLIENT_SECRET`           | OAuth client credentials                                     |
-| `EFI_MTLS_CERTIFICATE`, `EFI_MTLS_PRIVATE_KEY` | secret-manager-injected PEM material                         |
-| `EFI_WEBHOOK_SECRET`                           | webhook authenticity boundary secret                         |
-| `EFI_TIMEOUT_MS`                               | 1–30 second outbound timeout                                 |
-| `EFI_API_BASE_URL`                             | optional HTTPS override                                      |
-| `EFI_PRODUCTION_APPROVED`                      | explicit production gate; not evidence of approval by itself |
+Production accepts only its pinned official hosts. Explicit URL overrides exist only for local/test transports and cannot be used with the production environment. Billing OAuth uses client credentials over HTTPS; this boundary does not claim Billing requires an outbound client certificate. Pix requires its separately injected client certificate/private key and server-certificate validation. Access tokens remain memory-only.
 
-Enabled configuration is validated during Nest configuration startup. Production additionally fails closed unless `EFI_PRODUCTION_APPROVED=true`; deployment governance must set it only after written Efí homologation. No secret, certificate, key, or token belongs in Git, a database, an event payload, or application logs.
+The provider is off unless `EFI_ENABLED=true`. Enabled startup requires `EFI_CLIENT_ID`, `EFI_CLIENT_SECRET`, `EFI_PIX_MTLS_CERTIFICATE`, `EFI_PIX_MTLS_PRIVATE_KEY`, and a 1–30 second timeout. `EFI_PRODUCTION_APPROVED=true` is an additional fail-closed deployment gate, not proof of homologation. Sandbox and production credentials and certificates must be entirely separate and secret-manager injected. Secrets, tokens, certificates, and keys must never enter Git, persistence, payload logs, or error messages.
 
-## Certificates and transport security
+## Billing charge contract
 
-Outbound HTTPS uses the configured client certificate/private key, validates the server certificate, and has a finite timeout. Efí Pix webhook mTLS, where applicable to the contracted endpoint, must terminate at a trusted ingress configured to require and validate Efí's client certificate. The ingress must pass only verified traffic to the application; the application then performs payload authentication and parsing. Exact production CA/certificate rotation is pending homologation.
+Create and detail responses use `{ code, data: { charge_id, status, total, ... } }`; `ProviderPayment.id` comes from `data.charge_id`. Positive minor-unit `bigint` amounts are range-checked before conversion, and values above `Number.MAX_SAFE_INTEGER` are rejected before network access. Creation sends the stable internal reference in `metadata.custom_id` for later reconciliation.
 
-No PAN or CVV is accepted by this adapter. Future cards must use provider-hosted tokenization; complete card data must never traverse or persist in LIT Buy.
+The Billing API's undocumented `x-idempotency-key` is not sent or assumed. LIT Buy still requires internal idempotency. A timeout or connection loss following a mutation is ambiguous, is never blindly retried, and requires reconciliation.
 
-## Payment and webhook mapping
+Cancel is read-after-write: `PUT /v1/charge/:id/cancel`, followed by authenticated `GET /v1/charge/:id`. An ambiguous PUT or unreliable confirmation requires reconciliation. In particular, a canceled boleto may later be reported as `paid`; a late notification must not blindly reactivate an Order and must go through the future idempotent reconciliation/state-machine workflow.
 
-Efí `new`/`waiting` map to `PENDING`; `identified`/`paid`/`approved` to `SUCCEEDED`; `unpaid` to `FAILED`; and `canceled`/`expired` to `EXPIRED`. Unknown states fail closed and open a reconciliation concern rather than guessing.
+Status mapping is deliberately conservative:
 
-Webhook JSON is strictly reduced to an external event ID, event type, charge ID, mapped state, and SHA-256 payload hash (`ProviderWebhook`). The stable external ID and hash support the existing idempotency/reconciliation boundary: duplicate delivery is not a second financial instruction, arrival order is never trusted, and no fixture/parser path writes ledger entries.
+- `new`, `waiting`, `identified`, `approved`, `link` → `PENDING`;
+- `paid` → `SUCCEEDED`;
+- `unpaid` → `FAILED`;
+- `canceled`, `expired` → `EXPIRED`.
 
-## Errors, retries, and reconciliation
+`refunded`, `contested`, and `settled` carry financial semantics that the simple payment state cannot preserve. They fail closed with reconciliation required until refund, dispute/chargeback, and settlement domain flows consume them explicitly.
 
-HTTP and transport failures become bounded adapter errors. Authentication and invalid requests are non-retryable; throttling may be retried only by an explicitly designed read-safe policy. A timeout, connection loss, malformed/unknown response, or 5xx after a mutable request is ambiguous and requires reconciliation. The adapter does **not** blindly retry financial mutations.
+## Billing notification token resolution
 
-Logs and operator errors contain normalized codes and optional provider correlation IDs, never response bodies, authorization headers, credentials, certificates, private keys, access tokens, or full payment instrument data.
+Efí Billing posts `application/x-www-form-urlencoded` containing `notification=<token>`. The adapter strictly parses that callback, then performs authenticated `GET /v1/notification/:token`. The returned `{ code, data: [...] }` history contains event `id`, `type`, current/previous status, `identifiers.charge_id`, and creation time. Only supported `charge` events become provider-neutral events.
 
-## Marketplace risk foundation
+The token identifies the lifecycle, not one delivery. Each normalized external ID is a deterministic SHA-256 of provider, protocol, token, and notification event ID. Thus two lifecycle changes have different IDs while a redelivery of the same history event has the same ID. Raw notification tokens are not returned to the domain or logged. Arrival order is never authoritative, and resolution itself performs no financial write.
 
-Efí remains the regulated financial layer; LIT Buy does not build a bank or standalone AML system. Marketplace withdrawal decisions will require KYC and same-titularity destination, forbid third-party payouts, and require step-up plus cooldown after a destination change. A deficit or blocked/restricted seller cannot withdraw; disputes and chargebacks may block balance.
+## Pix webhook boundary
 
-Signals prepared for future manual review include abnormal volume, related accounts/devices, rapid money entry/exit, self-purchase or self-dealing, and abnormal refund/chargeback rates. These signals do not autonomously confiscate or move funds.
+Pix callbacks are JSON shaped as `{ pix: [...] }`, with entries including `endToEndId`, `txid`, `valor`, and `horario`. This parser is separate from Billing notification resolution. It does not invent or require a body-HMAC signature.
 
-The PR #39 withdrawal policy remains unchanged: `STANDARD`, up to 48 hours, manual approval, zero fee; `INSTANT` remains disabled.
+Authenticity depends first on mTLS at a trusted ingress that validates Efí's client certificate. Until that infrastructure exists, callers must provide explicit internal `transportVerified=true`; otherwise the adapter rejects the payload. Additional IP or URL-HMAC controls remain subject to current official documentation and written homologation. The parser creates no payment or ledger effect.
 
-## Decisions pending written homologation
+## Refunds and reconciliation
 
-Before production, Efí must confirm in writing the real catalog and receipt/repayment structure, contractual custody/hold implications, supported refund and chargeback behavior, marketplace/seller KYC responsibilities, webhook mTLS/signature contract and certificate rotation, payment endpoint/field versions, idempotency guarantees, reconciliation reports, rate limits, and the future Pix Cash-Out flow with same-titularity enforcement. Native seller split is not the currently planned settlement path.
+Generic `refundPayment` is explicitly `UNSUPPORTED_OPERATION` and performs no network call. Card reversal is method-specific and asynchronous, Pix uses its own refund mechanism, and boleto does not share that contract. A future increment must first connect PaymentAttempt/payment-method data and sufficient external identifiers, then model pending outcomes and reconcile the correct method-specific API.
+
+Normalized operator errors expose only stable codes and optional correlation IDs. They never contain response bodies, authorization headers, client secrets, access tokens, notification tokens, certificates, private keys, PAN, or CVV.
+
+## Marketplace risk ownership
+
+Provider-independent policy lives in `backend/src/financial/risk/marketplace-withdrawal-risk-policy.ts`, not in the Efí adapter. It is only a policy foundation—not implemented AML/KYC automation. LIT Buy owns marketplace-specific seller eligibility, related account/device and self-dealing signals, abnormal behavior, balance release, deficits, and withdrawal approval. KYC before withdrawal, same-titularity destination, third-party payout prohibition, and destination-change step-up/cooldown remain planned controls.
+
+Efí is the regulated financial institution. Financial antifraud and PLD-FT controls are Efí responsibilities where the future contract and law assign them; LIT Buy does not claim to replace those controls or operate a bank.
+
+The PR #39 policy remains unchanged: `STANDARD`, up to 48 hours, manual approval, zero fee; `INSTANT` remains disabled.
+
+## Commercial gate
+
+Production remains blocked until Efí confirms in writing the real LIT Buy catalog and receipt/repayment model, responsibilities for KYC/PLD-FT and fraud, notification and Pix ingress controls, certificate rotation, method-specific refunds, chargebacks, reconciliation reports, and the future same-titularity Pix Cash-Out flow. Native seller split is not the planned primary settlement path.

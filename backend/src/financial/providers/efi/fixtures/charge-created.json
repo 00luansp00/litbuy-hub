@@ -1,0 +1,9 @@
+{
+  "code": 200,
+  "data": {
+    "charge_id": 1234567,
+    "status": "new",
+    "total": 12990,
+    "custom_id": "order-123"
+  }
+}

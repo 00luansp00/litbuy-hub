@@ -1,5 +1,5 @@
-export const EFI_WITHDRAWAL_RISK_FOUNDATION = Object.freeze({
-  kycRequired: true,
+export const MARKETPLACE_WITHDRAWAL_RISK_FOUNDATION = Object.freeze({
+  kycRequiredBeforeWithdrawal: true,
   sameOwnerDestinationRequired: true,
   thirdPartyDestinationForbidden: true,
   destinationChangeRequiresStepUpAndCooldown: true,

@@ -12,4 +12,4 @@ LIT Buy remains authoritative for its ledger, fees/commissions, `PENDING`, `HELD
 
 Production remains blocked until Efí provides written homologation for both the receipt/repayment model and LIT Buy's real catalog. The catalog includes game accounts, virtual currencies, skins, digital items, boost/powerlevel, keys, software/licenses, gift cards, and digital services. Approval, custody/retention support, refunds, chargebacks, KYC, Pix, boleto, cards, and the future cash-out model must not be assumed.
 
-The current adapter is a sandbox/boundary foundation only. Any production enablement requires the explicit configuration gate, written approval, operational runbooks, reconciliation monitoring, and a separately reviewed release.
+The current adapter is a sandbox/boundary foundation only. Billing notifications and Pix webhooks use distinct provider-neutral resolution paths; generic refunds and payouts remain unsupported. Any production enablement requires the explicit configuration gate, written approval, operational runbooks, reconciliation monitoring, and a separately reviewed release.

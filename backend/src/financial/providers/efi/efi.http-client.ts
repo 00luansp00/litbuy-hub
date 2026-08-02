@@ -1,5 +1,5 @@
 import { request as httpsRequest } from 'node:https';
-import type { EfiConfig, EfiHttpRequest, EfiHttpResponse, EfiHttpTransport } from './efi.types';
+import type { EfiApiProfile, EfiHttpRequest, EfiHttpResponse, EfiHttpTransport } from './efi.types';
 import { EfiProviderError, mapEfiHttpError } from './efi.errors';
 
 export const nodeEfiTransport: EfiHttpTransport = (input) =>
@@ -9,8 +9,8 @@ export const nodeEfiTransport: EfiHttpTransport = (input) =>
       {
         method: input.method,
         headers: input.headers,
-        cert: input.certificate,
-        key: input.privateKey,
+        ...(input.certificate ? { cert: input.certificate } : {}),
+        ...(input.privateKey ? { key: input.privateKey } : {}),
         rejectUnauthorized: true,
         timeout: input.timeoutMs,
       },
@@ -35,31 +35,25 @@ export const nodeEfiTransport: EfiHttpTransport = (input) =>
 export class EfiHttpClient {
   private accessToken?: { value: string; expiresAt: number };
   constructor(
-    private readonly config: EfiConfig,
+    private readonly profile: EfiApiProfile,
     private readonly transport: EfiHttpTransport = nodeEfiTransport,
   ) {}
 
-  async send(
-    method: EfiHttpRequest['method'],
-    path: string,
-    body: unknown,
-    idempotencyKey?: string,
-  ) {
+  async send(method: EfiHttpRequest['method'], path: string, body: unknown) {
     const token = await this.authenticate();
     return this.execute({
       method,
-      url: new URL(path, this.config.apiBaseUrl),
+      url: new URL(path, this.profile.baseUrl),
       headers: {
         authorization: `Bearer ${token}`,
         'content-type': 'application/json',
         accept: 'application/json',
         'x-correlation-id': crypto.randomUUID(),
-        ...(idempotencyKey ? { 'x-idempotency-key': idempotencyKey } : {}),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
-      timeoutMs: this.config.timeoutMs,
-      certificate: this.config.certificate,
-      privateKey: this.config.privateKey,
+      timeoutMs: this.profile.timeoutMs,
+      certificate: this.profile.certificate,
+      privateKey: this.profile.privateKey,
     });
   }
 
@@ -68,16 +62,16 @@ export class EfiHttpClient {
       return this.accessToken.value;
     const response = await this.execute({
       method: 'POST',
-      url: new URL('/v1/authorize', this.config.apiBaseUrl),
+      url: new URL(this.profile.oauthPath, this.profile.baseUrl),
       headers: {
-        authorization: `Basic ${Buffer.from(`${this.config.clientId}:${this.config.clientSecret}`).toString('base64')}`,
+        authorization: `Basic ${Buffer.from(`${this.profile.clientId}:${this.profile.clientSecret}`).toString('base64')}`,
         'content-type': 'application/json',
         'x-correlation-id': crypto.randomUUID(),
       },
       body: JSON.stringify({ grant_type: 'client_credentials' }),
-      timeoutMs: this.config.timeoutMs,
-      certificate: this.config.certificate,
-      privateKey: this.config.privateKey,
+      timeoutMs: this.profile.timeoutMs,
+      certificate: this.profile.certificate,
+      privateKey: this.profile.privateKey,
     });
     const parsed = safeObject(response.body);
     if (typeof parsed.access_token !== 'string' || typeof parsed.expires_in !== 'number')

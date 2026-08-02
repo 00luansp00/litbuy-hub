@@ -6,7 +6,9 @@ export type EfiErrorCode =
   | 'PROVIDER_UNAVAILABLE'
   | 'TIMEOUT'
   | 'AMBIGUOUS_RESULT'
-  | 'INVALID_PROVIDER_RESPONSE';
+  | 'INVALID_PROVIDER_RESPONSE'
+  | 'UNSUPPORTED_OPERATION'
+  | 'UNVERIFIED_TRANSPORT';
 
 export class EfiProviderError extends Error {
   constructor(
