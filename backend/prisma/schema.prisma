@@ -237,39 +237,46 @@ enum SecurityEventOutcome {
 }
 
 model User {
-  id                         String                      @id @default(uuid()) @db.Uuid
-  email                      String                      @unique
-  phoneE164                  String?
-  phoneVerifiedAt            DateTime?
-  birthDate                  DateTime                    @db.Date
-  status                     UserStatus                  @default(PENDING_EMAIL)
-  emailVerifiedAt            DateTime?
-  termsVersion               String
-  termsAcceptedAt            DateTime
-  privacyVersion             String
-  privacyAcceptedAt          DateTime
-  createdAt                  DateTime                    @default(now())
-  updatedAt                  DateTime                    @updatedAt
-  deletedAt                  DateTime?
-  sensitiveActionHoldUntil   DateTime?
-  lastSensitiveChangeAt      DateTime?
-  passwordCredential         PasswordCredential?
-  devices                    Device[]
-  sessions                   Session[]
-  verificationChallenges     VerificationChallenge[]
-  securityEvents             SecurityEvent[]
-  emailChangeRequests        EmailChangeRequest[]
-  twoFactorSettings          TwoFactorSettings?
-  twoFactorRecoveryCodes     TwoFactorRecoveryCode[]
-  stepUpGrants               StepUpGrant[]
-  roleAssignments            UserRoleAssignment[]
-  sellerApplication          SellerApplication?          @relation("SellerApplicationOwner")
-  reviewedSellerApplications SellerApplication[]         @relation("SellerApplicationReviewer")
-  sellerProfile              SellerProfile?
-  reviewedListingDrafts      ListingDraft[]              @relation("ListingDraftReviewer")
-  carts                      Cart[]                      @relation("CartBuyer")
-  orders                     Order[]                     @relation("OrderBuyer")
-  commerceIdempotencyRecords CommerceIdempotencyRecord[]
+  id                          String                      @id @default(uuid()) @db.Uuid
+  email                       String                      @unique
+  phoneE164                   String?
+  phoneVerifiedAt             DateTime?
+  birthDate                   DateTime                    @db.Date
+  status                      UserStatus                  @default(PENDING_EMAIL)
+  emailVerifiedAt             DateTime?
+  termsVersion                String
+  termsAcceptedAt             DateTime
+  privacyVersion              String
+  privacyAcceptedAt           DateTime
+  createdAt                   DateTime                    @default(now())
+  updatedAt                   DateTime                    @updatedAt
+  deletedAt                   DateTime?
+  sensitiveActionHoldUntil    DateTime?
+  lastSensitiveChangeAt       DateTime?
+  passwordCredential          PasswordCredential?
+  devices                     Device[]
+  sessions                    Session[]
+  verificationChallenges      VerificationChallenge[]
+  securityEvents              SecurityEvent[]
+  emailChangeRequests         EmailChangeRequest[]
+  twoFactorSettings           TwoFactorSettings?
+  twoFactorRecoveryCodes      TwoFactorRecoveryCode[]
+  stepUpGrants                StepUpGrant[]
+  roleAssignments             UserRoleAssignment[]
+  sellerApplication           SellerApplication?          @relation("SellerApplicationOwner")
+  reviewedSellerApplications  SellerApplication[]         @relation("SellerApplicationReviewer")
+  sellerProfile               SellerProfile?
+  reviewedListingDrafts       ListingDraft[]              @relation("ListingDraftReviewer")
+  carts                       Cart[]                      @relation("CartBuyer")
+  orders                      Order[]                     @relation("OrderBuyer")
+  commerceIdempotencyRecords  CommerceIdempotencyRecord[]
+  reviewedWithdrawals         Withdrawal[]                @relation("WithdrawalReviewer")
+  createdFeePolicies          FeePolicyVersion[]          @relation("FeePolicyCreator")
+  publishedFeePolicies        FeePolicyVersion[]          @relation("FeePolicyPublisher")
+  createdWithdrawalPolicies   WithdrawalPolicyVersion[]   @relation("WithdrawalPolicyCreator")
+  publishedWithdrawalPolicies WithdrawalPolicyVersion[]   @relation("WithdrawalPolicyPublisher")
+  financialEvents             FinancialEvent[]            @relation("FinancialEventActor")
+  requestedRefunds            Refund[]                    @relation("RefundRequester")
 
   @@unique([phoneE164])
   @@index([email])
@@ -322,11 +329,15 @@ model SellerProfile {
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt
 
-  user          User           @relation(fields: [userId], references: [id], onDelete: Restrict)
-  listingDrafts ListingDraft[]
-  products      Product[]
-  carts         Cart[]
-  orders        Order[]
+  user                    User                     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  listingDrafts           ListingDraft[]
+  products                Product[]
+  carts                   Cart[]
+  orders                  Order[]
+  paymentProviderAccounts PaymentProviderAccount[]
+  ledgerAccounts          LedgerAccount[]
+  financialHolds          FinancialHold[]
+  withdrawals             Withdrawal[]
 
   @@index([status])
   @@index([slug])
@@ -907,6 +918,8 @@ model Order {
   items                  OrderItem[]
   reservations           InventoryReservation[]
   events                 OrderEvent[]
+  payment                Payment?
+  refunds                Refund[]
 
   @@index([buyerUserId, createdAt, id])
   @@index([sellerProfileId, createdAt, id])
@@ -1066,4 +1079,589 @@ model ProductAccountDetails {
   recoveryRisk   ListingDraftAccountRecoveryRisk?
   warrantyNote   String?
   product        Product                           @relation(fields: [productId], references: [id], onDelete: Restrict)
+}
+
+enum PaymentAttemptStatus {
+  CREATED
+  PENDING
+  PROCESSING
+  REQUIRES_ACTION
+  SUCCEEDED
+  FAILED
+  EXPIRED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  PIX
+  BOLETO
+  CARD
+}
+
+enum ProviderAccountOwner {
+  PLATFORM
+  SELLER
+}
+
+enum ProviderAccountStatus {
+  PENDING_ONBOARDING
+  PENDING_KYC
+  ACTIVE
+  RESTRICTED
+  SUSPENDED
+  CLOSED
+}
+
+enum LedgerOwnerType {
+  SYSTEM
+  PLATFORM
+  SELLER
+}
+
+enum LedgerAccountClass {
+  ASSET
+  LIABILITY
+  REVENUE
+  EXPENSE
+  EQUITY
+}
+
+enum LedgerAccountPurpose {
+  PROVIDER_CLEARING
+  SELLER_PENDING
+  SELLER_HELD
+  SELLER_AVAILABLE
+  SELLER_RESERVED
+  SELLER_DEFICIT
+  PLATFORM_COMMISSION
+  PLATFORM_WITHDRAWAL_FEE
+  PSP_FEE_EXPENSE
+  BUYER_REFUND_CLEARING
+  WITHDRAWAL_CLEARING
+  CHARGEBACK_RESERVE
+}
+
+enum LedgerDirection {
+  DEBIT
+  CREDIT
+}
+
+enum FinancialHoldStatus {
+  ACTIVE
+  RELEASE_ELIGIBLE
+  RELEASE_REQUESTED
+  RELEASED
+  BLOCKED
+  CANCELLED
+}
+
+enum FinancialHoldReason {
+  DELIVERY_PROTECTION
+  DISPUTE
+  CHARGEBACK_RESERVE
+  RISK_REVIEW
+  MANUAL
+}
+
+enum SettlementStatus {
+  PENDING
+  HELD
+  AVAILABLE
+  REVERSED
+  FAILED
+}
+
+enum TransferStatus {
+  CREATED
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum WithdrawalSpeed {
+  STANDARD
+  INSTANT
+}
+
+enum WithdrawalApprovalMode {
+  MANUAL
+  AUTOMATIC
+}
+
+enum WithdrawalStatus {
+  REQUESTED
+  PENDING_REVIEW
+  APPROVED
+  PROCESSING
+  SUCCEEDED
+  REJECTED
+  FAILED
+  CANCELLED
+}
+
+enum RefundStatus {
+  REQUESTED
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum ChargebackStatus {
+  OPEN
+  EVIDENCE_REQUIRED
+  CONTESTED
+  WON
+  LOST
+  CLOSED
+}
+
+enum ProviderWebhookEventStatus {
+  RECEIVED
+  PROCESSING
+  PROCESSED
+  FAILED
+  DEAD_LETTER
+  IGNORED
+}
+
+enum ReconciliationIssueStatus {
+  OPEN
+  INVESTIGATING
+  RESOLVED
+}
+
+enum ReconciliationIssueType {
+  AMOUNT_MISMATCH
+  STATUS_MISMATCH
+  MISSING_LOCAL
+  MISSING_PROVIDER
+  DUPLICATE_EXTERNAL_EVENT
+  LATE_PAYMENT
+  AMBIGUOUS_TRANSFER
+  OTHER
+}
+
+enum FinancialOutboxStatus {
+  PENDING
+  PUBLISHED
+  FAILED
+}
+
+enum FeePolicyStatus {
+  DRAFT
+  SCHEDULED
+  ACTIVE
+  RETIRED
+}
+
+enum FeeFormula {
+  FIXED
+  PERCENT_BPS
+  PERCENT_BPS_PLUS_FIXED
+}
+
+enum FeeRuleCategory {
+  PLATFORM_COMMISSION
+  BUYER_SERVICE_FEE
+  PAYMENT_METHOD_SURCHARGE
+  CARD_FEE
+  INSTALLMENT_FEE
+  BOLETO_FEE
+  PIX_FEE
+  PROMOTION_PRICE
+  LIT_MAX_PRICE
+  LIT_MAX_REDUCTION
+  SELLER_LEVEL_ADJUSTMENT
+  BUYER_BENEFIT
+  WITHDRAWAL_FEE
+  OTHER
+}
+
+enum FeeParty {
+  BUYER
+  SELLER
+  PLATFORM
+}
+
+enum WithdrawalPolicyStatus {
+  DRAFT
+  SCHEDULED
+  ACTIVE
+  RETIRED
+}
+
+model Payment {
+  id          String           @id @default(uuid()) @db.Uuid
+  orderId     String           @unique @db.Uuid
+  amountMinor BigInt
+  currency    String           @default("BRL")
+  status      PaymentStatus    @default(PENDING)
+  version     Int              @default(1)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  attempts    PaymentAttempt[]
+  refunds     Refund[]
+  settlements Settlement[]
+  chargebacks Chargeback[]
+  holds       FinancialHold[]
+  order       Order            @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@unique([id, orderId])
+}
+
+model PaymentProviderAccount {
+  id                String                @id @default(uuid()) @db.Uuid
+  providerCode      String
+  owner             ProviderAccountOwner
+  sellerProfileId   String?               @db.Uuid
+  externalAccountId String
+  status            ProviderAccountStatus @default(PENDING_ONBOARDING)
+  providerStatusRaw String?
+  secretRef         String?
+  canCreateCharges  Boolean               @default(false)
+  canReceive        Boolean               @default(false)
+  canSplit          Boolean               @default(false)
+  canUseHold        Boolean               @default(false)
+  canWithdraw       Boolean               @default(false)
+  canRefund         Boolean               @default(false)
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  attempts          PaymentAttempt[]
+  withdrawals       Withdrawal[]
+  sellerProfile     SellerProfile?        @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
+
+  @@unique([providerCode, externalAccountId])
+  @@index([sellerProfileId, status])
+}
+
+model PaymentAttempt {
+  id                 String                  @id @default(uuid()) @db.Uuid
+  paymentId          String                  @db.Uuid
+  attemptNumber      Int
+  providerCode       String
+  providerAccountId  String?                 @db.Uuid
+  method             PaymentMethod
+  status             PaymentAttemptStatus    @default(CREATED)
+  amountMinor        BigInt
+  currency           String                  @default("BRL")
+  externalPaymentId  String?
+  externalAttemptId  String?
+  providerStatusRaw  String?
+  idempotencyKeyHash String
+  requestHash        String
+  expiresAt          DateTime?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+  payment            Payment                 @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  providerAccount    PaymentProviderAccount? @relation(fields: [providerAccountId], references: [id], onDelete: Restrict)
+
+  @@unique([paymentId, attemptNumber])
+  @@unique([providerCode, externalPaymentId])
+  @@unique([providerCode, externalAttemptId])
+  @@unique([providerCode, idempotencyKeyHash])
+}
+
+model LedgerAccount {
+  id              String               @id @default(uuid()) @db.Uuid
+  ownerType       LedgerOwnerType
+  ownerId         String
+  sellerProfileId String?              @db.Uuid
+  accountClass    LedgerAccountClass
+  purpose         LedgerAccountPurpose
+  currency        String               @default("BRL")
+  createdAt       DateTime             @default(now())
+  entries         LedgerEntry[]
+  sellerProfile   SellerProfile?       @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
+
+  @@unique([ownerType, ownerId, purpose, currency])
+}
+
+model LedgerTransaction {
+  id                 String          @id @default(uuid()) @db.Uuid
+  currency           String          @default("BRL")
+  type               String
+  referenceType      String?
+  referenceId        String?         @db.Uuid
+  idempotencyKeyHash String          @unique
+  requestHash        String
+  reversalOfId       String?         @db.Uuid
+  metadata           Json            @default("{}")
+  createdAt          DateTime        @default(now())
+  entries            LedgerEntry[]
+  financialEvent     FinancialEvent?
+}
+
+model LedgerEntry {
+  id            String            @id @default(uuid()) @db.Uuid
+  transactionId String            @db.Uuid
+  accountId     String            @db.Uuid
+  direction     LedgerDirection
+  amountMinor   BigInt
+  createdAt     DateTime          @default(now())
+  transaction   LedgerTransaction @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+  account       LedgerAccount     @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([transactionId])
+  @@index([accountId, createdAt])
+}
+
+model FinancialHold {
+  id                String              @id @default(uuid()) @db.Uuid
+  sellerProfileId   String              @db.Uuid
+  paymentId         String?             @db.Uuid
+  amountMinor       BigInt
+  currency          String              @default("BRL")
+  reason            FinancialHoldReason
+  status            FinancialHoldStatus @default(ACTIVE)
+  releaseEligibleAt DateTime?
+  releasedAt        DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  sellerProfile     SellerProfile       @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
+  payment           Payment?            @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+}
+
+model Settlement {
+  id                   String           @id @default(uuid()) @db.Uuid
+  paymentId            String           @db.Uuid
+  amountMinor          BigInt
+  currency             String           @default("BRL")
+  status               SettlementStatus @default(PENDING)
+  externalSettlementId String?
+  availableAt          DateTime?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  payment              Payment          @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+}
+
+model Transfer {
+  id                 String         @id @default(uuid()) @db.Uuid
+  providerCode       String
+  externalTransferId String?
+  amountMinor        BigInt
+  currency           String         @default("BRL")
+  status             TransferStatus @default(CREATED)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  withdrawal         Withdrawal?
+
+  @@unique([providerCode, externalTransferId])
+}
+
+model Withdrawal {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  sellerProfileId     String                  @db.Uuid
+  speed               WithdrawalSpeed         @default(STANDARD)
+  approvalMode        WithdrawalApprovalMode  @default(MANUAL)
+  debitAmountMinor    BigInt
+  feeAmountMinor      BigInt                  @default(0)
+  payoutAmountMinor   BigInt
+  currency            String                  @default("BRL")
+  status              WithdrawalStatus        @default(REQUESTED)
+  slaDueAt            DateTime
+  requestedAt         DateTime                @default(now())
+  reviewedAt          DateTime?
+  reviewedByUserId    String?                 @db.Uuid
+  rejectionReasonCode String?
+  approvedAt          DateTime?
+  processingAt        DateTime?
+  completedAt         DateTime?
+  providerAccountId   String?                 @db.Uuid
+  transferId          String?                 @unique @db.Uuid
+  destinationRef      String
+  idempotencyKeyHash  String                  @unique
+  requestHash         String
+  failureCode         String?
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+  sellerProfile       SellerProfile           @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
+  reviewedBy          User?                   @relation("WithdrawalReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  providerAccount     PaymentProviderAccount? @relation(fields: [providerAccountId], references: [id], onDelete: Restrict)
+  transfer            Transfer?               @relation(fields: [transferId], references: [id], onDelete: Restrict)
+}
+
+model Refund {
+  id                 String       @id @default(uuid()) @db.Uuid
+  paymentId          String       @db.Uuid
+  orderId            String       @db.Uuid
+  amountMinor        BigInt
+  currency           String       @default("BRL")
+  status             RefundStatus @default(REQUESTED)
+  reasonCode         String
+  requestedByUserId  String?      @db.Uuid
+  providerCode       String?
+  externalRefundId   String?
+  idempotencyKeyHash String       @unique
+  requestHash        String
+  requestedAt        DateTime     @default(now())
+  processingAt       DateTime?
+  completedAt        DateTime?
+  failedAt           DateTime?
+  cancelledAt        DateTime?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  payment            Payment      @relation(fields: [paymentId, orderId], references: [id, orderId], onDelete: Restrict)
+  order              Order        @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  requestedBy        User?        @relation("RefundRequester", fields: [requestedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([providerCode, externalRefundId])
+  @@index([orderId, status])
+}
+
+model Chargeback {
+  id                   String           @id @default(uuid()) @db.Uuid
+  paymentId            String           @db.Uuid
+  amountMinor          BigInt
+  currency             String           @default("BRL")
+  status               ChargebackStatus @default(OPEN)
+  providerCode         String?
+  externalChargebackId String?
+  openedAt             DateTime         @default(now())
+  closedAt             DateTime?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  payment              Payment          @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@unique([providerCode, externalChargebackId])
+}
+
+model ProviderWebhookEvent {
+  id              String                     @id @default(uuid()) @db.Uuid
+  providerCode    String
+  externalEventId String
+  eventType       String
+  payloadHash     String
+  status          ProviderWebhookEventStatus @default(RECEIVED)
+  attempts        Int                        @default(0)
+  receivedAt      DateTime                   @default(now())
+  processedAt     DateTime?
+  lastErrorCode   String?
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+
+  @@unique([providerCode, externalEventId])
+}
+
+model ReconciliationIssue {
+  id                  String                    @id @default(uuid()) @db.Uuid
+  providerCode        String?
+  type                ReconciliationIssueType
+  status              ReconciliationIssueStatus @default(OPEN)
+  referenceType       String?
+  referenceId         String?
+  expectedAmountMinor BigInt?
+  observedAmountMinor BigInt?
+  currency            String                    @default("BRL")
+  details             Json                      @default("{}")
+  resolvedAt          DateTime?
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+}
+
+model FinancialEvent {
+  id                  String                @id @default(uuid()) @db.Uuid
+  ledgerTransactionId String                @unique @db.Uuid
+  type                String
+  aggregateType       String
+  aggregateId         String
+  actorUserId         String?               @db.Uuid
+  metadata            Json                  @default("{}")
+  createdAt           DateTime              @default(now())
+  ledgerTransaction   LedgerTransaction     @relation(fields: [ledgerTransactionId], references: [id], onDelete: Restrict)
+  actor               User?                 @relation("FinancialEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  outbox              FinancialOutboxEvent?
+}
+
+model FinancialOutboxEvent {
+  id               String                @id @default(uuid()) @db.Uuid
+  financialEventId String                @unique @db.Uuid
+  eventType        String
+  payload          Json
+  status           FinancialOutboxStatus @default(PENDING)
+  attempts         Int                   @default(0)
+  availableAt      DateTime              @default(now())
+  publishedAt      DateTime?
+  lastErrorCode    String?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  financialEvent   FinancialEvent        @relation(fields: [financialEventId], references: [id], onDelete: Restrict)
+}
+
+model FeePolicyVersion {
+  id                String          @id @default(uuid()) @db.Uuid
+  publicVersion     Int             @unique
+  status            FeePolicyStatus @default(DRAFT)
+  effectiveFrom     DateTime
+  effectiveTo       DateTime?
+  createdByUserId   String          @db.Uuid
+  publishedByUserId String?         @db.Uuid
+  publishedAt       DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  rules             FeeRule[]
+  createdBy         User            @relation("FeePolicyCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  publishedBy       User?           @relation("FeePolicyPublisher", fields: [publishedByUserId], references: [id], onDelete: Restrict)
+}
+
+model FeeRule {
+  id                 String              @id @default(uuid()) @db.Uuid
+  policyVersionId    String              @db.Uuid
+  category           FeeRuleCategory
+  code               String
+  formula            FeeFormula
+  partyCharged       FeeParty
+  percentBps         Int?
+  fixedAmountMinor   BigInt?
+  minimumAmountMinor BigInt?
+  maximumAmountMinor BigInt?
+  paymentMethod      PaymentMethod?
+  installmentsFrom   Int?
+  installmentsTo     Int?
+  sellerLevel        String?
+  sellerPlan         String?
+  promotionTier      String?
+  withdrawalSpeed    WithdrawalSpeed?
+  productType        CatalogProductType?
+  priority           Int                 @default(0)
+  enabled            Boolean             @default(true)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  policyVersion      FeePolicyVersion    @relation(fields: [policyVersionId], references: [id], onDelete: Restrict)
+
+  @@unique([policyVersionId, code])
+}
+
+model WithdrawalPolicyVersion {
+  id                String                 @id @default(uuid()) @db.Uuid
+  publicVersion     Int                    @unique
+  status            WithdrawalPolicyStatus @default(DRAFT)
+  effectiveFrom     DateTime
+  effectiveTo       DateTime?
+  createdByUserId   String                 @db.Uuid
+  publishedByUserId String?                @db.Uuid
+  publishedAt       DateTime?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  rules             WithdrawalPolicyRule[]
+  createdBy         User                   @relation("WithdrawalPolicyCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  publishedBy       User?                  @relation("WithdrawalPolicyPublisher", fields: [publishedByUserId], references: [id], onDelete: Restrict)
+}
+
+model WithdrawalPolicyRule {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  policyVersionId     String                  @db.Uuid
+  speed               WithdrawalSpeed
+  enabled             Boolean
+  slaHours            Int
+  approvalMode        WithdrawalApprovalMode
+  feeFormula          FeeFormula              @default(FIXED)
+  feePercentBps       Int?
+  feeFixedAmountMinor BigInt                  @default(0)
+  createdAt           DateTime                @default(now())
+  policyVersion       WithdrawalPolicyVersion @relation(fields: [policyVersionId], references: [id], onDelete: Restrict)
+
+  @@unique([policyVersionId, speed])
 }

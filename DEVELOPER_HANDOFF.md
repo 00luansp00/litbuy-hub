@@ -259,3 +259,7 @@ A PR #38 está implementada e foi validada pelo CI #172. A integração frontend
 Preserve `orderCode.ts` como fonte única do formato público e a verificação de igualdade no detalhe. `parseOrderPage` impede que valores inseguros da URL alcancem o service. As suítes de interface usam jsdom, Testing Library e QueryClient real; não dependem de browser externo.
 
 Qualquer mutação futura, inclusive cancelamento ou pagamento, deve ser implementada em PR separada, invalidar `buyerOrderKeys.all` e o detalhe afetado e preservar contratos e autorização no backend.
+
+## PR #39 financial foundation (ready for review; not merged)
+
+The provider-neutral financial/ledger and versioned policy foundation is specified in [FINANCIAL_DOMAIN_FOUNDATION.md](./FINANCIAL_DOMAIN_FOUNDATION.md), [PAYMENT_PROVIDER_STRATEGY.md](./PAYMENT_PROVIDER_STRATEGY.md), [FINANCIAL_FEE_POLICY.md](./FINANCIAL_FEE_POLICY.md), and [WITHDRAWAL_POLICY.md](./WITHDRAWAL_POLICY.md). It introduces persistence and internal services only: no public endpoint, frontend flow, PSP adapter, real payment, or checkout/order behavior change. Existing displayed economics remain mocks. The next increment is sandbox integration only after written commercial approval of a selected provider.

@@ -99,11 +99,13 @@ Regras oficiais de produto da LIT Buy como marketplace intermediador de produtos
 - Footer aponta para `/lit-points` e `/taxas`.
 
 ## Verificação e Equipe (visual — Sprint 18.11)
+
 - Vendedores podem exibir o selo "Vendedor Verificado" quando aprovados pelo KYC (mock).
 - Em produção, KYC poderá ser exigido para publicar categorias sensíveis, sacar valores altos ou acessar recursos avançados.
 - Vendedores podem ter equipe com múltiplos cargos (Dono, Gerente, Atendente, Operador de entrega, Financeiro). Permissões e convites são visuais nesta fase.
 
 ## Gestão administrativa (Sprint 18.12)
+
 - Categorias/subcategorias são gerenciáveis pelo admin (mock). Em produção, alterar categoria deve tratar migração de anúncios afetados.
 - Moderação é organizada por perfis (Admin, Moderador de anúncios, Moderador de disputas, Suporte, Financeiro, Conteúdo, Leitura).
 - Financeiro, LIT Points, níveis de vendedor e planos comerciais (LIT-MAX, Prata, Ouro, Diamante) são configuráveis pelo admin em modo visual.
@@ -118,6 +120,7 @@ Regras oficiais de produto da LIT Buy como marketplace intermediador de produtos
 - Nesta fase, denúncias são visuais/mockadas — nenhuma ação real ocorre.
 
 ## Programa de Afiliados (Sprint 18.16 — mock)
+
 - Qualquer conta ativa pode participar (comprador, vendedor ou usuário comum).
 - Comissão é gerada por conversões válidas (cadastro, primeira compra, primeira venda, recorrentes, campanhas).
 - Autoindicação e uso de múltiplas contas são proibidos.
@@ -133,3 +136,7 @@ Regras oficiais de produto da LIT Buy como marketplace intermediador de produtos
 - Penalidades futuras (advertência, bloqueio de anúncio, suspensão, banimento) dependem de backend, RBAC e audit log.
 - Compradores e vendedores compartilham as regras gerais; regras específicas por papel estão listadas em `/regras-da-plataforma`.
 - Regras públicas devem sempre refletir as regras internas do admin e do serviço de mediação.
+
+## PR #39 financial foundation (ready for review; not merged)
+
+The provider-neutral financial/ledger and versioned policy foundation is specified in [FINANCIAL_DOMAIN_FOUNDATION.md](./FINANCIAL_DOMAIN_FOUNDATION.md), [PAYMENT_PROVIDER_STRATEGY.md](./PAYMENT_PROVIDER_STRATEGY.md), [FINANCIAL_FEE_POLICY.md](./FINANCIAL_FEE_POLICY.md), and [WITHDRAWAL_POLICY.md](./WITHDRAWAL_POLICY.md). It introduces persistence and internal services only: no public endpoint, frontend flow, PSP adapter, real payment, or checkout/order behavior change. Existing displayed economics remain mocks. The next increment is sandbox integration only after written commercial approval of a selected provider.
