@@ -187,12 +187,12 @@ describe('authoritative payment state graph', () => {
     PROCESSING: ['PAID', 'FAILED', 'EXPIRED'],
     PAID: ['REFUND_PENDING', 'CHARGEBACK'],
     REFUND_PENDING: ['PARTIALLY_REFUNDED', 'REFUNDED', 'PAID', 'CHARGEBACK'],
-    PARTIALLY_REFUNDED: ['REFUND_PENDING', 'REFUNDED', 'CHARGEBACK'],
+    PARTIALLY_REFUNDED: ['REFUND_PENDING', 'CHARGEBACK'],
     REFUNDED: ['CHARGEBACK'],
     FAILED: [],
     EXPIRED: [],
     CHARGEBACK: [],
-    NOT_CREATED: [],
+    NOT_CREATED: ['PENDING'],
   };
   for (const [from, targets] of Object.entries(allowed))
     for (const to of Object.keys(allowed))

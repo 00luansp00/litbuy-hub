@@ -9,3 +9,5 @@ A Withdrawal status is independent from its ledger reservation. The request is i
 A definitive external failure may release the reservation. Timeout, unknown response, or ambiguous external result must keep RESERVED and create `ReconciliationIssue`; it must never auto-release.
 
 `WithdrawalPolicyVersion` has typed rules per speed for enablement, SLA, approval mode, and integer fee. This allows future automatic STANDARD (still up to 48 hours and zero fee) and automatic INSTANT with configurable fee without a structural migration. Published history is immutable and overlapping validity is rejected.
+
+The database treats the created withdrawal request as structurally immutable: seller, speed, approval mode, monetary values, currency, SLA/request times, destination, and idempotency/request hashes cannot be updated or deleted. Only lifecycle review, provider/transfer correlation, statuses, results, and processing timestamps may evolve.

@@ -276,6 +276,7 @@ model User {
   createdWithdrawalPolicies   WithdrawalPolicyVersion[]   @relation("WithdrawalPolicyCreator")
   publishedWithdrawalPolicies WithdrawalPolicyVersion[]   @relation("WithdrawalPolicyPublisher")
   financialEvents             FinancialEvent[]            @relation("FinancialEventActor")
+  requestedRefunds            Refund[]                    @relation("RefundRequester")
 
   @@unique([phoneE164])
   @@index([email])
@@ -918,6 +919,7 @@ model Order {
   reservations           InventoryReservation[]
   events                 OrderEvent[]
   payment                Payment?
+  refunds                Refund[]
 
   @@index([buyerUserId, createdAt, id])
   @@index([sellerProfileId, createdAt, id])
@@ -1306,6 +1308,8 @@ model Payment {
   chargebacks Chargeback[]
   holds       FinancialHold[]
   order       Order            @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@unique([id, orderId])
 }
 
 model PaymentProviderAccount {
@@ -1482,18 +1486,29 @@ model Withdrawal {
 model Refund {
   id                 String       @id @default(uuid()) @db.Uuid
   paymentId          String       @db.Uuid
+  orderId            String       @db.Uuid
   amountMinor        BigInt
   currency           String       @default("BRL")
   status             RefundStatus @default(REQUESTED)
+  reasonCode         String
+  requestedByUserId  String?      @db.Uuid
   providerCode       String?
   externalRefundId   String?
   idempotencyKeyHash String       @unique
   requestHash        String
+  requestedAt        DateTime     @default(now())
+  processingAt       DateTime?
+  completedAt        DateTime?
+  failedAt           DateTime?
+  cancelledAt        DateTime?
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
-  payment            Payment      @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  payment            Payment      @relation(fields: [paymentId, orderId], references: [id, orderId], onDelete: Restrict)
+  order              Order        @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  requestedBy        User?        @relation("RefundRequester", fields: [requestedByUserId], references: [id], onDelete: SetNull)
 
   @@unique([providerCode, externalRefundId])
+  @@index([orderId, status])
 }
 
 model Chargeback {

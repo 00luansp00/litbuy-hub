@@ -7,7 +7,8 @@ export class FinancialDomainError extends Error {
       | 'INSUFFICIENT_FINANCIAL_BALANCE'
       | 'POLICY_NOT_FOUND'
       | 'INVALID_FEE_RULE'
-      | 'FEE_RULE_AMBIGUOUS',
+      | 'FEE_RULE_AMBIGUOUS'
+      | 'FINANCIAL_CONCURRENCY_CONFLICT',
     message: string = code,
   ) {
     super(message);

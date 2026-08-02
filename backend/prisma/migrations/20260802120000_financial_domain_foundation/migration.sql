@@ -258,13 +258,21 @@ CREATE TABLE "Withdrawal" (
 CREATE TABLE "Refund" (
     "id" UUID NOT NULL,
     "paymentId" UUID NOT NULL,
+    "orderId" UUID NOT NULL,
     "amountMinor" BIGINT NOT NULL,
     "currency" TEXT NOT NULL DEFAULT 'BRL',
     "status" "RefundStatus" NOT NULL DEFAULT 'REQUESTED',
+    "reasonCode" TEXT NOT NULL,
+    "requestedByUserId" UUID,
     "providerCode" TEXT,
     "externalRefundId" TEXT,
     "idempotencyKeyHash" TEXT NOT NULL,
     "requestHash" TEXT NOT NULL,
+    "requestedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "processingAt" TIMESTAMP(3),
+    "completedAt" TIMESTAMP(3),
+    "failedAt" TIMESTAMP(3),
+    "cancelledAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -436,6 +444,9 @@ CREATE TABLE "WithdrawalPolicyRule" (
 CREATE UNIQUE INDEX "Payment_orderId_key" ON "Payment"("orderId");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "Payment_id_orderId_key" ON "Payment"("id", "orderId");
+
+-- CreateIndex
 CREATE INDEX "PaymentProviderAccount_sellerProfileId_status_idx" ON "PaymentProviderAccount"("sellerProfileId", "status");
 
 -- CreateIndex
@@ -478,6 +489,9 @@ CREATE UNIQUE INDEX "Withdrawal_idempotencyKeyHash_key" ON "Withdrawal"("idempot
 CREATE UNIQUE INDEX "Refund_idempotencyKeyHash_key" ON "Refund"("idempotencyKeyHash");
 
 -- CreateIndex
+CREATE INDEX "Refund_orderId_status_idx" ON "Refund"("orderId", "status");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "Refund_providerCode_externalRefundId_key" ON "Refund"("providerCode", "externalRefundId");
 
 -- CreateIndex
@@ -511,8 +525,6 @@ ALTER TABLE "Payment" ADD CONSTRAINT "Payment_orderId_fkey" FOREIGN KEY ("orderI
 ALTER TABLE "PaymentProviderAccount" ADD CONSTRAINT "PaymentProviderAccount_sellerProfileId_fkey" FOREIGN KEY ("sellerProfileId") REFERENCES "SellerProfile"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "PaymentProviderAccount" ADD CONSTRAINT "PaymentProviderAccount_owner_consistency" CHECK ((owner='SELLER' AND "sellerProfileId" IS NOT NULL) OR (owner='PLATFORM' AND "sellerProfileId" IS NULL));
-ALTER TABLE "LedgerAccount" ADD CONSTRAINT "LedgerAccount_owner_consistency" CHECK (("ownerType"='SELLER' AND "sellerProfileId" IS NOT NULL AND "ownerId"="sellerProfileId"::text) OR ("ownerType" IN ('SYSTEM','PLATFORM') AND "sellerProfileId" IS NULL));
 ALTER TABLE "PaymentAttempt" ADD CONSTRAINT "PaymentAttempt_paymentId_fkey" FOREIGN KEY ("paymentId") REFERENCES "Payment"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -549,7 +561,13 @@ ALTER TABLE "Withdrawal" ADD CONSTRAINT "Withdrawal_providerAccountId_fkey" FORE
 ALTER TABLE "Withdrawal" ADD CONSTRAINT "Withdrawal_transferId_fkey" FOREIGN KEY ("transferId") REFERENCES "Transfer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Refund" ADD CONSTRAINT "Refund_paymentId_fkey" FOREIGN KEY ("paymentId") REFERENCES "Payment"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Refund" ADD CONSTRAINT "Refund_paymentId_orderId_fkey" FOREIGN KEY ("paymentId", "orderId") REFERENCES "Payment"("id", "orderId") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Refund" ADD CONSTRAINT "Refund_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "Order"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Refund" ADD CONSTRAINT "Refund_requestedByUserId_fkey" FOREIGN KEY ("requestedByUserId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Chargeback" ADD CONSTRAINT "Chargeback_paymentId_fkey" FOREIGN KEY ("paymentId") REFERENCES "Payment"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -638,6 +656,16 @@ BEGIN
 END $$;
 CREATE CONSTRAINT TRIGGER ledger_protected_balance AFTER INSERT ON "LedgerEntry" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION financial_protected_balance();
 
+CREATE FUNCTION financial_withdrawal_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP='DELETE' THEN RAISE EXCEPTION 'WITHDRAWAL_REQUEST_IMMUTABLE' USING ERRCODE='55000'; END IF;
+ IF NEW."sellerProfileId" IS DISTINCT FROM OLD."sellerProfileId" OR NEW.speed IS DISTINCT FROM OLD.speed OR NEW."approvalMode" IS DISTINCT FROM OLD."approvalMode" OR NEW."debitAmountMinor" IS DISTINCT FROM OLD."debitAmountMinor" OR NEW."feeAmountMinor" IS DISTINCT FROM OLD."feeAmountMinor" OR NEW."payoutAmountMinor" IS DISTINCT FROM OLD."payoutAmountMinor" OR NEW.currency IS DISTINCT FROM OLD.currency OR NEW."slaDueAt" IS DISTINCT FROM OLD."slaDueAt" OR NEW."requestedAt" IS DISTINCT FROM OLD."requestedAt" OR NEW."destinationRef" IS DISTINCT FROM OLD."destinationRef" OR NEW."idempotencyKeyHash" IS DISTINCT FROM OLD."idempotencyKeyHash" OR NEW."requestHash" IS DISTINCT FROM OLD."requestHash" THEN
+  RAISE EXCEPTION 'WITHDRAWAL_REQUEST_IMMUTABLE' USING ERRCODE='55000';
+ END IF;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER withdrawal_request_immutable BEFORE UPDATE OR DELETE ON "Withdrawal" FOR EACH ROW EXECUTE FUNCTION financial_withdrawal_guard();
+
 CREATE FUNCTION financial_policy_guard() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE allowed boolean;
 BEGIN
@@ -647,7 +675,7 @@ BEGIN
             (OLD.status='ACTIVE' AND NEW.status IN ('ACTIVE','RETIRED')) OR
             (OLD.status='RETIRED' AND NEW.status='RETIRED');
  IF NOT allowed THEN RAISE EXCEPTION 'INVALID_POLICY_TRANSITION' USING ERRCODE='23514'; END IF;
- IF OLD.status <> 'DRAFT' AND (NEW."publicVersion" IS DISTINCT FROM OLD."publicVersion" OR NEW."effectiveFrom" IS DISTINCT FROM OLD."effectiveFrom" OR NEW."effectiveTo" IS DISTINCT FROM OLD."effectiveTo" OR NEW."createdByUserId" IS DISTINCT FROM OLD."createdByUserId" OR NEW."createdAt" IS DISTINCT FROM OLD."createdAt") THEN
+ IF OLD.status <> 'DRAFT' AND (NEW."publicVersion" IS DISTINCT FROM OLD."publicVersion" OR NEW."effectiveFrom" IS DISTINCT FROM OLD."effectiveFrom" OR NEW."effectiveTo" IS DISTINCT FROM OLD."effectiveTo" OR NEW."createdByUserId" IS DISTINCT FROM OLD."createdByUserId" OR NEW."createdAt" IS DISTINCT FROM OLD."createdAt" OR NEW."publishedByUserId" IS DISTINCT FROM OLD."publishedByUserId" OR NEW."publishedAt" IS DISTINCT FROM OLD."publishedAt") THEN
   RAISE EXCEPTION 'PUBLISHED_POLICY_IMMUTABLE' USING ERRCODE='55000';
  END IF;
  IF NEW.status <> 'DRAFT' AND (NEW."publishedByUserId" IS NULL OR NEW."publishedAt" IS NULL) THEN RAISE EXCEPTION 'POLICY_PUBLICATION_AUDIT_REQUIRED' USING ERRCODE='23514'; END IF;
@@ -658,6 +686,7 @@ CREATE TRIGGER withdrawal_policy_immutable BEFORE UPDATE OR DELETE ON "Withdrawa
 CREATE FUNCTION financial_rule_guard() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE policy_status text; parent_id uuid;
 BEGIN
+ IF TG_OP='UPDATE' AND NEW."policyVersionId" IS DISTINCT FROM OLD."policyVersionId" THEN RAISE EXCEPTION 'POLICY_RULE_PARENT_IMMUTABLE' USING ERRCODE='55000'; END IF;
  parent_id := CASE WHEN TG_OP='DELETE' THEN OLD."policyVersionId" ELSE NEW."policyVersionId" END;
  IF TG_TABLE_NAME='FeeRule' THEN SELECT status::text INTO policy_status FROM "FeePolicyVersion" WHERE id=parent_id;
  ELSE SELECT status::text INTO policy_status FROM "WithdrawalPolicyVersion" WHERE id=parent_id; END IF;

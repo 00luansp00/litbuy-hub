@@ -199,6 +199,12 @@ describe('Financial domain with real PostgreSQL', () => {
       ]);
     const results = await Promise.allSettled([reserve(), reserve()]);
     expect(results.filter((x) => x.status === 'fulfilled')).toHaveLength(1);
+    const rejected = results.find((result) => result.status === 'rejected');
+    expect(rejected).toMatchObject({
+      status: 'rejected',
+      reason: { code: 'INSUFFICIENT_FINANCIAL_BALANCE' },
+    });
+    expect((rejected as PromiseRejectedResult).reason).not.toMatchObject({ code: 'P2034' });
     expect(await ledger.getSellerFinancialBalance(fixture.seller.id)).toMatchObject({
       available: 2_000n,
       reserved: 8_000n,
@@ -354,16 +360,28 @@ describe('Financial domain with real PostgreSQL', () => {
     ] as const;
     for (const [from, to] of edges) {
       const fee = await feePolicy(from);
-      await expect(
-        prisma.feePolicyVersion.update({ where: { id: fee.id }, data: { status: to, ...audit() } }),
-      ).resolves.toMatchObject({ status: to });
+      const feeAudit =
+        from === 'DRAFT'
+          ? audit()
+          : { publishedByUserId: fee.publishedByUserId, publishedAt: fee.publishedAt };
+      const updatedFee = await prisma.feePolicyVersion.update({
+        where: { id: fee.id },
+        data: { status: to, ...(from === 'DRAFT' ? feeAudit : {}) },
+      });
+      expect(updatedFee).toMatchObject({ status: to, ...feeAudit });
       const withdrawal = await withdrawalPolicy(from);
-      await expect(
-        prisma.withdrawalPolicyVersion.update({
-          where: { id: withdrawal.id },
-          data: { status: to, ...audit() },
-        }),
-      ).resolves.toMatchObject({ status: to });
+      const withdrawalAudit =
+        from === 'DRAFT'
+          ? audit()
+          : {
+              publishedByUserId: withdrawal.publishedByUserId,
+              publishedAt: withdrawal.publishedAt,
+            };
+      const updatedWithdrawal = await prisma.withdrawalPolicyVersion.update({
+        where: { id: withdrawal.id },
+        data: { status: to, ...(from === 'DRAFT' ? withdrawalAudit : {}) },
+      });
+      expect(updatedWithdrawal).toMatchObject({ status: to, ...withdrawalAudit });
       if (to !== 'RETIRED') {
         await prisma.feePolicyVersion.update({
           where: { id: fee.id },
@@ -386,6 +404,18 @@ describe('Financial domain with real PostgreSQL', () => {
       prisma.withdrawalPolicyVersion.update({
         where: { id: active.id },
         data: { effectiveFrom: new Date(0) },
+      }),
+    ).rejects.toThrow();
+    await expect(
+      prisma.feePolicyVersion.update({
+        where: { id: retired.id },
+        data: { publishedByUserId: fixture.sellerUser.id },
+      }),
+    ).rejects.toThrow();
+    await expect(
+      prisma.withdrawalPolicyVersion.update({
+        where: { id: active.id },
+        data: { publishedAt: new Date() },
       }),
     ).rejects.toThrow();
   });
@@ -441,6 +471,13 @@ describe('Financial domain with real PostgreSQL', () => {
             prisma.feeRule.update({ where: { id: rule.id }, data: { fixedAmountMinor: 3n } }),
           ).rejects.toThrow();
           await expect(prisma.feeRule.delete({ where: { id: rule.id } })).rejects.toThrow();
+          const targetDraft = await feePolicy();
+          await expect(
+            prisma.feeRule.update({
+              where: { id: rule.id },
+              data: { policyVersionId: targetDraft.id },
+            }),
+          ).rejects.toThrow();
           if (status !== 'RETIRED')
             await prisma.feePolicyVersion.update({
               where: { id: policy.id },
@@ -495,6 +532,13 @@ describe('Financial domain with real PostgreSQL', () => {
           await expect(
             prisma.withdrawalPolicyRule.delete({ where: { id: rule.id } }),
           ).rejects.toThrow();
+          const targetDraft = await withdrawalPolicy();
+          await expect(
+            prisma.withdrawalPolicyRule.update({
+              where: { id: rule.id },
+              data: { policyVersionId: targetDraft.id },
+            }),
+          ).rejects.toThrow();
           if (status !== 'RETIRED')
             await prisma.withdrawalPolicyVersion.update({
               where: { id: policy.id },
@@ -539,6 +583,71 @@ describe('Financial domain with real PostgreSQL', () => {
         },
       }),
     ).rejects.toThrow();
+  });
+  it('enforces Refund order/requester relations and permits a system requester', async () => {
+    const payment = await createPayment();
+    const persisted = await prisma.payment.findUniqueOrThrow({
+      where: { id: payment.id },
+      include: { order: true },
+    });
+    const base = {
+      paymentId: payment.id,
+      orderId: persisted.orderId,
+      amountMinor: 10n,
+      reasonCode: 'SYNTHETIC',
+      idempotencyKeyHash: randomUUID(),
+      requestHash: randomUUID(),
+    };
+    await expect(
+      prisma.refund.create({ data: { ...base, requestedByUserId: null } }),
+    ).resolves.toMatchObject({ orderId: persisted.orderId, requestedByUserId: null });
+    await expect(
+      prisma.refund.create({
+        data: { ...base, idempotencyKeyHash: randomUUID(), orderId: randomUUID() },
+      }),
+    ).rejects.toThrow();
+    await expect(
+      prisma.refund.create({
+        data: { ...base, idempotencyKeyHash: randomUUID(), requestedByUserId: randomUUID() },
+      }),
+    ).rejects.toThrow();
+  });
+  it('keeps the immutable Withdrawal request structure tamper-proof', async () => {
+    const withdrawal = await prisma.withdrawal.create({
+      data: {
+        sellerProfileId: fixture.seller.id,
+        debitAmountMinor: 100n,
+        payoutAmountMinor: 100n,
+        slaDueAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
+        destinationRef: 'opaque',
+        idempotencyKeyHash: randomUUID(),
+        requestHash: randomUUID(),
+      },
+    });
+    const mutations = [
+      `"sellerProfileId"='${randomUUID()}'`,
+      `speed='INSTANT'`,
+      `"approvalMode"='AUTOMATIC'`,
+      `"debitAmountMinor"=101`,
+      `"feeAmountMinor"=1`,
+      `"payoutAmountMinor"=99`,
+      `currency='USD'`,
+      `"slaDueAt"=now()`,
+      `"requestedAt"=now()`,
+      `"destinationRef"='changed'`,
+      `"idempotencyKeyHash"='${randomUUID()}'`,
+      `"requestHash"='changed'`,
+    ];
+    for (const mutation of mutations)
+      await expect(
+        prisma.$executeRawUnsafe(`UPDATE "Withdrawal" SET ${mutation} WHERE id='${withdrawal.id}'`),
+      ).rejects.toThrow();
+    await expect(
+      prisma.withdrawal.update({
+        where: { id: withdrawal.id },
+        data: { status: 'PENDING_REVIEW', reviewedAt: new Date() },
+      }),
+    ).resolves.toMatchObject({ status: 'PENDING_REVIEW' });
   });
   it('enforces financial ownership foreign keys and consistency', async () => {
     await expect(
