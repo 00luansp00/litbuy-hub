@@ -15,6 +15,7 @@ import { ProductImagesModule } from './product-images/product-images.module';
 import { CartsModule } from './carts/carts.module';
 import { CheckoutModule } from './checkout/checkout.module';
 import { OrdersModule } from './orders/orders.module';
+import { FinancialModule } from './financial/financial.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { OrdersModule } from './orders/orders.module';
     CartsModule,
     CheckoutModule,
     OrdersModule,
+    FinancialModule,
   ],
   providers: [AppLogger],
 })

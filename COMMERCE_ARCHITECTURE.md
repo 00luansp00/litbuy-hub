@@ -161,3 +161,7 @@ The persistent authenticated buyer-cart slice described above is now implemented
 ## PR #37 — checkout and order core
 
 The backend now contains the server-side checkout and persistent pending-order foundation described in `ORDER_CHECKOUT_FOUNDATION.md`. It uses cart preview fingerprints, immutable snapshots, BIGINT minor units, transactional inventory reservations, idempotency, order events/outbox, buyer-only reads, pre-payment cancellation, and controlled expiration. This does **not** implement payments, a gateway, a financial ledger, webhooks, fulfillment, or a connected frontend. PR #38 remains responsible for real frontend order reading after CI validates this foundation.
+
+## PR #39 financial foundation (ready for review; not merged)
+
+The provider-neutral financial/ledger and versioned policy foundation is specified in [FINANCIAL_DOMAIN_FOUNDATION.md](./FINANCIAL_DOMAIN_FOUNDATION.md), [PAYMENT_PROVIDER_STRATEGY.md](./PAYMENT_PROVIDER_STRATEGY.md), [FINANCIAL_FEE_POLICY.md](./FINANCIAL_FEE_POLICY.md), and [WITHDRAWAL_POLICY.md](./WITHDRAWAL_POLICY.md). It introduces persistence and internal services only: no public endpoint, frontend flow, PSP adapter, real payment, or checkout/order behavior change. Existing displayed economics remain mocks. The next increment is sandbox integration only after written commercial approval of a selected provider.

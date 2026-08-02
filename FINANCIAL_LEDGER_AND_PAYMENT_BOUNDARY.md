@@ -48,3 +48,7 @@ PostgreSQL usa `BIGINT`; TypeScript usa `bigint` ou value object. JSON usa exclu
 ## Pagamento tardio após expiração
 
 Confirmação após expiração é persistida idempotentemente e verificada no gateway quando necessário. O pedido expirado não é reativado; reserva liberada não é consumida novamente; entrega e recriação artificial de estoque são proibidas. Abre-se incidente de reconciliação, cuja resolução autorizada e auditada pode realizar refund automático ou tratamento operacional. Nenhum estado muda silenciosamente.
+
+## PR #39 financial foundation (ready for review; not merged)
+
+The provider-neutral financial/ledger and versioned policy foundation is specified in [FINANCIAL_DOMAIN_FOUNDATION.md](./FINANCIAL_DOMAIN_FOUNDATION.md), [PAYMENT_PROVIDER_STRATEGY.md](./PAYMENT_PROVIDER_STRATEGY.md), [FINANCIAL_FEE_POLICY.md](./FINANCIAL_FEE_POLICY.md), and [WITHDRAWAL_POLICY.md](./WITHDRAWAL_POLICY.md). It introduces persistence and internal services only: no public endpoint, frontend flow, PSP adapter, real payment, or checkout/order behavior change. Existing displayed economics remain mocks. The next increment is sandbox integration only after written commercial approval of a selected provider.

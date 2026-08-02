@@ -32,3 +32,7 @@ Autenticação usa os módulos em `src/services/auth/` e a API NestJS. Lifecycle
 `src/services/orders` é o módulo real e isolado de leitura de pedidos: tipos, parser defensivo, formatação BRL com `BigInt`, service autenticado e queries TanStack. `src/services/orderService.ts` permanece apenas legado e não é importado pelas rotas reais.
 
 `orderCode.ts` é a fonte única do regex público e `buyerOrdersService.detail` rejeita respostas cujo código difira do solicitado com `MALFORMED_RESPONSE`. Falhas locais de parsing/validação não recebem retry automático; 401/403/404 também não.
+
+## PR #39 financial foundation (ready for review; not merged)
+
+The provider-neutral financial/ledger and versioned policy foundation is specified in [FINANCIAL_DOMAIN_FOUNDATION.md](./FINANCIAL_DOMAIN_FOUNDATION.md), [PAYMENT_PROVIDER_STRATEGY.md](./PAYMENT_PROVIDER_STRATEGY.md), [FINANCIAL_FEE_POLICY.md](./FINANCIAL_FEE_POLICY.md), and [WITHDRAWAL_POLICY.md](./WITHDRAWAL_POLICY.md). It introduces persistence and internal services only: no public endpoint, frontend flow, PSP adapter, real payment, or checkout/order behavior change. Existing displayed economics remain mocks. The next increment is sandbox integration only after written commercial approval of a selected provider.

@@ -126,3 +126,7 @@ Futuro/demonstrativo: aprovação não publica produto público; imagens permane
 ## Product lifecycle foundation (2026-07-28, PR #28)
 
 O estado `ACTIVE` de produto agora é persistente e controlado pelo vendedor proprietário via backend, com elegibilidade transacional, versão otimista, advisory lock, idempotência e auditoria. Isso **não** conecta catálogo público nem torna qualquer produto comprável. Estoque/reserva, checkout, pagamentos e mutações administrativas de lifecycle continuam pendentes. O contrato autoritativo está em `PRODUCT_LIFECYCLE_FOUNDATION.md`.
+
+## PR #39 financial foundation (ready for review; not merged)
+
+The provider-neutral financial/ledger and versioned policy foundation is specified in [FINANCIAL_DOMAIN_FOUNDATION.md](./FINANCIAL_DOMAIN_FOUNDATION.md), [PAYMENT_PROVIDER_STRATEGY.md](./PAYMENT_PROVIDER_STRATEGY.md), [FINANCIAL_FEE_POLICY.md](./FINANCIAL_FEE_POLICY.md), and [WITHDRAWAL_POLICY.md](./WITHDRAWAL_POLICY.md). It introduces persistence and internal services only: no public endpoint, frontend flow, PSP adapter, real payment, or checkout/order behavior change. Existing displayed economics remain mocks. The next increment is sandbox integration only after written commercial approval of a selected provider.

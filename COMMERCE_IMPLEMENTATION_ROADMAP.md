@@ -35,3 +35,7 @@ The backend contains the server-side checkout and persistent pending-order found
 Implementada e validada no CI #172, a PR #38 conecta a leitura real em `/pedidos`, o detalhe real em `/pedidos/$id` e cinco pedidos reais em `/perfil`. O módulo usa parser defensivo de respostas `unknown`, dinheiro com `BigInt`, validação centralizada de `orderCode`, correspondência entre código solicitado e retornado, paginação segura e tratamento indistinguível de 404/IDOR.
 
 A PR permanece aberta e sem merge. Não há mutações, checkout ou pagamento nesta integração. O próximo incremento financeiro somente pode começar depois de decisão formal sobre o provedor de pagamento e deve ser entregue em PR separada.
+
+## PR #39 financial foundation (ready for review; not merged)
+
+The provider-neutral financial/ledger and versioned policy foundation is specified in [FINANCIAL_DOMAIN_FOUNDATION.md](./FINANCIAL_DOMAIN_FOUNDATION.md), [PAYMENT_PROVIDER_STRATEGY.md](./PAYMENT_PROVIDER_STRATEGY.md), [FINANCIAL_FEE_POLICY.md](./FINANCIAL_FEE_POLICY.md), and [WITHDRAWAL_POLICY.md](./WITHDRAWAL_POLICY.md). It introduces persistence and internal services only: no public endpoint, frontend flow, PSP adapter, real payment, or checkout/order behavior change. Existing displayed economics remain mocks. The next increment is sandbox integration only after written commercial approval of a selected provider.
