@@ -5,6 +5,7 @@ import databaseConfig from './database.config';
 import redisConfig from './redis.config';
 import { authConfig } from '../auth/auth.config';
 import { validateEnvironment } from './env.schema';
+import efiConfig from '../financial/providers/efi/efi.config';
 
 @Module({
   imports: [
@@ -12,7 +13,7 @@ import { validateEnvironment } from './env.schema';
       isGlobal: true,
       cache: true,
       envFilePath: ['.env.local', '.env'],
-      load: [appConfig, databaseConfig, redisConfig, authConfig],
+      load: [appConfig, databaseConfig, redisConfig, authConfig, efiConfig],
       validate: validateEnvironment,
     }),
   ],

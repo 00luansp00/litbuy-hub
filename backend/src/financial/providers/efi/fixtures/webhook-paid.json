@@ -1,0 +1,6 @@
+{
+  "id": "evt_123",
+  "type": "charge.paid",
+  "charge_id": "charge_123",
+  "status": "paid"
+}
