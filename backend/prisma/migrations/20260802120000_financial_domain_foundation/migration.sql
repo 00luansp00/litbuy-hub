@@ -523,6 +523,7 @@ ALTER TABLE "Payment" ADD CONSTRAINT "Payment_orderId_fkey" FOREIGN KEY ("orderI
 
 -- AddForeignKey
 ALTER TABLE "PaymentProviderAccount" ADD CONSTRAINT "PaymentProviderAccount_sellerProfileId_fkey" FOREIGN KEY ("sellerProfileId") REFERENCES "SellerProfile"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "PaymentProviderAccount" ADD CONSTRAINT "PaymentProviderAccount_owner_consistency" CHECK ((owner = 'SELLER' AND "sellerProfileId" IS NOT NULL) OR (owner = 'PLATFORM' AND "sellerProfileId" IS NULL));
 
 -- AddForeignKey
 ALTER TABLE "PaymentAttempt" ADD CONSTRAINT "PaymentAttempt_paymentId_fkey" FOREIGN KEY ("paymentId") REFERENCES "Payment"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -532,6 +533,7 @@ ALTER TABLE "PaymentAttempt" ADD CONSTRAINT "PaymentAttempt_providerAccountId_fk
 
 -- AddForeignKey
 ALTER TABLE "LedgerAccount" ADD CONSTRAINT "LedgerAccount_sellerProfileId_fkey" FOREIGN KEY ("sellerProfileId") REFERENCES "SellerProfile"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "LedgerAccount" ADD CONSTRAINT "LedgerAccount_owner_consistency" CHECK (("ownerType" = 'SELLER' AND "sellerProfileId" IS NOT NULL AND "ownerId" = "sellerProfileId"::text) OR ("ownerType" IN ('SYSTEM', 'PLATFORM') AND "sellerProfileId" IS NULL));
 
 -- AddForeignKey
 ALTER TABLE "LedgerEntry" ADD CONSTRAINT "LedgerEntry_transactionId_fkey" FOREIGN KEY ("transactionId") REFERENCES "LedgerTransaction"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

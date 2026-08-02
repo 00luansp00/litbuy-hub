@@ -649,31 +649,101 @@ describe('Financial domain with real PostgreSQL', () => {
       }),
     ).resolves.toMatchObject({ status: 'PENDING_REVIEW' });
   });
-  it('enforces financial ownership foreign keys and consistency', async () => {
-    await expect(
+  describe('authoritative financial ownership constraints', () => {
+    const providerAccount = (data: Record<string, unknown>) =>
       prisma.paymentProviderAccount.create({
-        data: { providerCode: 'fake', owner: 'SELLER', externalAccountId: randomUUID() },
-      }),
-    ).rejects.toThrow();
-    await expect(
+        data: {
+          providerCode: `fake-${randomUUID()}`,
+          externalAccountId: randomUUID(),
+          ...data,
+        } as never,
+      });
+    const ledgerAccount = (data: Record<string, unknown>) =>
       prisma.ledgerAccount.create({
         data: {
+          ownerId: randomUUID(),
+          accountClass: 'ASSET',
+          purpose: 'PSP_FEE_EXPENSE',
+          ...data,
+        } as never,
+      });
+
+    it('1 rejects SELLER provider account without sellerProfileId', async () => {
+      await expect(providerAccount({ owner: 'SELLER' })).rejects.toThrow();
+    });
+    it('2 rejects SELLER provider account with an unknown sellerProfileId', async () => {
+      await expect(
+        providerAccount({ owner: 'SELLER', sellerProfileId: randomUUID() }),
+      ).rejects.toThrow();
+    });
+    it('3 rejects PLATFORM provider account with sellerProfileId', async () => {
+      await expect(
+        providerAccount({ owner: 'PLATFORM', sellerProfileId: fixture.seller.id }),
+      ).rejects.toThrow();
+    });
+    it('4 accepts SELLER provider account with a real SellerProfile', async () => {
+      await expect(
+        providerAccount({ owner: 'SELLER', sellerProfileId: fixture.seller.id }),
+      ).resolves.toMatchObject({ owner: 'SELLER', sellerProfileId: fixture.seller.id });
+    });
+    it('5 accepts PLATFORM provider account without sellerProfileId', async () => {
+      await expect(
+        providerAccount({ owner: 'PLATFORM', sellerProfileId: null }),
+      ).resolves.toMatchObject({ owner: 'PLATFORM', sellerProfileId: null });
+    });
+    it('6 rejects SELLER ledger account without sellerProfileId', async () => {
+      await expect(ledgerAccount({ ownerType: 'SELLER' })).rejects.toThrow();
+    });
+    it('7 rejects SELLER ledger account with an unknown sellerProfileId', async () => {
+      const id = randomUUID();
+      await expect(
+        ledgerAccount({ ownerType: 'SELLER', ownerId: id, sellerProfileId: id }),
+      ).rejects.toThrow();
+    });
+    it('8 rejects SELLER ledger account when ownerId differs from sellerProfileId', async () => {
+      await expect(
+        ledgerAccount({
           ownerType: 'SELLER',
           ownerId: randomUUID(),
-          accountClass: 'LIABILITY',
-          purpose: 'SELLER_PENDING',
-        },
-      }),
-    ).rejects.toThrow();
-    await expect(
-      prisma.paymentProviderAccount.create({
-        data: {
-          providerCode: 'fake',
-          owner: 'SELLER',
-          sellerProfileId: randomUUID(),
-          externalAccountId: randomUUID(),
-        },
-      }),
-    ).rejects.toThrow();
+          sellerProfileId: fixture.seller.id,
+        }),
+      ).rejects.toThrow();
+    });
+    it('9 rejects SYSTEM ledger account with sellerProfileId', async () => {
+      await expect(
+        ledgerAccount({ ownerType: 'SYSTEM', sellerProfileId: fixture.seller.id }),
+      ).rejects.toThrow();
+    });
+    it('10 rejects PLATFORM ledger account with sellerProfileId', async () => {
+      await expect(
+        ledgerAccount({ ownerType: 'PLATFORM', sellerProfileId: fixture.seller.id }),
+      ).rejects.toThrow();
+    });
+    it('11 accepts SELLER ledger account when ownerId equals sellerProfileId', async () => {
+      await prisma.ledgerAccount.delete({ where: { id: account('SELLER_DEFICIT').id } });
+      await expect(
+        ledgerAccount({
+          ownerType: 'SELLER',
+          ownerId: fixture.seller.id,
+          sellerProfileId: fixture.seller.id,
+          accountClass: 'ASSET',
+          purpose: 'SELLER_DEFICIT',
+        }),
+      ).resolves.toMatchObject({
+        ownerType: 'SELLER',
+        ownerId: fixture.seller.id,
+        sellerProfileId: fixture.seller.id,
+      });
+    });
+    it('12 accepts SYSTEM ledger account without sellerProfileId', async () => {
+      await expect(
+        ledgerAccount({ ownerType: 'SYSTEM', sellerProfileId: null }),
+      ).resolves.toMatchObject({ ownerType: 'SYSTEM', sellerProfileId: null });
+    });
+    it('13 accepts PLATFORM ledger account without sellerProfileId', async () => {
+      await expect(
+        ledgerAccount({ ownerType: 'PLATFORM', sellerProfileId: null }),
+      ).resolves.toMatchObject({ ownerType: 'PLATFORM', sellerProfileId: null });
+    });
   });
 });
