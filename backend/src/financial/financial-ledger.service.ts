@@ -81,7 +81,14 @@ export class FinancialLedgerService {
           where: {
             ownerType_ownerId_purpose_currency: { ownerType, ownerId, purpose, currency: 'BRL' },
           },
-          create: { ownerType, ownerId, purpose, currency: 'BRL', accountClass: CLASSES[purpose] },
+          create: {
+            ownerType,
+            ownerId,
+            sellerProfileId: ownerType === 'SELLER' ? ownerId : null,
+            purpose,
+            currency: 'BRL',
+            accountClass: CLASSES[purpose],
+          },
           update: {},
         });
       return tx.ledgerAccount.findMany({ where: { ownerType, ownerId, currency: 'BRL' } });

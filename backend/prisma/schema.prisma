@@ -237,39 +237,45 @@ enum SecurityEventOutcome {
 }
 
 model User {
-  id                         String                      @id @default(uuid()) @db.Uuid
-  email                      String                      @unique
-  phoneE164                  String?
-  phoneVerifiedAt            DateTime?
-  birthDate                  DateTime                    @db.Date
-  status                     UserStatus                  @default(PENDING_EMAIL)
-  emailVerifiedAt            DateTime?
-  termsVersion               String
-  termsAcceptedAt            DateTime
-  privacyVersion             String
-  privacyAcceptedAt          DateTime
-  createdAt                  DateTime                    @default(now())
-  updatedAt                  DateTime                    @updatedAt
-  deletedAt                  DateTime?
-  sensitiveActionHoldUntil   DateTime?
-  lastSensitiveChangeAt      DateTime?
-  passwordCredential         PasswordCredential?
-  devices                    Device[]
-  sessions                   Session[]
-  verificationChallenges     VerificationChallenge[]
-  securityEvents             SecurityEvent[]
-  emailChangeRequests        EmailChangeRequest[]
-  twoFactorSettings          TwoFactorSettings?
-  twoFactorRecoveryCodes     TwoFactorRecoveryCode[]
-  stepUpGrants               StepUpGrant[]
-  roleAssignments            UserRoleAssignment[]
-  sellerApplication          SellerApplication?          @relation("SellerApplicationOwner")
-  reviewedSellerApplications SellerApplication[]         @relation("SellerApplicationReviewer")
-  sellerProfile              SellerProfile?
-  reviewedListingDrafts      ListingDraft[]              @relation("ListingDraftReviewer")
-  carts                      Cart[]                      @relation("CartBuyer")
-  orders                     Order[]                     @relation("OrderBuyer")
-  commerceIdempotencyRecords CommerceIdempotencyRecord[]
+  id                          String                      @id @default(uuid()) @db.Uuid
+  email                       String                      @unique
+  phoneE164                   String?
+  phoneVerifiedAt             DateTime?
+  birthDate                   DateTime                    @db.Date
+  status                      UserStatus                  @default(PENDING_EMAIL)
+  emailVerifiedAt             DateTime?
+  termsVersion                String
+  termsAcceptedAt             DateTime
+  privacyVersion              String
+  privacyAcceptedAt           DateTime
+  createdAt                   DateTime                    @default(now())
+  updatedAt                   DateTime                    @updatedAt
+  deletedAt                   DateTime?
+  sensitiveActionHoldUntil    DateTime?
+  lastSensitiveChangeAt       DateTime?
+  passwordCredential          PasswordCredential?
+  devices                     Device[]
+  sessions                    Session[]
+  verificationChallenges      VerificationChallenge[]
+  securityEvents              SecurityEvent[]
+  emailChangeRequests         EmailChangeRequest[]
+  twoFactorSettings           TwoFactorSettings?
+  twoFactorRecoveryCodes      TwoFactorRecoveryCode[]
+  stepUpGrants                StepUpGrant[]
+  roleAssignments             UserRoleAssignment[]
+  sellerApplication           SellerApplication?          @relation("SellerApplicationOwner")
+  reviewedSellerApplications  SellerApplication[]         @relation("SellerApplicationReviewer")
+  sellerProfile               SellerProfile?
+  reviewedListingDrafts       ListingDraft[]              @relation("ListingDraftReviewer")
+  carts                       Cart[]                      @relation("CartBuyer")
+  orders                      Order[]                     @relation("OrderBuyer")
+  commerceIdempotencyRecords  CommerceIdempotencyRecord[]
+  reviewedWithdrawals         Withdrawal[]                @relation("WithdrawalReviewer")
+  createdFeePolicies          FeePolicyVersion[]          @relation("FeePolicyCreator")
+  publishedFeePolicies        FeePolicyVersion[]          @relation("FeePolicyPublisher")
+  createdWithdrawalPolicies   WithdrawalPolicyVersion[]   @relation("WithdrawalPolicyCreator")
+  publishedWithdrawalPolicies WithdrawalPolicyVersion[]   @relation("WithdrawalPolicyPublisher")
+  financialEvents             FinancialEvent[]            @relation("FinancialEventActor")
 
   @@unique([phoneE164])
   @@index([email])
@@ -322,11 +328,15 @@ model SellerProfile {
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt
 
-  user          User           @relation(fields: [userId], references: [id], onDelete: Restrict)
-  listingDrafts ListingDraft[]
-  products      Product[]
-  carts         Cart[]
-  orders        Order[]
+  user                    User                     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  listingDrafts           ListingDraft[]
+  products                Product[]
+  carts                   Cart[]
+  orders                  Order[]
+  paymentProviderAccounts PaymentProviderAccount[]
+  ledgerAccounts          LedgerAccount[]
+  financialHolds          FinancialHold[]
+  withdrawals             Withdrawal[]
 
   @@index([status])
   @@index([slug])
@@ -907,6 +917,7 @@ model Order {
   items                  OrderItem[]
   reservations           InventoryReservation[]
   events                 OrderEvent[]
+  payment                Payment?
 
   @@index([buyerUserId, createdAt, id])
   @@index([sellerProfileId, createdAt, id])
@@ -1293,6 +1304,8 @@ model Payment {
   refunds     Refund[]
   settlements Settlement[]
   chargebacks Chargeback[]
+  holds       FinancialHold[]
+  order       Order            @relation(fields: [orderId], references: [id], onDelete: Restrict)
 }
 
 model PaymentProviderAccount {
@@ -1314,6 +1327,7 @@ model PaymentProviderAccount {
   updatedAt         DateTime              @updatedAt
   attempts          PaymentAttempt[]
   withdrawals       Withdrawal[]
+  sellerProfile     SellerProfile?        @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
 
   @@unique([providerCode, externalAccountId])
   @@index([sellerProfileId, status])
@@ -1347,14 +1361,16 @@ model PaymentAttempt {
 }
 
 model LedgerAccount {
-  id           String               @id @default(uuid()) @db.Uuid
-  ownerType    LedgerOwnerType
-  ownerId      String
-  accountClass LedgerAccountClass
-  purpose      LedgerAccountPurpose
-  currency     String               @default("BRL")
-  createdAt    DateTime             @default(now())
-  entries      LedgerEntry[]
+  id              String               @id @default(uuid()) @db.Uuid
+  ownerType       LedgerOwnerType
+  ownerId         String
+  sellerProfileId String?              @db.Uuid
+  accountClass    LedgerAccountClass
+  purpose         LedgerAccountPurpose
+  currency        String               @default("BRL")
+  createdAt       DateTime             @default(now())
+  entries         LedgerEntry[]
+  sellerProfile   SellerProfile?       @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
 
   @@unique([ownerType, ownerId, purpose, currency])
 }
@@ -1400,6 +1416,8 @@ model FinancialHold {
   releasedAt        DateTime?
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
+  sellerProfile     SellerProfile       @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
+  payment           Payment?            @relation(fields: [paymentId], references: [id], onDelete: Restrict)
 }
 
 model Settlement {
@@ -1455,6 +1473,8 @@ model Withdrawal {
   failureCode         String?
   createdAt           DateTime                @default(now())
   updatedAt           DateTime                @updatedAt
+  sellerProfile       SellerProfile           @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
+  reviewedBy          User?                   @relation("WithdrawalReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
   providerAccount     PaymentProviderAccount? @relation(fields: [providerAccountId], references: [id], onDelete: Restrict)
   transfer            Transfer?               @relation(fields: [transferId], references: [id], onDelete: Restrict)
 }
@@ -1536,6 +1556,7 @@ model FinancialEvent {
   metadata            Json                  @default("{}")
   createdAt           DateTime              @default(now())
   ledgerTransaction   LedgerTransaction     @relation(fields: [ledgerTransactionId], references: [id], onDelete: Restrict)
+  actor               User?                 @relation("FinancialEventActor", fields: [actorUserId], references: [id], onDelete: SetNull)
   outbox              FinancialOutboxEvent?
 }
 
@@ -1566,6 +1587,8 @@ model FeePolicyVersion {
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
   rules             FeeRule[]
+  createdBy         User            @relation("FeePolicyCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  publishedBy       User?           @relation("FeePolicyPublisher", fields: [publishedByUserId], references: [id], onDelete: Restrict)
 }
 
 model FeeRule {
@@ -1608,6 +1631,8 @@ model WithdrawalPolicyVersion {
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
   rules             WithdrawalPolicyRule[]
+  createdBy         User                   @relation("WithdrawalPolicyCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  publishedBy       User?                  @relation("WithdrawalPolicyPublisher", fields: [publishedByUserId], references: [id], onDelete: Restrict)
 }
 
 model WithdrawalPolicyRule {

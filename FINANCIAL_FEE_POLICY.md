@@ -7,3 +7,7 @@ Rules support fixed minor units, integer basis points, and basis points plus fix
 Frontend Bronze/Prata/Ouro/Diamante/Elite percentages, release times, `/taxas`, payment-method fees, and plan prices remain visual mocks and are not seeded policies. `PSP_FEE_EXPENSE` records a reconciled external PSP cost; a `FeeRule` is LIT Buy commercial policy. Neither proves the other.
 
 Future admin can create/diff/schedule/publish/retire versions and configure benefits, commissions, methods, levels, plans, promotions, withdrawal fees/SLA, and instant enablement. Publication requires ADMIN, step-up/2FA, actor, timestamp, audit, and idempotency.
+
+## Deterministic rule resolution
+
+A null qualifier is general. Applicable rules must match the charged party and every non-null qualifier. Resolution uses highest numeric priority and then greatest qualifier specificity; database return order is irrelevant. More than one equally ranked winner fails with stable `FEE_RULE_AMBIGUOUS` rather than silently selecting a rule. Formula components, non-negative values, min/max, and installment ranges are validated in TypeScript and PostgreSQL.

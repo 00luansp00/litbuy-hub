@@ -140,6 +140,7 @@ CREATE TABLE "LedgerAccount" (
     "id" UUID NOT NULL,
     "ownerType" "LedgerOwnerType" NOT NULL,
     "ownerId" TEXT NOT NULL,
+    "sellerProfileId" UUID,
     "accountClass" "LedgerAccountClass" NOT NULL,
     "purpose" "LedgerAccountPurpose" NOT NULL,
     "currency" TEXT NOT NULL DEFAULT 'BRL',
@@ -504,10 +505,21 @@ CREATE UNIQUE INDEX "WithdrawalPolicyVersion_publicVersion_key" ON "WithdrawalPo
 CREATE UNIQUE INDEX "WithdrawalPolicyRule_policyVersionId_speed_key" ON "WithdrawalPolicyRule"("policyVersionId", "speed");
 
 -- AddForeignKey
+ALTER TABLE "Payment" ADD CONSTRAINT "Payment_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "Order"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "PaymentProviderAccount" ADD CONSTRAINT "PaymentProviderAccount_sellerProfileId_fkey" FOREIGN KEY ("sellerProfileId") REFERENCES "SellerProfile"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "PaymentProviderAccount" ADD CONSTRAINT "PaymentProviderAccount_owner_consistency" CHECK ((owner='SELLER' AND "sellerProfileId" IS NOT NULL) OR (owner='PLATFORM' AND "sellerProfileId" IS NULL));
+ALTER TABLE "LedgerAccount" ADD CONSTRAINT "LedgerAccount_owner_consistency" CHECK (("ownerType"='SELLER' AND "sellerProfileId" IS NOT NULL AND "ownerId"="sellerProfileId"::text) OR ("ownerType" IN ('SYSTEM','PLATFORM') AND "sellerProfileId" IS NULL));
 ALTER TABLE "PaymentAttempt" ADD CONSTRAINT "PaymentAttempt_paymentId_fkey" FOREIGN KEY ("paymentId") REFERENCES "Payment"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "PaymentAttempt" ADD CONSTRAINT "PaymentAttempt_providerAccountId_fkey" FOREIGN KEY ("providerAccountId") REFERENCES "PaymentProviderAccount"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "LedgerAccount" ADD CONSTRAINT "LedgerAccount_sellerProfileId_fkey" FOREIGN KEY ("sellerProfileId") REFERENCES "SellerProfile"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "LedgerEntry" ADD CONSTRAINT "LedgerEntry_transactionId_fkey" FOREIGN KEY ("transactionId") REFERENCES "LedgerTransaction"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -516,7 +528,19 @@ ALTER TABLE "LedgerEntry" ADD CONSTRAINT "LedgerEntry_transactionId_fkey" FOREIG
 ALTER TABLE "LedgerEntry" ADD CONSTRAINT "LedgerEntry_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "LedgerAccount"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "FinancialHold" ADD CONSTRAINT "FinancialHold_sellerProfileId_fkey" FOREIGN KEY ("sellerProfileId") REFERENCES "SellerProfile"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "FinancialHold" ADD CONSTRAINT "FinancialHold_paymentId_fkey" FOREIGN KEY ("paymentId") REFERENCES "Payment"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "Settlement" ADD CONSTRAINT "Settlement_paymentId_fkey" FOREIGN KEY ("paymentId") REFERENCES "Payment"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Withdrawal" ADD CONSTRAINT "Withdrawal_sellerProfileId_fkey" FOREIGN KEY ("sellerProfileId") REFERENCES "SellerProfile"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Withdrawal" ADD CONSTRAINT "Withdrawal_reviewedByUserId_fkey" FOREIGN KEY ("reviewedByUserId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Withdrawal" ADD CONSTRAINT "Withdrawal_providerAccountId_fkey" FOREIGN KEY ("providerAccountId") REFERENCES "PaymentProviderAccount"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -534,14 +558,28 @@ ALTER TABLE "Chargeback" ADD CONSTRAINT "Chargeback_paymentId_fkey" FOREIGN KEY 
 ALTER TABLE "FinancialEvent" ADD CONSTRAINT "FinancialEvent_ledgerTransactionId_fkey" FOREIGN KEY ("ledgerTransactionId") REFERENCES "LedgerTransaction"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "FinancialEvent" ADD CONSTRAINT "FinancialEvent_actorUserId_fkey" FOREIGN KEY ("actorUserId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "FinancialOutboxEvent" ADD CONSTRAINT "FinancialOutboxEvent_financialEventId_fkey" FOREIGN KEY ("financialEventId") REFERENCES "FinancialEvent"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "FeePolicyVersion" ADD CONSTRAINT "FeePolicyVersion_createdByUserId_fkey" FOREIGN KEY ("createdByUserId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "FeePolicyVersion" ADD CONSTRAINT "FeePolicyVersion_publishedByUserId_fkey" FOREIGN KEY ("publishedByUserId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "FeeRule" ADD CONSTRAINT "FeeRule_policyVersionId_fkey" FOREIGN KEY ("policyVersionId") REFERENCES "FeePolicyVersion"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "WithdrawalPolicyRule" ADD CONSTRAINT "WithdrawalPolicyRule_policyVersionId_fkey" FOREIGN KEY ("policyVersionId") REFERENCES "WithdrawalPolicyVersion"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "WithdrawalPolicyVersion" ADD CONSTRAINT "WithdrawalPolicyVersion_createdByUserId_fkey" FOREIGN KEY ("createdByUserId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
+-- AddForeignKey
+ALTER TABLE "WithdrawalPolicyVersion" ADD CONSTRAINT "WithdrawalPolicyVersion_publishedByUserId_fkey" FOREIGN KEY ("publishedByUserId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "WithdrawalPolicyRule" ADD CONSTRAINT "WithdrawalPolicyRule_policyVersionId_fkey" FOREIGN KEY ("policyVersionId") REFERENCES "WithdrawalPolicyVersion"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- Authoritative financial invariants intentionally live below Prisma's model layer.
 ALTER TABLE "Payment" ADD CONSTRAINT "Payment_real_status" CHECK (status <> 'NOT_CREATED'),
@@ -551,8 +589,22 @@ ALTER TABLE "PaymentAttempt" ADD CONSTRAINT "PaymentAttempt_positive_amount" CHE
 ALTER TABLE "LedgerEntry" ADD CONSTRAINT "LedgerEntry_positive_amount" CHECK ("amountMinor" > 0);
 ALTER TABLE "Withdrawal" ADD CONSTRAINT "Withdrawal_amount_equation" CHECK ("debitAmountMinor" > 0 AND "payoutAmountMinor" > 0 AND "feeAmountMinor" >= 0 AND "debitAmountMinor" = "payoutAmountMinor" + "feeAmountMinor"), ADD CONSTRAINT "Withdrawal_standard_zero_fee" CHECK (speed <> 'STANDARD' OR "feeAmountMinor" = 0);
 ALTER TABLE "Refund" ADD CONSTRAINT "Refund_positive_amount" CHECK ("amountMinor" > 0);
-ALTER TABLE "FeeRule" ADD CONSTRAINT "FeeRule_integer_money" CHECK (("percentBps" IS NULL OR "percentBps" >= 0) AND ("fixedAmountMinor" IS NULL OR "fixedAmountMinor" >= 0) AND ("minimumAmountMinor" IS NULL OR "minimumAmountMinor" >= 0) AND ("maximumAmountMinor" IS NULL OR "maximumAmountMinor" >= 0));
-ALTER TABLE "WithdrawalPolicyRule" ADD CONSTRAINT "WithdrawalPolicyRule_valid" CHECK ("slaHours" > 0 AND ("feePercentBps" IS NULL OR "feePercentBps" >= 0) AND "feeFixedAmountMinor" >= 0);
+ALTER TABLE "FeeRule" ADD CONSTRAINT "FeeRule_configuration" CHECK (
+ ("percentBps" IS NULL OR "percentBps" >= 0) AND ("fixedAmountMinor" IS NULL OR "fixedAmountMinor" >= 0) AND
+ ("minimumAmountMinor" IS NULL OR "minimumAmountMinor" >= 0) AND ("maximumAmountMinor" IS NULL OR "maximumAmountMinor" >= 0) AND
+ ("minimumAmountMinor" IS NULL OR "maximumAmountMinor" IS NULL OR "minimumAmountMinor" <= "maximumAmountMinor") AND
+ ("installmentsFrom" IS NULL OR "installmentsFrom" > 0) AND ("installmentsTo" IS NULL OR "installmentsTo" > 0) AND
+ ("installmentsFrom" IS NULL OR "installmentsTo" IS NULL OR "installmentsFrom" <= "installmentsTo") AND
+ ((formula='FIXED' AND "fixedAmountMinor" IS NOT NULL AND "percentBps" IS NULL) OR
+  (formula='PERCENT_BPS' AND "percentBps" IS NOT NULL AND "fixedAmountMinor" IS NULL) OR
+  (formula='PERCENT_BPS_PLUS_FIXED' AND "percentBps" IS NOT NULL AND "fixedAmountMinor" IS NOT NULL))
+);
+ALTER TABLE "WithdrawalPolicyRule" ADD CONSTRAINT "WithdrawalPolicyRule_valid" CHECK (
+ "slaHours" > 0 AND ("feePercentBps" IS NULL OR "feePercentBps" >= 0) AND "feeFixedAmountMinor" >= 0 AND
+ (("feeFormula"='FIXED' AND "feePercentBps" IS NULL) OR
+  ("feeFormula"='PERCENT_BPS' AND "feePercentBps" IS NOT NULL AND "feeFixedAmountMinor"=0) OR
+  ("feeFormula"='PERCENT_BPS_PLUS_FIXED' AND "feePercentBps" IS NOT NULL))
+);
 
 CREATE FUNCTION financial_reject_mutation() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN RAISE EXCEPTION 'FINANCIAL_APPEND_ONLY: % cannot be %', TG_TABLE_NAME, TG_OP USING ERRCODE='55000'; END $$;
@@ -587,22 +639,33 @@ END $$;
 CREATE CONSTRAINT TRIGGER ledger_protected_balance AFTER INSERT ON "LedgerEntry" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION financial_protected_balance();
 
 CREATE FUNCTION financial_policy_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE allowed boolean;
 BEGIN
- IF OLD.status <> 'DRAFT' THEN RAISE EXCEPTION 'PUBLISHED_POLICY_IMMUTABLE' USING ERRCODE='55000'; END IF;
+ IF TG_OP='DELETE' THEN RAISE EXCEPTION 'PUBLISHED_POLICY_IMMUTABLE' USING ERRCODE='55000'; END IF;
+ allowed := (OLD.status='DRAFT' AND NEW.status IN ('DRAFT','SCHEDULED','ACTIVE','RETIRED')) OR
+            (OLD.status='SCHEDULED' AND NEW.status IN ('SCHEDULED','ACTIVE','RETIRED')) OR
+            (OLD.status='ACTIVE' AND NEW.status IN ('ACTIVE','RETIRED')) OR
+            (OLD.status='RETIRED' AND NEW.status='RETIRED');
+ IF NOT allowed THEN RAISE EXCEPTION 'INVALID_POLICY_TRANSITION' USING ERRCODE='23514'; END IF;
+ IF OLD.status <> 'DRAFT' AND (NEW."publicVersion" IS DISTINCT FROM OLD."publicVersion" OR NEW."effectiveFrom" IS DISTINCT FROM OLD."effectiveFrom" OR NEW."effectiveTo" IS DISTINCT FROM OLD."effectiveTo" OR NEW."createdByUserId" IS DISTINCT FROM OLD."createdByUserId" OR NEW."createdAt" IS DISTINCT FROM OLD."createdAt") THEN
+  RAISE EXCEPTION 'PUBLISHED_POLICY_IMMUTABLE' USING ERRCODE='55000';
+ END IF;
+ IF NEW.status <> 'DRAFT' AND (NEW."publishedByUserId" IS NULL OR NEW."publishedAt" IS NULL) THEN RAISE EXCEPTION 'POLICY_PUBLICATION_AUDIT_REQUIRED' USING ERRCODE='23514'; END IF;
  RETURN NEW;
 END $$;
 CREATE TRIGGER fee_policy_immutable BEFORE UPDATE OR DELETE ON "FeePolicyVersion" FOR EACH ROW EXECUTE FUNCTION financial_policy_guard();
 CREATE TRIGGER withdrawal_policy_immutable BEFORE UPDATE OR DELETE ON "WithdrawalPolicyVersion" FOR EACH ROW EXECUTE FUNCTION financial_policy_guard();
 CREATE FUNCTION financial_rule_guard() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE policy_status text;
+DECLARE policy_status text; parent_id uuid;
 BEGIN
- IF TG_TABLE_NAME='FeeRule' THEN SELECT status::text INTO policy_status FROM "FeePolicyVersion" WHERE id=COALESCE(OLD."policyVersionId",NEW."policyVersionId");
- ELSE SELECT status::text INTO policy_status FROM "WithdrawalPolicyVersion" WHERE id=COALESCE(OLD."policyVersionId",NEW."policyVersionId"); END IF;
- IF policy_status <> 'DRAFT' THEN RAISE EXCEPTION 'PUBLISHED_POLICY_IMMUTABLE' USING ERRCODE='55000'; END IF;
- RETURN COALESCE(NEW,OLD);
+ parent_id := CASE WHEN TG_OP='DELETE' THEN OLD."policyVersionId" ELSE NEW."policyVersionId" END;
+ IF TG_TABLE_NAME='FeeRule' THEN SELECT status::text INTO policy_status FROM "FeePolicyVersion" WHERE id=parent_id;
+ ELSE SELECT status::text INTO policy_status FROM "WithdrawalPolicyVersion" WHERE id=parent_id; END IF;
+ IF policy_status IS DISTINCT FROM 'DRAFT' THEN RAISE EXCEPTION 'PUBLISHED_POLICY_IMMUTABLE' USING ERRCODE='55000'; END IF;
+ RETURN CASE WHEN TG_OP='DELETE' THEN OLD ELSE NEW END;
 END $$;
-CREATE TRIGGER fee_rule_immutable BEFORE UPDATE OR DELETE ON "FeeRule" FOR EACH ROW EXECUTE FUNCTION financial_rule_guard();
-CREATE TRIGGER withdrawal_rule_immutable BEFORE UPDATE OR DELETE ON "WithdrawalPolicyRule" FOR EACH ROW EXECUTE FUNCTION financial_rule_guard();
+CREATE TRIGGER fee_rule_immutable BEFORE INSERT OR UPDATE OR DELETE ON "FeeRule" FOR EACH ROW EXECUTE FUNCTION financial_rule_guard();
+CREATE TRIGGER withdrawal_rule_immutable BEFORE INSERT OR UPDATE OR DELETE ON "WithdrawalPolicyRule" FOR EACH ROW EXECUTE FUNCTION financial_rule_guard();
 
 CREATE FUNCTION financial_policy_no_overlap() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE conflicts integer;

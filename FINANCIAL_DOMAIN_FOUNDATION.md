@@ -21,3 +21,9 @@ Webhook delivery is at-least-once. `(providerCode, externalEventId)` and provide
 Threats include ledger tampering, duplicate posting, double withdrawal/reservation, negative-balance bypass, webhook replay/reorder/forgery, provider/local divergence, malicious metadata, secret leakage, external-ID collision, refund races, chargeback after withdrawal, and ambiguous transfer results. Mitigations are append-only/constraint triggers, canonical idempotency hashes, ordered advisory locks, typed and size-limited metadata at future boundaries, opaque secret references, unique external IDs, reconciliation, compensating postings, and integration tests against PostgreSQL.
 
 Admin policy publication will require ADMIN, step-up/2FA, immutable audit actor/timestamp, and idempotency. An admin never edits a ledger entry, seller balance, or an immutable withdrawal request.
+
+## PostgreSQL financial integration coverage
+
+`backend/test/financial-domain.integration-spec.ts` is discovered by the existing `test:integration` configuration and exercises the financial migration against real PostgreSQL: deferred double-entry validation, currency and positive-money constraints, append-only triggers, derived/protected buckets, concurrent provisioning/posting/reservation, atomic rollback, external deduplication, relational ownership, compensation, and policy lifecycle/rule immutability. This suite requires the CI PostgreSQL service; unit tests are not treated as a substitute.
+
+Published policy lifecycle updates are limited to the explicit DRAFT → SCHEDULED/ACTIVE/RETIRED, SCHEDULED → ACTIVE/RETIRED, and ACTIVE → RETIRED edges. Once a policy leaves DRAFT, its public version, effective interval, original author, creation timestamp, and all rules are immutable. Rule INSERT, UPDATE, and DELETE are accepted only while the parent remains DRAFT.

@@ -5,7 +5,9 @@ export class FinancialDomainError extends Error {
       | 'INVALID_TRANSITION'
       | 'IDEMPOTENCY_KEY_REUSED'
       | 'INSUFFICIENT_FINANCIAL_BALANCE'
-      | 'POLICY_NOT_FOUND',
+      | 'POLICY_NOT_FOUND'
+      | 'INVALID_FEE_RULE'
+      | 'FEE_RULE_AMBIGUOUS',
     message: string = code,
   ) {
     super(message);
