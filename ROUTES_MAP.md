@@ -179,3 +179,9 @@ A rota `/categoria/$slug` usa produtos e subcategorias públicos reais, com filt
 ## Detalhe público do produto (PR #33)
 
 A rota legada `/produto/$id` interpreta `$id` como slug e lê somente `GET /api/v1/catalog/products/:slug`, com parser defensivo, galeria assinada, variantes/serviços reais e estados seguros. Apenas cards do catálogo público navegam para ela; superfícies legadas continuam demonstrativas e sem link automático. Compra, carrinho, checkout, loja, avaliações, perguntas e relacionados não estão conectados. Consulte `PRODUCT_DETAIL_PUBLIC_CATALOG_INTEGRATION.md`.
+
+# Atualização — leitura real de pedidos do comprador
+
+`/pedidos` e `/pedidos/$id` são rotas autenticadas de leitura real. A primeira lista `GET /api/v1/orders` com paginação/filtro; a segunda interpreta `$id` exclusivamente como `orderCode` e lê `GET /api/v1/orders/:orderCode`. `/perfil` monta sua consulta de cinco pedidos apenas dentro do conteúdo autenticado. Consulte `BUYER_ORDER_READ_FRONTEND.md`.
+
+`/pedidos` normaliza a página para 1 quando a URL não contém inteiro seguro entre 1 e 10.000. O detalhe não oferece retry principal para 404 e usa retorno a “Meus pedidos”; falhas transitórias e malformadas mantêm um estado seguro.

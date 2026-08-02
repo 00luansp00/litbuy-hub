@@ -1,127 +1,107 @@
-import { useState } from "react";
-import { createFileRoute, notFound } from "@tanstack/react-router";
-import { toast } from "sonner";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { Breadcrumb } from "@/components/common/Breadcrumb";
-import { DigitalDeliveryCard } from "@/components/orders/DigitalDeliveryCard";
-import { OrderActionsCard } from "@/components/orders/OrderActionsCard";
-import { OrderChatCard } from "@/components/orders/OrderChatCard";
-import { OrderDisputeCard } from "@/components/orders/OrderDisputeCard";
-import { OrderHeader } from "@/components/orders/OrderHeader";
-import { OrderItemsList } from "@/components/orders/OrderItemsList";
-import { OrderMediationCard } from "@/components/orders/OrderMediationCard";
-import { OrderProblemDialog } from "@/components/orders/OrderProblemDialog";
-import { OrderReviewCard } from "@/components/orders/OrderReviewCard";
-import { OrderSecurityNotice } from "@/components/orders/OrderSecurityNotice";
-import { OrderTimeline } from "@/components/orders/OrderTimeline";
-import { EmptyState } from "@/components/common/EmptyState";
-import { orderService } from "@/services/orderService";
-import { analyticsService } from "@/services/analyticsService";
-
-export const Route = createFileRoute("/pedidos/$id")({
-  loader: async ({ params }) => {
-    const order = await orderService.getOrderById(params.id);
-    if (!order) throw notFound();
-    const [timeline, mediation] = await Promise.all([
-      orderService.getOrderTimeline(order.id),
-      orderService.getOrderMediation(order.id),
-    ]);
-    return { order, timeline, mediation };
-  },
-  component: OrderDetailPage,
-  notFoundComponent: OrderNotFound,
-});
-
+import { BuyerOrderAmounts } from "@/components/orders/BuyerOrderAmounts";
+import { BuyerOrderErrorState } from "@/components/orders/BuyerOrderErrorState";
+import { BuyerOrderItems } from "@/components/orders/BuyerOrderItems";
+import { BuyerOrderStateSummary } from "@/components/orders/BuyerOrderStateSummary";
+import { BuyerOrderStatusBadge } from "@/components/orders/BuyerOrderStatusBadge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ApiError } from "@/lib/api/client";
+import { formatOrderDate, useBuyerOrder } from "@/services/orders";
+export const Route = createFileRoute("/pedidos/$id")({ component: OrderDetailPage });
 function OrderDetailPage() {
-  const { order, timeline, mediation } = Route.useLoaderData();
-  const [problemOpen, setProblemOpen] = useState(false);
-
-  const canConfirm =
-    order.status === "delivered_by_seller" ||
-    order.status === "awaiting_buyer_confirmation";
-  const canOpenDispute =
-    order.status !== "cancelled" && order.status !== "refunded";
-
+  const { id } = Route.useParams();
   return (
     <AuthGate
       title="Entre para acessar o pedido"
       description="Você precisa estar logado para ver os detalhes do pedido."
     >
-      <div className="container-lit space-y-6 py-6 md:space-y-8 md:py-10">
-        <Breadcrumb
-          items={[
-            { label: "Home", to: "/" },
-            { label: "Meus pedidos", to: "/pedidos" },
-            { label: order.code },
-          ]}
-        />
-
-        <OrderHeader order={order} />
-
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-8">
-          <div className="min-w-0 space-y-6">
-            <OrderItemsList order={order} />
-            <DigitalDeliveryCard
-              delivery={order.delivery}
-              canConfirm={canConfirm}
-              onConfirm={() => {
-                orderService.simulateConfirmDelivery(order.id);
-                analyticsService.track("buyer_confirmed_delivery_mocked", {
-                  orderId: order.id,
-                });
-                toast.success("Recebimento confirmado (mock)", {
-                  description:
-                    "Em produção, o pagamento seria liberado ao vendedor.",
-                });
-              }}
-              onReport={() => setProblemOpen(true)}
-            />
-            <OrderChatCard
-              order={order}
-              onReportProblem={() => setProblemOpen(true)}
-            />
-            <OrderTimeline events={timeline} />
-            {mediation && (
-              <OrderMediationCard mediation={mediation} perspective="buyer" />
-            )}
-            <OrderDisputeCard
-              orderId={order.id}
-              dispute={order.dispute}
-              canOpen={canOpenDispute}
-            />
-            <OrderReviewCard
-              orderId={order.id}
-              status={order.status}
-              review={order.review}
-            />
-          </div>
-
-          <aside className="space-y-6">
-            <OrderSecurityNotice />
-            <OrderActionsCard order={order} />
-          </aside>
-        </div>
-      </div>
-
-      <OrderProblemDialog
-        orderId={order.id}
-        open={problemOpen}
-        onOpenChange={setProblemOpen}
-      />
+      <OrderDetailContent orderCode={id} />
     </AuthGate>
   );
 }
-
-function OrderNotFound() {
+export function OrderDetailContent({ orderCode }: { orderCode: string }) {
+  const query = useBuyerOrder(orderCode);
+  if (query.isPending)
+    return (
+      <div className="container-lit py-10" aria-live="polite">
+        <span className="sr-only">Carregando pedido...</span>
+        <Skeleton className="h-48" />
+      </div>
+    );
+  if (query.isError) {
+    const notFound =
+      (query.error instanceof ApiError && query.error.status === 404) ||
+      query.error instanceof TypeError;
+    if (notFound)
+      return (
+        <div role="alert" className="container-lit py-10">
+          <h1 className="text-xl font-bold">Pedido indisponível</h1>
+          <p className="mt-2">Pedido não encontrado ou indisponível para esta conta.</p>
+          <Link to="/pedidos" className="mt-4 inline-block text-primary hover:underline">
+            Voltar para Meus pedidos
+          </Link>
+        </div>
+      );
+    return (
+      <div className="container-lit py-10">
+        <BuyerOrderErrorState
+          message="Não foi possível carregar o pedido com segurança."
+          retry={() => void query.refetch()}
+        />
+      </div>
+    );
+  }
+  const order = query.data;
   return (
-    <div className="container-lit py-16">
-      <EmptyState
-        icon="SearchX"
-        title="Pedido não encontrado"
-        description="O pedido que você procura não existe ou foi removida."
-        action={{ label: "Ver meus pedidos", to: "/pedidos" }}
+    <main className="container-lit space-y-6 py-6 md:py-10">
+      <Breadcrumb
+        items={[
+          { label: "Home", to: "/" },
+          { label: "Meus pedidos", to: "/pedidos" },
+          { label: order.orderCode },
+        ]}
       />
-    </div>
+      <header className="space-y-2">
+        <BuyerOrderStatusBadge status={order.status} />
+        <h1 className="text-2xl font-bold">Pedido {order.orderCode}</h1>
+        <p className="text-sm text-muted-foreground">
+          Criado em {formatOrderDate(order.createdAt)}
+        </p>
+        {order.status === "PENDING_PAYMENT" && (
+          <p className="text-sm">Expira em {formatOrderDate(order.expiresAt)}</p>
+        )}
+        {order.expiredAt && (
+          <p className="text-sm">Expirado em {formatOrderDate(order.expiredAt)}</p>
+        )}
+        {order.cancelledAt && (
+          <p className="text-sm">Cancelado em {formatOrderDate(order.cancelledAt)}</p>
+        )}
+      </header>
+      <BuyerOrderStateSummary order={order} />
+      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+        <div className="space-y-6">
+          <section aria-labelledby="seller-title" className="rounded-xl border p-5">
+            <h2 id="seller-title" className="text-xl font-bold">
+              Seller histórico
+            </h2>
+            <p className="mt-2 font-semibold">{order.seller.storeName}</p>
+            <Link
+              to="/loja/$slug"
+              params={{ slug: order.seller.slug }}
+              className="text-sm text-primary hover:underline"
+            >
+              /{order.seller.slug}
+            </Link>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Seller registrado no momento do pedido.
+            </p>
+          </section>
+          <BuyerOrderItems items={order.items} />
+        </div>
+        <BuyerOrderAmounts order={order} />
+      </div>
+    </main>
   );
 }
-

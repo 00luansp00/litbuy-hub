@@ -250,4 +250,12 @@ Read `CART_FOUNDATION.md` before changing carts. Preserve buyer ownership filter
 
 ## PR #37 — checkout and order core
 
-The backend now contains the server-side checkout and persistent pending-order foundation described in `ORDER_CHECKOUT_FOUNDATION.md`. It uses cart preview fingerprints, immutable snapshots, BIGINT minor units, transactional inventory reservations, idempotency, order events/outbox, buyer-only reads, pre-payment cancellation, and controlled expiration. This does **not** implement payments, a gateway, a financial ledger, webhooks, fulfillment, or a connected frontend. PR #38 remains responsible for real frontend order reading after CI validates this foundation.
+The backend contains the server-side checkout and persistent pending-order foundation described in `ORDER_CHECKOUT_FOUNDATION.md`. It uses cart preview fingerprints, immutable snapshots, BIGINT minor units, transactional inventory reservations, idempotency, order events/outbox, buyer-only reads, pre-payment cancellation, and controlled expiration. This does **not** implement payments, a gateway, a financial ledger, webhooks or fulfillment. PR #38 subsequently implemented the read-only frontend consumer and was validated by CI #172.
+
+# Handoff — leitura real de pedidos
+
+A PR #38 está implementada e foi validada pelo CI #172. A integração frontend somente de leitura está descrita em `BUYER_ORDER_READ_FRONTEND.md`, usa `buyerOrderKeys` e não contém checkout, mutações, gateway ou pagamento.
+
+Preserve `orderCode.ts` como fonte única do formato público e a verificação de igualdade no detalhe. `parseOrderPage` impede que valores inseguros da URL alcancem o service. As suítes de interface usam jsdom, Testing Library e QueryClient real; não dependem de browser externo.
+
+Qualquer mutação futura, inclusive cancelamento ou pagamento, deve ser implementada em PR separada, invalidar `buyerOrderKeys.all` e o detalhe afetado e preservar contratos e autorização no backend.
