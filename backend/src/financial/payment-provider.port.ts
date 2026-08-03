@@ -24,6 +24,7 @@ export type ProviderWebhook = {
   paymentId: string;
   status: ProviderPayment['status'];
   payloadHash: string;
+  occurredAt?: Date;
 };
 export type ProviderNotificationInput = {
   payload: Uint8Array;
@@ -49,5 +50,7 @@ export interface PaymentProviderPort {
   }): Promise<{ id: string; status: 'PENDING' | 'SUCCEEDED' | 'FAILED' }>;
 }
 export interface PaymentProviderNotificationPort {
+  readonly providerCode: string;
+  assertAvailable(): void;
   resolveNotification(input: ProviderNotificationInput): Promise<ProviderWebhook[]>;
 }

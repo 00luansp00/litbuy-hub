@@ -2,7 +2,7 @@
 
 ## Scope
 
-`backend/src/financial/providers/efi` is a sandbox boundary. Payment operations implement the provider-neutral `PaymentProviderPort`; external-event resolution implements the separate provider-neutral `PaymentProviderNotificationPort`. Efí DTOs do not enter Order, Checkout, Ledger, or domain services. No public callback endpoint, real checkout payment, Pix transfer, cash-out, payout, seller split, refund, or irreversible ledger effect is enabled.
+`backend/src/financial/providers/efi` is a sandbox boundary. Payment operations implement the provider-neutral `PaymentProviderPort`; external-event resolution implements the separate provider-neutral `PaymentProviderNotificationPort`. Efí DTOs do not enter Order, Checkout, Ledger, or domain services. A feature-gated Billing callback now persists a durable provider-neutral inbox before asynchronous resolution. No Pix callback, real checkout payment, Pix transfer, cash-out, payout, seller split, refund, or irreversible ledger effect is enabled.
 
 ## Separate Billing and Pix profiles
 
@@ -40,9 +40,9 @@ Efí Billing posts `application/x-www-form-urlencoded` containing `notification=
 
 The token identifies the lifecycle, not one delivery. Each normalized external ID is a deterministic SHA-256 of provider, protocol, token, and notification event ID. Thus two lifecycle changes have different IDs while a redelivery of the same history event has the same ID. Raw notification tokens are not returned to the domain or logged. Arrival order is never authoritative, and resolution itself performs no financial write.
 
-Calling `GET /v1/notification/:token` tells Efí that the notification was received. A future public callback route therefore **must not call this resolver before durable ingestion exists**. The callback/token must first enter a durable inbox or queue; only then may a worker resolve the authenticated notification history. This ordering permits local retries even if Efí already considers the token consulted. Inbox and normalized-event processing must remain idempotent, and `ProviderWebhookEvent` plus any later financial processing stays subsequent and transactional.
+Calling `GET /v1/notification/:token` tells Efí that the notification was received. The public Billing callback therefore **does not call this resolver**. It first commits an encrypted-token delivery to `ProviderNotificationInbox`; only the separate worker may resolve the authenticated notification history. This ordering permits local retries even if Efí already considers the token consulted. Inbox and normalized-event processing are idempotent, and `ProviderWebhookEvent` plus any later financial processing stays subsequent and transactional.
 
-The raw token must never appear in logs. If durable storage needs recoverable material to re-query Efí, it must protect that material appropriately at rest; a one-way hash alone cannot support provider re-query. This PR intentionally adds no controller, public callback endpoint, inbox, queue, worker, or ledger consumer.
+The raw token never appears in logs or persistence. AES-256-GCM protects recoverable token material with an injected, identified key; SHA-256 is stored only for technical correlation. See [PROVIDER_NOTIFICATION_INGRESS.md](./PROVIDER_NOTIFICATION_INGRESS.md). No ledger consumer or financial effect is included.
 
 ## Pix webhook boundary
 

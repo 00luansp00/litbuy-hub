@@ -416,7 +416,7 @@ describe('Efí Pix notification boundary', () => {
         contentType: 'application/json',
         transportVerified: false,
       }),
-    ).rejects.toMatchObject({ code: 'UNVERIFIED_TRANSPORT' });
+    ).rejects.toMatchObject({ reason: 'UNVERIFIED_TRANSPORT', kind: 'DEFINITIVE' });
     await expect(
       provider.resolveNotification({
         payload,
@@ -443,8 +443,8 @@ describe('Efí Pix notification boundary', () => {
         transportVerified: true,
       }),
     ).rejects.toMatchObject({
-      code: 'UNSUPPORTED_PROVIDER_EVENT',
-      retryable: false,
+      reason: 'UNSUPPORTED_PROVIDER_EVENT',
+      kind: 'AMBIGUOUS',
       requiresReconciliation: true,
     });
   });
@@ -456,7 +456,7 @@ describe('Efí Pix notification boundary', () => {
         contentType: 'application/json',
         transportVerified: true,
       }),
-    ).rejects.toMatchObject({ code: 'INVALID_PROVIDER_RESPONSE' });
+    ).rejects.toMatchObject({ reason: 'INVALID_PROVIDER_RESPONSE', kind: 'DEFINITIVE' });
   });
   it('rejects unverified transport before unsupported-event classification', async () => {
     const provider = new EfiPixNotificationProvider();
@@ -466,7 +466,11 @@ describe('Efí Pix notification boundary', () => {
         contentType: 'application/json',
         transportVerified: false,
       }),
-    ).rejects.toMatchObject({ code: 'UNVERIFIED_TRANSPORT', requiresReconciliation: false });
+    ).rejects.toMatchObject({
+      reason: 'UNVERIFIED_TRANSPORT',
+      kind: 'DEFINITIVE',
+      requiresReconciliation: false,
+    });
   });
   it('keeps payment operations and notification resolution provider-neutral', () => {
     const payment: PaymentProviderPort = new EfiPaymentProvider(config());
