@@ -108,7 +108,7 @@ export class CheckoutService {
             productId: selected.item.productId,
             productVariantId: selected.item.productVariantId,
             status: InventoryReservationStatus.ACTIVE,
-            expiresAt: { gt: new Date() },
+            OR: [{ expiresAt: { gt: new Date() } }, { order: { payment: { status: 'PAID' } } }],
           },
           _sum: { quantity: true },
         });

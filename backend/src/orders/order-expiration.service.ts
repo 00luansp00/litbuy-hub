@@ -6,6 +6,7 @@ import {
   OutboxEventStatus,
   SecurityEventOutcome,
   SecurityEventType,
+  PaymentStatus,
 } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { acquireAdvisoryTransactionLock } from '../database/advisory-lock';
@@ -14,7 +15,11 @@ export class OrderExpirationService {
   constructor(private readonly prisma: PrismaService) {}
   async expire(batch = 100) {
     const ids = await this.prisma.order.findMany({
-      where: { status: OrderStatus.PENDING_PAYMENT, expiresAt: { lte: new Date() } },
+      where: {
+        status: OrderStatus.PENDING_PAYMENT,
+        expiresAt: { lte: new Date() },
+        NOT: { payment: { is: { status: PaymentStatus.PAID } } },
+      },
       select: { id: true },
       orderBy: { expiresAt: 'asc' },
       take: batch,
@@ -23,6 +28,10 @@ export class OrderExpirationService {
     for (const { id } of ids)
       expired += await this.prisma.$transaction(async (tx) => {
         await acquireAdvisoryTransactionLock(tx, 'order:' + id);
+        const payments = await tx.$queryRaw<Array<{ status: PaymentStatus }>>`
+          SELECT "status" FROM "Payment" WHERE "orderId" = ${id}::uuid FOR UPDATE
+        `;
+        if (payments.some((payment) => payment.status === PaymentStatus.PAID)) return 0;
         const order = await tx.order.findFirst({
           where: { id, status: OrderStatus.PENDING_PAYMENT, expiresAt: { lte: new Date() } },
         });
