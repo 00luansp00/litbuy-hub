@@ -99,6 +99,38 @@ describe('Efí configuration profiles', () => {
 });
 
 describe('Efí Billing charges', () => {
+  it('fails locally with zero HTTP requests when Efí is disabled', async () => {
+    const queue = queuedTransport([]);
+    const disabled = readEfiConfig({ NODE_ENV: 'test', EFI_ENABLED: 'false' });
+    const provider = new EfiPaymentProvider(
+      disabled,
+      new EfiHttpClient(disabled.billing, queue.transport),
+    );
+    await expect(
+      provider.createPayment({
+        reference: 'order',
+        money: { amountMinor: 100n, currency: 'BRL' },
+        idempotencyHash: 'internal',
+      }),
+    ).rejects.toMatchObject({ kind: 'DEFINITIVE', reason: 'PROVIDER_DISABLED' });
+    expect(queue.requests).toHaveLength(0);
+  });
+  it('rejects unapproved production configuration before any HTTP request', () => {
+    const queue = queuedTransport([]);
+    const production: EfiConfig = {
+      ...config(),
+      environment: 'production',
+      nodeEnvironment: 'production',
+      productionApproved: false,
+      billing: { ...config().billing, baseUrl: 'https://cobrancas.api.efipay.com.br' },
+      pix: { ...config().pix, baseUrl: 'https://pix.api.efipay.com.br' },
+    };
+    expect(
+      () =>
+        new EfiPaymentProvider(production, new EfiHttpClient(production.billing, queue.transport)),
+    ).toThrow(/EFI_PRODUCTION_APPROVED/);
+    expect(queue.requests).toHaveLength(0);
+  });
   it('maps the official create envelope and sends metadata custom_id without undocumented idempotency header', async () => {
     const queue = queuedTransport([auth, response(fixture('charge-created.json'))]);
     const provider = new EfiPaymentProvider(

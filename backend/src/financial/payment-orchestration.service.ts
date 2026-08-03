@@ -2,7 +2,6 @@ import { Inject, Injectable } from '@nestjs/common';
 import {
   OrderStatus,
   PaymentAttemptStatus,
-  PaymentMethod,
   PaymentStatus,
   Prisma,
   ReconciliationIssueType,
@@ -20,9 +19,7 @@ import {
 import { assertFinancialTransition } from './state-machines';
 
 export const PAYMENT_PROVIDER_PORT = Symbol('PAYMENT_PROVIDER_PORT');
-export const EFI_BILLING_PROVIDER_CODE = 'EFI_BILLING';
 const OPERATION = 'PAYMENT_CREATE';
-const METHOD = PaymentMethod.BILLING;
 const BLOCKING = new Set<PaymentAttemptStatus>([
   PaymentAttemptStatus.PENDING,
   PaymentAttemptStatus.PROCESSING,
@@ -44,8 +41,8 @@ export type PaymentOrchestrationResult = {
   paymentId: string;
   attemptId: string;
   attemptNumber: number;
-  providerCode: typeof EFI_BILLING_PROVIDER_CODE;
-  method: 'BILLING';
+  providerCode: string;
+  method: null;
   status: PaymentAttemptStatus;
   amountMinor: string;
   currency: 'BRL';
@@ -65,22 +62,19 @@ export class PaymentOrchestrationService {
     orderId: string,
     key: ParsedIdempotencyKey,
   ): Promise<PaymentOrchestrationResult> {
+    this.provider.assertAvailable();
+    const providerCode = this.provider.providerCode;
+    if (!/^[A-Z0-9_]{2,64}$/.test(providerCode))
+      throw new FinancialDomainError('PAYMENT_PROVIDER_FAILURE');
     const scopedKeyHash = sha256(`${buyerUserId}:${OPERATION}:${key.hash}`);
     const requestHash = canonicalRequestHash({
       actorUserId: buyerUserId,
       operation: OPERATION,
       orderId,
-      method: METHOD,
+      method: null,
     });
     const prepared = await this.prepare(buyerUserId, orderId, scopedKeyHash, requestHash);
-    if (prepared.reused) {
-      const prior = await this.prisma.paymentAttempt.findUniqueOrThrow({
-        where: { id: prepared.attemptId },
-      });
-      if (BLOCKING.has(prior.status) && !prior.externalPaymentId)
-        await this.bestEffortIssue(prepared, 'UNCONFIRMED_PROVIDER_MUTATION');
-      return this.result(prepared.attemptId);
-    }
+    if (prepared.reused) return this.result(prepared.attemptId);
 
     let external: ProviderPayment;
     try {
@@ -165,7 +159,7 @@ export class PaymentOrchestrationService {
       const keyed = await tx.paymentAttempt.findUnique({
         where: {
           providerCode_idempotencyKeyHash: {
-            providerCode: EFI_BILLING_PROVIDER_CODE,
+            providerCode: this.provider.providerCode,
             idempotencyKeyHash,
           },
         },
@@ -188,8 +182,8 @@ export class PaymentOrchestrationService {
         data: {
           paymentId: payment.id,
           attemptNumber: (latest?.attemptNumber ?? 0) + 1,
-          providerCode: EFI_BILLING_PROVIDER_CODE,
-          method: METHOD,
+          providerCode: this.provider.providerCode,
+          method: null,
           status: PaymentAttemptStatus.PENDING,
           amountMinor: payment.amountMinor,
           currency: 'BRL',
@@ -284,7 +278,7 @@ export class PaymentOrchestrationService {
   ) {
     const prior = await tx.reconciliationIssue.findFirst({
       where: {
-        providerCode: EFI_BILLING_PROVIDER_CODE,
+        providerCode: this.provider.providerCode,
         referenceType: 'PAYMENT_ATTEMPT',
         referenceId: prepared.attemptId,
         status: { not: 'RESOLVED' },
@@ -293,7 +287,7 @@ export class PaymentOrchestrationService {
     if (prior) return prior;
     return tx.reconciliationIssue.create({
       data: {
-        providerCode: EFI_BILLING_PROVIDER_CODE,
+        providerCode: this.provider.providerCode,
         type:
           observedAmountMinor !== undefined && observedAmountMinor !== prepared.amountMinor
             ? ReconciliationIssueType.AMOUNT_MISMATCH
@@ -316,8 +310,8 @@ export class PaymentOrchestrationService {
       paymentId: attempt.paymentId,
       attemptId: attempt.id,
       attemptNumber: attempt.attemptNumber,
-      providerCode: EFI_BILLING_PROVIDER_CODE,
-      method: 'BILLING',
+      providerCode: attempt.providerCode,
+      method: null,
       status: attempt.status,
       amountMinor: attempt.amountMinor.toString(),
       currency: 'BRL',

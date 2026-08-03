@@ -1,5 +1,5 @@
--- The first provider orchestration represents only Efí's generic Billing charge.
-ALTER TYPE "PaymentMethod" ADD VALUE 'BILLING' BEFORE 'PIX';
+-- The preliminary generic charge has no commercial payment instrument yet.
+ALTER TABLE "PaymentAttempt" ALTER COLUMN "method" DROP NOT NULL;
 
 -- A reconciliation reference is unique per unresolved local ambiguity. This makes
 -- best-effort materialization after a provider mutation safe to repeat.

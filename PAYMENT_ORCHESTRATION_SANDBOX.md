@@ -6,9 +6,10 @@ This increment adds an internal, provider-neutral `PaymentOrchestrationService` 
 
 `Order -> Payment -> PaymentAttempt -> PaymentProviderPort -> Efí sandbox`
 
-There is no public payment endpoint in this increment. The sole supported method intent is
-`BILLING`, representing the generic Efí Billing `/v1/charge` operation already implemented by the
-adapter. It does **not** represent a usable Pix QR code, boleto, or card payment.
+There is no public payment endpoint in this increment. The generic Efí Billing `/v1/charge`
+operation creates no commercial payment instrument, so `PaymentAttempt.method` remains `null`.
+The commercial `PaymentMethod` enum remains limited to `PIX`, `BOLETO`, and `CARD`; none is selected
+until a real instrument exists.
 
 The service accepts buyer identity, Order ID, and a pre-hashed validated Idempotency-Key. Price,
 seller, currency, expiry, and lifecycle states are loaded from the persisted Order. A real Payment
@@ -33,9 +34,9 @@ guarantee for the POST.
 
 Only a SHA-256 hash scoped to actor and operation is stored; raw Idempotency-Keys are neither
 stored nor passed to Efí. The canonical request hash covers actor, operation, Order, and the
-`BILLING` intent. An identical key and request reuses the local attempt/result. Reusing the key for
-a different semantic request fails with `IDEMPOTENCY_KEY_REUSED`. Advisory locking deliberately
-handles concurrent requests rather than relying only on unique constraints.
+null preliminary method intent. An identical key and request reuses the local attempt/result.
+Reusing the key for a different semantic request fails with `IDEMPOTENCY_KEY_REUSED`. Advisory
+locking deliberately handles concurrent requests rather than relying only on unique constraints.
 
 ## Ambiguity and reconciliation
 

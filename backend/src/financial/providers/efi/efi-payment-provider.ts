@@ -4,20 +4,32 @@ import {
   type ProviderPayment,
 } from '../../payment-provider.port';
 import type { EfiConfig, EfiChargeEnvelopeDto } from './efi.types';
+import { validateEfiConfig } from './efi.config';
 import { EfiHttpClient, safeObject } from './efi.http-client';
 import { amountMinorToSafeNumber, mapEfiCharge } from './efi.mapper';
 import { EfiProviderError } from './efi.errors';
 
 export class EfiPaymentProvider implements PaymentProviderPort {
+  readonly providerCode = 'EFI_BILLING';
   private readonly client: EfiHttpClient;
-  constructor(config: EfiConfig, client?: EfiHttpClient) {
+  constructor(
+    private readonly config: EfiConfig,
+    client?: EfiHttpClient,
+  ) {
+    validateEfiConfig(config);
     this.client = client ?? new EfiHttpClient(config.billing);
+  }
+  assertAvailable(): void {
+    if (!this.config.enabled) throw new PaymentProviderError('DEFINITIVE', 'PROVIDER_DISABLED');
+    if (this.config.environment === 'production' && !this.config.productionApproved)
+      throw new PaymentProviderError('DEFINITIVE', 'PROVIDER_PRODUCTION_NOT_APPROVED');
   }
   async createPayment(input: {
     reference: string;
     money: { amountMinor: bigint; currency: 'BRL' };
     idempotencyHash: string;
   }): Promise<ProviderPayment> {
+    this.assertAvailable();
     try {
       const amount = amountMinorToSafeNumber(input.money.amountMinor);
       const response = await this.client.send('POST', '/v1/charge', {

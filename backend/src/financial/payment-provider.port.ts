@@ -31,6 +31,10 @@ export type ProviderNotificationInput = {
   transportVerified: boolean;
 };
 export interface PaymentProviderPort {
+  /** Stable persistence identity supplied by the adapter, not by orchestration logic. */
+  readonly providerCode: string;
+  /** Fails locally before persistence or network access when the adapter is unavailable. */
+  assertAvailable(): void;
   createPayment(input: {
     reference: string;
     money: ProviderMoney;

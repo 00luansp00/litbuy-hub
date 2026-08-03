@@ -4,7 +4,6 @@ import { AppModule } from '../src/app.module';
 import { parseIdempotencyKey } from '../src/commerce/idempotency-key';
 import { PrismaService } from '../src/database/prisma.service';
 import {
-  EFI_BILLING_PROVIDER_CODE,
   PAYMENT_PROVIDER_PORT,
   PaymentOrchestrationService,
 } from '../src/financial/payment-orchestration.service';
@@ -15,11 +14,16 @@ import {
 import { commerceFixture } from './order-checkout-test.helpers';
 
 class ControlledProvider implements PaymentProviderPort {
+  readonly providerCode = 'EFI_BILLING';
   calls = 0;
   failure?: Error;
   status: 'PENDING' | 'SUCCEEDED' | 'FAILED' | 'EXPIRED' = 'PENDING';
   amountDelta = 0n;
+  availabilityError?: PaymentProviderError;
   release: Promise<void> = Promise.resolve();
+  assertAvailable() {
+    if (this.availabilityError) throw this.availabilityError;
+  }
   async createPayment(input: Parameters<PaymentProviderPort['createPayment']>[0]) {
     this.calls += 1;
     await this.release;
@@ -69,6 +73,7 @@ describe('Payment orchestration with real PostgreSQL', () => {
     provider.failure = undefined;
     provider.status = 'PENDING';
     provider.amountDelta = 0n;
+    provider.availabilityError = undefined;
     provider.release = Promise.resolve();
   });
   afterAll(() => module.close());
@@ -98,6 +103,19 @@ describe('Payment orchestration with real PostgreSQL', () => {
   }
   const key = (value: string = crypto.randomUUID()) => parseIdempotencyKey(`payment-${value}`);
 
+  it('fails before local persistence when the provider is deliberately unavailable', async () => {
+    const created = await order();
+    provider.availabilityError = new PaymentProviderError('DEFINITIVE', 'PROVIDER_DISABLED');
+    await expect(
+      service.initiateBilling(fixture.buyer.id, created.id, key()),
+    ).rejects.toMatchObject({
+      reason: 'PROVIDER_DISABLED',
+    });
+    expect(provider.calls).toBe(0);
+    expect(await prisma.payment.count()).toBe(0);
+    expect(await prisma.paymentAttempt.count()).toBe(0);
+  });
+
   it('creates one authoritative PENDING Payment and Billing attempt without activating or posting', async () => {
     const created = await order();
     const beforeLedger = await prisma.ledgerTransaction.count();
@@ -110,8 +128,8 @@ describe('Payment orchestration with real PostgreSQL', () => {
     expect(payment).toMatchObject({ amountMinor: 12_345n, currency: 'BRL', status: 'PENDING' });
     expect(attempt).toMatchObject({
       attemptNumber: 1,
-      providerCode: EFI_BILLING_PROVIDER_CODE,
-      method: 'BILLING',
+      providerCode: provider.providerCode,
+      method: null,
       status: 'PENDING',
       amountMinor: 12_345n,
       currency: 'BRL',
@@ -150,11 +168,17 @@ describe('Payment orchestration with real PostgreSQL', () => {
       created.id,
       key('concurrent-same-key'),
     );
+    const replay = await second;
+    expect(replay.externalPaymentId).toBeNull();
+    expect(provider.calls).toBe(1);
+    expect(await prisma.reconciliationIssue.count()).toBe(0);
     release();
-    await Promise.all([first, second]);
+    const completed = await first;
+    expect(completed.externalPaymentId).toBe('efi-1');
     expect(provider.calls).toBe(1);
     expect(await prisma.payment.count({ where: { orderId: created.id } })).toBe(1);
     expect(await prisma.paymentAttempt.count()).toBe(1);
+    expect(await prisma.reconciliationIssue.count()).toBe(0);
   });
 
   it.each([PaymentAttemptStatus.PENDING, PaymentAttemptStatus.PROCESSING])(
@@ -200,7 +224,7 @@ describe('Payment orchestration with real PostgreSQL', () => {
       code: 'PAYMENT_RECONCILIATION_REQUIRED',
     });
     expect(await prisma.reconciliationIssue.findFirst()).toMatchObject({
-      providerCode: EFI_BILLING_PROVIDER_CODE,
+      providerCode: provider.providerCode,
       referenceType: 'PAYMENT_ATTEMPT',
       status: 'OPEN',
     });

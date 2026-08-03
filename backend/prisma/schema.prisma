@@ -1093,7 +1093,6 @@ enum PaymentAttemptStatus {
 }
 
 enum PaymentMethod {
-  BILLING
   PIX
   BOLETO
   CARD
@@ -1344,7 +1343,7 @@ model PaymentAttempt {
   attemptNumber      Int
   providerCode       String
   providerAccountId  String?                 @db.Uuid
-  method             PaymentMethod
+  method             PaymentMethod?
   status             PaymentAttemptStatus    @default(CREATED)
   amountMinor        BigInt
   currency           String                  @default("BRL")
