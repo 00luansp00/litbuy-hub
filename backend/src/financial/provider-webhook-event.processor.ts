@@ -265,6 +265,10 @@ export class ProviderWebhookEventProcessor {
       await this.issueAndIgnore(tx, claim, 'STATUS_MISMATCH', 'PAID_AT_MISMATCH');
       return;
     }
+    if (payment.status === 'PAID' && !payment.paidAt) {
+      await this.issueAndIgnore(tx, claim, 'STATUS_MISMATCH', 'PAID_AT_MISSING');
+      return;
+    }
     if (attempt.status !== 'SUCCEEDED') {
       if (!['PENDING', 'PROCESSING', 'REQUIRES_ACTION'].includes(attempt.status)) {
         await this.issueAndIgnore(tx, claim, 'STATUS_MISMATCH', 'ATTEMPT_STATUS_MISMATCH');
