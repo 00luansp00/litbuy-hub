@@ -4,6 +4,7 @@ import {
   type PaymentProviderNotificationPort,
   type ProviderWebhook,
 } from './payment-provider.port';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { acquireAdvisoryTransactionLock } from '../database/advisory-lock';
 import { ProviderNotificationProtector } from './provider-notification-protector';
@@ -39,7 +40,7 @@ export class ProviderNotificationInboxWorker {
     if (!inbox) return false;
     const provider = this.providers.get(inbox.providerCode);
     if (!provider) {
-      await this.fail(inbox.id, 'PROVIDER_NOT_CONFIGURED', 'FAILED');
+      await this.fail(inbox, 'PROVIDER_NOT_CONFIGURED');
       return true;
     }
     try {
@@ -50,7 +51,11 @@ export class ProviderNotificationInboxWorker {
         contentType: 'application/x-www-form-urlencoded',
         transportVerified: true,
       });
-      await this.complete(inbox, events);
+      try {
+        await this.complete(inbox, events);
+      } catch {
+        await this.scheduleRetry(inbox, 'LOCAL_FINALIZATION_FAILED');
+      }
     } catch (error) {
       await this.handleFailure(inbox, error);
     }
@@ -96,6 +101,7 @@ export class ProviderNotificationInboxWorker {
 
   private async complete(inbox: ClaimedInbox, events: ProviderWebhook[]): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
+      if (!(await lockCurrentClaim(tx, inbox))) return;
       for (const event of [...events].sort((a, b) =>
         a.externalEventId.localeCompare(b.externalEventId),
       ))
@@ -163,20 +169,13 @@ export class ProviderNotificationInboxWorker {
 
   private async handleFailure(inbox: ClaimedInbox, error: unknown): Promise<void> {
     if (error instanceof PaymentProviderError && error.kind === 'SAFE_TO_RETRY') {
-      const delaySeconds = Math.min(300, 2 ** Math.min(inbox.attempts, 8));
-      await this.prisma.providerNotificationInbox.update({
-        where: { id: inbox.id },
-        data: {
-          status: 'RETRY_SCHEDULED',
-          availableAt: new Date(Date.now() + delaySeconds * 1_000),
-          lastErrorCode: sanitizeCode(error.reason),
-        },
-      });
+      await this.scheduleRetry(inbox, sanitizeCode(error.reason));
       return;
     }
     if (error instanceof PaymentProviderError && error.requiresReconciliation) {
-      await this.prisma.$transaction([
-        this.prisma.reconciliationIssue.create({
+      await this.prisma.$transaction(async (tx) => {
+        if (!(await lockCurrentClaim(tx, inbox))) return;
+        await tx.reconciliationIssue.create({
           data: {
             providerCode: inbox.providerCode,
             type: 'OTHER',
@@ -184,28 +183,59 @@ export class ProviderNotificationInboxWorker {
             referenceId: inbox.id,
             details: { errorCode: sanitizeCode(error.reason) },
           },
-        }),
-        this.prisma.providerNotificationInbox.update({
+        });
+        await tx.providerNotificationInbox.update({
           where: { id: inbox.id },
           data: {
             status: 'RECONCILIATION_REQUIRED',
             lastErrorCode: sanitizeCode(error.reason),
           },
-        }),
-      ]);
+        });
+      });
       return;
     }
     const code =
       error instanceof PaymentProviderError ? error.reason : 'NOTIFICATION_PROCESSING_FAILED';
-    await this.fail(inbox.id, sanitizeCode(code), 'FAILED');
+    await this.fail(inbox, sanitizeCode(code));
   }
 
-  private async fail(id: string, code: string, status: 'FAILED'): Promise<void> {
-    await this.prisma.providerNotificationInbox.update({
-      where: { id },
-      data: { status, lastErrorCode: code },
+  private async scheduleRetry(inbox: ClaimedInbox, code: string): Promise<void> {
+    const delaySeconds = Math.min(300, 2 ** Math.min(inbox.attempts, 8));
+    await this.prisma.$transaction(async (tx) => {
+      if (!(await lockCurrentClaim(tx, inbox))) return;
+      await tx.providerNotificationInbox.update({
+        where: { id: inbox.id },
+        data: {
+          status: 'RETRY_SCHEDULED',
+          availableAt: new Date(Date.now() + delaySeconds * 1_000),
+          lastErrorCode: code,
+        },
+      });
     });
   }
+
+  private async fail(inbox: ClaimedInbox, code: string): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      if (!(await lockCurrentClaim(tx, inbox))) return;
+      await tx.providerNotificationInbox.update({
+        where: { id: inbox.id },
+        data: { status: 'FAILED', lastErrorCode: code },
+      });
+    });
+  }
+}
+
+async function lockCurrentClaim(
+  tx: Prisma.TransactionClient,
+  inbox: Pick<ClaimedInbox, 'id' | 'attempts'>,
+): Promise<boolean> {
+  const rows = await tx.$queryRaw<Array<{ current: boolean }>>`
+    SELECT ("status" = 'PROCESSING' AND "attempts" = ${inbox.attempts}) AS current
+    FROM "ProviderNotificationInbox"
+    WHERE "id" = ${inbox.id}::uuid
+    FOR UPDATE
+  `;
+  return rows[0]?.current === true;
 }
 
 function sameEvent(

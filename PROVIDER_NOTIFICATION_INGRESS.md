@@ -33,7 +33,9 @@ Provider-neutral `SAFE_TO_RETRY` read failures retain the inbox and schedule det
 backoff. Definitive failures become operationally terminal. Ambiguous/reconciliation-required
 failures create a correlated issue and never invent an event. A stale processing lease can be
 reclaimed after a worker crash. Provider `occurredAt` is preserved because arrival order is not
-authority; this increment applies no payment or order state transition.
+authority. The incremented claim attempt is also a fencing generation: every final transaction
+locks the inbox and rejects local effects from a worker whose stale claim was superseded. This
+increment applies no payment or order state transition.
 
 ## Deliberate limits
 

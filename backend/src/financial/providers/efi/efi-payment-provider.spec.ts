@@ -366,6 +366,23 @@ describe('Efí HTTP retry classification', () => {
 });
 
 describe('Efí Billing notification resolution', () => {
+  it('rejects unsafe operational configuration before constructing a request boundary', () => {
+    const queue = queuedTransport([auth]);
+    const valid = config();
+    const unsafe = {
+      ...valid,
+      billing: { ...valid.billing, baseUrl: 'http://attacker.invalid' },
+    };
+    expect(
+      () =>
+        new EfiBillingNotificationProvider(
+          unsafe,
+          new EfiHttpClient(unsafe.billing, queue.transport),
+        ),
+    ).toThrow(/EFI_BILLING_API_BASE_URL/);
+    expect(queue.requests).toHaveLength(0);
+  });
+
   it('parses the real form callback and resolves authenticated history', async () => {
     const callback = fixture('billing-notification-callback.txt');
     expect(parseBillingNotificationToken(callback)).toBe('notification_token_123456789');

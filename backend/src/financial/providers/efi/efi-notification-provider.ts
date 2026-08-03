@@ -6,6 +6,7 @@ import type {
 } from '../../payment-provider.port';
 import { PaymentProviderError } from '../../payment-provider.port';
 import { EfiProviderError } from './efi.errors';
+import { validateEfiConfig } from './efi.config';
 import { EfiHttpClient, safeObject } from './efi.http-client';
 import { mapEfiBillingStatus } from './efi.mapper';
 import type { EfiBillingNotificationEnvelopeDto, EfiConfig, EfiPixWebhookDto } from './efi.types';
@@ -17,6 +18,7 @@ export class EfiBillingNotificationProvider implements PaymentProviderNotificati
     private readonly config: EfiConfig,
     client?: EfiHttpClient,
   ) {
+    validateEfiConfig(config);
     this.client = client ?? new EfiHttpClient(config.billing);
   }
   assertAvailable(): void {
