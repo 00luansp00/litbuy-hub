@@ -6,6 +6,7 @@ import {
   PAYMENT_PROVIDER_PORT,
 } from './payment-orchestration.service';
 import { EfiBillingNotificationProvider, EfiPaymentProvider } from './providers/efi';
+import type { PaymentProviderPort } from './payment-provider.port';
 import { readEfiConfig } from './providers/efi/efi.config';
 import { ProviderNotificationController } from './provider-notification.controller';
 import {
@@ -49,7 +50,7 @@ import {
     {
       provide: PAYMENT_EVENT_PROVIDERS,
       inject: [PAYMENT_PROVIDER_PORT],
-      useFactory: (provider: EfiPaymentProvider) => [provider],
+      useFactory: (provider: PaymentProviderPort) => [provider],
     },
     ProviderWebhookEventProcessor,
   ],
