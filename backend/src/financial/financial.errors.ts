@@ -8,7 +8,11 @@ export class FinancialDomainError extends Error {
       | 'POLICY_NOT_FOUND'
       | 'INVALID_FEE_RULE'
       | 'FEE_RULE_AMBIGUOUS'
-      | 'FINANCIAL_CONCURRENCY_CONFLICT',
+      | 'FINANCIAL_CONCURRENCY_CONFLICT'
+      | 'ORDER_NOT_PAYMENT_ELIGIBLE'
+      | 'PAYMENT_ATTEMPT_IN_PROGRESS'
+      | 'PAYMENT_PROVIDER_FAILURE'
+      | 'PAYMENT_RECONCILIATION_REQUIRED',
     message: string = code,
   ) {
     super(message);

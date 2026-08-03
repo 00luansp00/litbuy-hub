@@ -1,4 +1,18 @@
 export type ProviderMoney = { amountMinor: bigint; currency: 'BRL' };
+export type ProviderFailureKind = 'DEFINITIVE' | 'SAFE_TO_RETRY' | 'AMBIGUOUS';
+/** Provider-neutral failure exposed to application services. */
+export class PaymentProviderError extends Error {
+  constructor(
+    public readonly kind: ProviderFailureKind,
+    public readonly reason: string = 'PAYMENT_PROVIDER_FAILURE',
+  ) {
+    super(reason);
+    this.name = 'PaymentProviderError';
+  }
+  get requiresReconciliation() {
+    return this.kind === 'AMBIGUOUS';
+  }
+}
 export type ProviderPayment = {
   id: string;
   status: 'PENDING' | 'SUCCEEDED' | 'FAILED' | 'EXPIRED';

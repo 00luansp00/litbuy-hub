@@ -175,7 +175,7 @@ describe('Efí Billing charges', () => {
         money: { amountMinor: BigInt(Number.MAX_SAFE_INTEGER) + 1n, currency: 'BRL' },
         idempotencyHash: 'x',
       }),
-    ).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+    ).rejects.toMatchObject({ kind: 'DEFINITIVE', reason: 'INVALID_REQUEST' });
     expect(queue.requests).toHaveLength(0);
   });
   it('does not retry an ambiguous create mutation', async () => {
@@ -190,7 +190,11 @@ describe('Efí Billing charges', () => {
         money: { amountMinor: 100n, currency: 'BRL' },
         idempotencyHash: 'x',
       }),
-    ).rejects.toMatchObject({ code: 'AMBIGUOUS_RESULT', requiresReconciliation: true });
+    ).rejects.toMatchObject({
+      kind: 'AMBIGUOUS',
+      reason: 'AMBIGUOUS_RESULT',
+      requiresReconciliation: true,
+    });
     expect(queue.requests.filter((request) => request.url.pathname === '/v1/charge')).toHaveLength(
       1,
     );

@@ -1,4 +1,8 @@
-import type { PaymentProviderPort, ProviderPayment } from '../../payment-provider.port';
+import {
+  PaymentProviderError,
+  type PaymentProviderPort,
+  type ProviderPayment,
+} from '../../payment-provider.port';
 import type { EfiConfig, EfiChargeEnvelopeDto } from './efi.types';
 import { EfiHttpClient, safeObject } from './efi.http-client';
 import { amountMinorToSafeNumber, mapEfiCharge } from './efi.mapper';
@@ -14,12 +18,16 @@ export class EfiPaymentProvider implements PaymentProviderPort {
     money: { amountMinor: bigint; currency: 'BRL' };
     idempotencyHash: string;
   }): Promise<ProviderPayment> {
-    const amount = amountMinorToSafeNumber(input.money.amountMinor);
-    const response = await this.client.send('POST', '/v1/charge', {
-      items: [{ name: input.reference, value: amount, amount: 1 }],
-      metadata: { custom_id: input.reference },
-    });
-    return mapEfiCharge(safeObject(response.body) as unknown as EfiChargeEnvelopeDto);
+    try {
+      const amount = amountMinorToSafeNumber(input.money.amountMinor);
+      const response = await this.client.send('POST', '/v1/charge', {
+        items: [{ name: input.reference, value: amount, amount: 1 }],
+        metadata: { custom_id: input.reference },
+      });
+      return mapEfiCharge(safeObject(response.body) as unknown as EfiChargeEnvelopeDto);
+    } catch (error) {
+      throw this.providerError(error);
+    }
   }
   async getPayment(id: string): Promise<ProviderPayment | null> {
     try {
@@ -48,5 +56,11 @@ export class EfiPaymentProvider implements PaymentProviderPort {
   }): Promise<{ id: string; status: 'PENDING' | 'SUCCEEDED' | 'FAILED' }> {
     void input;
     return Promise.reject(new EfiProviderError('UNSUPPORTED_OPERATION', false, false));
+  }
+  private providerError(error: unknown): PaymentProviderError {
+    if (!(error instanceof EfiProviderError)) return new PaymentProviderError('AMBIGUOUS');
+    if (error.requiresReconciliation) return new PaymentProviderError('AMBIGUOUS', error.code);
+    if (error.retryable) return new PaymentProviderError('SAFE_TO_RETRY', error.code);
+    return new PaymentProviderError('DEFINITIVE', error.code);
   }
 }
