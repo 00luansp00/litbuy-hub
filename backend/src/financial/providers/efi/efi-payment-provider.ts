@@ -42,6 +42,7 @@ export class EfiPaymentProvider implements PaymentProviderPort {
     }
   }
   async getPayment(id: string): Promise<ProviderPayment | null> {
+    this.assertAvailable();
     try {
       const response = await this.client.send(
         'GET',
@@ -51,15 +52,20 @@ export class EfiPaymentProvider implements PaymentProviderPort {
       return mapEfiCharge(safeObject(response.body) as unknown as EfiChargeEnvelopeDto);
     } catch (error) {
       if (error instanceof EfiProviderError && error.code === 'NOT_FOUND') return null;
-      throw error;
+      throw this.providerError(error);
     }
   }
   async cancelPayment(id: string): Promise<ProviderPayment> {
-    await this.client.send('PUT', `/v1/charge/${encodeURIComponent(id)}/cancel`, {});
-    const confirmed = await this.getPayment(id);
-    if (!confirmed || confirmed.status !== 'EXPIRED')
-      throw new EfiProviderError('AMBIGUOUS_RESULT', false, true);
-    return confirmed;
+    this.assertAvailable();
+    try {
+      await this.client.send('PUT', `/v1/charge/${encodeURIComponent(id)}/cancel`, {});
+      const confirmed = await this.getPayment(id);
+      if (!confirmed || confirmed.status !== 'EXPIRED')
+        throw new EfiProviderError('AMBIGUOUS_RESULT', false, true);
+      return confirmed;
+    } catch (error) {
+      throw this.providerError(error);
+    }
   }
   refundPayment(input: {
     paymentId: string;
@@ -67,9 +73,11 @@ export class EfiPaymentProvider implements PaymentProviderPort {
     idempotencyHash: string;
   }): Promise<{ id: string; status: 'PENDING' | 'SUCCEEDED' | 'FAILED' }> {
     void input;
-    return Promise.reject(new EfiProviderError('UNSUPPORTED_OPERATION', false, false));
+    this.assertAvailable();
+    return Promise.reject(new PaymentProviderError('DEFINITIVE', 'UNSUPPORTED_OPERATION'));
   }
   private providerError(error: unknown): PaymentProviderError {
+    if (error instanceof PaymentProviderError) return error;
     if (!(error instanceof EfiProviderError)) return new PaymentProviderError('AMBIGUOUS');
     if (error.requiresReconciliation) return new PaymentProviderError('AMBIGUOUS', error.code);
     if (error.retryable) return new PaymentProviderError('SAFE_TO_RETRY', error.code);

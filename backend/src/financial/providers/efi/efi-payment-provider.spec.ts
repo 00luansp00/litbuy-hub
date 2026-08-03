@@ -4,6 +4,7 @@ import type {
   PaymentProviderNotificationPort,
   PaymentProviderPort,
 } from '../../payment-provider.port';
+import { PaymentProviderError } from '../../payment-provider.port';
 import { readEfiConfig } from './efi.config';
 import { EfiProviderError, mapEfiHttpError } from './efi.errors';
 import { EfiHttpClient } from './efi.http-client';
@@ -115,6 +116,23 @@ describe('Efí Billing charges', () => {
     ).rejects.toMatchObject({ kind: 'DEFINITIVE', reason: 'PROVIDER_DISABLED' });
     expect(queue.requests).toHaveLength(0);
   });
+  it.each(['get', 'cancel'] as const)(
+    'fails locally with zero HTTP requests when disabled for %s',
+    async (operation) => {
+      const queue = queuedTransport([]);
+      const disabled = readEfiConfig({ NODE_ENV: 'test', EFI_ENABLED: 'false' });
+      const provider = new EfiPaymentProvider(
+        disabled,
+        new EfiHttpClient(disabled.billing, queue.transport),
+      );
+      const result = operation === 'get' ? provider.getPayment('1') : provider.cancelPayment('1');
+      await expect(result).rejects.toMatchObject({
+        kind: 'DEFINITIVE',
+        reason: 'PROVIDER_DISABLED',
+      });
+      expect(queue.requests).toHaveLength(0);
+    },
+  );
   it('rejects unapproved production configuration before any HTTP request', () => {
     const queue = queuedTransport([]);
     const production: EfiConfig = {
@@ -165,6 +183,25 @@ describe('Efí Billing charges', () => {
     });
     expect(queue.requests[1].url.pathname).toBe('/v1/charge/1234567');
   });
+  it('preserves enabled NOT_FOUND as null', async () => {
+    const queue = queuedTransport([auth, response('{}', 404)]);
+    const provider = new EfiPaymentProvider(
+      config(),
+      new EfiHttpClient(config().billing, queue.transport),
+    );
+    await expect(provider.getPayment('missing')).resolves.toBeNull();
+    expect(queue.requests).toHaveLength(2);
+  });
+  it('normalizes enabled get failures at the provider port boundary', async () => {
+    const queue = queuedTransport([auth, response('{}', 500)]);
+    const provider = new EfiPaymentProvider(
+      config(),
+      new EfiHttpClient(config().billing, queue.transport),
+    );
+    const error = await provider.getPayment('1').catch((value: unknown) => value);
+    expect(error).toBeInstanceOf(PaymentProviderError);
+    expect(error).not.toBeInstanceOf(EfiProviderError);
+  });
   it('cancels then confirms with read-after-write instead of mapping cancel response', async () => {
     const queue = queuedTransport([
       auth,
@@ -191,7 +228,8 @@ describe('Efí Billing charges', () => {
       new EfiHttpClient(config().billing, queue.transport),
     );
     await expect(provider.cancelPayment('1234567')).rejects.toMatchObject({
-      code: 'AMBIGUOUS_RESULT',
+      kind: 'AMBIGUOUS',
+      reason: 'AMBIGUOUS_RESULT',
       requiresReconciliation: true,
     });
   });
@@ -243,7 +281,7 @@ describe('Efí Billing charges', () => {
         money: { amountMinor: 100n, currency: 'BRL' },
         idempotencyHash: 'x',
       }),
-    ).rejects.toMatchObject({ code: 'UNSUPPORTED_OPERATION' });
+    ).rejects.toMatchObject({ kind: 'DEFINITIVE', reason: 'UNSUPPORTED_OPERATION' });
     expect(queue.requests).toHaveLength(0);
   });
 });

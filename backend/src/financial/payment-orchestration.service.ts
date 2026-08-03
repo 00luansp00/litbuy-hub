@@ -74,7 +74,18 @@ export class PaymentOrchestrationService {
       method: null,
     });
     const prepared = await this.prepare(buyerUserId, orderId, scopedKeyHash, requestHash);
-    if (prepared.reused) return this.result(prepared.attemptId);
+    if (prepared.reused) {
+      const reconciliation = await this.prisma.reconciliationIssue.findFirst({
+        where: {
+          referenceType: 'PAYMENT_ATTEMPT',
+          referenceId: prepared.attemptId,
+          status: { in: ['OPEN', 'INVESTIGATING'] },
+        },
+        select: { id: true },
+      });
+      if (reconciliation) throw new FinancialDomainError('PAYMENT_RECONCILIATION_REQUIRED');
+      return this.result(prepared.attemptId);
+    }
 
     let external: ProviderPayment;
     try {

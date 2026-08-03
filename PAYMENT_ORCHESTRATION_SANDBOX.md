@@ -37,6 +37,9 @@ stored nor passed to Efí. The canonical request hash covers actor, operation, O
 null preliminary method intent. An identical key and request reuses the local attempt/result.
 Reusing the key for a different semantic request fails with `IDEMPOTENCY_KEY_REUSED`. Advisory
 locking deliberately handles concurrent requests rather than relying only on unique constraints.
+An immediate same-key replay of an in-flight attempt returns its local state without inventing an
+incident. If that attempt already has an open or investigating `ReconciliationIssue`, replay fails
+closed with `PAYMENT_RECONCILIATION_REQUIRED` and still performs no provider mutation.
 
 ## Ambiguity and reconciliation
 

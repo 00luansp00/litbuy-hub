@@ -229,11 +229,14 @@ describe('Payment orchestration with real PostgreSQL', () => {
       status: 'OPEN',
     });
     provider.failure = undefined;
-    await service.initiateBilling(fixture.buyer.id, created.id, original);
+    await expect(
+      service.initiateBilling(fixture.buyer.id, created.id, original),
+    ).rejects.toMatchObject({ code: 'PAYMENT_RECONCILIATION_REQUIRED' });
     await expect(
       service.initiateBilling(fixture.buyer.id, created.id, key('ambiguous-bypass')),
     ).rejects.toMatchObject({ code: 'PAYMENT_ATTEMPT_IN_PROGRESS' });
     expect(provider.calls).toBe(1);
+    expect(await prisma.reconciliationIssue.count()).toBe(1);
   });
 
   it('fails closed and reconciles an unexpected final or amount response', async () => {
@@ -267,11 +270,14 @@ describe('Payment orchestration with real PostgreSQL', () => {
       code: 'PAYMENT_RECONCILIATION_REQUIRED',
     });
     spy.mockRestore();
-    await service.initiateBilling(fixture.buyer.id, created.id, original);
+    await expect(
+      service.initiateBilling(fixture.buyer.id, created.id, original),
+    ).rejects.toMatchObject({ code: 'PAYMENT_RECONCILIATION_REQUIRED' });
     await expect(
       service.initiateBilling(fixture.buyer.id, created.id, key('post-provider-new-key')),
     ).rejects.toMatchObject({ code: 'PAYMENT_ATTEMPT_IN_PROGRESS' });
     expect(provider.calls).toBe(1);
+    expect(await prisma.reconciliationIssue.count()).toBe(1);
   });
 
   it.each([
