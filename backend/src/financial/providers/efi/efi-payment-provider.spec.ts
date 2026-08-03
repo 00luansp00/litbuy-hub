@@ -366,6 +366,23 @@ describe('Efí HTTP retry classification', () => {
 });
 
 describe('Efí Billing notification resolution', () => {
+  it('rejects unsafe operational configuration before constructing a request boundary', () => {
+    const queue = queuedTransport([auth]);
+    const valid = config();
+    const unsafe = {
+      ...valid,
+      billing: { ...valid.billing, baseUrl: 'http://attacker.invalid' },
+    };
+    expect(
+      () =>
+        new EfiBillingNotificationProvider(
+          unsafe,
+          new EfiHttpClient(unsafe.billing, queue.transport),
+        ),
+    ).toThrow(/EFI_BILLING_API_BASE_URL/);
+    expect(queue.requests).toHaveLength(0);
+  });
+
   it('parses the real form callback and resolves authenticated history', async () => {
     const callback = fixture('billing-notification-callback.txt');
     expect(parseBillingNotificationToken(callback)).toBe('notification_token_123456789');
@@ -416,7 +433,7 @@ describe('Efí Pix notification boundary', () => {
         contentType: 'application/json',
         transportVerified: false,
       }),
-    ).rejects.toMatchObject({ code: 'UNVERIFIED_TRANSPORT' });
+    ).rejects.toMatchObject({ reason: 'UNVERIFIED_TRANSPORT', kind: 'DEFINITIVE' });
     await expect(
       provider.resolveNotification({
         payload,
@@ -443,8 +460,8 @@ describe('Efí Pix notification boundary', () => {
         transportVerified: true,
       }),
     ).rejects.toMatchObject({
-      code: 'UNSUPPORTED_PROVIDER_EVENT',
-      retryable: false,
+      reason: 'UNSUPPORTED_PROVIDER_EVENT',
+      kind: 'AMBIGUOUS',
       requiresReconciliation: true,
     });
   });
@@ -456,7 +473,7 @@ describe('Efí Pix notification boundary', () => {
         contentType: 'application/json',
         transportVerified: true,
       }),
-    ).rejects.toMatchObject({ code: 'INVALID_PROVIDER_RESPONSE' });
+    ).rejects.toMatchObject({ reason: 'INVALID_PROVIDER_RESPONSE', kind: 'DEFINITIVE' });
   });
   it('rejects unverified transport before unsupported-event classification', async () => {
     const provider = new EfiPixNotificationProvider();
@@ -466,7 +483,11 @@ describe('Efí Pix notification boundary', () => {
         contentType: 'application/json',
         transportVerified: false,
       }),
-    ).rejects.toMatchObject({ code: 'UNVERIFIED_TRANSPORT', requiresReconciliation: false });
+    ).rejects.toMatchObject({
+      reason: 'UNVERIFIED_TRANSPORT',
+      kind: 'DEFINITIVE',
+      requiresReconciliation: false,
+    });
   });
   it('keeps payment operations and notification resolution provider-neutral', () => {
     const payment: PaymentProviderPort = new EfiPaymentProvider(config());

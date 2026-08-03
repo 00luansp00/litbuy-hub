@@ -261,6 +261,8 @@ describe('Financial domain with real PostgreSQL', () => {
       providerCode: 'fake',
       externalEventId: randomUUID(),
       eventType: 'payment',
+      externalPaymentId: randomUUID(),
+      normalizedPaymentStatus: 'SUCCEEDED' as const,
       payloadHash: randomUUID(),
     };
     await prisma.providerWebhookEvent.create({ data: event });

@@ -4,31 +4,50 @@ import type {
   ProviderNotificationInput,
   ProviderWebhook,
 } from '../../payment-provider.port';
+import { PaymentProviderError } from '../../payment-provider.port';
 import { EfiProviderError } from './efi.errors';
+import { validateEfiConfig } from './efi.config';
 import { EfiHttpClient, safeObject } from './efi.http-client';
 import { mapEfiBillingStatus } from './efi.mapper';
 import type { EfiBillingNotificationEnvelopeDto, EfiConfig, EfiPixWebhookDto } from './efi.types';
 
 export class EfiBillingNotificationProvider implements PaymentProviderNotificationPort {
+  readonly providerCode = 'EFI_BILLING';
   private readonly client: EfiHttpClient;
-  constructor(config: EfiConfig, client?: EfiHttpClient) {
+  constructor(
+    private readonly config: EfiConfig,
+    client?: EfiHttpClient,
+  ) {
+    validateEfiConfig(config);
     this.client = client ?? new EfiHttpClient(config.billing);
   }
+  assertAvailable(): void {
+    if (!this.config.enabled) throw new PaymentProviderError('DEFINITIVE', 'PROVIDER_DISABLED');
+    if (this.config.environment === 'production' && !this.config.productionApproved)
+      throw new PaymentProviderError('DEFINITIVE', 'PROVIDER_PRODUCTION_NOT_APPROVED');
+  }
   async resolveNotification(input: ProviderNotificationInput): Promise<ProviderWebhook[]> {
-    if (input.contentType !== 'application/x-www-form-urlencoded') throw invalid();
-    const token = parseBillingNotificationToken(input.payload);
-    const response = await this.client.send(
-      'GET',
-      `/v1/notification/${encodeURIComponent(token)}`,
-      undefined,
-    );
-    return mapBillingHistory(
-      token,
-      safeObject(response.body) as unknown as EfiBillingNotificationEnvelopeDto,
-    );
+    this.assertAvailable();
+    try {
+      if (input.contentType !== 'application/x-www-form-urlencoded') throw invalid();
+      const token = parseBillingNotificationToken(input.payload);
+      const response = await this.client.send(
+        'GET',
+        `/v1/notification/${encodeURIComponent(token)}`,
+        undefined,
+      );
+      return mapBillingHistory(
+        token,
+        safeObject(response.body) as unknown as EfiBillingNotificationEnvelopeDto,
+      );
+    } catch (error) {
+      throw normalizeError(error);
+    }
   }
 }
 export class EfiPixNotificationProvider implements PaymentProviderNotificationPort {
+  readonly providerCode = 'EFI_PIX';
+  assertAvailable(): void {}
   resolveNotification(input: ProviderNotificationInput): Promise<ProviderWebhook[]> {
     try {
       if (input.contentType !== 'application/json') throw invalid();
@@ -55,11 +74,12 @@ export class EfiPixNotificationProvider implements PaymentProviderNotificationPo
             paymentId: pix.txid,
             status: 'SUCCEEDED' as const,
             payloadHash: digest(JSON.stringify(pix)),
+            occurredAt: parseOccurredAt(pix.horario),
           };
         }),
       );
     } catch (error) {
-      return Promise.reject(error instanceof EfiProviderError ? error : invalid());
+      return Promise.reject(normalizeError(error instanceof EfiProviderError ? error : invalid()));
     }
   }
 }
@@ -114,9 +134,24 @@ function mapBillingHistory(
         paymentId: String(event.identifiers.charge_id),
         status: mapEfiBillingStatus(event.status.current),
         payloadHash: digest(JSON.stringify(event)),
+        occurredAt: parseOccurredAt(event.created_at),
       };
     });
 }
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 const invalid = (reconciliation = false) =>
   new EfiProviderError('INVALID_PROVIDER_RESPONSE', false, reconciliation);
+
+function parseOccurredAt(value: string): Date {
+  const occurredAt = new Date(value);
+  if (Number.isNaN(occurredAt.getTime())) throw invalid(true);
+  return occurredAt;
+}
+
+function normalizeError(error: unknown): PaymentProviderError {
+  if (error instanceof PaymentProviderError) return error;
+  if (!(error instanceof EfiProviderError)) return new PaymentProviderError('AMBIGUOUS');
+  if (error.requiresReconciliation) return new PaymentProviderError('AMBIGUOUS', error.code);
+  if (error.retryable) return new PaymentProviderError('SAFE_TO_RETRY', error.code);
+  return new PaymentProviderError('DEFINITIVE', error.code);
+}
