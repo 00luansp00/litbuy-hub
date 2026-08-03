@@ -39,7 +39,9 @@ increment applies no payment or order state transition.
 
 ## Deliberate limits
 
-This increment has no built-in scheduler; infrastructure invokes `processOne` or `processBatch`.
-It adds no public Pix ingress, payment confirmation, Order activation, inventory operation, ledger
-posting, settlement, refund, chargeback, fulfillment, wallet, withdrawal, split, KYC, frontend, or
-production approval. In particular, the Efí GET can never happen before the durable inbox commit.
+This ingress has no built-in scheduler; infrastructure invokes `processOne` or `processBatch`.
+The separately documented payment-event application worker may now confirm PaymentAttempt and
+Payment from these normalized events, but still adds no public Pix ingress, Order activation,
+inventory operation, ledger posting, settlement, fulfillment, or production approval. In
+particular, either Efí GET can never happen before its corresponding durable claim commit. See
+[PROVIDER_PAYMENT_EVENT_APPLICATION.md](./PROVIDER_PAYMENT_EVENT_APPLICATION.md).

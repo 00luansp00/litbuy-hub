@@ -1319,6 +1319,7 @@ model Payment {
   amountMinor BigInt
   currency    String           @default("BRL")
   status      PaymentStatus    @default(PENDING)
+  paidAt      DateTime?
   version     Int              @default(1)
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
@@ -1559,13 +1560,16 @@ model ProviderWebhookEvent {
   payloadHash             String
   status                  ProviderWebhookEventStatus @default(RECEIVED)
   attempts                Int                        @default(0)
+  availableAt             DateTime                   @default(now())
   receivedAt              DateTime                   @default(now())
+  processingStartedAt     DateTime?
   processedAt             DateTime?
   lastErrorCode           String?
   createdAt               DateTime                   @default(now())
   updatedAt               DateTime                   @updatedAt
 
   @@unique([providerCode, externalEventId])
+  @@index([status, availableAt, receivedAt])
 }
 
 model ProviderNotificationInbox {

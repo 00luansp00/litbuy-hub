@@ -18,6 +18,10 @@ import {
   PAYMENT_NOTIFICATION_PROVIDERS,
   ProviderNotificationInboxWorker,
 } from './provider-notification-inbox.worker';
+import {
+  PAYMENT_EVENT_PROVIDERS,
+  ProviderWebhookEventProcessor,
+} from './provider-webhook-event.processor';
 @Module({
   imports: [DatabaseModule],
   controllers: [ProviderNotificationController],
@@ -42,12 +46,19 @@ import {
       useFactory: () => [new EfiBillingNotificationProvider(readEfiConfig())],
     },
     ProviderNotificationInboxWorker,
+    {
+      provide: PAYMENT_EVENT_PROVIDERS,
+      inject: [PAYMENT_PROVIDER_PORT],
+      useFactory: (provider: EfiPaymentProvider) => [provider],
+    },
+    ProviderWebhookEventProcessor,
   ],
   exports: [
     FinancialLedgerService,
     PaymentOrchestrationService,
     ProviderNotificationIngressService,
     ProviderNotificationInboxWorker,
+    ProviderWebhookEventProcessor,
   ],
 })
 export class FinancialModule {}
