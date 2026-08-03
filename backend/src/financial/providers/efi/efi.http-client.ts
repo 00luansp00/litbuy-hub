@@ -88,12 +88,17 @@ export class EfiHttpClient {
       const response = await this.transport(request);
       const correlation = header(response, 'x-correlation-id');
       if (response.status < 200 || response.status >= 300)
-        throw mapEfiHttpError(response.status, correlation);
+        throw mapEfiHttpError(response.status, request.method, correlation);
       return response;
     } catch (error) {
       if (error instanceof EfiProviderError) throw error;
+      const read = request.method === 'GET';
       const timedOut = error instanceof Error && error.message === 'EFI_TIMEOUT';
-      throw new EfiProviderError(timedOut ? 'TIMEOUT' : 'AMBIGUOUS_RESULT', !timedOut, true);
+      throw new EfiProviderError(
+        read && timedOut ? 'TIMEOUT' : read ? 'PROVIDER_UNAVAILABLE' : 'AMBIGUOUS_RESULT',
+        read,
+        !read,
+      );
     }
   }
 }

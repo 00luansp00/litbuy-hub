@@ -40,15 +40,23 @@ Efí Billing posts `application/x-www-form-urlencoded` containing `notification=
 
 The token identifies the lifecycle, not one delivery. Each normalized external ID is a deterministic SHA-256 of provider, protocol, token, and notification event ID. Thus two lifecycle changes have different IDs while a redelivery of the same history event has the same ID. Raw notification tokens are not returned to the domain or logged. Arrival order is never authoritative, and resolution itself performs no financial write.
 
+Calling `GET /v1/notification/:token` tells Efí that the notification was received. A future public callback route therefore **must not call this resolver before durable ingestion exists**. The callback/token must first enter a durable inbox or queue; only then may a worker resolve the authenticated notification history. This ordering permits local retries even if Efí already considers the token consulted. Inbox and normalized-event processing must remain idempotent, and `ProviderWebhookEvent` plus any later financial processing stays subsequent and transactional.
+
+The raw token must never appear in logs. If durable storage needs recoverable material to re-query Efí, it must protect that material appropriately at rest; a one-way hash alone cannot support provider re-query. This PR intentionally adds no controller, public callback endpoint, inbox, queue, worker, or ledger consumer.
+
 ## Pix webhook boundary
 
 Pix callbacks are JSON shaped as `{ pix: [...] }`, with entries including `endToEndId`, `txid`, `valor`, and `horario`. This parser is separate from Billing notification resolution. It does not invent or require a body-HMAC signature.
+
+Only an unambiguous received Pix without refund/outbound lifecycle markers is normalized as `PIX_RECEIVED`. The shared `{ pix: [...] }` envelope may also contain `devolucoes`; refund/devolution markers and known outbound/Pix Cash-Out markers fail with `UNSUPPORTED_PROVIDER_EVENT` and `requiresReconciliation=true`. They are never mislabeled as a successful receipt, discarded, translated into an invented refund state, or connected to the ledger in this boundary.
 
 Authenticity depends first on mTLS at a trusted ingress that validates Efí's client certificate. Until that infrastructure exists, callers must provide explicit internal `transportVerified=true`; otherwise the adapter rejects the payload. Additional IP or URL-HMAC controls remain subject to current official documentation and written homologation. The parser creates no payment or ledger effect.
 
 ## Refunds and reconciliation
 
 Generic `refundPayment` is explicitly `UNSUPPORTED_OPERATION` and performs no network call. Card reversal is method-specific and asynchronous, Pix uses its own refund mechanism, and boleto does not share that contract. A future increment must first connect PaymentAttempt/payment-method data and sufficient external identifiers, then model pending outcomes and reconcile the correct method-specific API.
+
+Transport retry classification is method-aware. A failed `GET` may be retryable because repeating a read creates no provider-side financial effect. A timeout, connection loss, 429, or 5xx affecting a `POST`/`PUT` is non-retryable and reconciliation-required unless a future documented contract proves the mutation was not executed. No mutation is blindly repeated and no undocumented provider idempotency header is assumed.
 
 Normalized operator errors expose only stable codes and optional correlation IDs. They never contain response bodies, authorization headers, client secrets, access tokens, notification tokens, certificates, private keys, PAN, or CVV.
 

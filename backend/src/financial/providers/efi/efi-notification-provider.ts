@@ -40,6 +40,7 @@ export class EfiPixNotificationProvider implements PaymentProviderNotificationPo
       if (!Array.isArray(payload.pix) || payload.pix.length === 0) throw invalid();
       return Promise.resolve(
         payload.pix.map((pix) => {
+          assertSupportedPixReceived(pix);
           if (
             typeof pix.endToEndId !== 'string' ||
             typeof pix.txid !== 'string' ||
@@ -61,6 +62,30 @@ export class EfiPixNotificationProvider implements PaymentProviderNotificationPo
       return Promise.reject(error instanceof EfiProviderError ? error : invalid());
     }
   }
+}
+function assertSupportedPixReceived(pix: EfiPixWebhookDto['pix'][number]): void {
+  const value = pix as unknown as Record<string, unknown>;
+  const marker = [value.tipo, value.natureza, value.movimento]
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.toUpperCase());
+  if (
+    Object.hasOwn(value, 'devolucoes') ||
+    Object.hasOwn(value, 'devolucao') ||
+    Object.hasOwn(value, 'refund') ||
+    marker.some((item) =>
+      [
+        'DEVOLUCAO',
+        'DEVOLUÇÃO',
+        'REFUND',
+        'PIX_ENVIADO',
+        'ENVIADO',
+        'CASH_OUT',
+        'SAIDA',
+        'SAÍDA',
+      ].includes(item),
+    )
+  )
+    throw new EfiProviderError('UNSUPPORTED_PROVIDER_EVENT', false, true);
 }
 export function parseBillingNotificationToken(payload: Uint8Array): string {
   const form = new URLSearchParams(Buffer.from(payload).toString('utf8').trim());

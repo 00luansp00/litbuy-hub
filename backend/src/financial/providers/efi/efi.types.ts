@@ -44,6 +44,10 @@ export interface EfiPixDto {
   txid: string;
   valor: string;
   horario: string;
+  devolucoes?: unknown;
+  tipo?: string;
+  natureza?: string;
+  movimento?: string;
 }
 export interface EfiPixWebhookDto {
   pix: EfiPixDto[];

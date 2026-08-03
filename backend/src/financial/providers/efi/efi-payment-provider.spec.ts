@@ -72,6 +72,24 @@ describe('Efí configuration profiles', () => {
       }),
     ).toThrow(/EFI_BILLING_API_BASE_URL/);
   });
+  it.each([
+    ['arbitrary port', { EFI_BILLING_API_BASE_URL: 'https://cobrancas.api.efipay.com.br:444' }],
+    ['credentials', { EFI_BILLING_API_BASE_URL: 'https://user:pass@cobrancas.api.efipay.com.br' }],
+    ['query', { EFI_BILLING_API_BASE_URL: 'https://cobrancas.api.efipay.com.br?target=other' }],
+    ['fragment', { EFI_BILLING_API_BASE_URL: 'https://cobrancas.api.efipay.com.br#other' }],
+    ['http', { EFI_BILLING_API_BASE_URL: 'http://cobrancas.api.efipay.com.br' }],
+    ['sandbox host', { EFI_BILLING_API_BASE_URL: 'https://cobrancas-h.api.efipay.com.br' }],
+    ['wrong profile', { EFI_BILLING_API_BASE_URL: 'https://pix.api.efipay.com.br' }],
+  ])('rejects production Billing URL with %s', (_name, override) => {
+    expect(() =>
+      config({
+        NODE_ENV: 'production',
+        EFI_ENVIRONMENT: 'production',
+        EFI_PRODUCTION_APPROVED: 'true',
+        ...override,
+      }),
+    ).toThrow(/EFI_BILLING_API_BASE_URL/);
+  });
   it('allows explicit test-only overrides but rejects invalid timeout', () => {
     expect(config({ EFI_BILLING_API_BASE_URL: 'https://mock.invalid' }).billing.baseUrl).toBe(
       'https://mock.invalid',
@@ -224,6 +242,55 @@ describe('Efí Billing statuses', () => {
   );
 });
 
+describe('Efí HTTP retry classification', () => {
+  it.each([
+    ['GET timeout', 'GET', new Error('EFI_TIMEOUT'), 'TIMEOUT'],
+    ['GET transport failure', 'GET', new Error('socket reset'), 'PROVIDER_UNAVAILABLE'],
+  ] as const)('%s is safe to retry', async (_name, method, failure, code) => {
+    const queue = queuedTransport([auth, failure]);
+    const client = new EfiHttpClient(config().billing, queue.transport);
+    await expect(client.send(method, '/v1/charge/1', undefined)).rejects.toMatchObject({
+      code,
+      retryable: true,
+      requiresReconciliation: false,
+    });
+    expect(
+      queue.requests.filter((request) => request.url.pathname === '/v1/charge/1'),
+    ).toHaveLength(1);
+  });
+  it.each([
+    ['POST socket reset', 'POST', new Error('socket reset')],
+    ['POST timeout', 'POST', new Error('EFI_TIMEOUT')],
+    ['PUT socket reset', 'PUT', new Error('socket reset')],
+    ['PUT timeout', 'PUT', new Error('EFI_TIMEOUT')],
+  ] as const)('%s is never blindly retried', async (_name, method, failure) => {
+    const queue = queuedTransport([auth, failure]);
+    const client = new EfiHttpClient(config().billing, queue.transport);
+    await expect(client.send(method, '/v1/mutation', {})).rejects.toMatchObject({
+      code: 'AMBIGUOUS_RESULT',
+      retryable: false,
+      requiresReconciliation: true,
+    });
+    expect(
+      queue.requests.filter((request) => request.url.pathname === '/v1/mutation'),
+    ).toHaveLength(1);
+  });
+  it('does not mark mutation 429/5xx as retryable without an execution guarantee', () => {
+    expect(mapEfiHttpError(429, 'POST')).toMatchObject({
+      retryable: false,
+      requiresReconciliation: true,
+    });
+    expect(mapEfiHttpError(503, 'PUT')).toMatchObject({
+      retryable: false,
+      requiresReconciliation: true,
+    });
+    expect(mapEfiHttpError(503, 'GET')).toMatchObject({
+      retryable: true,
+      requiresReconciliation: false,
+    });
+  });
+});
+
 describe('Efí Billing notification resolution', () => {
   it('parses the real form callback and resolves authenticated history', async () => {
     const callback = fixture('billing-notification-callback.txt');
@@ -266,7 +333,7 @@ describe('Efí Billing notification resolution', () => {
 });
 
 describe('Efí Pix notification boundary', () => {
-  it('parses the real pix array only after trusted-ingress verification and uses no body HMAC', async () => {
+  it('maps only a pure received Pix after trusted-ingress verification', async () => {
     const provider: PaymentProviderNotificationPort = new EfiPixNotificationProvider();
     const payload = fixture('pix-webhook.json');
     await expect(
@@ -290,6 +357,43 @@ describe('Efí Pix notification boundary', () => {
       }),
     ]);
   });
+  it.each([
+    ['Pix refund', 'pix-refund-webhook.json'],
+    ['outbound Pix/cash-out', 'pix-outbound-webhook.json'],
+  ])('%s never becomes PIX_RECEIVED and requires reconciliation', async (_name, filename) => {
+    const provider = new EfiPixNotificationProvider();
+    await expect(
+      provider.resolveNotification({
+        payload: fixture(filename),
+        contentType: 'application/json',
+        transportVerified: true,
+      }),
+    ).rejects.toMatchObject({
+      code: 'UNSUPPORTED_PROVIDER_EVENT',
+      retryable: false,
+      requiresReconciliation: true,
+    });
+  });
+  it('rejects malformed Pix payloads fail-closed', async () => {
+    const provider = new EfiPixNotificationProvider();
+    await expect(
+      provider.resolveNotification({
+        payload: Buffer.from('{"pix":[{"txid":"missing-fields"}]}'),
+        contentType: 'application/json',
+        transportVerified: true,
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_PROVIDER_RESPONSE' });
+  });
+  it('rejects unverified transport before unsupported-event classification', async () => {
+    const provider = new EfiPixNotificationProvider();
+    await expect(
+      provider.resolveNotification({
+        payload: fixture('pix-refund-webhook.json'),
+        contentType: 'application/json',
+        transportVerified: false,
+      }),
+    ).rejects.toMatchObject({ code: 'UNVERIFIED_TRANSPORT', requiresReconciliation: false });
+  });
   it('keeps payment operations and notification resolution provider-neutral', () => {
     const payment: PaymentProviderPort = new EfiPaymentProvider(config());
     const notification: PaymentProviderNotificationPort = new EfiBillingNotificationProvider(
@@ -299,7 +403,7 @@ describe('Efí Pix notification boundary', () => {
     expect(notification).toBeInstanceOf(EfiBillingNotificationProvider);
   });
   it('normalizes errors without secret, token, or certificate values', () => {
-    const error = mapEfiHttpError(503);
+    const error = mapEfiHttpError(503, 'GET');
     expect(error.message).not.toMatch(
       /secret-not-logged|notification_token|certificate-not-logged/,
     );

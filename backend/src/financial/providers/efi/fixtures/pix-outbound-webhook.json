@@ -1,0 +1,12 @@
+{
+  "pix": [
+    {
+      "endToEndId": "E12345678202608021000OUT12345678",
+      "txid": "cashout123pix",
+      "valor": "50.00",
+      "horario": "2026-08-02T10:00:00.000Z",
+      "tipo": "PIX_ENVIADO",
+      "natureza": "SAIDA"
+    }
+  ]
+}

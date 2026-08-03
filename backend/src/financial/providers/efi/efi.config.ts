@@ -73,7 +73,10 @@ function validateHost(config: EfiConfig, profile: EfiApiProfile, invalid: string
       url.protocol !== 'https:' ||
       url.username ||
       url.password ||
+      (url.port !== '' && url.port !== '443') ||
       url.pathname !== '/' ||
+      url.search !== '' ||
+      url.hash !== '' ||
       (!overrideAllowed && url.hostname !== official)
     )
       invalid.push(key);
