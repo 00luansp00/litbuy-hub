@@ -58,7 +58,8 @@ durable at-most-once barrier: neither the same key nor a new key can produce a s
 
 ## Still pending
 
-This is sandbox orchestration only. Public endpoints, frontend checkout, usable Pix/boleto/card
-instruments, webhooks and notification processing, payment confirmation, Order activation,
-inventory consumption, ledger postings, settlement, fulfillment, refunds, chargebacks, wallets,
-withdrawals, split, KYC, and Efí production enablement remain outside this increment.
+This remains sandbox orchestration only. A later incremental worker now consumes normalized
+provider events and can confirm PaymentAttempt/Payment, as documented in
+[PROVIDER_PAYMENT_EVENT_APPLICATION.md](./PROVIDER_PAYMENT_EVENT_APPLICATION.md). Public payment
+endpoints, usable Pix/boleto/card instruments, Order activation, inventory consumption, ledger
+postings, settlement, fulfillment, and Efí production enablement remain outside this boundary.
