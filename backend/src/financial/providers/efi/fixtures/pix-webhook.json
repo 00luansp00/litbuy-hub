@@ -1,0 +1,11 @@
+{
+  "pix": [
+    {
+      "endToEndId": "E12345678202608011000ABC12345678",
+      "txid": "order123pix",
+      "valor": "129.90",
+      "horario": "2026-08-01T10:00:00.000Z",
+      "infoPagador": "Pedido LIT Buy"
+    }
+  ]
+}

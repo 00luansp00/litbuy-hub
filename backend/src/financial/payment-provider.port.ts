@@ -11,6 +11,11 @@ export type ProviderWebhook = {
   status: ProviderPayment['status'];
   payloadHash: string;
 };
+export type ProviderNotificationInput = {
+  payload: Uint8Array;
+  contentType: 'application/x-www-form-urlencoded' | 'application/json';
+  transportVerified: boolean;
+};
 export interface PaymentProviderPort {
   createPayment(input: {
     reference: string;
@@ -23,7 +28,8 @@ export interface PaymentProviderPort {
     paymentId: string;
     money: ProviderMoney;
     idempotencyHash: string;
-  }): Promise<{ id: string; status: 'SUCCEEDED' }>;
-  verifyWebhook(payload: Uint8Array, signature: string): Promise<boolean>;
-  parseWebhook(payload: Uint8Array): Promise<ProviderWebhook>;
+  }): Promise<{ id: string; status: 'PENDING' | 'SUCCEEDED' | 'FAILED' }>;
+}
+export interface PaymentProviderNotificationPort {
+  resolveNotification(input: ProviderNotificationInput): Promise<ProviderWebhook[]>;
 }

@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
 import type {
+  PaymentProviderNotificationPort,
   PaymentProviderPort,
   ProviderPayment,
   ProviderWebhook,
 } from './payment-provider.port';
-export class FakePaymentProvider implements PaymentProviderPort {
+export class FakePaymentProvider implements PaymentProviderPort, PaymentProviderNotificationPort {
   private sequence = 0;
   private readonly payments = new Map<string, ProviderPayment>();
   private readonly keyed = new Map<string, ProviderPayment>();
@@ -48,17 +49,22 @@ export class FakePaymentProvider implements PaymentProviderPort {
       status: 'SUCCEEDED' as const,
     });
   }
-  verifyWebhook(_payload: Uint8Array, signature: string) {
-    return Promise.resolve(signature === 'fake-valid-signature');
-  }
-  parseWebhook(payload: Uint8Array): Promise<ProviderWebhook> {
+  resolveNotification(input: {
+    payload: Uint8Array;
+    contentType: 'application/x-www-form-urlencoded' | 'application/json';
+    transportVerified: boolean;
+  }): Promise<ProviderWebhook[]> {
+    if (!input.transportVerified) return Promise.resolve([]);
+    const payload = input.payload;
     const parsed = JSON.parse(Buffer.from(payload).toString()) as Omit<
       ProviderWebhook,
       'payloadHash'
     >;
-    return Promise.resolve({
-      ...parsed,
-      payloadHash: createHash('sha256').update(payload).digest('hex'),
-    });
+    return Promise.resolve([
+      {
+        ...parsed,
+        payloadHash: createHash('sha256').update(payload).digest('hex'),
+      },
+    ]);
   }
 }

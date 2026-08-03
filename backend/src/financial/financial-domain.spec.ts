@@ -83,8 +83,28 @@ describe('financial domain', () => {
     const first = await provider.createPayment(input);
     expect(await provider.createPayment(input)).toBe(first);
     expect(provider.simulate(first.id, 'SUCCEEDED').status).toBe('SUCCEEDED');
-    expect(await provider.verifyWebhook(new Uint8Array(), 'bad')).toBe(false);
-    expect(await provider.verifyWebhook(new Uint8Array(), 'fake-valid-signature')).toBe(true);
+    const notification = Buffer.from(
+      JSON.stringify({
+        externalEventId: 'fake-event',
+        type: 'paid',
+        paymentId: first.id,
+        status: 'SUCCEEDED',
+      }),
+    );
+    expect(
+      await provider.resolveNotification({
+        payload: notification,
+        contentType: 'application/json',
+        transportVerified: false,
+      }),
+    ).toEqual([]);
+    expect(
+      await provider.resolveNotification({
+        payload: notification,
+        contentType: 'application/json',
+        transportVerified: true,
+      }),
+    ).toHaveLength(1);
   });
 });
 
