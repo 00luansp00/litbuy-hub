@@ -52,8 +52,12 @@ describe('Paid order activation with real PostgreSQL', () => {
         expectedPreviewFingerprint: preview.previewFingerprint,
       },
     )) as { orderCode: string };
-    const order = await prisma.order.findUniqueOrThrow({
+    const checkoutOrder = await prisma.order.findUniqueOrThrow({
       where: { publicCode: response.orderCode },
+    });
+    const order = await prisma.order.update({
+      where: { id: checkoutOrder.id },
+      data: { paymentStatus: 'PENDING', version: { increment: 1 } },
     });
     const paidAt = new Date(order.expiresAt.getTime() - 1_000);
     const payment = await prisma.payment.create({
@@ -75,6 +79,7 @@ describe('Paid order activation with real PostgreSQL', () => {
       fixture,
       order,
       payment,
+      checkoutOrderVersion: checkoutOrder.version,
       selectedVariantId: variantId,
       otherVariantId:
         model === 'DYNAMIC'
@@ -115,7 +120,12 @@ describe('Paid order activation with real PostgreSQL', () => {
   it.each(['NORMAL', 'DYNAMIC', 'SERVICE'] as const)(
     'activates %s from persisted payment truth and applies only its stock rules',
     async (model) => {
-      const { fixture, order, selectedVariantId } = await paidOrder(model);
+      const { fixture, order, selectedVariantId, checkoutOrderVersion } = await paidOrder(model);
+      expect(order).toMatchObject({
+        status: 'PENDING_PAYMENT',
+        paymentStatus: 'PENDING',
+        version: checkoutOrderVersion + 1,
+      });
       const accountingBefore = await Promise.all([
         prisma.ledgerTransaction.count(),
         prisma.ledgerEntry.count(),
@@ -330,18 +340,6 @@ describe('Paid order activation with real PostgreSQL', () => {
       'PAYMENT_AMOUNT_MISMATCH',
     ],
     [
-      'payment currency mismatch',
-      async ({ payment }: Awaited<ReturnType<typeof paidOrder>>) =>
-        prisma.payment.update({ where: { id: payment.id }, data: { currency: 'USD' } }),
-      'PAYMENT_CURRENCY_MISMATCH',
-    ],
-    [
-      'order currency mismatch',
-      async ({ order }: Awaited<ReturnType<typeof paidOrder>>) =>
-        prisma.order.update({ where: { id: order.id }, data: { currency: 'USD' } }),
-      'PAYMENT_CURRENCY_MISMATCH',
-    ],
-    [
       'order payment projection mismatch',
       async ({ order }: Awaited<ReturnType<typeof paidOrder>>) =>
         prisma.order.update({ where: { id: order.id }, data: { paymentStatus: 'FAILED' } }),
@@ -353,6 +351,26 @@ describe('Paid order activation with real PostgreSQL', () => {
     await activation.processOne(context.order.id);
     await expectUnchanged(context.order.id, context.fixture.product.id, 2);
     expect((await issueFor(context.order.id)).details).toMatchObject({ errorCode });
+  });
+
+  it('enforces BRL currency on Payment at the PostgreSQL boundary', async () => {
+    const { payment } = await paidOrder('SERVICE');
+    await expect(
+      prisma.payment.update({ where: { id: payment.id }, data: { currency: 'USD' } }),
+    ).rejects.toThrow();
+    expect(await prisma.payment.findUniqueOrThrow({ where: { id: payment.id } })).toMatchObject({
+      currency: 'BRL',
+    });
+  });
+
+  it('enforces BRL currency on Order at the PostgreSQL boundary', async () => {
+    const { order } = await paidOrder('SERVICE');
+    await expect(
+      prisma.order.update({ where: { id: order.id }, data: { currency: 'USD' } }),
+    ).rejects.toThrow();
+    expect(await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).toMatchObject({
+      currency: 'BRL',
+    });
   });
 
   it('reconciles a missing succeeded attempt', async () => {
