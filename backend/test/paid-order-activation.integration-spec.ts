@@ -71,7 +71,16 @@ describe('Paid order activation with real PostgreSQL', () => {
         requestHash: crypto.randomUUID(),
       },
     });
-    return { fixture, order, payment };
+    return {
+      fixture,
+      order,
+      payment,
+      selectedVariantId: variantId,
+      otherVariantId:
+        model === 'DYNAMIC'
+          ? fixture.product.variants.find((variant) => variant.id !== variantId)!.id
+          : undefined,
+    };
   }
 
   async function issueFor(orderId: string) {
@@ -106,7 +115,7 @@ describe('Paid order activation with real PostgreSQL', () => {
   it.each(['NORMAL', 'DYNAMIC', 'SERVICE'] as const)(
     'activates %s from persisted payment truth and applies only its stock rules',
     async (model) => {
-      const { fixture, order } = await paidOrder(model);
+      const { fixture, order, selectedVariantId } = await paidOrder(model);
       const accountingBefore = await Promise.all([
         prisma.ledgerTransaction.count(),
         prisma.ledgerEntry.count(),
@@ -134,13 +143,15 @@ describe('Paid order activation with real PostgreSQL', () => {
         });
         expect(updated.reservations[0].consumedAt).toBeInstanceOf(Date);
       }
-      const product = await prisma.product.findUniqueOrThrow({
-        where: { id: fixture.product.id },
-        include: { variants: true },
-      });
-      expect(
-        model === 'NORMAL' ? product.stock : model === 'DYNAMIC' ? product.variants[0].stock : null,
-      ).toBe(model === 'SERVICE' ? null : 4);
+      const stock =
+        model === 'DYNAMIC'
+          ? (
+              await prisma.productVariant.findUniqueOrThrow({
+                where: { id: selectedVariantId! },
+              })
+            ).stock
+          : (await prisma.product.findUniqueOrThrow({ where: { id: fixture.product.id } })).stock;
+      expect(stock).toBe(model === 'SERVICE' ? null : 4);
       expect(updated.events.filter(({ type }) => type === 'ORDER_ACTIVATED')).toHaveLength(1);
       expect(updated.events.filter(({ type }) => type === 'INVENTORY_CONSUMED')).toHaveLength(
         model === 'SERVICE' ? 0 : 1,
@@ -510,12 +521,12 @@ describe('Paid order activation with real PostgreSQL', () => {
   it.each(['NORMAL', 'DYNAMIC'] as const)(
     'rolls back when %s physical stock is unavailable',
     async (model) => {
-      const { fixture, order } = await paidOrder(model, 1);
+      const { fixture, order, selectedVariantId } = await paidOrder(model, 1);
       if (model === 'NORMAL')
         await prisma.product.update({ where: { id: fixture.product.id }, data: { stock: 0 } });
       else
         await prisma.productVariant.update({
-          where: { id: fixture.product.variants[0].id },
+          where: { id: selectedVariantId! },
           data: { stock: 0 },
         });
       await activation.processOne(order.id);
@@ -544,11 +555,15 @@ describe('Paid order activation with real PostgreSQL', () => {
           },
         }),
       ).toBe(0);
-      const product = await prisma.product.findUniqueOrThrow({
-        where: { id: fixture.product.id },
-        include: { variants: true },
-      });
-      expect(model === 'NORMAL' ? product.stock : product.variants[0].stock).toBe(0);
+      const stock =
+        model === 'DYNAMIC'
+          ? (
+              await prisma.productVariant.findUniqueOrThrow({
+                where: { id: selectedVariantId! },
+              })
+            ).stock
+          : (await prisma.product.findUniqueOrThrow({ where: { id: fixture.product.id } })).stock;
+      expect(stock).toBe(0);
     },
   );
 
@@ -664,7 +679,7 @@ describe('Paid order activation with real PostgreSQL', () => {
     ['DYNAMIC', 'activation-first'],
     ['DYNAMIC', 'checkout-first'],
   ] as const)('does not expose phantom %s stock with %s lock ordering', async (model, ordering) => {
-    const { fixture, order } = await paidOrder(model, 1);
+    const { fixture, order, selectedVariantId, otherVariantId } = await paidOrder(model, 1);
     const buyer = await prisma.user.create({
       data: {
         email: `competing-${crypto.randomUUID()}@test.local`,
@@ -679,13 +694,13 @@ describe('Paid order activation with real PostgreSQL', () => {
     });
     const preview = await carts.add(buyer.id, fixture.seller.slug, {
       productId: fixture.product.id,
-      productVariantId: model === 'DYNAMIC' ? fixture.product.variants[0].id : undefined,
+      productVariantId: selectedVariantId,
       quantity: 1,
       expectedVersion: 0,
     });
     const stockKey =
       model === 'DYNAMIC'
-        ? `checkout-stock:variant:${fixture.product.variants[0].id}`
+        ? `checkout-stock:variant:${selectedVariantId}`
         : `checkout-stock:product:${fixture.product.id}`;
     let unblock!: () => void;
     let locked!: () => void;
@@ -719,11 +734,27 @@ describe('Paid order activation with real PostgreSQL', () => {
       reason: { code: 'INSUFFICIENT_STOCK' },
     });
     expect(await prisma.order.count()).toBe(1);
-    const current = await prisma.product.findUniqueOrThrow({
-      where: { id: fixture.product.id },
-      include: { variants: true },
+    expect(await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).toMatchObject({
+      status: 'ACTIVE',
     });
-    expect(model === 'NORMAL' ? current.stock : current.variants[0].stock).toBe(0);
+    expect(
+      await prisma.inventoryReservation.findFirstOrThrow({ where: { orderId: order.id } }),
+    ).toMatchObject({
+      status: 'CONSUMED',
+      productVariantId: selectedVariantId,
+    });
+    if (model === 'DYNAMIC') {
+      expect(
+        await prisma.productVariant.findUniqueOrThrow({ where: { id: selectedVariantId! } }),
+      ).toMatchObject({ stock: 0 });
+      expect(
+        await prisma.productVariant.findUniqueOrThrow({ where: { id: otherVariantId! } }),
+      ).toMatchObject({ stock: 1 });
+    } else {
+      expect(
+        await prisma.product.findUniqueOrThrow({ where: { id: fixture.product.id } }),
+      ).toMatchObject({ stock: 0 });
+    }
   });
 
   it('rolls back a database failure after stock updates and retries cleanly', async () => {
