@@ -103,19 +103,34 @@ export class CheckoutService {
         .sort((a, b) => a.key.localeCompare(b.key));
       for (const selected of reservable) {
         await acquireAdvisoryTransactionLock(tx, 'checkout-stock:' + selected.key);
+        let stockRows: Array<{ stock: number | null }>;
+        if (selected.item.product.model === ListingDraftModel.DYNAMIC) {
+          if (!selected.item.productVariantId) this.fail('INSUFFICIENT_STOCK', 409);
+          stockRows = await tx.$queryRaw<Array<{ stock: number | null }>>`
+            SELECT "stock"
+            FROM "ProductVariant"
+            WHERE "id" = ${selected.item.productVariantId}::uuid
+              AND "productId" = ${selected.item.productId}::uuid
+            FOR UPDATE
+          `;
+        } else {
+          stockRows = await tx.$queryRaw<Array<{ stock: number | null }>>`
+            SELECT "stock"
+            FROM "Product"
+            WHERE "id" = ${selected.item.productId}::uuid
+            FOR UPDATE
+          `;
+        }
         const active = await tx.inventoryReservation.aggregate({
           where: {
             productId: selected.item.productId,
             productVariantId: selected.item.productVariantId,
             status: InventoryReservationStatus.ACTIVE,
-            expiresAt: { gt: new Date() },
+            OR: [{ expiresAt: { gt: new Date() } }, { order: { payment: { status: 'PAID' } } }],
           },
           _sum: { quantity: true },
         });
-        const stock =
-          selected.item.product.model === ListingDraftModel.DYNAMIC
-            ? selected.selection.variant?.stock
-            : selected.item.product.stock;
+        const stock = stockRows[0]?.stock;
         if (
           stock === null ||
           stock === undefined ||

@@ -22,5 +22,6 @@ attempt does not make the aggregate Payment failed, because another attempt may 
 Late payment records financial truth but never reactivates an expired/cancelled Order or its
 reservation. It creates `LATE_PAYMENT` when the Order is terminal, payment occurred after expiry,
 or a reservation was released/expired. Deliberately, this stage can leave `Payment = PAID` while
-`Order = PENDING_PAYMENT`; Order activation is a later PR. Inventory, fulfillment, Order events,
-ledger postings, settlement, and holds are also deferred to later PRs.
+`Order = PENDING_PAYMENT`; the local worker documented in `PAID_ORDER_ACTIVATION.md` performs the
+atomic activation and inventory consumption. Fulfillment, ledger postings, settlement, and holds
+remain deferred to later PRs.
