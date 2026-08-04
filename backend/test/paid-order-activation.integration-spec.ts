@@ -759,7 +759,7 @@ describe('Paid order activation with real PostgreSQL', () => {
       await prisma.inventoryReservation.findFirstOrThrow({ where: { orderId: order.id } }),
     ).toMatchObject({
       status: 'CONSUMED',
-      productVariantId: selectedVariantId,
+      productVariantId: model === 'DYNAMIC' ? selectedVariantId : null,
     });
     if (model === 'DYNAMIC') {
       expect(
