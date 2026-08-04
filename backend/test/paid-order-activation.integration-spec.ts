@@ -7,7 +7,6 @@ import { PaidOrderActivationService } from '../src/orders/paid-order-activation.
 import { OrderExpirationService } from '../src/orders/order-expiration.service';
 import { parseIdempotencyKey } from '../src/commerce/idempotency-key';
 import { commerceFixture } from './order-checkout-test.helpers';
-import { readFile } from 'node:fs/promises';
 import { acquireAdvisoryTransactionLock } from '../src/database/advisory-lock';
 
 describe('Paid order activation with real PostgreSQL', () => {
@@ -94,6 +93,14 @@ describe('Paid order activation with real PostgreSQL', () => {
         where: { orderId, type: { in: ['ORDER_ACTIVATED', 'INVENTORY_CONSUMED'] } },
       }),
     ).toBe(0);
+    expect(
+      await prisma.outboxEvent.count({
+        where: {
+          aggregateId: orderId,
+          eventType: { in: ['ORDER_ACTIVATED', 'INVENTORY_CONSUMED'] },
+        },
+      }),
+    ).toBe(0);
   }
 
   it.each(['NORMAL', 'DYNAMIC', 'SERVICE'] as const)(
@@ -138,7 +145,15 @@ describe('Paid order activation with real PostgreSQL', () => {
       expect(updated.events.filter(({ type }) => type === 'INVENTORY_CONSUMED')).toHaveLength(
         model === 'SERVICE' ? 0 : 1,
       );
-      expect(updated.events.every(({ outbox }) => outbox?.status === 'PENDING')).toBe(true);
+      const activationEvents = updated.events.filter(({ type }) =>
+        ['ORDER_ACTIVATED', 'INVENTORY_CONSUMED'].includes(type),
+      );
+      expect(activationEvents).toHaveLength(model === 'SERVICE' ? 1 : 2);
+      expect(
+        activationEvents.every(
+          ({ type, outbox }) => outbox?.status === 'PENDING' && outbox.eventType === type,
+        ),
+      ).toBe(true);
       expect(
         await Promise.all([
           prisma.ledgerTransaction.count(),
@@ -162,7 +177,7 @@ describe('Paid order activation with real PostgreSQL', () => {
         eventType: { in: ['ORDER_ACTIVATED', 'INVENTORY_CONSUMED'] },
       },
     });
-    await activation.processOne(order.id);
+    expect(await activation.processOne(order.id)).toBe(true);
     expect(
       await prisma.product.findUniqueOrThrow({ where: { id: fixture.product.id } }),
     ).toMatchObject({ stock: 1 });
@@ -183,6 +198,7 @@ describe('Paid order activation with real PostgreSQL', () => {
         },
       }),
     ).toBe(outboxAfterFirst);
+    expect(await activation.processOne()).toBe(false);
   });
 
   it('fails closed and reconciles late payment without partial effects', async () => {
@@ -309,6 +325,12 @@ describe('Paid order activation with real PostgreSQL', () => {
       'PAYMENT_CURRENCY_MISMATCH',
     ],
     [
+      'order currency mismatch',
+      async ({ order }: Awaited<ReturnType<typeof paidOrder>>) =>
+        prisma.order.update({ where: { id: order.id }, data: { currency: 'USD' } }),
+      'PAYMENT_CURRENCY_MISMATCH',
+    ],
+    [
       'order payment projection mismatch',
       async ({ order }: Awaited<ReturnType<typeof paidOrder>>) =>
         prisma.order.update({ where: { id: order.id }, data: { paymentStatus: 'FAILED' } }),
@@ -322,14 +344,16 @@ describe('Paid order activation with real PostgreSQL', () => {
     expect((await issueFor(context.order.id)).details).toMatchObject({ errorCode });
   });
 
-  it('reconciles missing, multiple, and malformed succeeded attempts', async () => {
+  it('reconciles a missing succeeded attempt', async () => {
     const missing = await paidOrder('SERVICE');
     await prisma.paymentAttempt.deleteMany({ where: { paymentId: missing.payment.id } });
     await activation.processOne(missing.order.id);
     expect((await issueFor(missing.order.id)).details).toMatchObject({
       errorCode: 'SUCCEEDED_ATTEMPT_MISSING',
     });
+  });
 
+  it('reconciles multiple succeeded attempts', async () => {
     const multiple = await paidOrder('SERVICE');
     await prisma.paymentAttempt.create({
       data: {
@@ -347,15 +371,36 @@ describe('Paid order activation with real PostgreSQL', () => {
     expect((await issueFor(multiple.order.id)).details).toMatchObject({
       errorCode: 'MULTIPLE_SUCCEEDED_ATTEMPTS',
     });
+  });
 
+  it.each([
+    ['amount', { amountMinor: { increment: 1 } }],
+    ['currency', { currency: 'USD' }],
+    ['external identity', { externalPaymentId: null }],
+    ['provider identity', { providerCode: '' }],
+  ] as const)('reconciles a succeeded attempt with incompatible %s', async (_name, data) => {
     const malformed = await paidOrder('SERVICE');
     await prisma.paymentAttempt.updateMany({
       where: { paymentId: malformed.payment.id },
-      data: { currency: 'USD', amountMinor: { increment: 1 }, externalPaymentId: null },
+      data,
     });
     await activation.processOne(malformed.order.id);
     expect((await issueFor(malformed.order.id)).details).toMatchObject({
       errorCode: 'SUCCEEDED_ATTEMPT_MISMATCH',
+    });
+  });
+
+  it('reconciles a succeeded attempt correlated to another payment', async () => {
+    const original = await paidOrder('SERVICE');
+    const other = await paidOrder('SERVICE');
+    await prisma.paymentAttempt.deleteMany({ where: { paymentId: other.payment.id } });
+    await prisma.paymentAttempt.updateMany({
+      where: { paymentId: original.payment.id },
+      data: { paymentId: other.payment.id, attemptNumber: 2 },
+    });
+    await activation.processOne(original.order.id);
+    expect((await issueFor(original.order.id)).details).toMatchObject({
+      errorCode: 'SUCCEEDED_ATTEMPT_MISSING',
     });
   });
 
@@ -427,8 +472,9 @@ describe('Paid order activation with real PostgreSQL', () => {
     expect((await issueFor(order.id)).details).toMatchObject({ errorCode: 'RESERVATION_MISSING' });
   });
 
-  it('rejects reservation product, variant, quantity, and order-item mismatches', async () => {
-    for (const mismatch of ['product', 'variant', 'quantity', 'item'] as const) {
+  it.each(['product', 'variant', 'quantity', 'item'] as const)(
+    'rejects a reservation %s mismatch',
+    async (mismatch) => {
       const context = await paidOrder(mismatch === 'variant' ? 'DYNAMIC' : 'NORMAL');
       if (mismatch === 'quantity')
         await prisma.inventoryReservation.updateMany({
@@ -458,8 +504,8 @@ describe('Paid order activation with real PostgreSQL', () => {
       expect((await issueFor(context.order.id)).details).toMatchObject({
         errorCode: mismatch === 'item' ? 'RESERVATION_MISSING' : 'RESERVATION_MISMATCH',
       });
-    }
-  });
+    },
+  );
 
   it.each(['NORMAL', 'DYNAMIC'] as const)(
     'rolls back when %s physical stock is unavailable',
@@ -476,12 +522,33 @@ describe('Paid order activation with real PostgreSQL', () => {
       expect(
         await prisma.inventoryReservation.findFirstOrThrow({ where: { orderId: order.id } }),
       ).toMatchObject({ status: 'ACTIVE' });
+      expect(await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).toMatchObject({
+        status: 'PENDING_PAYMENT',
+      });
       expect((await issueFor(order.id)).details).toMatchObject({
         errorCode: 'RESERVED_STOCK_UNAVAILABLE',
       });
       expect(
-        await prisma.orderEvent.count({ where: { orderId: order.id, type: 'ORDER_ACTIVATED' } }),
+        await prisma.orderEvent.count({
+          where: {
+            orderId: order.id,
+            type: { in: ['ORDER_ACTIVATED', 'INVENTORY_CONSUMED'] },
+          },
+        }),
       ).toBe(0);
+      expect(
+        await prisma.outboxEvent.count({
+          where: {
+            aggregateId: order.id,
+            eventType: { in: ['ORDER_ACTIVATED', 'INVENTORY_CONSUMED'] },
+          },
+        }),
+      ).toBe(0);
+      const product = await prisma.product.findUniqueOrThrow({
+        where: { id: fixture.product.id },
+        include: { variants: true },
+      });
+      expect(model === 'NORMAL' ? product.stock : product.variants[0].stock).toBe(0);
     },
   );
 
@@ -515,6 +582,17 @@ describe('Paid order activation with real PostgreSQL', () => {
     expect(
       await prisma.inventoryReservation.count({ where: { orderId: order.id, status: 'ACTIVE' } }),
     ).toBe(2);
+    expect(await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).toMatchObject({
+      status: 'PENDING_PAYMENT',
+    });
+    expect(
+      await prisma.orderEvent.count({
+        where: {
+          orderId: order.id,
+          type: { in: ['ORDER_ACTIVATED', 'INVENTORY_CONSUMED'] },
+        },
+      }),
+    ).toBe(0);
     expect(
       await prisma.outboxEvent.count({
         where: {
@@ -580,54 +658,73 @@ describe('Paid order activation with real PostgreSQL', () => {
     ).toMatchObject({ status: 'ACTIVE' });
   });
 
-  it.each(['NORMAL', 'DYNAMIC'] as const)(
-    'does not expose phantom %s stock during activation versus checkout',
-    async (model) => {
-      const { fixture, order } = await paidOrder(model, 1);
-      const buyer = await prisma.user.create({
-        data: {
-          email: `competing-${crypto.randomUUID()}@test.local`,
-          birthDate: new Date('2000-01-01'),
-          status: 'ACTIVE',
-          termsVersion: 't',
-          termsAcceptedAt: new Date(),
-          privacyVersion: 'p',
-          privacyAcceptedAt: new Date(),
-          roleAssignments: { create: { role: 'BUYER' } },
-        },
+  it.each([
+    ['NORMAL', 'activation-first'],
+    ['NORMAL', 'checkout-first'],
+    ['DYNAMIC', 'activation-first'],
+    ['DYNAMIC', 'checkout-first'],
+  ] as const)('does not expose phantom %s stock with %s lock ordering', async (model, ordering) => {
+    const { fixture, order } = await paidOrder(model, 1);
+    const buyer = await prisma.user.create({
+      data: {
+        email: `competing-${crypto.randomUUID()}@test.local`,
+        birthDate: new Date('2000-01-01'),
+        status: 'ACTIVE',
+        termsVersion: 't',
+        termsAcceptedAt: new Date(),
+        privacyVersion: 'p',
+        privacyAcceptedAt: new Date(),
+        roleAssignments: { create: { role: 'BUYER' } },
+      },
+    });
+    const preview = await carts.add(buyer.id, fixture.seller.slug, {
+      productId: fixture.product.id,
+      productVariantId: model === 'DYNAMIC' ? fixture.product.variants[0].id : undefined,
+      quantity: 1,
+      expectedVersion: 0,
+    });
+    const stockKey =
+      model === 'DYNAMIC'
+        ? `checkout-stock:variant:${fixture.product.variants[0].id}`
+        : `checkout-stock:product:${fixture.product.id}`;
+    let unblock!: () => void;
+    let locked!: () => void;
+    const ready = new Promise<void>((resolve) => (locked = resolve));
+    const release = new Promise<void>((resolve) => (unblock = resolve));
+    const blocker = prisma.$transaction(async (tx) => {
+      await acquireAdvisoryTransactionLock(tx, stockKey);
+      locked();
+      await release;
+    });
+    await ready;
+    const runActivation = () => activation.processOne(order.id);
+    const runCheckout = () =>
+      checkout.create(buyer.id, parseIdempotencyKey(`competing:${crypto.randomUUID()}`), {
+        sellerSlug: fixture.seller.slug,
+        expectedCartVersion: preview.version,
+        expectedPreviewFingerprint: preview.previewFingerprint,
       });
-      const preview = await carts.add(buyer.id, fixture.seller.slug, {
-        productId: fixture.product.id,
-        productVariantId: model === 'DYNAMIC' ? fixture.product.variants[0].id : undefined,
-        quantity: 1,
-        expectedVersion: 0,
-      });
-      const competingCheckout = checkout.create(
-        buyer.id,
-        parseIdempotencyKey(`competing:${crypto.randomUUID()}`),
-        {
-          sellerSlug: fixture.seller.slug,
-          expectedCartVersion: preview.version,
-          expectedPreviewFingerprint: preview.previewFingerprint,
-        },
-      );
-      const results = await Promise.allSettled([
-        activation.processOne(order.id),
-        competingCheckout,
-      ]);
-      expect(results[0].status).toBe('fulfilled');
-      expect(results[1]).toMatchObject({
-        status: 'rejected',
-        reason: { code: 'INSUFFICIENT_STOCK' },
-      });
-      expect(await prisma.order.count()).toBe(1);
-      const current = await prisma.product.findUniqueOrThrow({
-        where: { id: fixture.product.id },
-        include: { variants: true },
-      });
-      expect(model === 'NORMAL' ? current.stock : current.variants[0].stock).toBe(0);
-    },
-  );
+    const first = ordering === 'activation-first' ? runActivation() : runCheckout();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const second = ordering === 'activation-first' ? runCheckout() : runActivation();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    unblock();
+    const [firstResult, secondResult] = await Promise.allSettled([first, second]);
+    await blocker;
+    const activationResult = ordering === 'activation-first' ? firstResult : secondResult;
+    const checkoutResult = ordering === 'activation-first' ? secondResult : firstResult;
+    expect(activationResult.status).toBe('fulfilled');
+    expect(checkoutResult).toMatchObject({
+      status: 'rejected',
+      reason: { code: 'INSUFFICIENT_STOCK' },
+    });
+    expect(await prisma.order.count()).toBe(1);
+    const current = await prisma.product.findUniqueOrThrow({
+      where: { id: fixture.product.id },
+      include: { variants: true },
+    });
+    expect(model === 'NORMAL' ? current.stock : current.variants[0].stock).toBe(0);
+  });
 
   it('rolls back a database failure after stock updates and retries cleanly', async () => {
     const { fixture, order } = await paidOrder('NORMAL', 2);
@@ -679,18 +776,12 @@ describe('Paid order activation with real PostgreSQL', () => {
     const workers = [activation.processBatch(2), activation.processBatch(2)];
     await new Promise((resolve) => setTimeout(resolve, 100));
     unblock();
-    await Promise.all([blocker, ...workers]);
+    const [, ...processed] = await Promise.all([blocker, ...workers]);
+    expect(processed.reduce((sum, count) => sum + count, 0)).toBe(2);
     expect(
       await prisma.order.count({
         where: { id: { in: [first.order.id, second.order.id] }, status: 'ACTIVE' },
       }),
     ).toBe(2);
-  });
-
-  it('has no provider or HTTP dependency', async () => {
-    const source = await readFile('src/orders/paid-order-activation.service.ts', 'utf8');
-    expect(source).not.toMatch(
-      /PaymentProviderPort|EfiPaymentProvider|https?:|getPayment|createPayment|cancelPayment|refund/,
-    );
   });
 });

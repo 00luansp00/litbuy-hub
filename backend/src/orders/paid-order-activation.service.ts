@@ -14,6 +14,7 @@ import { acquireAdvisoryTransactionLock } from '../database/advisory-lock';
 const REFERENCE_TYPE = 'OrderActivation';
 type Tx = Prisma.TransactionClient;
 type Failure = { type: ReconciliationIssueType; code: string };
+type CandidateResult = 'NO_CANDIDATE' | 'ALREADY_HANDLED' | 'PROCESSED';
 class ActivationRollback extends Error {
   constructor(readonly failure: Failure) {
     super(failure.code);
@@ -25,27 +26,35 @@ export class PaidOrderActivationService {
   constructor(private readonly prisma: PrismaService) {}
 
   async processOne(orderId?: string): Promise<boolean> {
+    return (await this.processCandidate(orderId)) !== 'NO_CANDIDATE';
+  }
+
+  async processBatch(limit = 25): Promise<number> {
+    let processed = 0;
+    const bounded = Math.max(1, Math.min(limit, 100));
+    while (processed < bounded) {
+      const result = await this.processCandidate();
+      if (result === 'NO_CANDIDATE') break;
+      if (result === 'PROCESSED') processed += 1;
+      // ALREADY_HANDLED deliberately does not consume batch capacity. The next scan
+      // excludes the now-active order and can continue with another candidate.
+    }
+    return processed;
+  }
+
+  private async processCandidate(orderId?: string): Promise<CandidateResult> {
     const id = orderId ?? (await this.nextCandidate());
-    if (!id) return false;
+    if (!id) return 'NO_CANDIDATE';
     try {
-      await this.prisma.$transaction((tx) => this.activate(tx, id));
+      return await this.prisma.$transaction((tx) => this.activate(tx, id));
     } catch (error) {
       if (!(error instanceof ActivationRollback)) throw error;
       await this.prisma.$transaction(async (tx) => {
         await acquireAdvisoryTransactionLock(tx, `order:${id}`);
         await this.ensureIssue(id, error.failure, tx);
       });
+      return 'PROCESSED';
     }
-    // A candidate was claimed even when another worker completed it while this worker waited.
-    // processBatch must only stop when candidate selection itself returns no row.
-    return true;
-  }
-
-  async processBatch(limit = 25): Promise<number> {
-    let processed = 0;
-    const bounded = Math.max(1, Math.min(limit, 100));
-    while (processed < bounded && (await this.processOne())) processed += 1;
-    return processed;
   }
 
   private async nextCandidate(): Promise<string | null> {
@@ -68,7 +77,10 @@ export class PaidOrderActivationService {
     return rows[0]?.id ?? null;
   }
 
-  private async activate(tx: Tx, orderId: string): Promise<boolean> {
+  private async activate(
+    tx: Tx,
+    orderId: string,
+  ): Promise<Exclude<CandidateResult, 'NO_CANDIDATE'>> {
     await acquireAdvisoryTransactionLock(tx, `order:${orderId}`);
     const attempts = await tx.$queryRaw<LockedAttempt[]>`
       SELECT a."id", a."paymentId", a."providerCode", a."externalPaymentId",
@@ -87,8 +99,7 @@ export class PaidOrderActivationService {
       FROM "Order" WHERE "id" = ${orderId}::uuid FOR UPDATE
     `;
     const order = orders[0];
-    if (!order) return false;
-    if (order.status === OrderStatus.ACTIVE) return false;
+    if (!order || order.status === OrderStatus.ACTIVE) return 'ALREADY_HANDLED';
     if (order.status !== OrderStatus.PENDING_PAYMENT)
       return this.reject(tx, orderId, 'STATUS_MISMATCH', 'ORDER_STATUS_MISMATCH');
     const payment = payments[0];
@@ -217,12 +228,12 @@ export class PaidOrderActivationService {
         orderId,
         reservationIds: consumptions.map(({ reservation }) => reservation.id),
       });
-    return true;
+    return 'PROCESSED';
   }
 
   private async reject(tx: Tx, orderId: string, type: ReconciliationIssueType, code: string) {
     await this.ensureIssue(orderId, { type, code }, tx);
-    return true;
+    return 'PROCESSED' as const;
   }
 
   private async ensureIssue(
