@@ -925,7 +925,7 @@ model Order {
   payment                  Payment?
   refunds                  Refund[]
   feePolicyVersion         FeePolicyVersion?      @relation(fields: [feePolicyVersionId], references: [id], onDelete: Restrict)
-  platformCommissionRule   FeeRule?               @relation(fields: [platformCommissionRuleId], references: [id], onDelete: Restrict)
+  platformCommissionRule   FeeRule?               @relation("OrderPlatformCommissionRule", fields: [platformCommissionRuleId, feePolicyVersionId], references: [id, policyVersionId], onDelete: Restrict)
 
   @@index([buyerUserId, createdAt, id])
   @@index([sellerProfileId, createdAt, id])
@@ -1691,9 +1691,10 @@ model FeeRule {
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
   policyVersion      FeePolicyVersion    @relation(fields: [policyVersionId], references: [id], onDelete: Restrict)
-  commissionOrders   Order[]
+  commissionOrders   Order[]             @relation("OrderPlatformCommissionRule")
 
   @@unique([policyVersionId, code])
+  @@unique([id, policyVersionId])
 }
 
 model WithdrawalPolicyVersion {

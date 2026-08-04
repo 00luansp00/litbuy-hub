@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { Test } from '@nestjs/testing';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/database/prisma.service';
@@ -19,7 +21,16 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
     carts = app.get(CartsService);
     checkout = app.get(CheckoutService);
   });
-  beforeEach(() => prisma.$executeRawUnsafe('TRUNCATE TABLE "User", "CatalogCategory" CASCADE'));
+  async function cleanup() {
+    await prisma.$executeRawUnsafe('TRUNCATE TABLE "User", "CatalogCategory" CASCADE');
+  }
+
+  beforeEach(async () => {
+    await cleanup();
+    expect(await prisma.feePolicyVersion.count({ where: { status: 'ACTIVE' } })).toBe(0);
+  });
+
+  afterEach(cleanup);
   afterAll(() => app.close());
 
   const key = () => parseIdempotencyKey(`commission:${crypto.randomUUID()}`);
@@ -238,11 +249,29 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
     ).rejects.toBeDefined();
   });
 
+  async function financialCounts() {
+    return Promise.all([
+      prisma.ledgerTransaction.count(),
+      prisma.ledgerEntry.count(),
+      prisma.financialEvent.count(),
+      prisma.financialOutboxEvent.count(),
+      prisma.settlement.count(),
+      prisma.financialHold.count(),
+    ]);
+  }
+
   it('enforces database fee constraints and creates no financial records', async () => {
-    const f = await ready();
+    const f = await ready({ fixedAmountMinor: 125n });
+    const beforeFinancial = await financialCounts();
     const result = await checkout.create(f.buyer.id, key(), f.dto);
     const order = await prisma.order.findUniqueOrThrow({
       where: { publicCode: (result as { orderCode: string }).orderCode },
+    });
+    expect(order).toMatchObject({
+      subtotalAmountMinor: 1000n,
+      discountAmountMinor: 0n,
+      platformFeeAmountMinor: 125n,
+      totalAmountMinor: 1000n,
     });
     for (const fee of [-1n, 1001n])
       await expect(
@@ -251,17 +280,144 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
     await expect(
       prisma.order.update({
         where: { id: order.id },
+        data: { totalAmountMinor: 1125n },
+      }),
+    ).rejects.toBeDefined();
+    await expect(
+      prisma.order.update({
+        where: { id: order.id },
         data: { totalAmountMinor: 0n, platformFeeAmountMinor: 1n },
       }),
     ).rejects.toBeDefined();
+    expect(await financialCounts()).toEqual(beforeFinancial);
+  });
+
+  it('enforces policy/rule snapshot coherence while preserving legacy null snapshots', async () => {
+    const f = await ready({ fixedAmountMinor: 125n });
+    const result = await checkout.create(f.buyer.id, key(), f.dto);
+    const order = await prisma.order.findUniqueOrThrow({
+      where: { publicCode: (result as { orderCode: string }).orderCode },
+    });
+    const other = await publishPlatformCommissionPolicy(prisma, f.sellerUser.id, {
+      publicVersion: 2,
+      status: 'DRAFT',
+      fixedAmountMinor: 0n,
+    });
+
+    await expect(
+      prisma.order.update({
+        where: { id: order.id },
+        data: { platformCommissionRuleId: other.rules[0].id },
+      }),
+    ).rejects.toBeDefined();
+    await expect(
+      prisma.order.update({ where: { id: order.id }, data: { platformCommissionRuleId: null } }),
+    ).rejects.toBeDefined();
+    await expect(
+      prisma.order.update({ where: { id: order.id }, data: { feePolicyVersionId: null } }),
+    ).rejects.toBeDefined();
+    await expect(
+      prisma.order.update({
+        where: { id: order.id },
+        data: { feePolicyVersionId: null, platformCommissionRuleId: null },
+      }),
+    ).resolves.toMatchObject({ feePolicyVersionId: null, platformCommissionRuleId: null });
+  });
+
+  it('runs concurrent checkouts with one coherent active policy snapshot', async () => {
+    const fixture = await commerceFixture(prisma, 'NORMAL', undefined, 10, false);
+    const policy = await publishPlatformCommissionPolicy(prisma, fixture.sellerUser.id, {
+      formula: 'PERCENT_BPS',
+      percentBps: 1250,
+    });
+    const firstPreview = await carts.add(fixture.buyer.id, fixture.seller.slug, {
+      productId: fixture.product.id,
+      quantity: 1,
+      expectedVersion: 0,
+    });
+    const otherBuyer = await prisma.user.create({
+      data: {
+        email: `buyer-${crypto.randomUUID()}@test.local`,
+        birthDate: new Date('2000-01-01'),
+        status: 'ACTIVE',
+        termsVersion: 't',
+        termsAcceptedAt: new Date(),
+        privacyVersion: 'p',
+        privacyAcceptedAt: new Date(),
+        roleAssignments: { create: { role: 'BUYER' } },
+      },
+    });
+    const secondPreview = await carts.add(otherBuyer.id, fixture.seller.slug, {
+      productId: fixture.product.id,
+      quantity: 2,
+      expectedVersion: 0,
+    });
+
+    const [first, second] = await Promise.all([
+      checkout.create(fixture.buyer.id, key(), {
+        sellerSlug: fixture.seller.slug,
+        expectedCartVersion: firstPreview.version,
+        expectedPreviewFingerprint: firstPreview.previewFingerprint,
+      }),
+      checkout.create(otherBuyer.id, key(), {
+        sellerSlug: fixture.seller.slug,
+        expectedCartVersion: secondPreview.version,
+        expectedPreviewFingerprint: secondPreview.previewFingerprint,
+      }),
+    ]);
+
+    const orders = await prisma.order.findMany({
+      where: {
+        publicCode: {
+          in: [
+            (first as { orderCode: string }).orderCode,
+            (second as { orderCode: string }).orderCode,
+          ],
+        },
+      },
+      orderBy: { subtotalAmountMinor: 'asc' },
+    });
+    expect(orders).toHaveLength(2);
     expect(
-      await Promise.all([
-        prisma.ledgerTransaction.count(),
-        prisma.ledgerEntry.count(),
-        prisma.financialEvent.count(),
-        prisma.settlement.count(),
-        prisma.financialHold.count(),
-      ]),
-    ).toEqual([0, 0, 0, 0, 0]);
+      orders.map((order) => ({
+        policy: order.feePolicyVersionId,
+        rule: order.platformCommissionRuleId,
+        publicVersion: order.pricingPolicyVersion,
+        subtotal: order.subtotalAmountMinor,
+        fee: order.platformFeeAmountMinor,
+        total: order.totalAmountMinor,
+      })),
+    ).toEqual([
+      {
+        policy: policy.id,
+        rule: policy.rules[0].id,
+        publicVersion: policy.publicVersion,
+        subtotal: 1000n,
+        fee: 125n,
+        total: 1000n,
+      },
+      {
+        policy: policy.id,
+        rule: policy.rules[0].id,
+        publicVersion: policy.publicVersion,
+        subtotal: 2000n,
+        fee: 250n,
+        total: 2000n,
+      },
+    ]);
+  });
+
+  it('does not depend on PSP or ledger posting from CheckoutService', () => {
+    const source = readFileSync(join(__dirname, '../src/checkout/checkout.service.ts'), 'utf8');
+    expect(source).not.toContain('PaymentProviderPort');
+    expect(source).not.toContain('EfiPaymentProvider');
+    expect(source).not.toContain('createPayment');
+    expect(source).not.toContain('getPayment');
+    expect(source).not.toContain('cancelPayment');
+    expect(source).not.toContain('refundPayment');
+    expect(source).not.toContain('httpService');
+    expect(source).not.toContain('HttpService');
+    expect(source).not.toContain('FinancialLedgerService');
+    expect(source).not.toContain('.post(');
   });
 });
