@@ -12,7 +12,7 @@ O instante autoritativo é `Payment.paidAt`: ele deve ser anterior ou igual a `O
 
 ## Estoque e atomicidade
 
-O checkout reserva disponibilidade sem reduzir o estoque físico. A ativação transforma cada reserva necessária de `ACTIVE` em `CONSUMED` e reduz, condicionalmente, `Product.stock` para itens `NORMAL` ou `ProductVariant.stock` para itens `DYNAMIC`. Serviços `FIXED` não usam reserva.
+O checkout reserva disponibilidade sem reduzir o estoque físico. A ativação só aceita uma reserva `ACTIVE` cujos metadados `releasedAt`, `consumedAt` e `releaseReason` estejam nulos; qualquer divergência segue para reconciliação sem correção silenciosa. A ativação transforma cada reserva válida em `CONSUMED` e reduz, condicionalmente, `Product.stock` para itens `NORMAL` ou `ProductVariant.stock` para itens `DYNAMIC`. Serviços `FIXED` não usam reserva.
 
 Checkout e consumo compartilham os advisory locks `checkout-stock:product:<id>` e `checkout-stock:variant:<id>`, adquiridos em ordem determinística. Ativação, cancelamento e expiração compartilham `order:<id>`. Falta, divergência, pagamento tardio, reserva inválida ou estoque insuficiente falham de forma fechada e geram uma `ReconciliationIssue` referenciada por `OrderActivation`.
 

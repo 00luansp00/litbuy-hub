@@ -28,15 +28,17 @@ export class PaidOrderActivationService {
     const id = orderId ?? (await this.nextCandidate());
     if (!id) return false;
     try {
-      return await this.prisma.$transaction((tx) => this.activate(tx, id));
+      await this.prisma.$transaction((tx) => this.activate(tx, id));
     } catch (error) {
       if (!(error instanceof ActivationRollback)) throw error;
       await this.prisma.$transaction(async (tx) => {
         await acquireAdvisoryTransactionLock(tx, `order:${id}`);
         await this.ensureIssue(id, error.failure, tx);
       });
-      return true;
     }
+    // A candidate was claimed even when another worker completed it while this worker waited.
+    // processBatch must only stop when candidate selection itself returns no row.
+    return true;
   }
 
   async processBatch(limit = 25): Promise<number> {
@@ -125,7 +127,8 @@ export class PaidOrderActivationService {
       FROM "OrderItem" i WHERE i."orderId" = ${orderId}::uuid ORDER BY i."id" FOR UPDATE
     `;
     const reservations = await tx.$queryRaw<LockedReservation[]>`
-      SELECT "id", "orderItemId", "productId", "productVariantId", "quantity", "status", "expiresAt"
+      SELECT "id", "orderItemId", "productId", "productVariantId", "quantity", "status", "expiresAt",
+             "releasedAt", "consumedAt", "releaseReason"
       FROM "InventoryReservation" WHERE "orderId" = ${orderId}::uuid ORDER BY "id" FOR UPDATE
     `;
     const required = items.filter((item) => item.productModel !== 'SERVICE');
@@ -156,6 +159,8 @@ export class PaidOrderActivationService {
             : 'STATUS_MISMATCH',
           'RESERVATION_NOT_ACTIVE',
         );
+      if (reservation.releasedAt || reservation.consumedAt || reservation.releaseReason)
+        return this.reject(tx, orderId, 'STATUS_MISMATCH', 'RESERVATION_METADATA_MISMATCH');
       if (payment.paidAt > reservation.expiresAt)
         return this.reject(tx, orderId, 'LATE_PAYMENT', 'LATE_PAYMENT');
       consumptions.push({
@@ -302,4 +307,7 @@ type LockedReservation = {
   quantity: number;
   status: InventoryReservationStatus;
   expiresAt: Date;
+  releasedAt: Date | null;
+  consumedAt: Date | null;
+  releaseReason: string | null;
 };
