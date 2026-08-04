@@ -1,5 +1,7 @@
 # Ativação de pedidos pagos
 
+> **Fronteira da comissão:** o checkout já congela política, regra e valor da comissão no `Order`, mas a ativação paga ainda não lança essa comissão no ledger. O reconhecimento de `PROVIDER_CLEARING`, `SELLER_PENDING` e `PLATFORM_COMMISSION` pertence ao próximo incremento e não deve recalcular o snapshot.
+
 Este incremento aplica exclusivamente a verdade financeira já persistida pelo backend:
 
 `Payment PAID` → worker de ativação → `Order ACTIVE` → reservas `CONSUMED` → redução do estoque físico → `OrderEvent` e outbox transacionais.

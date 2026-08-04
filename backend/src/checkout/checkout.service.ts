@@ -24,6 +24,8 @@ import type { ParsedIdempotencyKey } from '../commerce/idempotency-key';
 import { orderItemSnapshot } from './order-snapshot';
 import { generateOrderCode } from '../orders/order-code';
 import type { CreateCheckoutDto } from './checkout.dto';
+import { calculateFee, resolveFeeRule } from '../financial/fee-engine';
+import { FinancialDomainError } from '../financial/financial.errors';
 
 type Tx = Prisma.TransactionClient;
 type CheckoutCartItem = CartResponsePayload['items'][number];
@@ -142,6 +144,7 @@ export class CheckoutService {
         (sum, x) => sum + x.selection.unitMinor * BigInt(x.item.quantity),
         0n,
       );
+      const commission = await this.resolvePlatformCommission(tx, subtotal);
       const expiresAt = new Date(Date.now() + this.ttlMinutes() * 60_000);
       let order: Order | undefined;
       for (let attempt = 0; attempt < 5; attempt++) {
@@ -155,7 +158,11 @@ export class CheckoutService {
               buyerUserId: userId,
               sellerProfileId: seller.id,
               subtotalAmountMinor: subtotal,
+              platformFeeAmountMinor: commission.amountMinor,
               totalAmountMinor: subtotal,
+              feePolicyVersionId: commission.policy.id,
+              platformCommissionRuleId: commission.rule.id,
+              pricingPolicyVersion: commission.policy.publicVersion,
               expiresAt,
             },
           });
@@ -182,6 +189,7 @@ export class CheckoutService {
               { id: seller.id, slug: seller.slug, storeName: seller.storeName },
               selection.unitMinor,
               item.quantity,
+              commission.policy.publicVersion,
             ),
           },
         });
@@ -216,6 +224,10 @@ export class CheckoutService {
         orderCode: order.publicCode,
         cartId: cart.id,
         version: 1,
+        feePolicyVersionId: commission.policy.id,
+        pricingPolicyVersion: commission.policy.publicVersion,
+        platformCommissionRuleId: commission.rule.id,
+        platformFeeAmountMinor: commission.amountMinor.toString(),
       });
       if (reservations.length)
         await this.event(tx, order.id, OrderEventType.INVENTORY_RESERVED, userId, {
@@ -296,6 +308,55 @@ export class CheckoutService {
   private ttlMinutes() {
     const value = Number(process.env.CHECKOUT_RESERVATION_TTL_MINUTES ?? '15');
     return Number.isInteger(value) && value > 0 ? value : 15;
+  }
+  private async resolvePlatformCommission(tx: Tx, subtotal: bigint) {
+    const [{ pricingAt }] = await tx.$queryRaw<Array<{ pricingAt: Date }>>`
+      SELECT transaction_timestamp() AS "pricingAt"
+    `;
+    const policies = await tx.feePolicyVersion.findMany({
+      where: {
+        status: 'ACTIVE',
+        effectiveFrom: { lte: pricingAt },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gt: pricingAt } }],
+      },
+      select: { id: true },
+    });
+    if (policies.length === 0) this.fail('FEE_POLICY_NOT_FOUND', 422);
+    if (policies.length !== 1) this.fail('FEE_POLICY_AMBIGUOUS', 422);
+    const locked = await tx.$queryRaw<
+      Array<{
+        id: string;
+        publicVersion: number;
+        status: string;
+        effectiveFrom: Date;
+        effectiveTo: Date | null;
+      }>
+    >`
+      SELECT "id", "publicVersion", "status", "effectiveFrom", "effectiveTo"
+      FROM "FeePolicyVersion"
+      WHERE "id" = ${policies[0].id}::uuid
+      FOR SHARE
+    `;
+    const policy = locked[0];
+    if (
+      !policy ||
+      policy.status !== 'ACTIVE' ||
+      policy.effectiveFrom > pricingAt ||
+      (policy.effectiveTo !== null && pricingAt >= policy.effectiveTo)
+    )
+      this.fail('FEE_POLICY_NOT_FOUND', 422);
+    const rules = await tx.feeRule.findMany({ where: { policyVersionId: policy.id } });
+    try {
+      const rule = resolveFeeRule(rules, 'PLATFORM_COMMISSION', { partyCharged: 'SELLER' });
+      if (!rule) this.fail('PLATFORM_COMMISSION_RULE_NOT_FOUND', 422);
+      const amountMinor = calculateFee(subtotal, rule);
+      if (amountMinor < 0n || amountMinor > subtotal)
+        this.fail('PLATFORM_COMMISSION_EXCEEDS_ORDER_TOTAL', 422);
+      return { policy, rule, amountMinor };
+    } catch (error) {
+      if (error instanceof FinancialDomainError) this.fail(error.code, 422);
+      throw error;
+    }
   }
   private isUniqueViolation(error: unknown): error is Prisma.PrismaClientKnownRequestError {
     return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
