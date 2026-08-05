@@ -3,10 +3,13 @@ import { Injectable } from '@nestjs/common';
 import {
   FeeParty,
   FeeRuleCategory,
+  LedgerTransaction,
   OrderStatus,
   PaymentStatus,
+  Prisma,
   ReconciliationIssueType,
 } from '@prisma/client';
+import { acquireAdvisoryTransactionLock } from '../database/advisory-lock';
 import { PrismaService } from '../database/prisma.service';
 import { FinancialDomainError } from './financial.errors';
 import { FinancialLedgerService, PostRequest } from './financial-ledger.service';
@@ -15,6 +18,7 @@ const LEDGER_TYPE = 'SALE_RECOGNIZED';
 const LEDGER_REFERENCE_TYPE = 'OrderSale';
 const RECONCILIATION_REFERENCE_TYPE = 'SaleFinancialRecognition';
 
+type CandidateResult = 'NO_CANDIDATE' | 'ALREADY_HANDLED' | 'PROCESSED';
 type Failure = { type: ReconciliationIssueType; code: string };
 
 type OrderSnapshot = {
@@ -56,39 +60,45 @@ export class SaleFinancialRecognitionService {
   ) {}
 
   async processOne(orderId?: string): Promise<boolean> {
-    const id = orderId ?? (await this.nextCandidate());
-    if (!id) return false;
-    return this.processOrder(id);
+    return (await this.processCandidate(orderId)) !== 'NO_CANDIDATE';
   }
 
   async processBatch(limit = 25): Promise<number> {
     let processed = 0;
     const bounded = Math.max(1, Math.min(limit, 100));
     while (processed < bounded) {
-      const id = await this.nextCandidate();
-      if (!id) break;
-      if (await this.processOrder(id)) processed += 1;
+      const result = await this.processCandidate();
+      if (result === 'NO_CANDIDATE') break;
+      if (result === 'PROCESSED') processed += 1;
     }
     return processed;
   }
 
-  private async processOrder(orderId: string): Promise<boolean> {
-    const existing = await this.prisma.ledgerTransaction.findFirst({
-      where: { type: LEDGER_TYPE, referenceType: LEDGER_REFERENCE_TYPE, referenceId: orderId },
-      select: { id: true },
-    });
-    if (existing) return true;
+  private async processCandidate(orderId?: string): Promise<CandidateResult> {
+    const id = orderId ?? (await this.nextCandidate());
+    if (!id) return 'NO_CANDIDATE';
+    return this.processOrder(id);
+  }
+
+  private async processOrder(orderId: string): Promise<CandidateResult> {
+    const expectedKey = this.recognitionIdempotencyKey(orderId);
+    const existing = await this.findExistingRecognitions(orderId);
+    const existingState = this.validateExistingRecognition(orderId, expectedKey, existing);
+    if (existingState === 'MISMATCH') {
+      await this.ensureIssue(orderId, { type: 'OTHER', code: 'SALE_LEDGER_IDEMPOTENCY_MISMATCH' });
+      return 'PROCESSED';
+    }
 
     const validation = await this.validate(orderId);
     if ('failure' in validation) {
       await this.ensureIssue(orderId, validation.failure);
-      return true;
+      return 'PROCESSED';
     }
 
-    const request = await this.buildPostRequest(validation.order, validation.payment);
+    const request = await this.buildPostRequest(validation.order, validation.payment, expectedKey);
     try {
-      await this.ledger.post(request);
-      return true;
+      const outcome = await this.ledger.postWithOutcome(request);
+      return outcome.created ? 'PROCESSED' : 'ALREADY_HANDLED';
     } catch (error) {
       if (error instanceof FinancialDomainError) {
         if (error.code === 'FINANCIAL_CONCURRENCY_CONFLICT') throw error;
@@ -100,8 +110,15 @@ export class SaleFinancialRecognitionService {
               : undefined;
         if (code) {
           await this.ensureIssue(orderId, { type: 'OTHER', code });
-          return true;
+          return 'PROCESSED';
         }
+      }
+      if (this.isUniqueSaleRecognitionConflict(error)) {
+        await this.ensureIssue(orderId, {
+          type: 'OTHER',
+          code: 'SALE_LEDGER_IDEMPOTENCY_MISMATCH',
+        });
+        return 'PROCESSED';
       }
       throw error;
     }
@@ -133,6 +150,32 @@ export class SaleFinancialRecognitionService {
       LIMIT 1
     `;
     return rows[0]?.id ?? null;
+  }
+
+  private async findExistingRecognitions(orderId: string) {
+    return this.prisma.ledgerTransaction.findMany({
+      where: { type: LEDGER_TYPE, referenceType: LEDGER_REFERENCE_TYPE, referenceId: orderId },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  private validateExistingRecognition(
+    orderId: string,
+    expectedKey: string,
+    existing: LedgerTransaction[],
+  ): 'NONE' | 'EXPECTED' | 'MISMATCH' {
+    if (existing.length === 0) return 'NONE';
+    if (existing.length !== 1) return 'MISMATCH';
+    const transaction = existing[0];
+    if (
+      transaction.idempotencyKeyHash !== expectedKey ||
+      transaction.currency !== 'BRL' ||
+      transaction.type !== LEDGER_TYPE ||
+      transaction.referenceType !== LEDGER_REFERENCE_TYPE ||
+      transaction.referenceId !== orderId
+    )
+      return 'MISMATCH';
+    return 'EXPECTED';
   }
 
   private async validate(
@@ -189,13 +232,11 @@ export class SaleFinancialRecognitionService {
           },
         };
       const attempt = attempts[0];
-      if (
-        attempt.paymentId !== payment.id ||
-        attempt.currency !== 'BRL' ||
-        attempt.amountMinor !== payment.amountMinor ||
-        !attempt.providerCode.trim() ||
-        !attempt.externalPaymentId
-      )
+      if (attempt.paymentId !== payment.id)
+        return { failure: { type: 'STATUS_MISMATCH', code: 'SUCCEEDED_ATTEMPT_MISMATCH' } };
+      if (attempt.currency !== 'BRL' || attempt.amountMinor !== payment.amountMinor)
+        return { failure: { type: 'AMOUNT_MISMATCH', code: 'SUCCEEDED_ATTEMPT_MISMATCH' } };
+      if (!attempt.providerCode.trim() || !attempt.externalPaymentId)
         return { failure: { type: 'STATUS_MISMATCH', code: 'SUCCEEDED_ATTEMPT_MISMATCH' } };
 
       const policy = await tx.feePolicyVersion.findUnique({
@@ -224,6 +265,7 @@ export class SaleFinancialRecognitionService {
   private async buildPostRequest(
     order: OrderSnapshot,
     payment: PaymentSnapshot,
+    idempotencyKeyHash: string,
   ): Promise<PostRequest> {
     const [systemAccounts, platformAccounts, sellerAccounts] = await Promise.all([
       this.ledger.ensureSystemLedgerAccounts(),
@@ -239,9 +281,7 @@ export class SaleFinancialRecognitionService {
     return {
       type: LEDGER_TYPE,
       currency: 'BRL',
-      idempotencyKeyHash: createHash('sha256')
-        .update(`sale-recognition:v1:${order.id}`)
-        .digest('hex'),
+      idempotencyKeyHash,
       referenceType: LEDGER_REFERENCE_TYPE,
       referenceId: order.id,
       emitOutbox: true,
@@ -280,22 +320,33 @@ export class SaleFinancialRecognitionService {
     };
   }
 
+  private recognitionIdempotencyKey(orderId: string): string {
+    return createHash('sha256').update(`sale-recognition:v1:${orderId}`).digest('hex');
+  }
+
   private async ensureIssue(orderId: string, failure: Failure) {
-    const existing = await this.prisma.reconciliationIssue.findFirst({
-      where: {
-        referenceType: RECONCILIATION_REFERENCE_TYPE,
-        referenceId: orderId,
-        status: { in: ['OPEN', 'INVESTIGATING'] },
-      },
-    });
-    if (!existing)
-      await this.prisma.reconciliationIssue.create({
-        data: {
-          type: failure.type,
+    await this.prisma.$transaction(async (tx) => {
+      await acquireAdvisoryTransactionLock(tx, `financial:sale-recognition-issue:${orderId}`);
+      const existing = await tx.reconciliationIssue.findFirst({
+        where: {
           referenceType: RECONCILIATION_REFERENCE_TYPE,
           referenceId: orderId,
-          details: { errorCode: failure.code },
+          status: { in: ['OPEN', 'INVESTIGATING'] },
         },
       });
+      if (!existing)
+        await tx.reconciliationIssue.create({
+          data: {
+            type: failure.type,
+            referenceType: RECONCILIATION_REFERENCE_TYPE,
+            referenceId: orderId,
+            details: { errorCode: failure.code },
+          },
+        });
+    });
+  }
+
+  private isUniqueSaleRecognitionConflict(error: unknown): boolean {
+    return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
   }
 }
