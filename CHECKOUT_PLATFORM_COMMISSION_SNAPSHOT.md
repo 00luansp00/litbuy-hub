@@ -16,6 +16,8 @@ O cálculo permanece em `bigint`, BRL e basis points inteiros com arredondamento
 
 Todo pedido novo congela `feePolicyVersionId`, `platformCommissionRuleId`, `pricingPolicyVersion` (o `publicVersion` da política) e `platformFeeAmountMinor`. Cada `OrderItem` congela o mesmo `pricingPolicyVersion`; não existe fee por item ou rateio nesta etapa. As referências são opcionais no schema apenas para compatibilidade com pedidos legados e usam exclusão restrita.
 
+O PostgreSQL protege esses quatro campos do snapshot contra `UPDATE` por trigger `BEFORE UPDATE` em `Order`, com comparação `IS DISTINCT FROM` e erro `ORDER_PRICING_SNAPSHOT_IMMUTABLE`. A compatibilidade legada significa aceitar linhas que já nasceram sem `feePolicyVersionId` e sem `platformCommissionRuleId`; ela não permite transformar um pedido novo em legado apagando o snapshot em runtime. Transições normais de lifecycle continuam permitidas quando não alteram os campos congelados.
+
 Pedidos antigos não são recalculados. Replay idempotente retorna o resultado já persistido antes de consultar uma política nova, portanto aposentadoria ou publicação posterior não altera versão, regra ou valor do pedido original.
 
 ## Limite contábil

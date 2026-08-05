@@ -292,7 +292,62 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
     expect(await financialCounts()).toEqual(beforeFinancial);
   });
 
-  it('enforces policy/rule snapshot coherence while preserving legacy null snapshots', async () => {
+  async function expectImmutable(promise: Promise<unknown>) {
+    await expect(promise).rejects.toMatchObject({
+      message: expect.stringContaining('ORDER_PRICING_SNAPSHOT_IMMUTABLE'),
+    });
+  }
+
+  async function createCartShell(fixture: Awaited<ReturnType<typeof commerceFixture>>) {
+    const buyer = await prisma.user.create({
+      data: {
+        email: `legacy-buyer-${crypto.randomUUID()}@test.local`,
+        birthDate: new Date('2000-01-01'),
+        status: 'ACTIVE',
+        termsVersion: 't',
+        termsAcceptedAt: new Date(),
+        privacyVersion: 'p',
+        privacyAcceptedAt: new Date(),
+        roleAssignments: { create: { role: 'BUYER' } },
+      },
+    });
+    return prisma.cart.create({
+      data: { buyerUserId: buyer.id, sellerProfileId: fixture.seller.id },
+    });
+  }
+
+  async function createOrderShell(
+    fixture: Awaited<ReturnType<typeof commerceFixture>>,
+    cartId: string,
+    cartVersion: number,
+    data: {
+      feePolicyVersionId?: string | null;
+      platformCommissionRuleId?: string | null;
+      pricingPolicyVersion?: number;
+      platformFeeAmountMinor?: bigint;
+    } = {},
+  ) {
+    return prisma.order.create({
+      data: {
+        publicCode: `legacy-${crypto.randomUUID()}`,
+        sourceCartId: cartId,
+        sourceCartVersion: cartVersion,
+        buyerUserId: fixture.buyer.id,
+        sellerProfileId: fixture.seller.id,
+        currency: 'BRL',
+        subtotalAmountMinor: 1000n,
+        discountAmountMinor: 0n,
+        platformFeeAmountMinor: data.platformFeeAmountMinor ?? 0n,
+        totalAmountMinor: 1000n,
+        pricingPolicyVersion: data.pricingPolicyVersion ?? 1,
+        feePolicyVersionId: data.feePolicyVersionId,
+        platformCommissionRuleId: data.platformCommissionRuleId,
+        expiresAt: new Date(Date.now() + 900_000),
+      },
+    });
+  }
+
+  it('makes checkout pricing snapshots immutable while preserving normal lifecycle updates', async () => {
     const f = await ready({ fixedAmountMinor: 125n });
     const result = await checkout.create(f.buyer.id, key(), f.dto);
     const order = await prisma.order.findUniqueOrThrow({
@@ -304,24 +359,115 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
       fixedAmountMinor: 0n,
     });
 
-    await expect(
+    await expectImmutable(
+      prisma.order.update({ where: { id: order.id }, data: { platformFeeAmountMinor: 126n } }),
+    );
+    await expectImmutable(
+      prisma.order.update({ where: { id: order.id }, data: { feePolicyVersionId: other.id } }),
+    );
+    await expectImmutable(
       prisma.order.update({
         where: { id: order.id },
         data: { platformCommissionRuleId: other.rules[0].id },
       }),
-    ).rejects.toBeDefined();
-    await expect(
-      prisma.order.update({ where: { id: order.id }, data: { platformCommissionRuleId: null } }),
-    ).rejects.toBeDefined();
-    await expect(
-      prisma.order.update({ where: { id: order.id }, data: { feePolicyVersionId: null } }),
-    ).rejects.toBeDefined();
-    await expect(
+    );
+    await expectImmutable(
+      prisma.order.update({ where: { id: order.id }, data: { pricingPolicyVersion: 999 } }),
+    );
+    await expectImmutable(
       prisma.order.update({
         where: { id: order.id },
         data: { feePolicyVersionId: null, platformCommissionRuleId: null },
       }),
-    ).resolves.toMatchObject({ feePolicyVersionId: null, platformCommissionRuleId: null });
+    );
+
+    await expect(
+      prisma.order.update({
+        where: { id: order.id },
+        data: {
+          status: 'CANCELLED',
+          paymentStatus: 'EXPIRED',
+          fulfillmentStatus: 'NOT_AVAILABLE',
+          disputeStatus: 'NONE',
+          version: { increment: 1 },
+          cancelledAt: new Date(),
+        },
+      }),
+    ).resolves.toMatchObject({
+      id: order.id,
+      feePolicyVersionId: f.policy.id,
+      platformCommissionRuleId: f.policy.rules[0].id,
+      pricingPolicyVersion: f.policy.publicVersion,
+      platformFeeAmountMinor: 125n,
+      status: 'CANCELLED',
+    });
+  });
+
+  it('enforces policy/rule snapshot coherence while preserving true legacy null snapshots', async () => {
+    const fixture = await commerceFixture(prisma, 'NORMAL', undefined, 5, false);
+    const policyA = await publishPlatformCommissionPolicy(prisma, fixture.sellerUser.id, {
+      fixedAmountMinor: 125n,
+    });
+    const policyB = await publishPlatformCommissionPolicy(prisma, fixture.sellerUser.id, {
+      publicVersion: 2,
+      status: 'DRAFT',
+      fixedAmountMinor: 0n,
+    });
+
+    const legacyPreview = await createCartShell(fixture);
+    const legacy = await createOrderShell(fixture, legacyPreview.id, legacyPreview.version, {
+      feePolicyVersionId: null,
+      platformCommissionRuleId: null,
+    });
+    await expect(
+      prisma.order.update({
+        where: { id: legacy.id },
+        data: { status: 'CANCELLED', version: { increment: 1 }, cancelledAt: new Date() },
+      }),
+    ).resolves.toMatchObject({
+      id: legacy.id,
+      feePolicyVersionId: null,
+      platformCommissionRuleId: null,
+    });
+
+    const partialPolicyPreview = await createCartShell(fixture);
+    await expect(
+      createOrderShell(fixture, partialPolicyPreview.id, partialPolicyPreview.version, {
+        feePolicyVersionId: policyA.id,
+        platformCommissionRuleId: null,
+      }),
+    ).rejects.toBeDefined();
+
+    const partialRulePreview = await createCartShell(fixture);
+    await expect(
+      createOrderShell(fixture, partialRulePreview.id, partialRulePreview.version, {
+        feePolicyVersionId: null,
+        platformCommissionRuleId: policyA.rules[0].id,
+      }),
+    ).rejects.toBeDefined();
+
+    const mismatchPreview = await createCartShell(fixture);
+    await expect(
+      createOrderShell(fixture, mismatchPreview.id, mismatchPreview.version, {
+        feePolicyVersionId: policyA.id,
+        platformCommissionRuleId: policyB.rules[0].id,
+        pricingPolicyVersion: policyA.publicVersion,
+        platformFeeAmountMinor: 125n,
+      }),
+    ).rejects.toBeDefined();
+
+    const coherentPreview = await createCartShell(fixture);
+    await expect(
+      createOrderShell(fixture, coherentPreview.id, coherentPreview.version, {
+        feePolicyVersionId: policyA.id,
+        platformCommissionRuleId: policyA.rules[0].id,
+        pricingPolicyVersion: policyA.publicVersion,
+        platformFeeAmountMinor: 125n,
+      }),
+    ).resolves.toMatchObject({
+      feePolicyVersionId: policyA.id,
+      platformCommissionRuleId: policyA.rules[0].id,
+    });
   });
 
   it('runs concurrent checkouts with one coherent active policy snapshot', async () => {

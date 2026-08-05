@@ -34,3 +34,23 @@ ON DELETE RESTRICT ON UPDATE CASCADE,
 ADD CONSTRAINT "Order_platformCommissionRuleId_feePolicyVersionId_fkey"
 FOREIGN KEY ("platformCommissionRuleId", "feePolicyVersionId") REFERENCES "FeeRule"("id", "policyVersionId")
 ON DELETE RESTRICT ON UPDATE CASCADE;
+
+CREATE OR REPLACE FUNCTION prevent_order_pricing_snapshot_update()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF OLD."feePolicyVersionId" IS DISTINCT FROM NEW."feePolicyVersionId"
+    OR OLD."platformCommissionRuleId" IS DISTINCT FROM NEW."platformCommissionRuleId"
+    OR OLD."pricingPolicyVersion" IS DISTINCT FROM NEW."pricingPolicyVersion"
+    OR OLD."platformFeeAmountMinor" IS DISTINCT FROM NEW."platformFeeAmountMinor" THEN
+    RAISE EXCEPTION 'ORDER_PRICING_SNAPSHOT_IMMUTABLE'
+      USING ERRCODE = '55000';
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER "Order_pricing_snapshot_immutable"
+BEFORE UPDATE ON "Order"
+FOR EACH ROW
+EXECUTE FUNCTION prevent_order_pricing_snapshot_update();
