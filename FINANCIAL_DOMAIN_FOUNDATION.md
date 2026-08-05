@@ -29,3 +29,7 @@ Admin policy publication will require ADMIN, step-up/2FA, immutable audit actor/
 Published policy lifecycle updates are limited to the explicit DRAFT → SCHEDULED/ACTIVE/RETIRED, SCHEDULED → ACTIVE/RETIRED, and ACTIVE → RETIRED edges. Once a policy leaves DRAFT, its public version, effective interval, original author, creation timestamp, and all rules are immutable. Rule INSERT, UPDATE, and DELETE are accepted only while the parent remains DRAFT.
 
 Serializable financial posting retries the complete atomic transaction at most three times only for Prisma `P2034`; domain, constraint, and permanent errors are never retried. Refund persistence now correlates the authoritative Payment and Order, records a typed reason/requester (nullable for system initiation), and exposes explicit lifecycle timestamps.
+
+## PR #48 sale recognition
+
+`SaleFinancialRecognitionService` now recognizes paid and activated orders in the ledger using the immutable checkout pricing snapshot. It posts `SALE_RECOGNIZED` through `FinancialLedgerService.post()` only: debit `PROVIDER_CLEARING`, credit `SELLER_PENDING` when seller proceeds are positive, and credit `PLATFORM_COMMISSION` when commission is positive. No settlement, hold, PSP call, refund, chargeback, withdrawal, or seller release is introduced. See `SALE_FINANCIAL_RECOGNITION.md`.

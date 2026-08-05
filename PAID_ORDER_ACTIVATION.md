@@ -22,4 +22,4 @@ A alteração do pedido, decrementos, consumo das reservas, `ORDER_ACTIVATED`, `
 
 ## Fora do escopo
 
-`fulfillmentStatus` permanece `NOT_AVAILABLE`. Ledger, reconhecimento contábil, settlement, holds, comissão, entrega e demais etapas de fulfillment permanecem para incrementos futuros.
+`fulfillmentStatus` permanece `NOT_AVAILABLE`. A ativação permanece separada do ledger. Após o pedido estar `ACTIVE` e o pagamento `PAID`, `SaleFinancialRecognitionService` pode reconhecer contabilmente a venda em `SELLER_PENDING` e `PLATFORM_COMMISSION` sem alterar pedido, estoque, reservas ou fulfillment. Settlement, holds, entrega e demais etapas de fulfillment permanecem fora deste escopo. Consulte `SALE_FINANCIAL_RECOGNITION.md`.

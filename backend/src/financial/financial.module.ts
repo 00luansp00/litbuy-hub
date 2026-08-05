@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { DatabaseModule } from '../database/database.module';
 import { FinancialLedgerService } from './financial-ledger.service';
+import { SaleFinancialRecognitionService } from './sale-financial-recognition.service';
 import {
   PaymentOrchestrationService,
   PAYMENT_PROVIDER_PORT,
@@ -28,6 +29,7 @@ import {
   controllers: [ProviderNotificationController],
   providers: [
     FinancialLedgerService,
+    SaleFinancialRecognitionService,
     PaymentOrchestrationService,
     { provide: PAYMENT_PROVIDER_PORT, useFactory: () => new EfiPaymentProvider(readEfiConfig()) },
     {
@@ -56,6 +58,7 @@ import {
   ],
   exports: [
     FinancialLedgerService,
+    SaleFinancialRecognitionService,
     PaymentOrchestrationService,
     ProviderNotificationIngressService,
     ProviderNotificationInboxWorker,

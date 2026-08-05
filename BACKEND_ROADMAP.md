@@ -1,6 +1,6 @@
 # BACKEND_ROADMAP.md — LIT Buy
 
-> **PR #47:** checkout agora resolve uma política financeira ativa e congela a comissão da plataforma no pedido e a versão de pricing nos itens. Ledger, clearing, saldo pendente do seller e reconhecimento da receita da plataforma continuam no próximo incremento.
+> **PR #48:** vendas com pedido `ACTIVE`, pagamento `PAID` e snapshot financeiro imutável agora são reconhecidas no ledger interno via `SALE_RECOGNIZED`: debitam `PROVIDER_CLEARING` e creditam `SELLER_PENDING`/`PLATFORM_COMMISSION`. O seller permanece pendente; sem settlement, hold, saque, PSP, fulfillment, refund ou chargeback.
 
 > **Contrato comercial vigente:** `COMMERCE_ARCHITECTURE.md` é a fonte autoritativa. O conteúdo comercial histórico abaixo é preliminar ou substituído quando divergir; pagamentos e ledger não estão implementados, e nenhum gateway foi escolhido.
 

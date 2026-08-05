@@ -22,4 +22,4 @@ Pedidos antigos não são recalculados. Replay idempotente retorna o resultado j
 
 ## Limite contábil
 
-Esta entrega não cria `LedgerTransaction`, `LedgerEntry`, `FinancialEvent`, settlement, hold, conta ou integração PSP. O `ORDER_CREATED` comercial continua sendo o evento do checkout. O próximo incremento reconhecerá contabilmente o fluxo `PROVIDER_CLEARING -> SELLER_PENDING -> PLATFORM_COMMISSION` após pagamento confirmado.
+Esta entrega não cria `LedgerTransaction`, `LedgerEntry`, `FinancialEvent`, settlement, hold, conta ou integração PSP. O `ORDER_CREATED` comercial continua sendo o evento do checkout. O incremento seguinte agora reconhece contabilmente vendas pagas e ativadas a partir desse snapshot, sem recalcular comissão e sem exigir que a política histórica continue `ACTIVE`. Consulte `SALE_FINANCIAL_RECOGNITION.md`.
