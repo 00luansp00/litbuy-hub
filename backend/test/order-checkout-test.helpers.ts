@@ -2,6 +2,7 @@ import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import type { AuthMailer } from '../src/auth/auth.service';
 import type { PrismaService } from '../src/database/prisma.service';
+import type { Prisma } from '@prisma/client';
 
 export async function createActor(
   app: INestApplication,
@@ -47,11 +48,73 @@ export const authHeaders = (actor: Awaited<ReturnType<typeof createActor>>, csrf
   ...(csrf ? { 'X-CSRF-Token': actor.csrf } : {}),
 });
 
+export async function publishPlatformCommissionPolicy(
+  prisma: PrismaService,
+  createdByUserId: string,
+  options: {
+    publicVersion?: number;
+    formula?: 'FIXED' | 'PERCENT_BPS' | 'PERCENT_BPS_PLUS_FIXED';
+    percentBps?: number | null;
+    fixedAmountMinor?: bigint | null;
+    minimumAmountMinor?: bigint | null;
+    maximumAmountMinor?: bigint | null;
+    status?: 'DRAFT' | 'SCHEDULED' | 'ACTIVE' | 'RETIRED';
+    effectiveFrom?: Date;
+    effectiveTo?: Date | null;
+    rule?: Partial<Prisma.FeeRuleUncheckedCreateInput>;
+    additionalRules?: Array<Partial<Prisma.FeeRuleUncheckedCreateInput>>;
+  } = {},
+) {
+  const formula = options.formula ?? 'FIXED';
+  return prisma.$transaction(async (tx) => {
+    const policy = await tx.feePolicyVersion.create({
+      data: {
+        publicVersion: options.publicVersion ?? 1,
+        status: 'DRAFT',
+        effectiveFrom: options.effectiveFrom ?? new Date(Date.now() - 60_000),
+        effectiveTo: options.effectiveTo,
+        createdByUserId,
+        publishedByUserId: createdByUserId,
+        publishedAt: new Date(),
+        rules: {
+          create: [
+            {
+              code: `platform-commission-${crypto.randomUUID()}`,
+              category: 'PLATFORM_COMMISSION',
+              partyCharged: 'SELLER',
+              formula,
+              percentBps: options.percentBps ?? (formula === 'FIXED' ? null : 0),
+              fixedAmountMinor: options.fixedAmountMinor ?? (formula === 'PERCENT_BPS' ? null : 0n),
+              minimumAmountMinor: options.minimumAmountMinor,
+              maximumAmountMinor: options.maximumAmountMinor,
+              ...options.rule,
+            },
+            ...(options.additionalRules ?? []).map((rule) => ({
+              code: `platform-commission-${crypto.randomUUID()}`,
+              category: 'PLATFORM_COMMISSION' as const,
+              partyCharged: 'SELLER' as const,
+              formula: 'FIXED' as const,
+              fixedAmountMinor: 0n,
+              ...rule,
+            })),
+          ],
+        },
+      },
+    });
+    return tx.feePolicyVersion.update({
+      where: { id: policy.id },
+      data: { status: options.status ?? 'ACTIVE' },
+      include: { rules: true },
+    });
+  });
+}
+
 export async function commerceFixture(
   prisma: PrismaService,
   model: 'NORMAL' | 'DYNAMIC' | 'SERVICE' = 'NORMAL',
   pricingType?: 'FIXED' | 'QUOTE',
   stock = 5,
+  withZeroCommissionPolicy = true,
 ) {
   const suffix = crypto.randomUUID();
   const buyer = await prisma.user.create({
@@ -80,6 +143,11 @@ export async function commerceFixture(
   const seller = await prisma.sellerProfile.create({
     data: { userId: sellerUser.id, storeName: 'Snapshot Store', slug: `store-${suffix}` },
   });
+  if (
+    withZeroCommissionPolicy &&
+    (await prisma.feePolicyVersion.count({ where: { status: 'ACTIVE' } })) === 0
+  )
+    await publishPlatformCommissionPolicy(prisma, sellerUser.id);
   const category = await prisma.catalogCategory.create({
     data: { name: 'Games', slug: `games-${suffix}` },
   });

@@ -22,7 +22,7 @@ describe('Financial domain with real PostgreSQL', () => {
   });
   beforeEach(async () => {
     await prisma.$executeRawUnsafe('TRUNCATE TABLE "User", "CatalogCategory" CASCADE');
-    fixture = await commerceFixture(prisma);
+    fixture = await commerceFixture(prisma, 'NORMAL', undefined, 5, false);
     [accounts, system] = await Promise.all([
       ledger.ensureSellerLedgerAccounts(fixture.seller.id),
       ledger.ensureSystemLedgerAccounts(),

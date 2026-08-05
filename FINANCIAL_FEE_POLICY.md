@@ -1,5 +1,7 @@
 # Versioned financial fee policy
 
+> **Integração de checkout (PR #47):** a comissão geral `PLATFORM_COMMISSION`, cobrada do `SELLER`, agora é resolvida e congelada transacionalmente no pedido. Ausência de política efetiva ou regra aplicável falha fechada; zero exige regra explícita. Consulte `CHECKOUT_PLATFORM_COMMISSION_SNAPSHOT.md`. O reconhecimento no ledger permanece fora deste incremento.
+
 `FeePolicyVersion` and typed `FeeRule` make future administration code-independent without allowing executable JSON/scripts. Drafts alone are editable. Scheduled/active/retired versions and their rules are database-protected from mutation; overlapping scheduled/active effective intervals are rejected. Resolution at a transaction instant must return exactly one version, whose calculated values are snapshotted on the future operation. Old Orders, Payments, ledger postings, commissions, and Withdrawals are never recalculated.
 
 Rules support fixed minor units, integer basis points, and basis points plus fixed, with integer min/max. Typed qualifiers cover payment method and installments, seller level/plan, promotion tier, withdrawal speed, product type, and charged party. Categories cover platform commission, buyer service fee/benefit, payment/card/installment/Pix/boleto charges, promotion, LIT-MAX, seller adjustments, and withdrawals. No production percentage or plan price is defined here.

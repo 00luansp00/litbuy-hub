@@ -1,5 +1,7 @@
 # BACKEND_ROADMAP.md — LIT Buy
 
+> **PR #47:** checkout agora resolve uma política financeira ativa e congela a comissão da plataforma no pedido e a versão de pricing nos itens. Ledger, clearing, saldo pendente do seller e reconhecimento da receita da plataforma continuam no próximo incremento.
+
 > **Contrato comercial vigente:** `COMMERCE_ARCHITECTURE.md` é a fonte autoritativa. O conteúdo comercial histórico abaixo é preliminar ou substituído quando divergir; pagamentos e ledger não estão implementados, e nenhum gateway foi escolhido.
 
 > Concluída a fundação isolada de dados locais determinísticos para PostgreSQL e MinIO; ela não adiciona endpoints nem altera lifecycle.

@@ -5,6 +5,7 @@ export function orderItemSnapshot(
   seller: { id: string; slug: string; storeName: string },
   unit: bigint,
   quantity: number,
+  pricingPolicyVersion: number,
 ) {
   return {
     sourceProductId: product.id,
@@ -25,6 +26,6 @@ export function orderItemSnapshot(
     currency: 'BRL',
     serviceEstimatedDelivery: product.serviceDetails?.estimatedDelivery ?? null,
     serviceBuyerRequirements: product.serviceDetails?.buyerRequirements ?? null,
-    pricingPolicyVersion: 1,
+    pricingPolicyVersion,
   };
 }
