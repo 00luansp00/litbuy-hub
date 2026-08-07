@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { PrismaClient } from '@prisma/client';
 import { Test } from '@nestjs/testing';
 import { AppModule } from '../src/app.module';
 import { CartsService } from '../src/carts/carts.service';
@@ -25,9 +26,13 @@ describe('SaleFinancialRecognitionService with real PostgreSQL', () => {
   let activation: PaidOrderActivationService;
   let recognition: SaleFinancialRecognitionService;
   let ledger: FinancialLedgerService;
+  let cleanupPrisma: PrismaClient;
   let publicVersion = 1;
 
+  const clean = () => cleanupPrisma.$executeRawUnsafe(cleanupSql);
+
   beforeAll(async () => {
+    cleanupPrisma = new PrismaClient();
     app = await Test.createTestingModule({ imports: [AppModule] }).compile();
     prisma = app.get(PrismaService);
     carts = app.get(CartsService);
@@ -36,9 +41,15 @@ describe('SaleFinancialRecognitionService with real PostgreSQL', () => {
     recognition = app.get(SaleFinancialRecognitionService);
     ledger = app.get(FinancialLedgerService);
   });
-  beforeEach(() => prisma.$executeRawUnsafe(cleanupSql));
-  afterEach(() => prisma.$executeRawUnsafe(cleanupSql));
-  afterAll(() => app.close());
+  beforeEach(() => clean());
+  afterAll(async () => {
+    await app.close();
+    try {
+      await clean();
+    } finally {
+      await cleanupPrisma.$disconnect();
+    }
+  });
 
   async function activePaidOrder(
     options: { fee?: bigint; quantity?: number; stock?: number } = {},
@@ -272,7 +283,7 @@ describe('SaleFinancialRecognitionService with real PostgreSQL', () => {
     ).toBe(1);
   });
 
-  it('omits zero and full-fee entries correctly', async () => {
+  it('omits zero commission entries and credits all proceeds to seller pending', async () => {
     const zero = await activePaidOrder({ fee: 0n });
     await recognition.processOne(zero.order.id);
     expect(await ledger.getSellerFinancialBalance(zero.fixture.seller.id)).toMatchObject({
@@ -286,8 +297,9 @@ describe('SaleFinancialRecognitionService with real PostgreSQL', () => {
     expect(zeroEntries.some((entry) => entry.account.purpose === 'PLATFORM_COMMISSION')).toBe(
       false,
     );
+  });
 
-    await prisma.$executeRawUnsafe(cleanupSql);
+  it('omits seller pending when commission equals the order total', async () => {
     const full = await activePaidOrder({ fee: 1000n });
     await recognition.processOne(full.order.id);
     const fullEntries = await entriesFor(full.order.id);
@@ -329,8 +341,9 @@ describe('SaleFinancialRecognitionService with real PostgreSQL', () => {
       }),
     ).toBe(0);
     await expectSingleIssue(order.id, 'SALE_LEDGER_IDEMPOTENCY_MISMATCH');
+  });
 
-    await prisma.$executeRawUnsafe(cleanupSql);
+  it('opens reconciliation for SALE_RECOGNIZED with the same reference and unexpected key', async () => {
     const seeded = await activePaidOrder({ fee: 100n });
     const seededAccounts = await ledger.ensureSystemLedgerAccounts();
     const seededSellerAccounts = await ledger.ensureSellerLedgerAccounts(
