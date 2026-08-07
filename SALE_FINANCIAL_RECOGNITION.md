@@ -23,7 +23,7 @@ Legacy active/paid orders without the pricing snapshot fail closed with `ORDER_P
 
 ## Posting
 
-`SaleFinancialRecognitionService` delegates all posting to `FinancialLedgerService.post()` with `emitOutbox = true`. It does not write `LedgerTransaction` or `LedgerEntry` directly.
+`SaleFinancialRecognitionService` delegates posting to `FinancialLedgerService.postWithOutcome()` with `emitOutbox = true`. The outcome distinguishes a posting created by the current execution from an idempotent replay. `FinancialLedgerService.post()` remains the compatibility wrapper for existing consumers. The recognition service does not write `LedgerTransaction` or `LedgerEntry` directly.
 
 For a normal sale, the posting is:
 
@@ -44,6 +44,8 @@ The idempotency hash is deterministic: `sha256("sale-recognition:v1:" + order.id
 - `referenceId = Order.id`.
 
 A successful recognition creates exactly one `LedgerTransaction`, one `FinancialEvent`, and one `FinancialOutboxEvent`. Metadata stores safe identifiers and money values as decimal strings only.
+
+PostgreSQL also enforces at most one recognition per order through the partial unique index created by `backend/prisma/migrations/20260805160000_sale_recognition_unique_order/migration.sql`. The physical index `LedgerTransaction_sale_recognition_order_unique` (the `LedgerTransaction_sale_recognized_order_key` invariant) covers `referenceId` only when `type = 'SALE_RECOGNIZED'` and `referenceType = 'OrderSale'`.
 
 ## Reconciliation
 

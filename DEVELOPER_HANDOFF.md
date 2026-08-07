@@ -2,7 +2,7 @@
 
 ## PR #48 — reconhecimento financeiro de vendas ativadas
 
-Pedidos `ACTIVE` com pagamento `PAID` e snapshot financeiro imutável agora podem ser reconhecidos no ledger por `SaleFinancialRecognitionService`. O serviço usa somente verdade persistida, valida Payment/Attempt/snapshot, posta via `FinancialLedgerService.post()` com idempotência determinística e cria event/outbox financeiro; seller permanece em `SELLER_PENDING`. Não há PSP, Settlement, FinancialHold, saque, refund, chargeback, fulfillment ou frontend. Consulte `SALE_FINANCIAL_RECOGNITION.md`.
+Pedidos `ACTIVE` com pagamento `PAID` e snapshot financeiro imutável agora podem ser reconhecidos no ledger por `SaleFinancialRecognitionService`. O serviço usa somente verdade persistida, valida Payment/Attempt/snapshot, posta via `FinancialLedgerService.postWithOutcome()` com idempotência determinística e cria event/outbox financeiro; o outcome diferencia criação real de replay idempotente, enquanto `post()` permanece como wrapper compatível do ledger. O seller permanece em `SELLER_PENDING`. Não há PSP, Settlement, FinancialHold, saque, refund, chargeback, fulfillment ou frontend. Consulte `SALE_FINANCIAL_RECOGNITION.md`.
 
 ## PR #47 — snapshot versionado da comissão no checkout
 
