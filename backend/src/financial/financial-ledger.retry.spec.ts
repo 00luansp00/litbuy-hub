@@ -29,7 +29,7 @@ describe('FinancialLedgerService serialization retry', () => {
           clientVersion: 'test',
         }),
       )
-      .mockResolvedValueOnce(result);
+      .mockResolvedValueOnce({ transaction: result, created: true });
     const service = new FinancialLedgerService({ $transaction: transaction } as never);
     await expect(service.post(request)).resolves.toBe(result);
     expect(transaction).toHaveBeenCalledTimes(2);

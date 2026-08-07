@@ -48,6 +48,8 @@ export type PostRequest = {
   emitOutbox?: boolean;
   metadata?: Record<string, string | boolean | null>;
 };
+type PostedTransaction = Prisma.LedgerTransactionGetPayload<{ include: { entries: true } }>;
+export type PostOutcome = { transaction: PostedTransaction; created: boolean };
 @Injectable()
 export class FinancialLedgerService {
   constructor(private readonly prisma: PrismaService) {}
@@ -126,6 +128,10 @@ export class FinancialLedgerService {
     };
   }
   async post(request: PostRequest) {
+    return (await this.postWithOutcome(request)).transaction;
+  }
+
+  async postWithOutcome(request: PostRequest): Promise<PostOutcome> {
     if (
       request.currency !== 'BRL' ||
       request.entries.length < 2 ||
@@ -151,7 +157,7 @@ export class FinancialLedgerService {
             if (prior) {
               if (prior.requestHash !== requestHash)
                 throw new FinancialDomainError('IDEMPOTENCY_KEY_REUSED');
-              return prior;
+              return { transaction: prior, created: false };
             }
             const accountIds = [...new Set(request.entries.map((e) => e.accountId))].sort();
             for (const id of accountIds)
@@ -213,10 +219,13 @@ export class FinancialLedgerService {
                   payload: { ledgerTransactionId: transaction.id },
                 },
               });
-            return tx.ledgerTransaction.findUniqueOrThrow({
-              where: { id: transaction.id },
-              include: { entries: true },
-            });
+            return {
+              transaction: await tx.ledgerTransaction.findUniqueOrThrow({
+                where: { id: transaction.id },
+                include: { entries: true },
+              }),
+              created: true,
+            };
           },
           { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
         );

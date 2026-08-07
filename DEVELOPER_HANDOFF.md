@@ -1,5 +1,9 @@
 # DEVELOPER_HANDOFF.md — LIT Buy
 
+## PR #48 — reconhecimento financeiro de vendas ativadas
+
+Pedidos `ACTIVE` com pagamento `PAID` e snapshot financeiro imutável agora podem ser reconhecidos no ledger por `SaleFinancialRecognitionService`. O serviço usa somente verdade persistida, valida Payment/Attempt/snapshot, posta via `FinancialLedgerService.postWithOutcome()` com idempotência determinística e cria event/outbox financeiro; o outcome diferencia criação real de replay idempotente, enquanto `post()` permanece como wrapper compatível do ledger. O seller permanece em `SELLER_PENDING`. Não há PSP, Settlement, FinancialHold, saque, refund, chargeback, fulfillment ou frontend. Consulte `SALE_FINANCIAL_RECOGNITION.md`.
+
 ## PR #47 — snapshot versionado da comissão no checkout
 
 Novos checkouts exigem uma `FeePolicyVersion ACTIVE` efetiva e uma regra geral `PLATFORM_COMMISSION` cobrada do seller. Política, regra, `publicVersion` e valor calculado são congelados no `Order`, e os itens recebem o mesmo `pricingPolicyVersion`. Fixtures de teste publicam explicitamente uma regra zero; não existe fallback nem seed comercial de produção. Nenhum lançamento contábil ou chamada PSP foi adicionado. Detalhes em `CHECKOUT_PLATFORM_COMMISSION_SNAPSHOT.md`.
