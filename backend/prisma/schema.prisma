@@ -212,6 +212,16 @@ enum OrderEventType {
   ORDER_CANCELLED
   INVENTORY_RELEASED
   ORDER_EXPIRED
+  FULFILLMENT_AVAILABLE
+  FULFILLMENT_DELIVERED
+  FULFILLMENT_AWAITING_BUYER_CONFIRMATION
+  FULFILLMENT_CONFIRMED
+  ORDER_COMPLETED
+}
+
+enum OrderDeliveryType {
+  MANUAL_REFERENCE
+  AUTOMATED_REFERENCE
 }
 
 enum OutboxEventStatus {
@@ -340,6 +350,7 @@ model SellerProfile {
   ledgerAccounts          LedgerAccount[]
   financialHolds          FinancialHold[]
   withdrawals             Withdrawal[]
+  orderDeliveries         OrderDelivery[]
 
   @@index([status])
   @@index([slug])
@@ -923,6 +934,7 @@ model Order {
   reservations             InventoryReservation[]
   events                   OrderEvent[]
   payment                  Payment?
+  delivery                 OrderDelivery?
   refunds                  Refund[]
   feePolicyVersion         FeePolicyVersion?      @relation(fields: [feePolicyVersionId], references: [id], onDelete: Restrict)
   platformCommissionRule   FeeRule?               @relation("OrderPlatformCommissionRule", fields: [platformCommissionRuleId, feePolicyVersionId], references: [id, policyVersionId], onDelete: Restrict)
@@ -932,6 +944,21 @@ model Order {
   @@index([status, expiresAt])
   @@index([feePolicyVersionId])
   @@index([platformCommissionRuleId])
+}
+
+model OrderDelivery {
+  id              String            @id @default(uuid()) @db.Uuid
+  orderId         String            @unique @db.Uuid
+  sellerProfileId String            @db.Uuid
+  deliveryType    OrderDeliveryType
+  evidenceHash    String
+  secureReference String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  order           Order             @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  sellerProfile   SellerProfile     @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
+
+  @@index([sellerProfileId, createdAt])
 }
 
 model OrderItem {

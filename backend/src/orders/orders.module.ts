@@ -7,10 +7,23 @@ import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
 import { OrderExpirationService } from './order-expiration.service';
 import { PaidOrderActivationService } from './paid-order-activation.service';
+import { OrderFulfillmentController } from './order-fulfillment.controller';
+import { OrderFulfillmentService } from './order-fulfillment.service';
 @Module({
   imports: [DatabaseModule, AuthModule, JwtModule.register({})],
-  controllers: [OrdersController],
-  providers: [OrdersService, OrderExpirationService, PaidOrderActivationService, CartCsrfGuard],
-  exports: [OrdersService, OrderExpirationService, PaidOrderActivationService],
+  controllers: [OrdersController, OrderFulfillmentController],
+  providers: [
+    OrdersService,
+    OrderExpirationService,
+    PaidOrderActivationService,
+    OrderFulfillmentService,
+    CartCsrfGuard,
+  ],
+  exports: [
+    OrdersService,
+    OrderExpirationService,
+    PaidOrderActivationService,
+    OrderFulfillmentService,
+  ],
 })
 export class OrdersModule {}
