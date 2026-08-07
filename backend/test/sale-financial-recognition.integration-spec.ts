@@ -52,15 +52,45 @@ describe('SaleFinancialRecognitionService with real PostgreSQL', () => {
   });
 
   async function activePaidOrder(
-    options: { fee?: bigint; quantity?: number; stock?: number } = {},
+    options: {
+      fee?: bigint;
+      quantity?: number;
+      stock?: number;
+      useExistingActivePolicy?: boolean;
+    } = {},
   ) {
     const fee = options.fee ?? 1000n;
     const quantity = options.quantity ?? 1;
     const fixture = await commerceFixture(prisma, 'NORMAL', undefined, options.stock ?? 20, false);
-    const policy = await publishPlatformCommissionPolicy(prisma, fixture.sellerUser.id, {
-      publicVersion: publicVersion++,
-      fixedAmountMinor: fee,
-    });
+    const policy = options.useExistingActivePolicy
+      ? await prisma.feePolicyVersion.findFirstOrThrow({
+          where: {
+            status: 'ACTIVE',
+            rules: {
+              some: {
+                category: 'PLATFORM_COMMISSION',
+                partyCharged: 'SELLER',
+                formula: 'FIXED',
+                fixedAmountMinor: fee,
+              },
+            },
+          },
+          include: { rules: true },
+        })
+      : await publishPlatformCommissionPolicy(prisma, fixture.sellerUser.id, {
+          publicVersion: publicVersion++,
+          fixedAmountMinor: fee,
+        });
+    expect(policy.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          category: 'PLATFORM_COMMISSION',
+          partyCharged: 'SELLER',
+          formula: 'FIXED',
+          fixedAmountMinor: fee,
+        }),
+      ]),
+    );
     const preview = await carts.add(fixture.buyer.id, fixture.seller.slug, {
       productId: fixture.product.id,
       quantity,
@@ -249,11 +279,9 @@ describe('SaleFinancialRecognitionService with real PostgreSQL', () => {
     const replay = await recognition.processBatch(1);
     expect(replay).toBe(0);
 
-    const orders = await Promise.all([
-      activePaidOrder({ fee: 100n }),
-      activePaidOrder({ fee: 100n }),
-      activePaidOrder({ fee: 100n }),
-    ]);
+    const orders = [];
+    for (let index = 0; index < 3; index += 1)
+      orders.push(await activePaidOrder({ fee: 100n, useExistingActivePolicy: true }));
     const results = await Promise.all([recognition.processBatch(2), recognition.processBatch(2)]);
     expect(results.reduce((n, value) => n + value, 0)).toBe(3);
     for (const { order } of orders)
@@ -349,10 +377,11 @@ describe('SaleFinancialRecognitionService with real PostgreSQL', () => {
     const seededSellerAccounts = await ledger.ensureSellerLedgerAccounts(
       seeded.order.sellerProfileId,
     );
-    await ledger.post({
+    const unexpectedKey = randomUUID();
+    const existing = await ledger.post({
       type: 'SALE_RECOGNIZED',
       currency: 'BRL',
-      idempotencyKeyHash: randomUUID(),
+      idempotencyKeyHash: unexpectedKey,
       referenceType: 'OrderSale',
       referenceId: seeded.order.id,
       entries: [
@@ -368,8 +397,56 @@ describe('SaleFinancialRecognitionService with real PostgreSQL', () => {
         },
       ],
     });
+    const existingEntries = await prisma.ledgerEntry.findMany({
+      where: { transactionId: existing.id },
+      orderBy: { id: 'asc' },
+    });
+    const existingEvents = await prisma.financialEvent.findMany({
+      where: { ledgerTransactionId: existing.id },
+      orderBy: { id: 'asc' },
+    });
+    const existingOutbox = await prisma.financialOutboxEvent.findMany({
+      where: { financialEvent: { ledgerTransactionId: existing.id } },
+      orderBy: { id: 'asc' },
+    });
     await recognition.processOne(seeded.order.id);
-    await expectSingleIssue(seeded.order.id, 'SALE_LEDGER_IDEMPOTENCY_MISMATCH');
+    await recognition.processOne(seeded.order.id);
+    const recognitions = await prisma.ledgerTransaction.findMany({
+      where: {
+        type: 'SALE_RECOGNIZED',
+        referenceType: 'OrderSale',
+        referenceId: seeded.order.id,
+      },
+    });
+    expect(recognitions).toHaveLength(1);
+    expect(recognitions[0]).toMatchObject({ id: existing.id, idempotencyKeyHash: unexpectedKey });
+    expect(
+      await prisma.ledgerEntry.findMany({
+        where: { transactionId: existing.id },
+        orderBy: { id: 'asc' },
+      }),
+    ).toEqual(existingEntries);
+    expect(
+      await prisma.financialEvent.findMany({
+        where: { ledgerTransactionId: existing.id },
+        orderBy: { id: 'asc' },
+      }),
+    ).toEqual(existingEvents);
+    expect(
+      await prisma.financialOutboxEvent.findMany({
+        where: { financialEvent: { ledgerTransactionId: existing.id } },
+        orderBy: { id: 'asc' },
+      }),
+    ).toEqual(existingOutbox);
+    const issues = await prisma.reconciliationIssue.findMany({
+      where: {
+        referenceType: 'SaleFinancialRecognition',
+        referenceId: seeded.order.id,
+        status: 'OPEN',
+      },
+    });
+    expect(issues).toHaveLength(1);
+    expect(issues[0].details).toEqual({ errorCode: 'SALE_LEDGER_IDEMPOTENCY_MISMATCH' });
     await expect(
       ledger.post({
         type: 'SALE_RECOGNIZED',
@@ -395,6 +472,7 @@ describe('SaleFinancialRecognitionService with real PostgreSQL', () => {
 
   it('deduplicates concurrent reconciliation and lets RESOLVED issues be evaluated again', async () => {
     const { order } = await activePaidOrder({ fee: 100n });
+    await prisma.paymentAttempt.deleteMany({ where: { payment: { orderId: order.id } } });
     await prisma.payment.delete({ where: { orderId: order.id } });
     await Promise.all(Array.from({ length: 6 }, () => recognition.processOne(order.id)));
     let issues = await prisma.reconciliationIssue.findMany({
@@ -508,16 +586,23 @@ describe('SaleFinancialRecognitionService with real PostgreSQL', () => {
         }),
       'SUCCEEDED_ATTEMPT_MISMATCH',
     ],
-    [
-      'pricing version mismatch',
-      async (id: string) =>
-        prisma.$executeRaw`UPDATE "Order" SET "pricingPolicyVersion" = 999 WHERE "id" = ${id}::uuid`,
-      'PRICING_POLICY_VERSION_MISMATCH',
-    ],
   ])('fails closed for %s', async (_name, mutate, code) => {
     const { order } = await activePaidOrder({ fee: 100n });
     await mutate(order.id);
     await expectSingleIssue(order.id, code);
+  });
+
+  it('enforces immutable pricingPolicyVersion at the PostgreSQL boundary', async () => {
+    const { order } = await activePaidOrder({ fee: 100n });
+    await expect(
+      prisma.$executeRaw`UPDATE "Order" SET "pricingPolicyVersion" = 999 WHERE "id" = ${order.id}::uuid`,
+    ).rejects.toThrow(/ORDER_PRICING_SNAPSHOT_IMMUTABLE/);
+    expect(
+      await prisma.order.findUniqueOrThrow({
+        where: { id: order.id },
+        select: { pricingPolicyVersion: true },
+      }),
+    ).toEqual({ pricingPolicyVersion: order.pricingPolicyVersion });
   });
 
   it('fails closed for legacy and commission snapshot mismatch without disabling triggers', async () => {
@@ -584,6 +669,10 @@ describe('SaleFinancialRecognitionService with real PostgreSQL', () => {
 
   it('accumulates seller pending by seller while sharing system and platform accounts', async () => {
     const a = await activePaidOrder({ fee: 100n });
+    await prisma.feePolicyVersion.update({
+      where: { id: a.policy.id },
+      data: { status: 'RETIRED' },
+    });
     const b = await activePaidOrder({ fee: 200n });
     await recognition.processOne(a.order.id);
     await recognition.processOne(b.order.id);
