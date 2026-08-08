@@ -1454,6 +1454,7 @@ model LedgerTransaction {
   createdAt          DateTime        @default(now())
   entries            LedgerEntry[]
   financialEvent     FinancialEvent?
+  financialHold      FinancialHold?
 }
 
 model LedgerEntry {
@@ -1471,23 +1472,25 @@ model LedgerEntry {
 }
 
 model FinancialHold {
-  id                String              @id @default(uuid()) @db.Uuid
-  sellerProfileId   String              @db.Uuid
-  paymentId         String?             @db.Uuid
-  orderId           String?             @db.Uuid
-  amountMinor       BigInt
-  currency          String              @default("BRL")
-  reason            FinancialHoldReason
-  status            FinancialHoldStatus @default(ACTIVE)
-  releaseEligibleAt DateTime?
-  releasedAt        DateTime?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  sellerProfile     SellerProfile       @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
-  payment           Payment?            @relation(fields: [paymentId], references: [id], onDelete: Restrict)
-  order             Order?              @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  id                  String              @id @default(uuid()) @db.Uuid
+  sellerProfileId     String              @db.Uuid
+  paymentId           String?             @db.Uuid
+  orderId             String?             @db.Uuid
+  ledgerTransactionId String?             @unique @db.Uuid
+  amountMinor         BigInt
+  currency            String              @default("BRL")
+  reason              FinancialHoldReason
+  status              FinancialHoldStatus @default(ACTIVE)
+  releaseEligibleAt   DateTime?
+  releasedAt          DateTime?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  sellerProfile       SellerProfile       @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
+  payment             Payment?            @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  order               Order?              @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  ledgerTransaction   LedgerTransaction?  @relation(fields: [ledgerTransactionId], references: [id], onDelete: Restrict)
 
-  @@unique([orderId, reason])
+  @@index([orderId, reason])
 }
 
 /// Non-monetary completion marker for the valid full-commission case only.

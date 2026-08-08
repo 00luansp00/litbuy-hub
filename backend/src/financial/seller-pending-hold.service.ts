@@ -36,6 +36,9 @@ type PaymentSnapshot = {
   amountMinor: bigint;
   currency: string;
 };
+type LedgerTransactionWithAccounts = Prisma.LedgerTransactionGetPayload<{
+  include: { entries: { include: { account: true } } };
+}>;
 
 @Injectable()
 export class SellerPendingHoldService {
@@ -70,9 +73,19 @@ export class SellerPendingHoldService {
         AND o."disputeStatus" NOT IN ('OPEN', 'UNDER_REVIEW')
         AND NOT EXISTS (
           SELECT 1 FROM "FinancialHold" h
+          JOIN "Payment" hp ON hp."id" = h."paymentId" AND hp."orderId" = o."id"
+          JOIN "LedgerTransaction" lt ON lt."id" = h."ledgerTransactionId"
           WHERE h."orderId" = o."id" AND h."reason" = 'DELIVERY_PROTECTION'
+            AND h."sellerProfileId" = o."sellerProfileId"
+            AND h."amountMinor" = o."totalAmountMinor" - o."platformFeeAmountMinor"
+            AND h."currency" = 'BRL' AND h."status" = 'ACTIVE'
+            AND lt."type" = ${LEDGER_TYPE} AND lt."referenceType" = ${LEDGER_REFERENCE_TYPE}
+            AND lt."referenceId" = o."id"
         )
-        AND NOT EXISTS (SELECT 1 FROM "SellerPendingHoldZero" z WHERE z."orderId" = o."id")
+        AND NOT EXISTS (SELECT 1 FROM "SellerPendingHoldZero" z
+          JOIN "Payment" zp ON zp."id" = z."paymentId" AND zp."orderId" = o."id"
+          WHERE z."orderId" = o."id" AND z."sellerProfileId" = o."sellerProfileId"
+            AND o."totalAmountMinor" = o."platformFeeAmountMinor")
         AND NOT EXISTS (
           SELECT 1 FROM "ReconciliationIssue" r
           WHERE r."referenceType" = ${ISSUE_REFERENCE_TYPE}
@@ -110,32 +123,9 @@ export class SellerPendingHoldService {
       return 'PROCESSED';
     }
 
-    const accounts = await this.ledger.ensureSellerLedgerAccounts(order.sellerProfileId);
-    const pending = accounts.find((account) => account.purpose === 'SELLER_PENDING')!;
-    const held = accounts.find((account) => account.purpose === 'SELLER_HELD')!;
     try {
-      const outcome = await this.ledger.postWithOutcome({
-        type: LEDGER_TYPE,
-        currency: 'BRL',
-        idempotencyKeyHash: expectedKey,
-        referenceType: LEDGER_REFERENCE_TYPE,
-        referenceId: order.id,
-        emitOutbox: true,
-        metadata: {
-          orderId: order.id,
-          paymentId: payment.id,
-          sellerProfileId: order.sellerProfileId,
-          amountMinor: proceeds.toString(),
-          currency: 'BRL',
-          referenceType: LEDGER_REFERENCE_TYPE,
-        },
-        entries: [
-          { accountId: pending.id, direction: 'DEBIT', amountMinor: proceeds },
-          { accountId: held.id, direction: 'CREDIT', amountMinor: proceeds },
-        ],
-      });
-      await this.ensureHold(order, payment, proceeds);
-      return outcome.created ? 'PROCESSED' : 'ALREADY_HANDLED';
+      const outcome = await this.postAndCreateHoldAtomically(order, payment, proceeds, expectedKey);
+      return outcome;
     } catch (error) {
       if (error instanceof FinancialDomainError) {
         if (error.code === 'FINANCIAL_CONCURRENCY_CONFLICT') throw error;
@@ -149,14 +139,95 @@ export class SellerPendingHoldService {
         return 'PROCESSED';
       }
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        await this.ensureIssue(order.id, {
-          type: 'OTHER',
-          code: 'SELLER_HOLD_LEDGER_IDEMPOTENCY_MISMATCH',
-        });
+        await this.ensureIssue(order.id, { type: 'OTHER', code: 'SELLER_HOLD_ARTIFACT_MISMATCH' });
         return 'PROCESSED';
       }
       throw error;
     }
+  }
+
+  private async postAndCreateHoldAtomically(
+    order: Snapshot,
+    payment: PaymentSnapshot,
+    proceeds: bigint,
+    expectedKey: string,
+  ): Promise<SellerPendingHoldCandidateResult> {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        return await this.prisma.$transaction(
+          async (tx) => {
+            const holds = await tx.financialHold.findMany({
+              where: { orderId: order.id, reason: 'DELIVERY_PROTECTION' },
+            });
+            const postings = await tx.ledgerTransaction.findMany({
+              where: {
+                type: LEDGER_TYPE,
+                referenceType: LEDGER_REFERENCE_TYPE,
+                referenceId: order.id,
+              },
+              include: { entries: { include: { account: true } } },
+            });
+            if (holds.length && !postings.length)
+              throw new FinancialDomainError('IDEMPOTENCY_KEY_REUSED');
+            const accounts = await tx.ledgerAccount.findMany({
+              where: {
+                ownerType: 'SELLER',
+                ownerId: order.sellerProfileId,
+                currency: 'BRL',
+                purpose: { in: ['SELLER_PENDING', 'SELLER_HELD'] },
+              },
+            });
+            const pending = accounts.find((account) => account.purpose === 'SELLER_PENDING');
+            const held = accounts.find((account) => account.purpose === 'SELLER_HELD');
+            if (!pending || !held) throw new FinancialDomainError('INVALID_MONEY');
+            const outcome = await this.ledger.postWithOutcomeInTransaction(tx, {
+              type: LEDGER_TYPE,
+              currency: 'BRL',
+              idempotencyKeyHash: expectedKey,
+              referenceType: LEDGER_REFERENCE_TYPE,
+              referenceId: order.id,
+              emitOutbox: true,
+              metadata: {
+                orderId: order.id,
+                paymentId: payment.id,
+                sellerProfileId: order.sellerProfileId,
+                amountMinor: proceeds.toString(),
+                currency: 'BRL',
+                referenceType: LEDGER_REFERENCE_TYPE,
+              },
+              entries: [
+                { accountId: pending.id, direction: 'DEBIT', amountMinor: proceeds },
+                { accountId: held.id, direction: 'CREDIT', amountMinor: proceeds },
+              ],
+            });
+            const prior = holds[0];
+            if (!prior)
+              await tx.financialHold.create({
+                data: {
+                  orderId: order.id,
+                  paymentId: payment.id,
+                  sellerProfileId: order.sellerProfileId,
+                  ledgerTransactionId: outcome.transaction.id,
+                  amountMinor: proceeds,
+                  currency: 'BRL',
+                  reason: 'DELIVERY_PROTECTION',
+                  status: 'ACTIVE',
+                  releaseEligibleAt: null,
+                },
+              });
+            else if (prior.ledgerTransactionId !== outcome.transaction.id)
+              throw new FinancialDomainError('IDEMPOTENCY_KEY_REUSED');
+            return outcome.created ? 'PROCESSED' : 'ALREADY_HANDLED';
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+      } catch (error) {
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034'))
+          throw error;
+        if (attempt === 3) throw new FinancialDomainError('FINANCIAL_CONCURRENCY_CONFLICT');
+      }
+    }
+    throw new FinancialDomainError('FINANCIAL_CONCURRENCY_CONFLICT');
   }
 
   private async validateLocked(
@@ -221,7 +292,7 @@ export class SellerPendingHoldService {
   }
 
   private validRecognition(
-    transactions: Awaited<ReturnType<typeof this.prisma.ledgerTransaction.findMany>> & any[],
+    transactions: LedgerTransactionWithAccounts[],
     order: Snapshot,
     proceeds: bigint,
   ): boolean {
@@ -245,7 +316,7 @@ export class SellerPendingHoldService {
       tx.entries.length === expected.length &&
       expected.every(([purpose, ownerType, direction, amount]) =>
         tx.entries.some(
-          (entry: any) =>
+          (entry) =>
             entry.account.purpose === purpose &&
             entry.account.ownerType === ownerType &&
             (ownerType !== 'SELLER' || entry.account.ownerId === order.sellerProfileId) &&
@@ -257,7 +328,7 @@ export class SellerPendingHoldService {
   }
 
   private validHoldPosting(
-    transactions: any[],
+    transactions: LedgerTransactionWithAccounts[],
     order: Snapshot,
     proceeds: bigint,
     key: string,
@@ -268,7 +339,7 @@ export class SellerPendingHoldService {
       return false;
     return ['SELLER_PENDING', 'SELLER_HELD'].every((purpose, index) =>
       tx.entries.some(
-        (entry: any) =>
+        (entry) =>
           entry.account.ownerType === 'SELLER' &&
           entry.account.ownerId === order.sellerProfileId &&
           entry.account.purpose === purpose &&
@@ -287,42 +358,6 @@ export class SellerPendingHoldService {
         data: { orderId: order.id, paymentId: payment.id, sellerProfileId: order.sellerProfileId },
       });
       return true;
-    });
-  }
-
-  private async ensureHold(order: Snapshot, payment: PaymentSnapshot, amountMinor: bigint) {
-    await this.prisma.$transaction(async (tx) => {
-      await acquireAdvisoryTransactionLock(tx, `financial:seller-pending-hold:${order.id}`);
-      const prior = await tx.financialHold.findUnique({
-        where: { orderId_reason: { orderId: order.id, reason: 'DELIVERY_PROTECTION' } },
-      });
-      if (prior) {
-        if (
-          prior.sellerProfileId !== order.sellerProfileId ||
-          prior.paymentId !== payment.id ||
-          prior.amountMinor !== amountMinor ||
-          prior.currency !== 'BRL' ||
-          prior.status !== 'ACTIVE' ||
-          prior.releaseEligibleAt !== null
-        )
-          await this.ensureIssueInTransaction(tx, order.id, {
-            type: 'OTHER',
-            code: 'SELLER_HOLD_LEDGER_IDEMPOTENCY_MISMATCH',
-          });
-        return;
-      }
-      await tx.financialHold.create({
-        data: {
-          orderId: order.id,
-          paymentId: payment.id,
-          sellerProfileId: order.sellerProfileId,
-          amountMinor,
-          currency: 'BRL',
-          reason: 'DELIVERY_PROTECTION',
-          status: 'ACTIVE',
-          releaseEligibleAt: null,
-        },
-      });
     });
   }
 

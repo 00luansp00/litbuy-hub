@@ -132,101 +132,11 @@ export class FinancialLedgerService {
   }
 
   async postWithOutcome(request: PostRequest): Promise<PostOutcome> {
-    if (
-      request.currency !== 'BRL' ||
-      request.entries.length < 2 ||
-      request.entries.some((e) => e.amountMinor <= 0n)
-    )
-      throw new FinancialDomainError('INVALID_MONEY');
-    const requestHash = canonicalRequestHash({
-      ...request,
-      entries: request.entries.map((e) => ({ ...e, amountMinor: e.amountMinor.toString() })),
-    });
+    this.validateRequest(request);
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         return await this.prisma.$transaction(
-          async (tx) => {
-            await acquireAdvisoryTransactionLock(
-              tx,
-              `financial:idempotency:${request.idempotencyKeyHash}`,
-            );
-            const prior = await tx.ledgerTransaction.findUnique({
-              where: { idempotencyKeyHash: request.idempotencyKeyHash },
-              include: { entries: true },
-            });
-            if (prior) {
-              if (prior.requestHash !== requestHash)
-                throw new FinancialDomainError('IDEMPOTENCY_KEY_REUSED');
-              return { transaction: prior, created: false };
-            }
-            const accountIds = [...new Set(request.entries.map((e) => e.accountId))].sort();
-            for (const id of accountIds)
-              await acquireAdvisoryTransactionLock(tx, `financial:account:${id}`);
-            const accounts = await tx.ledgerAccount.findMany({ where: { id: { in: accountIds } } });
-            if (
-              accounts.length !== accountIds.length ||
-              accounts.some((a) => a.currency !== request.currency)
-            )
-              throw new FinancialDomainError('INVALID_MONEY');
-            for (const account of accounts.filter((a) => PROTECTED.has(a.purpose))) {
-              const debits = request.entries
-                .filter((e) => e.accountId === account.id && e.direction === 'DEBIT')
-                .reduce((n, e) => n + e.amountMinor, 0n);
-              if (!debits) continue;
-              const rows = await tx.ledgerEntry.groupBy({
-                by: ['direction'],
-                where: { accountId: account.id },
-                _sum: { amountMinor: true },
-              });
-              const balance = rows.reduce(
-                (n, r) => n + (r.direction === 'CREDIT' ? 1n : -1n) * (r._sum.amountMinor ?? 0n),
-                0n,
-              );
-              const credits = request.entries
-                .filter((e) => e.accountId === account.id && e.direction === 'CREDIT')
-                .reduce((n, e) => n + e.amountMinor, 0n);
-              if (balance + credits - debits < 0n)
-                throw new FinancialDomainError('INSUFFICIENT_FINANCIAL_BALANCE');
-            }
-            const transaction = await tx.ledgerTransaction.create({
-              data: {
-                currency: request.currency,
-                type: request.type,
-                referenceType: request.referenceType,
-                referenceId: request.referenceId,
-                idempotencyKeyHash: request.idempotencyKeyHash,
-                requestHash,
-                metadata: request.metadata ?? {},
-              },
-            });
-            await tx.ledgerEntry.createMany({
-              data: request.entries.map((e) => ({ ...e, transactionId: transaction.id })),
-            });
-            const event = await tx.financialEvent.create({
-              data: {
-                ledgerTransactionId: transaction.id,
-                type: request.type,
-                aggregateType: request.referenceType ?? 'LEDGER_TRANSACTION',
-                aggregateId: request.referenceId ?? transaction.id,
-                metadata: request.metadata ?? {},
-              },
-            });
-            if (request.emitOutbox)
-              await tx.financialOutboxEvent.create({
-                data: {
-                  financialEventId: event.id,
-                  eventType: request.type,
-                  payload: { ledgerTransactionId: transaction.id },
-                },
-              });
-            return {
-              transaction: await tx.ledgerTransaction.findUniqueOrThrow({
-                where: { id: transaction.id },
-                include: { entries: true },
-              }),
-              created: true,
-            };
-          },
+          (tx) => this.postWithOutcomeInTransaction(tx, request),
           { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
         );
       } catch (error) {
@@ -235,6 +145,106 @@ export class FinancialLedgerService {
       }
     }
     throw new FinancialDomainError('FINANCIAL_CONCURRENCY_CONFLICT');
+  }
+
+  async postWithOutcomeInTransaction(
+    tx: Prisma.TransactionClient,
+    request: PostRequest,
+  ): Promise<PostOutcome> {
+    this.validateRequest(request);
+    const requestHash = canonicalRequestHash({
+      ...request,
+      entries: request.entries.map((entry) => ({
+        ...entry,
+        amountMinor: entry.amountMinor.toString(),
+      })),
+    });
+    await acquireAdvisoryTransactionLock(tx, `financial:idempotency:${request.idempotencyKeyHash}`);
+    const prior = await tx.ledgerTransaction.findUnique({
+      where: { idempotencyKeyHash: request.idempotencyKeyHash },
+      include: { entries: true },
+    });
+    if (prior) {
+      if (prior.requestHash !== requestHash)
+        throw new FinancialDomainError('IDEMPOTENCY_KEY_REUSED');
+      return { transaction: prior, created: false };
+    }
+    const accountIds = [...new Set(request.entries.map((entry) => entry.accountId))].sort();
+    for (const id of accountIds)
+      await acquireAdvisoryTransactionLock(tx, `financial:account:${id}`);
+    const accounts = await tx.ledgerAccount.findMany({ where: { id: { in: accountIds } } });
+    if (
+      accounts.length !== accountIds.length ||
+      accounts.some((account) => account.currency !== request.currency)
+    )
+      throw new FinancialDomainError('INVALID_MONEY');
+    for (const account of accounts.filter((candidate) => PROTECTED.has(candidate.purpose))) {
+      const debits = request.entries
+        .filter((entry) => entry.accountId === account.id && entry.direction === 'DEBIT')
+        .reduce((sum, entry) => sum + entry.amountMinor, 0n);
+      if (!debits) continue;
+      const rows = await tx.ledgerEntry.groupBy({
+        by: ['direction'],
+        where: { accountId: account.id },
+        _sum: { amountMinor: true },
+      });
+      const balance = rows.reduce(
+        (sum, row) => sum + (row.direction === 'CREDIT' ? 1n : -1n) * (row._sum.amountMinor ?? 0n),
+        0n,
+      );
+      const credits = request.entries
+        .filter((entry) => entry.accountId === account.id && entry.direction === 'CREDIT')
+        .reduce((sum, entry) => sum + entry.amountMinor, 0n);
+      if (balance + credits - debits < 0n)
+        throw new FinancialDomainError('INSUFFICIENT_FINANCIAL_BALANCE');
+    }
+    const transaction = await tx.ledgerTransaction.create({
+      data: {
+        currency: request.currency,
+        type: request.type,
+        referenceType: request.referenceType,
+        referenceId: request.referenceId,
+        idempotencyKeyHash: request.idempotencyKeyHash,
+        requestHash,
+        metadata: request.metadata ?? {},
+      },
+    });
+    await tx.ledgerEntry.createMany({
+      data: request.entries.map((entry) => ({ ...entry, transactionId: transaction.id })),
+    });
+    const event = await tx.financialEvent.create({
+      data: {
+        ledgerTransactionId: transaction.id,
+        type: request.type,
+        aggregateType: request.referenceType ?? 'LEDGER_TRANSACTION',
+        aggregateId: request.referenceId ?? transaction.id,
+        metadata: request.metadata ?? {},
+      },
+    });
+    if (request.emitOutbox)
+      await tx.financialOutboxEvent.create({
+        data: {
+          financialEventId: event.id,
+          eventType: request.type,
+          payload: { ledgerTransactionId: transaction.id },
+        },
+      });
+    return {
+      transaction: await tx.ledgerTransaction.findUniqueOrThrow({
+        where: { id: transaction.id },
+        include: { entries: true },
+      }),
+      created: true,
+    };
+  }
+
+  private validateRequest(request: PostRequest): void {
+    if (
+      request.currency !== 'BRL' ||
+      request.entries.length < 2 ||
+      request.entries.some((e) => e.amountMinor <= 0n)
+    )
+      throw new FinancialDomainError('INVALID_MONEY');
   }
   private isRetryableSerializationConflict(error: unknown): boolean {
     return (

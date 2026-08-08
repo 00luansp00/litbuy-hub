@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { PrismaClient } from '@prisma/client';
 import { Test } from '@nestjs/testing';
 import { AppModule } from '../src/app.module';
@@ -6,6 +8,7 @@ import { CartsService } from '../src/carts/carts.service';
 import { parseIdempotencyKey } from '../src/commerce/idempotency-key';
 import { CheckoutService } from '../src/checkout/checkout.service';
 import { PrismaService } from '../src/database/prisma.service';
+import { FinancialLedgerService } from '../src/financial/financial-ledger.service';
 import { SaleFinancialRecognitionService } from '../src/financial/sale-financial-recognition.service';
 import { SellerPendingHoldService } from '../src/financial/seller-pending-hold.service';
 import { PaidOrderActivationService } from '../src/orders/paid-order-activation.service';
@@ -125,8 +128,8 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
       ),
     ).toBe(false);
     expect(
-      await prisma.financialHold.findUnique({
-        where: { orderId_reason: { orderId: order.id, reason: 'DELIVERY_PROTECTION' } },
+      await prisma.financialHold.findFirst({
+        where: { orderId: order.id, reason: 'DELIVERY_PROTECTION' },
       }),
     ).toMatchObject({
       paymentId: payment.id,
@@ -193,14 +196,23 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
 
   it('fails closed and deduplicates reconciliation when pending funds are insufficient', async () => {
     const { order } = await completedOrder(1000n);
-    const recognition = await prisma.ledgerTransaction.findFirstOrThrow({
-      where: { type: 'SALE_RECOGNIZED', referenceId: order.id },
+    const accounts = await prisma.ledgerAccount.findMany({
+      where: { ownerType: 'SELLER', ownerId: order.sellerProfileId },
     });
-    await prisma.$executeRawUnsafe('SET session_replication_role = replica');
-    await prisma.ledgerEntry.deleteMany({
-      where: { transactionId: recognition.id, account: { purpose: 'SELLER_PENDING' } },
+    const pending = accounts.find((account) => account.purpose === 'SELLER_PENDING')!;
+    const held = accounts.find((account) => account.purpose === 'SELLER_HELD')!;
+    const ledger = app.get(FinancialLedgerService);
+    await ledger.postWithOutcome({
+      type: 'TEST_PENDING_CONSUMPTION',
+      currency: 'BRL',
+      idempotencyKeyHash: randomUUID(),
+      referenceType: 'TestPendingConsumption',
+      referenceId: order.id,
+      entries: [
+        { accountId: pending.id, direction: 'DEBIT', amountMinor: 9000n },
+        { accountId: held.id, direction: 'CREDIT', amountMinor: 9000n },
+      ],
     });
-    await prisma.$executeRawUnsafe('SET session_replication_role = origin');
     await Promise.all(Array.from({ length: 6 }, () => service.processOne(order.id)));
     expect(
       await prisma.ledgerTransaction.count({
@@ -215,12 +227,14 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
   });
 
   it('contains no PSP, HTTP, withdrawal, timer, or release-to-available dependency', () => {
-    const source = require('node:fs').readFileSync(
-      require('node:path').join(__dirname, '../src/financial/seller-pending-hold.service.ts'),
+    const source = readFileSync(
+      join(__dirname, '../src/financial/seller-pending-hold.service.ts'),
       'utf8',
     );
     expect(source).not.toMatch(
       /PaymentProviderPort|Efi|fetch\(|axios|setTimeout|Withdrawal|SELLER_AVAILABLE|SELLER_RESERVED/,
     );
+    expect(source).not.toMatch(/prisma\.ledger(Transaction|Entry)\.create/);
+    expect(readFileSync(__filename, 'utf8')).not.toContain('session_' + 'replication_role');
   });
 });
