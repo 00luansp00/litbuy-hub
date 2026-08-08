@@ -23,3 +23,7 @@ Each effective edge increments `Order.version` exactly once and creates one tran
 ## Financial non-goals
 
 No ledger transaction, entry, financial event/outbox, settlement, hold, withdrawal, PSP call, or balance movement is created here. In particular, seller proceeds remain exclusively `SELLER_PENDING`; there is no move to `SELLER_AVAILABLE` or `SELLER_HELD`. The next financial-release increment consumes `CONFIRMED/COMPLETED`.
+
+## Completion recovery and reconciliation
+
+System inconsistencies are recorded inside the locked transaction and returned as explicit outcomes; the transaction commits before a public operation converts that outcome to a conflict response. Active `OrderFulfillment` reconciliation issues block automatic completion retries. After an operator explicitly resolves an issue, `processCompletionBatch()` may safely reconsider an `ACTIVE + CONFIRMED + PAID` order; it never resolves or deletes the historical issue itself. Exact buyer and seller replays remain side-effect free, while a delivery replay with a changed type or evidence hash is rejected as an idempotency mismatch.

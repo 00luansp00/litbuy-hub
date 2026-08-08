@@ -939,6 +939,7 @@ model Order {
   feePolicyVersion         FeePolicyVersion?      @relation(fields: [feePolicyVersionId], references: [id], onDelete: Restrict)
   platformCommissionRule   FeeRule?               @relation("OrderPlatformCommissionRule", fields: [platformCommissionRuleId, feePolicyVersionId], references: [id, policyVersionId], onDelete: Restrict)
 
+  @@unique([id, sellerProfileId])
   @@index([buyerUserId, createdAt, id])
   @@index([sellerProfileId, createdAt, id])
   @@index([status, expiresAt])
@@ -955,9 +956,10 @@ model OrderDelivery {
   secureReference String?
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
-  order           Order             @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  order           Order             @relation(fields: [orderId, sellerProfileId], references: [id, sellerProfileId], onDelete: Restrict)
   sellerProfile   SellerProfile     @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
 
+  @@unique([orderId, sellerProfileId])
   @@index([sellerProfileId, createdAt])
 }
 
