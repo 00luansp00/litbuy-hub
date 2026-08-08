@@ -2,6 +2,8 @@
 
 > **PR #48:** vendas com pedido `ACTIVE`, pagamento `PAID` e snapshot financeiro imutável agora são reconhecidas no ledger interno via `SALE_RECOGNIZED`: debitam `PROVIDER_CLEARING` e creditam `SELLER_PENDING`/`PLATFORM_COMMISSION`. O seller permanece pendente; sem settlement, hold, saque, PSP, fulfillment, refund ou chargeback.
 
+> **Seller hold foundation:** pedidos concluídos e confirmados movem proceeds do snapshot de `SELLER_PENDING` para `SELLER_HELD`, com hold de proteção sem prazo. `AVAILABLE`, settlement, saque e PSP permanecem fora do escopo.
+
 > **Contrato comercial vigente:** `COMMERCE_ARCHITECTURE.md` é a fonte autoritativa. O conteúdo comercial histórico abaixo é preliminar ou substituído quando divergir; pagamentos e ledger não estão implementados, e nenhum gateway foi escolhido.
 
 > Concluída a fundação isolada de dados locais determinísticos para PostgreSQL e MinIO; ela não adiciona endpoints nem altera lifecycle.

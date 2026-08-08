@@ -64,3 +64,5 @@ The service does not call a PSP, Efí, HTTP, frontend data, settlement, financia
 ## Fulfillment foundation (PR #49)
 
 The authoritative post-payment fulfillment lifecycle is implemented in `OrderFulfillmentService` and specified in `ORDER_FULFILLMENT_FOUNDATION.md`. Delivery requires hashed evidence, buyer confirmation is explicit, disputes fail closed, and completion requires the valid PR #48 `SALE_RECOGNIZED` transaction. This phase does not transport secrets, auto-confirm, simulate automatic delivery, or release seller funds; proceeds remain `SELLER_PENDING` for the next financial-release phase.
+
+The subsequent release foundation validates this posting in full before moving its snapshot seller credit to `SELLER_HELD`; see `SELLER_PENDING_HOLD_FOUNDATION.md`. Recognition itself still never performs that movement.
