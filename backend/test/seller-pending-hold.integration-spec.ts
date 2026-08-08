@@ -12,6 +12,7 @@ import { FinancialLedgerService } from '../src/financial/financial-ledger.servic
 import { SaleFinancialRecognitionService } from '../src/financial/sale-financial-recognition.service';
 import { SellerPendingHoldService } from '../src/financial/seller-pending-hold.service';
 import { PaidOrderActivationService } from '../src/orders/paid-order-activation.service';
+import { OrderFulfillmentService } from '../src/orders/order-fulfillment.service';
 import { commerceFixture, publishPlatformCommissionPolicy } from './order-checkout-test.helpers';
 
 describe('SellerPendingHoldService with real PostgreSQL', () => {
@@ -24,6 +25,7 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
   let activation: PaidOrderActivationService;
   let recognition: SaleFinancialRecognitionService;
   let service: SellerPendingHoldService;
+  let fulfillment: OrderFulfillmentService;
   let version = 50_000;
 
   beforeAll(async () => {
@@ -35,6 +37,7 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
     activation = app.get(PaidOrderActivationService);
     recognition = app.get(SaleFinancialRecognitionService);
     service = app.get(SellerPendingHoldService);
+    fulfillment = app.get(OrderFulfillmentService);
   });
   beforeEach(() =>
     cleanupPrisma.$executeRawUnsafe('TRUNCATE TABLE "User", "CatalogCategory" CASCADE'),
@@ -90,10 +93,14 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
     await prisma.order.update({ where: { id: order.id }, data: { paymentStatus: 'PENDING' } });
     await activation.processOne(order.id);
     await recognition.processOne(order.id);
-    await prisma.order.update({
-      where: { id: order.id },
-      data: { status: 'COMPLETED', fulfillmentStatus: 'CONFIRMED' },
+    await fulfillment.makeAvailable(order.id);
+    await fulfillment.recordDelivered({
+      orderCode: order.publicCode,
+      actorUserId: fixture.sellerUser.id,
+      deliveryType: 'MANUAL_REFERENCE',
+      evidenceHash: 'a'.repeat(64),
     });
+    await fulfillment.confirmReceipt(order.publicCode, fixture.buyer.id);
     return { order: await prisma.order.findUniqueOrThrow({ where: { id: order.id } }), payment };
   }
 

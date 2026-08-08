@@ -98,196 +98,219 @@ export class SellerPendingHoldService {
   }
 
   private async processOrder(orderId: string): Promise<SellerPendingHoldCandidateResult> {
-    const validation = await this.validateLocked(orderId);
-    if ('blocked' in validation) return 'ALREADY_HANDLED';
-    if ('failure' in validation) {
-      await this.ensureIssue(orderId, validation.failure);
-      return 'PROCESSED';
-    }
-    const { order, payment, proceeds } = validation;
-    if (proceeds === 0n) {
-      const created = await this.markZero(order, payment);
-      return created ? 'PROCESSED' : 'ALREADY_HANDLED';
-    }
-
-    const expectedKey = this.holdKey(order.id);
-    const existing = await this.prisma.ledgerTransaction.findMany({
-      where: { type: LEDGER_TYPE, referenceType: LEDGER_REFERENCE_TYPE, referenceId: order.id },
-      include: { entries: { include: { account: true } } },
-    });
-    if (existing.length && !this.validHoldPosting(existing, order, proceeds, expectedKey)) {
-      await this.ensureIssue(order.id, {
-        type: 'OTHER',
-        code: 'SELLER_HOLD_LEDGER_IDEMPOTENCY_MISMATCH',
-      });
-      return 'PROCESSED';
-    }
-
-    try {
-      const outcome = await this.postAndCreateHoldAtomically(order, payment, proceeds, expectedKey);
-      return outcome;
-    } catch (error) {
-      if (error instanceof FinancialDomainError) {
-        if (error.code === 'FINANCIAL_CONCURRENCY_CONFLICT') throw error;
-        await this.ensureIssue(order.id, {
-          type: error.code === 'INSUFFICIENT_FINANCIAL_BALANCE' ? 'AMOUNT_MISMATCH' : 'OTHER',
-          code:
-            error.code === 'IDEMPOTENCY_KEY_REUSED'
-              ? 'SELLER_HOLD_LEDGER_IDEMPOTENCY_MISMATCH'
-              : 'SELLER_HOLD_POSTING_FAILED',
-        });
-        return 'PROCESSED';
-      }
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        await this.ensureIssue(order.id, { type: 'OTHER', code: 'SELLER_HOLD_ARTIFACT_MISMATCH' });
-        return 'PROCESSED';
-      }
-      throw error;
-    }
-  }
-
-  private async postAndCreateHoldAtomically(
-    order: Snapshot,
-    payment: PaymentSnapshot,
-    proceeds: bigint,
-    expectedKey: string,
-  ): Promise<SellerPendingHoldCandidateResult> {
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        return await this.prisma.$transaction(
-          async (tx) => {
-            const holds = await tx.financialHold.findMany({
-              where: { orderId: order.id, reason: 'DELIVERY_PROTECTION' },
-            });
-            const postings = await tx.ledgerTransaction.findMany({
-              where: {
-                type: LEDGER_TYPE,
-                referenceType: LEDGER_REFERENCE_TYPE,
-                referenceId: order.id,
-              },
-              include: { entries: { include: { account: true } } },
-            });
-            if (holds.length && !postings.length)
-              throw new FinancialDomainError('IDEMPOTENCY_KEY_REUSED');
-            const accounts = await tx.ledgerAccount.findMany({
-              where: {
-                ownerType: 'SELLER',
-                ownerId: order.sellerProfileId,
-                currency: 'BRL',
-                purpose: { in: ['SELLER_PENDING', 'SELLER_HELD'] },
-              },
-            });
-            const pending = accounts.find((account) => account.purpose === 'SELLER_PENDING');
-            const held = accounts.find((account) => account.purpose === 'SELLER_HELD');
-            if (!pending || !held) throw new FinancialDomainError('INVALID_MONEY');
-            const outcome = await this.ledger.postWithOutcomeInTransaction(tx, {
-              type: LEDGER_TYPE,
-              currency: 'BRL',
-              idempotencyKeyHash: expectedKey,
-              referenceType: LEDGER_REFERENCE_TYPE,
-              referenceId: order.id,
-              emitOutbox: true,
-              metadata: {
-                orderId: order.id,
-                paymentId: payment.id,
-                sellerProfileId: order.sellerProfileId,
-                amountMinor: proceeds.toString(),
-                currency: 'BRL',
-                referenceType: LEDGER_REFERENCE_TYPE,
-              },
-              entries: [
-                { accountId: pending.id, direction: 'DEBIT', amountMinor: proceeds },
-                { accountId: held.id, direction: 'CREDIT', amountMinor: proceeds },
-              ],
-            });
-            const prior = holds[0];
-            if (!prior)
-              await tx.financialHold.create({
-                data: {
-                  orderId: order.id,
-                  paymentId: payment.id,
-                  sellerProfileId: order.sellerProfileId,
-                  ledgerTransactionId: outcome.transaction.id,
-                  amountMinor: proceeds,
-                  currency: 'BRL',
-                  reason: 'DELIVERY_PROTECTION',
-                  status: 'ACTIVE',
-                  releaseEligibleAt: null,
-                },
-              });
-            else if (prior.ledgerTransactionId !== outcome.transaction.id)
-              throw new FinancialDomainError('IDEMPOTENCY_KEY_REUSED');
-            return outcome.created ? 'PROCESSED' : 'ALREADY_HANDLED';
-          },
+        const result = await this.prisma.$transaction(
+          (tx) => this.processInTransaction(tx, orderId),
           { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
         );
+        if (typeof result !== 'string') {
+          await this.ensureIssue(orderId, result.failure);
+          return 'PROCESSED';
+        }
+        return result;
       } catch (error) {
-        if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034'))
-          throw error;
-        if (attempt === 3) throw new FinancialDomainError('FINANCIAL_CONCURRENCY_CONFLICT');
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
+          if (attempt === 3) throw new FinancialDomainError('FINANCIAL_CONCURRENCY_CONFLICT');
+          continue;
+        }
+        if (
+          error instanceof FinancialDomainError ||
+          (error instanceof Prisma.PrismaClientKnownRequestError &&
+            ['P2002', 'P2003', 'P2004'].includes(error.code))
+        ) {
+          await this.ensureIssue(orderId, {
+            type:
+              error instanceof FinancialDomainError &&
+              error.code === 'INSUFFICIENT_FINANCIAL_BALANCE'
+                ? 'AMOUNT_MISMATCH'
+                : 'OTHER',
+            code:
+              error instanceof FinancialDomainError && error.code === 'IDEMPOTENCY_KEY_REUSED'
+                ? 'SELLER_HOLD_LEDGER_IDEMPOTENCY_MISMATCH'
+                : 'SELLER_HOLD_POSTING_FAILED',
+          });
+          return 'PROCESSED';
+        }
+        throw error;
       }
     }
     throw new FinancialDomainError('FINANCIAL_CONCURRENCY_CONFLICT');
   }
 
-  private async validateLocked(
+  private async processInTransaction(
+    tx: Prisma.TransactionClient,
     orderId: string,
-  ): Promise<
-    | { order: Snapshot; payment: PaymentSnapshot; proceeds: bigint }
-    | { failure: Failure }
-    | { blocked: true }
-  > {
-    return this.prisma.$transaction(async (tx) => {
-      const rows = await tx.$queryRaw<Snapshot[]>`
-        SELECT "id", "sellerProfileId", "status", "paymentStatus", "fulfillmentStatus",
-               "disputeStatus", "currency", "totalAmountMinor", "platformFeeAmountMinor"
-        FROM "Order" WHERE "id" = ${orderId}::uuid FOR UPDATE
-      `;
-      const order = rows[0];
-      if (!order) return { failure: { type: 'MISSING_LOCAL', code: 'ORDER_MISSING' } };
-      if (order.status !== OrderStatus.COMPLETED)
-        return { failure: { type: 'STATUS_MISMATCH', code: 'ORDER_NOT_COMPLETED' } };
-      if (order.paymentStatus !== PaymentStatus.PAID)
-        return { failure: { type: 'STATUS_MISMATCH', code: 'ORDER_PAYMENT_STATUS_MISMATCH' } };
-      if (order.fulfillmentStatus !== FulfillmentStatus.CONFIRMED)
-        return {
-          failure: { type: 'STATUS_MISMATCH', code: 'ORDER_FULFILLMENT_STATUS_MISMATCH' },
-        };
-      if (
-        order.disputeStatus === DisputeStatus.OPEN ||
-        order.disputeStatus === DisputeStatus.UNDER_REVIEW
-      )
-        return { blocked: true };
-      if (order.currency !== 'BRL')
-        return { failure: { type: 'OTHER', code: 'PAYMENT_CURRENCY_MISMATCH' } };
-      const proceeds = order.totalAmountMinor - order.platformFeeAmountMinor;
-      if (proceeds < 0n)
-        return { failure: { type: 'AMOUNT_MISMATCH', code: 'SELLER_PROCEEDS_INVALID' } };
+  ): Promise<SellerPendingHoldCandidateResult | { failure: Failure }> {
+    const rows = await tx.$queryRaw<Snapshot[]>`
+      SELECT "id", "sellerProfileId", "status", "paymentStatus", "fulfillmentStatus",
+             "disputeStatus", "currency", "totalAmountMinor", "platformFeeAmountMinor"
+      FROM "Order" WHERE "id" = ${orderId}::uuid FOR UPDATE
+    `;
+    const order = rows[0];
+    if (!order) return { failure: { type: 'MISSING_LOCAL', code: 'ORDER_MISSING' } };
+    if (order.status !== OrderStatus.COMPLETED)
+      return { failure: { type: 'STATUS_MISMATCH', code: 'ORDER_NOT_COMPLETED' } };
+    if (order.paymentStatus !== PaymentStatus.PAID)
+      return { failure: { type: 'STATUS_MISMATCH', code: 'ORDER_PAYMENT_STATUS_MISMATCH' } };
+    if (order.fulfillmentStatus !== FulfillmentStatus.CONFIRMED)
+      return { failure: { type: 'STATUS_MISMATCH', code: 'ORDER_FULFILLMENT_STATUS_MISMATCH' } };
+    if (
+      order.disputeStatus === DisputeStatus.OPEN ||
+      order.disputeStatus === DisputeStatus.UNDER_REVIEW
+    )
+      return 'ALREADY_HANDLED';
+    if (order.currency !== 'BRL')
+      return { failure: { type: 'OTHER', code: 'PAYMENT_CURRENCY_MISMATCH' } };
 
-      const payments = await tx.$queryRaw<PaymentSnapshot[]>`
-        SELECT "id", "status", "paidAt", "amountMinor", "currency"
-        FROM "Payment" WHERE "orderId" = ${order.id}::uuid FOR UPDATE
-      `;
-      if (payments.length !== 1)
-        return { failure: { type: 'MISSING_LOCAL', code: 'PAYMENT_MISSING' } };
-      const payment = payments[0];
-      if (payment.status !== PaymentStatus.PAID)
-        return { failure: { type: 'STATUS_MISMATCH', code: 'PAYMENT_NOT_PAID' } };
-      if (!payment.paidAt)
-        return { failure: { type: 'STATUS_MISMATCH', code: 'PAYMENT_PAID_AT_MISSING' } };
-      if (payment.currency !== 'BRL')
-        return { failure: { type: 'OTHER', code: 'PAYMENT_CURRENCY_MISMATCH' } };
-      if (payment.amountMinor !== order.totalAmountMinor)
-        return { failure: { type: 'AMOUNT_MISMATCH', code: 'PAYMENT_AMOUNT_MISMATCH' } };
-      const recognition = await tx.ledgerTransaction.findMany({
-        where: { type: 'SALE_RECOGNIZED', referenceType: 'OrderSale', referenceId: order.id },
-        include: { entries: { include: { account: true } } },
+    const proceeds = order.totalAmountMinor - order.platformFeeAmountMinor;
+    if (proceeds < 0n)
+      return { failure: { type: 'AMOUNT_MISMATCH', code: 'SELLER_PROCEEDS_INVALID' } };
+    const payments = await tx.$queryRaw<PaymentSnapshot[]>`
+      SELECT "id", "status", "paidAt", "amountMinor", "currency"
+      FROM "Payment" WHERE "orderId" = ${order.id}::uuid FOR UPDATE
+    `;
+    if (payments.length !== 1)
+      return { failure: { type: 'MISSING_LOCAL', code: 'PAYMENT_MISSING' } };
+    const payment = payments[0];
+    if (payment.status !== PaymentStatus.PAID)
+      return { failure: { type: 'STATUS_MISMATCH', code: 'PAYMENT_NOT_PAID' } };
+    if (!payment.paidAt)
+      return { failure: { type: 'STATUS_MISMATCH', code: 'PAYMENT_PAID_AT_MISSING' } };
+    if (payment.currency !== 'BRL')
+      return { failure: { type: 'OTHER', code: 'PAYMENT_CURRENCY_MISMATCH' } };
+    if (payment.amountMinor !== order.totalAmountMinor)
+      return { failure: { type: 'AMOUNT_MISMATCH', code: 'PAYMENT_AMOUNT_MISMATCH' } };
+
+    const recognition = await tx.ledgerTransaction.findMany({
+      where: { type: 'SALE_RECOGNIZED', referenceType: 'OrderSale', referenceId: order.id },
+      include: { entries: { include: { account: true } } },
+    });
+    if (!recognition.length)
+      return { failure: { type: 'MISSING_LOCAL', code: 'SALE_RECOGNITION_MISSING' } };
+    if (!this.validRecognition(recognition, order, proceeds))
+      return { failure: { type: 'OTHER', code: 'SALE_RECOGNITION_INVALID' } };
+
+    if (proceeds === 0n) {
+      const marker = await tx.sellerPendingHoldZero.findUnique({ where: { orderId: order.id } });
+      if (marker) {
+        if (
+          marker.orderId !== order.id ||
+          marker.paymentId !== payment.id ||
+          marker.sellerProfileId !== order.sellerProfileId
+        )
+          return { failure: { type: 'OTHER', code: 'SELLER_HOLD_ARTIFACT_MISMATCH' } };
+        return 'ALREADY_HANDLED';
+      }
+      await tx.sellerPendingHoldZero.create({
+        data: { orderId: order.id, paymentId: payment.id, sellerProfileId: order.sellerProfileId },
       });
-      if (!recognition.length)
-        return { failure: { type: 'MISSING_LOCAL', code: 'SALE_RECOGNITION_MISSING' } };
-      if (!this.validRecognition(recognition, order, proceeds))
-        return { failure: { type: 'OTHER', code: 'SALE_RECOGNITION_INVALID' } };
-      return { order, payment, proceeds };
+      return 'PROCESSED';
+    }
+
+    const postings = await tx.ledgerTransaction.findMany({
+      where: { type: LEDGER_TYPE, referenceType: LEDGER_REFERENCE_TYPE, referenceId: order.id },
+      include: { entries: { include: { account: true } } },
+    });
+    const holds = await tx.financialHold.findMany({
+      where: { orderId: order.id, reason: 'DELIVERY_PROTECTION' },
+    });
+    if (
+      postings.length &&
+      !this.validHoldPosting(postings, order, proceeds, this.holdKey(order.id))
+    )
+      return { failure: { type: 'OTHER', code: 'SELLER_HOLD_LEDGER_IDEMPOTENCY_MISMATCH' } };
+    if (holds.length > 1 || postings.length > 1)
+      return { failure: { type: 'OTHER', code: 'SELLER_HOLD_ARTIFACT_MISMATCH' } };
+    const posting = postings[0];
+    const hold = holds[0];
+    if (hold && !posting)
+      return { failure: { type: 'OTHER', code: 'SELLER_HOLD_ARTIFACT_MISMATCH' } };
+    if (hold && posting && !this.validHold(hold, posting.id, order, payment, proceeds))
+      return { failure: { type: 'OTHER', code: 'SELLER_HOLD_ARTIFACT_MISMATCH' } };
+    if (hold && posting) return 'ALREADY_HANDLED';
+    if (posting) {
+      await this.createHold(tx, order, payment, proceeds, posting.id);
+      return 'ALREADY_HANDLED';
+    }
+
+    const accounts = await tx.ledgerAccount.findMany({
+      where: {
+        ownerType: 'SELLER',
+        ownerId: order.sellerProfileId,
+        currency: 'BRL',
+        purpose: { in: ['SELLER_PENDING', 'SELLER_HELD'] },
+      },
+    });
+    const pending = accounts.find((account) => account.purpose === 'SELLER_PENDING');
+    const held = accounts.find((account) => account.purpose === 'SELLER_HELD');
+    if (!pending || !held)
+      return { failure: { type: 'MISSING_LOCAL', code: 'SELLER_LEDGER_ACCOUNT_MISSING' } };
+    const outcome = await this.ledger.postWithOutcomeInTransaction(tx, {
+      type: LEDGER_TYPE,
+      currency: 'BRL',
+      idempotencyKeyHash: this.holdKey(order.id),
+      referenceType: LEDGER_REFERENCE_TYPE,
+      referenceId: order.id,
+      emitOutbox: true,
+      metadata: {
+        orderId: order.id,
+        paymentId: payment.id,
+        sellerProfileId: order.sellerProfileId,
+        amountMinor: proceeds.toString(),
+        currency: 'BRL',
+        referenceType: LEDGER_REFERENCE_TYPE,
+      },
+      entries: [
+        { accountId: pending.id, direction: 'DEBIT', amountMinor: proceeds },
+        { accountId: held.id, direction: 'CREDIT', amountMinor: proceeds },
+      ],
+    });
+    await this.createHold(tx, order, payment, proceeds, outcome.transaction.id);
+    return outcome.created ? 'PROCESSED' : 'ALREADY_HANDLED';
+  }
+
+  private validHold(
+    hold: Prisma.FinancialHoldGetPayload<Record<string, never>>,
+    ledgerTransactionId: string,
+    order: Snapshot,
+    payment: PaymentSnapshot,
+    proceeds: bigint,
+  ): boolean {
+    return (
+      hold.orderId === order.id &&
+      hold.paymentId === payment.id &&
+      hold.sellerProfileId === order.sellerProfileId &&
+      hold.ledgerTransactionId === ledgerTransactionId &&
+      hold.amountMinor === proceeds &&
+      hold.currency === 'BRL' &&
+      hold.reason === 'DELIVERY_PROTECTION' &&
+      hold.status === 'ACTIVE' &&
+      hold.releaseEligibleAt === null &&
+      hold.releasedAt === null
+    );
+  }
+
+  private async createHold(
+    tx: Prisma.TransactionClient,
+    order: Snapshot,
+    payment: PaymentSnapshot,
+    amountMinor: bigint,
+    ledgerTransactionId: string,
+  ): Promise<void> {
+    await tx.financialHold.create({
+      data: {
+        orderId: order.id,
+        paymentId: payment.id,
+        sellerProfileId: order.sellerProfileId,
+        ledgerTransactionId,
+        amountMinor,
+        currency: 'BRL',
+        reason: 'DELIVERY_PROTECTION',
+        status: 'ACTIVE',
+        releaseEligibleAt: null,
+        releasedAt: null,
+      },
     });
   }
 
@@ -347,18 +370,6 @@ export class SellerPendingHoldService {
           entry.amountMinor === proceeds,
       ),
     );
-  }
-
-  private async markZero(order: Snapshot, payment: PaymentSnapshot): Promise<boolean> {
-    return this.prisma.$transaction(async (tx) => {
-      await acquireAdvisoryTransactionLock(tx, `financial:seller-pending-hold:${order.id}`);
-      const prior = await tx.sellerPendingHoldZero.findUnique({ where: { orderId: order.id } });
-      if (prior) return false;
-      await tx.sellerPendingHoldZero.create({
-        data: { orderId: order.id, paymentId: payment.id, sellerProfileId: order.sellerProfileId },
-      });
-      return true;
-    });
   }
 
   private async ensureIssue(orderId: string, failure: Failure) {

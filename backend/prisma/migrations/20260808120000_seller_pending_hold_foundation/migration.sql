@@ -7,6 +7,13 @@ ALTER TABLE "FinancialHold" ADD CONSTRAINT "FinancialHold_payment_order_fkey"
   FOREIGN KEY ("paymentId", "orderId") REFERENCES "Payment"("id", "orderId") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "FinancialHold" ADD CONSTRAINT "FinancialHold_ledgerTransactionId_fkey"
   FOREIGN KEY ("ledgerTransactionId") REFERENCES "LedgerTransaction"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "FinancialHold" ADD CONSTRAINT "FinancialHold_delivery_protection_valid_check" CHECK (
+  "reason" <> 'DELIVERY_PROTECTION' OR (
+    "orderId" IS NOT NULL AND "paymentId" IS NOT NULL AND "ledgerTransactionId" IS NOT NULL
+    AND "amountMinor" > 0 AND "currency" = 'BRL' AND "status" = 'ACTIVE'
+    AND "releaseEligibleAt" IS NULL AND "releasedAt" IS NULL
+  )
+);
 CREATE UNIQUE INDEX "FinancialHold_ledgerTransactionId_key" ON "FinancialHold"("ledgerTransactionId");
 CREATE INDEX "FinancialHold_orderId_reason_idx" ON "FinancialHold"("orderId", "reason");
 CREATE UNIQUE INDEX "FinancialHold_delivery_protection_order_unique"
