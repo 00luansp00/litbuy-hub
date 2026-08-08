@@ -1486,8 +1486,8 @@ model FinancialHold {
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
   sellerProfile       SellerProfile       @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
-  payment             Payment?            @relation(fields: [paymentId], references: [id], onDelete: Restrict)
-  order               Order?              @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  payment             Payment?            @relation(fields: [paymentId, orderId], references: [id, orderId], onDelete: Restrict)
+  order               Order?              @relation(fields: [orderId, sellerProfileId], references: [id, sellerProfileId], onDelete: Restrict)
   ledgerTransaction   LedgerTransaction?  @relation(fields: [ledgerTransactionId], references: [id], onDelete: Restrict)
 
   @@index([orderId, reason])
@@ -1499,10 +1499,12 @@ model SellerPendingHoldZero {
   paymentId       String        @unique @db.Uuid
   sellerProfileId String        @db.Uuid
   completedAt     DateTime      @default(now())
-  order           Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  payment         Payment       @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  order           Order         @relation(fields: [orderId, sellerProfileId], references: [id, sellerProfileId], onDelete: Restrict)
+  payment         Payment       @relation(fields: [paymentId, orderId], references: [id, orderId], onDelete: Restrict)
   sellerProfile   SellerProfile @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
 
+  @@unique([orderId, sellerProfileId])
+  @@unique([paymentId, orderId])
   @@index([sellerProfileId])
 }
 

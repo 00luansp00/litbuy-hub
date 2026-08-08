@@ -233,6 +233,109 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
     ).toBe(1);
   });
 
+  it('does not let a wrong-key seller hold artifact disappear from batch selection', async () => {
+    const { order, payment } = await completedOrder(1000n);
+    const accounts = await prisma.ledgerAccount.findMany({
+      where: { ownerType: 'SELLER', ownerId: order.sellerProfileId },
+    });
+    const pending = accounts.find((account) => account.purpose === 'SELLER_PENDING')!;
+    const held = accounts.find((account) => account.purpose === 'SELLER_HELD')!;
+    const ledger = app.get(FinancialLedgerService);
+    const wrong = await ledger.postWithOutcome({
+      type: 'SELLER_FUNDS_HELD',
+      currency: 'BRL',
+      idempotencyKeyHash: randomUUID(),
+      referenceType: 'OrderSellerHold',
+      referenceId: order.id,
+      entries: [
+        { accountId: pending.id, direction: 'DEBIT', amountMinor: 9000n },
+        { accountId: held.id, direction: 'CREDIT', amountMinor: 9000n },
+      ],
+    });
+    await prisma.financialHold.create({
+      data: {
+        orderId: order.id,
+        paymentId: payment.id,
+        sellerProfileId: order.sellerProfileId,
+        ledgerTransactionId: wrong.transaction.id,
+        amountMinor: 9000n,
+        reason: 'DELIVERY_PROTECTION',
+      },
+    });
+
+    expect(await service.processBatch(1)).toBe(1);
+    expect(await service.processBatch(1)).toBe(0);
+    expect(
+      await prisma.reconciliationIssue.findMany({
+        where: { referenceType: 'SellerPendingHold', referenceId: order.id, status: 'OPEN' },
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        details: { errorCode: 'SELLER_HOLD_LEDGER_IDEMPOTENCY_MISMATCH' },
+      }),
+    ]);
+    expect(
+      await prisma.ledgerTransaction.count({
+        where: { type: 'SELLER_FUNDS_HELD', referenceId: order.id },
+      }),
+    ).toBe(1);
+  });
+
+  it.each([
+    ['missing ledger transaction', { ledgerTransactionId: null }],
+    ['zero amount', { amountMinor: 0n }],
+    ['non-BRL currency', { currency: 'USD' }],
+    ['non-active status', { status: 'BLOCKED' as const }],
+    ['release eligibility', { releaseEligibleAt: new Date() }],
+    ['released timestamp', { releasedAt: new Date() }],
+  ])('database rejects invalid DELIVERY_PROTECTION: %s', async (_name, override) => {
+    const { order, payment } = await completedOrder(1000n);
+    const recognition = await prisma.ledgerTransaction.findFirstOrThrow({
+      where: { type: 'SALE_RECOGNIZED', referenceId: order.id },
+    });
+    await expect(
+      prisma.financialHold.create({
+        data: {
+          orderId: order.id,
+          paymentId: payment.id,
+          sellerProfileId: order.sellerProfileId,
+          ledgerTransactionId: recognition.id,
+          amountMinor: 9000n,
+          reason: 'DELIVERY_PROTECTION',
+          ...override,
+        },
+      }),
+    ).rejects.toBeDefined();
+  });
+
+  it('serializes an OPEN dispute committed before seller-hold validation', async () => {
+    const { order } = await completedOrder(1000n);
+    let lockAcquired!: () => void;
+    let releaseLock!: () => void;
+    const acquired = new Promise<void>((resolve) => (lockAcquired = resolve));
+    const release = new Promise<void>((resolve) => (releaseLock = resolve));
+    const dispute = prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "Order" WHERE "id" = ${order.id}::uuid FOR UPDATE`;
+      await tx.order.update({ where: { id: order.id }, data: { disputeStatus: 'OPEN' } });
+      lockAcquired();
+      await release;
+    });
+    await acquired;
+    const holdAttempt = service.processOne(order.id);
+    releaseLock();
+    await Promise.all([dispute, holdAttempt]);
+
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).disputeStatus).toBe(
+      'OPEN',
+    );
+    expect(
+      await prisma.ledgerTransaction.count({
+        where: { type: 'SELLER_FUNDS_HELD', referenceId: order.id },
+      }),
+    ).toBe(0);
+    expect(await prisma.financialHold.count({ where: { orderId: order.id } })).toBe(0);
+  });
+
   it('contains no PSP, HTTP, withdrawal, timer, or release-to-available dependency', () => {
     const source = readFileSync(
       join(__dirname, '../src/financial/seller-pending-hold.service.ts'),

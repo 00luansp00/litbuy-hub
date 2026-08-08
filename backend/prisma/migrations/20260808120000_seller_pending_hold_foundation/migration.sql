@@ -33,6 +33,8 @@ CREATE TABLE "SellerPendingHoldZero" (
     REFERENCES "SellerProfile"("id") ON DELETE RESTRICT ON UPDATE CASCADE
 );
 CREATE UNIQUE INDEX "SellerPendingHoldZero_paymentId_key" ON "SellerPendingHoldZero"("paymentId");
+CREATE UNIQUE INDEX "SellerPendingHoldZero_orderId_sellerProfileId_key" ON "SellerPendingHoldZero"("orderId", "sellerProfileId");
+CREATE UNIQUE INDEX "SellerPendingHoldZero_paymentId_orderId_key" ON "SellerPendingHoldZero"("paymentId", "orderId");
 CREATE INDEX "SellerPendingHoldZero_sellerProfileId_idx" ON "SellerPendingHoldZero"("sellerProfileId");
 
 CREATE UNIQUE INDEX "LedgerTransaction_seller_funds_held_order_unique"

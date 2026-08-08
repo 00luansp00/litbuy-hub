@@ -56,32 +56,27 @@ export class SellerPendingHoldService {
   async processBatch(limit = 25): Promise<number> {
     const bounded = Math.max(1, Math.min(limit, 100));
     let processed = 0;
+    const seenOrderIds = new Set<string>();
     while (processed < bounded) {
-      const result = await this.processOne();
-      if (result === 'NO_CANDIDATE') break;
+      const orderId = await this.nextCandidate(seenOrderIds);
+      if (!orderId) break;
+      seenOrderIds.add(orderId);
+      const result = await this.processOne(orderId);
       if (result === 'PROCESSED') processed += 1;
     }
     return processed;
   }
 
-  private async nextCandidate(): Promise<string | null> {
+  private async nextCandidate(
+    seenOrderIds: ReadonlySet<string> = new Set(),
+  ): Promise<string | null> {
+    const seen = [...seenOrderIds];
     const rows = await this.prisma.$queryRaw<Array<{ id: string }>>`
       SELECT o."id" FROM "Order" o
       WHERE o."status" = 'COMPLETED'
         AND o."paymentStatus" = 'PAID'
         AND o."fulfillmentStatus" = 'CONFIRMED'
         AND o."disputeStatus" NOT IN ('OPEN', 'UNDER_REVIEW')
-        AND NOT EXISTS (
-          SELECT 1 FROM "FinancialHold" h
-          JOIN "Payment" hp ON hp."id" = h."paymentId" AND hp."orderId" = o."id"
-          JOIN "LedgerTransaction" lt ON lt."id" = h."ledgerTransactionId"
-          WHERE h."orderId" = o."id" AND h."reason" = 'DELIVERY_PROTECTION'
-            AND h."sellerProfileId" = o."sellerProfileId"
-            AND h."amountMinor" = o."totalAmountMinor" - o."platformFeeAmountMinor"
-            AND h."currency" = 'BRL' AND h."status" = 'ACTIVE'
-            AND lt."type" = ${LEDGER_TYPE} AND lt."referenceType" = ${LEDGER_REFERENCE_TYPE}
-            AND lt."referenceId" = o."id"
-        )
         AND NOT EXISTS (SELECT 1 FROM "SellerPendingHoldZero" z
           JOIN "Payment" zp ON zp."id" = z."paymentId" AND zp."orderId" = o."id"
           WHERE z."orderId" = o."id" AND z."sellerProfileId" = o."sellerProfileId"
@@ -92,6 +87,7 @@ export class SellerPendingHoldService {
             AND r."referenceId" = o."id"::text
             AND r."status" IN ('OPEN', 'INVESTIGATING')
         )
+        AND o."id"::text NOT IN (${Prisma.join(seen.length ? seen : [''])})
       ORDER BY o."updatedAt", o."id" LIMIT 1
     `;
     return rows[0]?.id ?? null;
