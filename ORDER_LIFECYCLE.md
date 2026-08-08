@@ -146,3 +146,7 @@ atualiza status → cria/atualiza `Order` correspondente → libera entrega.
 Todos disparam também notificação na plataforma. Envio real ficará no backend.
 
 <!-- HISTORICAL_SNAPSHOT_END -->
+
+## Fulfillment foundation (PR #49)
+
+The authoritative post-payment fulfillment lifecycle is implemented in `OrderFulfillmentService` and specified in `ORDER_FULFILLMENT_FOUNDATION.md`. Delivery requires hashed evidence, buyer confirmation is explicit, disputes fail closed, and completion requires the valid PR #48 `SALE_RECOGNIZED` transaction. This phase does not transport secrets, auto-confirm, simulate automatic delivery, or release seller funds; proceeds remain `SELLER_PENDING` for the next financial-release phase.

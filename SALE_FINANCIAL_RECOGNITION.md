@@ -60,3 +60,7 @@ Validation failures create a deduplicated open reconciliation issue using:
 ## Boundaries
 
 The service does not call a PSP, Efí, HTTP, frontend data, settlement, financial hold, fulfillment, delivery, disputes, refunds, chargebacks, withdrawals, or operational settlement. Future PRs will move seller amounts from `PENDING` to held or available buckets when the commercial lifecycle supports release.
+
+## Fulfillment foundation (PR #49)
+
+The authoritative post-payment fulfillment lifecycle is implemented in `OrderFulfillmentService` and specified in `ORDER_FULFILLMENT_FOUNDATION.md`. Delivery requires hashed evidence, buyer confirmation is explicit, disputes fail closed, and completion requires the valid PR #48 `SALE_RECOGNIZED` transaction. This phase does not transport secrets, auto-confirm, simulate automatic delivery, or release seller funds; proceeds remain `SELLER_PENDING` for the next financial-release phase.
