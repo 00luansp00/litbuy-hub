@@ -320,6 +320,63 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
     ).toBe(0);
   });
 
+  it('reconciles a structurally valid RELEASE_ELIGIBLE hold marked before its deadline', async () => {
+    const { order, payment, actorUserId } = await completedOrder(1000n);
+    await publishSellerReleasePolicy(actorUserId, 72);
+    await service.processOne(order.id);
+    const hold = await prisma.financialHold.findFirstOrThrow({ where: { orderId: order.id } });
+    expect(hold.status).toBe('ACTIVE');
+    const before = {
+      ledgerTransactions: await prisma.ledgerTransaction.count(),
+      ledgerEntries: await prisma.ledgerEntry.count(),
+      balances: await prisma.$queryRaw<Array<{ purpose: string; balance: bigint }>>`
+        SELECT a."purpose"::text AS "purpose",
+          COALESCE(SUM(CASE e."direction" WHEN 'CREDIT' THEN e."amountMinor" ELSE -e."amountMinor" END), 0)::bigint AS "balance"
+        FROM "LedgerAccount" a LEFT JOIN "LedgerEntry" e ON e."accountId" = a."id"
+        WHERE a."ownerType" = 'SELLER' AND a."ownerId" = ${order.sellerProfileId}
+          AND a."purpose" IN ('SELLER_HELD', 'SELLER_AVAILABLE', 'SELLER_RESERVED')
+        GROUP BY a."purpose" ORDER BY a."purpose"
+      `,
+      order: await prisma.order.findUniqueOrThrow({ where: { id: order.id } }),
+      payment: await prisma.payment.findUniqueOrThrow({ where: { id: payment.id } }),
+      delivery: await prisma.orderDelivery.findUniqueOrThrow({ where: { orderId: order.id } }),
+    };
+
+    await prisma.financialHold.update({
+      where: { id: hold.id },
+      data: { status: 'RELEASE_ELIGIBLE' },
+    });
+    expect(await eligibility.processOne(hold.id)).toBe('RECONCILIATION_REQUIRED');
+    expect(
+      await prisma.reconciliationIssue.findFirst({
+        where: { referenceType: 'SellerHoldEligibility', referenceId: hold.id, status: 'OPEN' },
+      }),
+    ).toMatchObject({ details: { errorCode: 'SELLER_HOLD_ELIGIBILITY_PREMATURE' } });
+    expect(await prisma.financialHold.findUniqueOrThrow({ where: { id: hold.id } })).toMatchObject({
+      status: 'RELEASE_ELIGIBLE',
+      releasedAt: null,
+    });
+    expect(await prisma.ledgerTransaction.count()).toBe(before.ledgerTransactions);
+    expect(await prisma.ledgerEntry.count()).toBe(before.ledgerEntries);
+    expect(
+      await prisma.$queryRaw<Array<{ purpose: string; balance: bigint }>>`
+        SELECT a."purpose"::text AS "purpose",
+          COALESCE(SUM(CASE e."direction" WHEN 'CREDIT' THEN e."amountMinor" ELSE -e."amountMinor" END), 0)::bigint AS "balance"
+        FROM "LedgerAccount" a LEFT JOIN "LedgerEntry" e ON e."accountId" = a."id"
+        WHERE a."ownerType" = 'SELLER' AND a."ownerId" = ${order.sellerProfileId}
+          AND a."purpose" IN ('SELLER_HELD', 'SELLER_AVAILABLE', 'SELLER_RESERVED')
+        GROUP BY a."purpose" ORDER BY a."purpose"
+      `,
+    ).toEqual(before.balances);
+    expect(await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).toEqual(before.order);
+    expect(await prisma.payment.findUniqueOrThrow({ where: { id: payment.id } })).toEqual(
+      before.payment,
+    );
+    expect(await prisma.orderDelivery.findUniqueOrThrow({ where: { orderId: order.id } })).toEqual(
+      before.delivery,
+    );
+  });
+
   it('honors a retired historical policy under six concurrent workers', async () => {
     const { order, actorUserId } = await completedOrder(1000n);
     const policy = await publishSellerReleasePolicy(actorUserId, 0);

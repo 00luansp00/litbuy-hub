@@ -175,7 +175,14 @@ export class SellerHoldEligibilityService {
         type: postings.length ? 'OTHER' : 'MISSING_LOCAL',
         code: postings.length ? 'SELLER_HOLD_POSTING_INVALID' : 'SELLER_HOLD_POSTING_MISSING',
       });
-    if (replay) return 'ALREADY_ELIGIBLE';
+    if (replay) {
+      if (!hold.due)
+        return this.fail(tx, holdId, {
+          type: 'STATUS_MISMATCH',
+          code: 'SELLER_HOLD_ELIGIBILITY_PREMATURE',
+        });
+      return 'ALREADY_ELIGIBLE';
+    }
     if (order.disputeStatus === 'OPEN' || order.disputeStatus === 'UNDER_REVIEW')
       return 'BUSINESS_BLOCKED';
     if (
