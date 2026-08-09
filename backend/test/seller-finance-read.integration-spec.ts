@@ -247,11 +247,7 @@ describe('Seller finance read HTTP with real auth and PostgreSQL', () => {
   });
 
   it('exposes pending, held, and available checkpoints from the real commerce chain', async () => {
-    const sellerActor = await actor();
-    const actorProfile = await prisma.sellerProfile.findUniqueOrThrow({
-      where: { userId: sellerActor.userId },
-    });
-    await prisma.sellerProfile.delete({ where: { id: actorProfile.id } });
+    const sellerActor = await actor(true, 'NONE');
     const fixture = await commerceFixture(prisma, 'NORMAL', undefined, 20, false);
     await prisma.sellerProfile.update({
       where: { id: fixture.seller.id },
