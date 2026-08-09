@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { JwtModule } from '@nestjs/jwt';
+import { AuthModule } from '../auth/auth.module';
 import { DatabaseModule } from '../database/database.module';
 import { FinancialLedgerService } from './financial-ledger.service';
 import { SaleFinancialRecognitionService } from './sale-financial-recognition.service';
@@ -6,6 +8,8 @@ import { SellerPendingHoldService } from './seller-pending-hold.service';
 import { SellerHoldEligibilityService } from './seller-hold-eligibility.service';
 import { SellerHeldFundsReleaseService } from './seller-held-funds-release.service';
 import { SellerReleasePolicyService } from './seller-release-policy.service';
+import { SellerFinanceController } from './seller-finance.controller';
+import { SellerFinanceReadService } from './seller-finance-read.service';
 import {
   PaymentOrchestrationService,
   PAYMENT_PROVIDER_PORT,
@@ -29,10 +33,11 @@ import {
   ProviderWebhookEventProcessor,
 } from './provider-webhook-event.processor';
 @Module({
-  imports: [DatabaseModule],
-  controllers: [ProviderNotificationController],
+  imports: [DatabaseModule, AuthModule, JwtModule.register({})],
+  controllers: [ProviderNotificationController, SellerFinanceController],
   providers: [
     FinancialLedgerService,
+    SellerFinanceReadService,
     SaleFinancialRecognitionService,
     SellerPendingHoldService,
     SellerHoldEligibilityService,

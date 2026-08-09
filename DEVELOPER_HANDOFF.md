@@ -297,3 +297,7 @@ The policy is now applied to positive delivery-protection holds as an immutable 
 ## Seller held funds release
 
 `SellerHeldFundsReleaseService` now owns the internal, serializable `SELLER_HELD -> SELLER_AVAILABLE` posting for valid `RELEASE_ELIGIBLE` delivery holds. It has no scheduler or public endpoint. See `SELLER_HELD_FUNDS_RELEASE.md` for identity, locking, replay, dispute, and reconciliation rules.
+
+## Seller finance read API
+
+`GET /api/v1/seller/finance/summary` and `/activity` resolve the active `SellerProfile` only from the authenticated user. Both are ledger-derived and strictly read-only; activity exposes only aggregated movements from that seller's entries. Preserve decimal-string minor units and all five buckets. Withdrawal and seller finance frontend work remain pending.
