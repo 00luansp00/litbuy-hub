@@ -53,6 +53,19 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
       publicVersion: version++,
       fixedAmountMinor: fee,
     });
+    await prisma.sellerReleasePolicyVersion.create({
+      data: {
+        publicVersion: version++,
+        status: 'ACTIVE',
+        effectiveFrom: new Date(Date.now() - 60_000),
+        createdByUserId: fixture.sellerUser.id,
+        publishedByUserId: fixture.sellerUser.id,
+        publishedAt: new Date(),
+        rules: {
+          create: { code: 'DELIVERY_PROTECTION_DEFAULT', delayHours: 72, enabled: true },
+        },
+      },
+    });
     const cart = await carts.add(fixture.buyer.id, fixture.seller.slug, {
       productId: fixture.product.id,
       quantity: 10,
@@ -142,7 +155,9 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
       paymentId: payment.id,
       amountMinor: 9000n,
       status: 'ACTIVE',
-      releaseEligibleAt: null,
+      releaseDelayHours: 72,
+      releasePolicyAppliedAt: expect.any(Date),
+      releaseEligibleAt: expect.any(Date),
     });
     expect(await prisma.settlement.count()).toBe(0);
     expect(await prisma.withdrawal.count()).toBe(0);
@@ -165,6 +180,58 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
     expect(
       await prisma.financialOutboxEvent.count({ where: { eventType: 'SELLER_FUNDS_HELD' } }),
     ).toBe(1);
+  });
+
+  it('fails closed without an effective policy and does not move pending funds', async () => {
+    const { order } = await completedOrder(1000n);
+    await prisma.sellerReleasePolicyVersion.updateMany({
+      where: { status: 'ACTIVE' },
+      data: { status: 'RETIRED' },
+    });
+    await Promise.all(Array.from({ length: 6 }, () => service.processOne(order.id)));
+    expect(
+      await prisma.ledgerTransaction.count({
+        where: { type: 'SELLER_FUNDS_HELD', referenceId: order.id },
+      }),
+    ).toBe(0);
+    expect(await prisma.financialHold.count({ where: { orderId: order.id } })).toBe(0);
+    expect(
+      await prisma.reconciliationIssue.findMany({
+        where: { referenceType: 'SellerPendingHold', referenceId: order.id, status: 'OPEN' },
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        details: { errorCode: 'SELLER_RELEASE_POLICY_NOT_FOUND' },
+      }),
+    ]);
+  });
+
+  it('keeps delay zero scheduled and ACTIVE without releasing funds', async () => {
+    const { order } = await completedOrder(1000n);
+    const policy = await prisma.sellerReleasePolicyVersion.findFirstOrThrow({
+      where: { status: 'ACTIVE' },
+      include: { rules: true },
+    });
+    await prisma.sellerReleasePolicyVersion.update({
+      where: { id: policy.id },
+      data: { status: 'RETIRED' },
+    });
+    await prisma.sellerReleasePolicyVersion.create({
+      data: {
+        publicVersion: version++,
+        status: 'ACTIVE',
+        effectiveFrom: new Date(Date.now() - 60_000),
+        createdByUserId: policy.createdByUserId,
+        publishedByUserId: policy.createdByUserId,
+        publishedAt: new Date(),
+        rules: { create: { code: 'DELIVERY_PROTECTION_DEFAULT', delayHours: 0 } },
+      },
+    });
+    expect(await service.processOne(order.id)).toBe('PROCESSED');
+    const hold = await prisma.financialHold.findFirstOrThrow({ where: { orderId: order.id } });
+    expect(hold.releaseEligibleAt).toEqual(hold.releasePolicyAppliedAt);
+    expect(hold.status).toBe('ACTIVE');
+    expect(hold.releasedAt).toBeNull();
   });
 
   it('durably marks zero proceeds without monetary artifacts or a batch busy loop', async () => {
@@ -286,7 +353,6 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
     ['zero amount', { amountMinor: 0n }],
     ['non-BRL currency', { currency: 'USD' }],
     ['non-active status', { status: 'BLOCKED' as const }],
-    ['release eligibility', { releaseEligibleAt: new Date() }],
     ['released timestamp', { releasedAt: new Date() }],
   ])('database rejects invalid DELIVERY_PROTECTION: %s', async (_name, override) => {
     const { order, payment } = await completedOrder(1000n);

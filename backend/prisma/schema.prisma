@@ -1481,23 +1481,28 @@ model LedgerEntry {
 }
 
 model FinancialHold {
-  id                  String              @id @default(uuid()) @db.Uuid
-  sellerProfileId     String              @db.Uuid
-  paymentId           String?             @db.Uuid
-  orderId             String?             @db.Uuid
-  ledgerTransactionId String?             @unique @db.Uuid
-  amountMinor         BigInt
-  currency            String              @default("BRL")
-  reason              FinancialHoldReason
-  status              FinancialHoldStatus @default(ACTIVE)
-  releaseEligibleAt   DateTime?
-  releasedAt          DateTime?
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
-  sellerProfile       SellerProfile       @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
-  payment             Payment?            @relation(fields: [paymentId, orderId], references: [id, orderId], onDelete: Restrict)
-  order               Order?              @relation(fields: [orderId, sellerProfileId], references: [id, sellerProfileId], onDelete: Restrict)
-  ledgerTransaction   LedgerTransaction?  @relation(fields: [ledgerTransactionId], references: [id], onDelete: Restrict)
+  id                           String                   @id @default(uuid()) @db.Uuid
+  sellerProfileId              String                   @db.Uuid
+  paymentId                    String?                  @db.Uuid
+  orderId                      String?                  @db.Uuid
+  ledgerTransactionId          String?                  @unique @db.Uuid
+  sellerReleasePolicyVersionId String?                  @db.Uuid
+  sellerReleasePolicyRuleId    String?                  @db.Uuid
+  releaseDelayHours            Int?
+  releasePolicyAppliedAt       DateTime?
+  amountMinor                  BigInt
+  currency                     String                   @default("BRL")
+  reason                       FinancialHoldReason
+  status                       FinancialHoldStatus      @default(ACTIVE)
+  releaseEligibleAt            DateTime?
+  releasedAt                   DateTime?
+  createdAt                    DateTime                 @default(now())
+  updatedAt                    DateTime                 @updatedAt
+  sellerProfile                SellerProfile            @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
+  payment                      Payment?                 @relation(fields: [paymentId, orderId], references: [id, orderId], onDelete: Restrict)
+  order                        Order?                   @relation(fields: [orderId, sellerProfileId], references: [id, sellerProfileId], onDelete: Restrict)
+  ledgerTransaction            LedgerTransaction?       @relation(fields: [ledgerTransactionId], references: [id], onDelete: Restrict)
+  sellerReleasePolicyRule      SellerReleasePolicyRule? @relation(fields: [sellerReleasePolicyRuleId, sellerReleasePolicyVersionId], references: [id, policyVersionId], onDelete: Restrict)
 
   @@index([orderId, reason])
 }
@@ -1818,6 +1823,8 @@ model SellerReleasePolicyRule {
   createdAt       DateTime                   @default(now())
   updatedAt       DateTime                   @updatedAt
   policyVersion   SellerReleasePolicyVersion @relation(fields: [policyVersionId], references: [id], onDelete: Restrict)
+  financialHolds  FinancialHold[]
 
+  @@unique([id, policyVersionId])
   @@unique([policyVersionId, code])
 }

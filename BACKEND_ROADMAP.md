@@ -200,3 +200,7 @@ The authoritative post-payment fulfillment lifecycle is implemented in `OrderFul
 ## Seller release policy foundation (PR #51)
 
 The versioned, immutable global delivery-protection delay policy and fail-closed PostgreSQL-time resolver are defined in `SELLER_RELEASE_POLICY_FOUNDATION.md`. No production duration is seeded and no hold, ledger balance, settlement, withdrawal, endpoint, or scheduler changes. Applying a policy snapshot and moving held funds remain separate future increments.
+
+## Seller hold release snapshot (PR #52)
+
+Positive delivery-protection holds freeze the effective policy and PostgreSQL-time eligibility schedule atomically with the existing pending-to-held posting. Legacy unscheduled holds are upgraded without ledger mutation. Holds remain `ACTIVE`; observing the clock and moving held funds are later increments.

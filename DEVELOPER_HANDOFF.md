@@ -282,3 +282,7 @@ The authoritative post-payment fulfillment lifecycle is implemented in `OrderFul
 ## Seller release policy handoff
 
 Read `SELLER_RELEASE_POLICY_FOUNDATION.md` before implementing hold eligibility. `SellerReleasePolicyService` resolves one global, ACTIVE version using PostgreSQL time and fails closed on absence or ambiguity. There is no production seed and the policy is not yet applied to `FinancialHold`; do not infer a commercial delay from test fixtures.
+
+## Seller hold release snapshot handoff (PR #52)
+
+The policy is now applied to positive delivery-protection holds as an immutable snapshot; read `SELLER_HOLD_RELEASE_SNAPSHOT.md`. Eligibility is a timestamp only: holds remain `ACTIVE`, and available/reserved balances, withdrawals, PSP operations, and scheduling remain out of scope. There is still no production duration seed.
