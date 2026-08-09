@@ -293,3 +293,7 @@ Read `SELLER_RELEASE_POLICY_FOUNDATION.md` before implementing hold eligibility.
 ## Seller hold release snapshot handoff (PR #52)
 
 The policy is now applied to positive delivery-protection holds as an immutable snapshot; read `SELLER_HOLD_RELEASE_SNAPSHOT.md`. Eligibility is a timestamp only: holds remain `ACTIVE`, and available/reserved balances, withdrawals, PSP operations, and scheduling remain out of scope. There is still no production duration seed.
+
+## Seller held funds release
+
+`SellerHeldFundsReleaseService` now owns the internal, serializable `SELLER_HELD -> SELLER_AVAILABLE` posting for valid `RELEASE_ELIGIBLE` delivery holds. It has no scheduler or public endpoint. See `SELLER_HELD_FUNDS_RELEASE.md` for identity, locking, replay, dispute, and reconciliation rules.

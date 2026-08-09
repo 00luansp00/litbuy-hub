@@ -10,6 +10,7 @@ import { CheckoutService } from '../src/checkout/checkout.service';
 import { PrismaService } from '../src/database/prisma.service';
 import { FinancialLedgerService } from '../src/financial/financial-ledger.service';
 import { SellerHoldEligibilityService } from '../src/financial/seller-hold-eligibility.service';
+import { SellerHeldFundsReleaseService } from '../src/financial/seller-held-funds-release.service';
 import { SaleFinancialRecognitionService } from '../src/financial/sale-financial-recognition.service';
 import { SellerPendingHoldService } from '../src/financial/seller-pending-hold.service';
 import { PaidOrderActivationService } from '../src/orders/paid-order-activation.service';
@@ -27,6 +28,7 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
   let recognition: SaleFinancialRecognitionService;
   let service: SellerPendingHoldService;
   let eligibility: SellerHoldEligibilityService;
+  let release: SellerHeldFundsReleaseService;
   let fulfillment: OrderFulfillmentService;
   let version = 50_000;
 
@@ -40,6 +42,7 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
     recognition = app.get(SaleFinancialRecognitionService);
     service = app.get(SellerPendingHoldService);
     eligibility = app.get(SellerHoldEligibilityService);
+    release = app.get(SellerHeldFundsReleaseService);
     fulfillment = app.get(OrderFulfillmentService);
   });
   beforeEach(() =>
@@ -774,6 +777,99 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
       }),
     ).toBe(0);
     expect(await prisma.financialHold.count({ where: { orderId: order.id } })).toBe(0);
+  });
+
+  async function eligibleHold() {
+    const { order, actorUserId } = await completedOrder(1000n);
+    await publishSellerReleasePolicy(actorUserId, 0);
+    expect(await service.processOne(order.id)).toBe('PROCESSED');
+    const hold = await prisma.financialHold.findFirstOrThrow({ where: { orderId: order.id } });
+    expect(await eligibility.processOne(hold.id)).toBe('RELEASE_ELIGIBLE');
+    return { order, hold };
+  }
+
+  it('atomically releases held proceeds to available and deeply validates replays', async () => {
+    const { order, hold } = await eligibleHold();
+    const ledger = app.get(FinancialLedgerService);
+    expect(await ledger.getSellerFinancialBalance(order.sellerProfileId)).toMatchObject({
+      pending: 0n,
+      held: 9000n,
+      available: 0n,
+      reserved: 0n,
+    });
+
+    expect(await release.processOne(hold.id)).toBe('RELEASED');
+    expect(await release.processOne(hold.id)).toBe('ALREADY_RELEASED');
+    expect(await release.processOne(hold.id)).toBe('ALREADY_RELEASED');
+    expect(await ledger.getSellerFinancialBalance(order.sellerProfileId)).toMatchObject({
+      pending: 0n,
+      held: 0n,
+      available: 9000n,
+      reserved: 0n,
+    });
+    const released = await prisma.financialHold.findUniqueOrThrow({ where: { id: hold.id } });
+    expect(released).toMatchObject({ status: 'RELEASED' });
+    expect(released.releasedAt).not.toBeNull();
+    expect(released.releaseLedgerTransactionId).not.toBe(released.ledgerTransactionId);
+    const postings = await prisma.ledgerTransaction.findMany({
+      where: {
+        type: 'SELLER_FUNDS_RELEASED',
+        referenceType: 'FinancialHoldRelease',
+        referenceId: hold.id,
+      },
+      include: {
+        entries: { include: { account: true } },
+        financialEvent: { include: { outbox: true } },
+      },
+    });
+    expect(postings).toHaveLength(1);
+    expect(postings[0].entries).toHaveLength(2);
+    expect(postings[0].financialEvent?.outbox).not.toBeNull();
+  });
+
+  it('converges six concurrent workers on exactly one monetary release', async () => {
+    const { order, hold } = await eligibleHold();
+    const outcomes = await Promise.all(
+      Array.from({ length: 6 }, () => release.processOne(hold.id)),
+    );
+    expect(outcomes.filter((value) => value === 'RELEASED')).toHaveLength(1);
+    expect(outcomes.filter((value) => value === 'ALREADY_RELEASED')).toHaveLength(5);
+    expect(
+      await prisma.ledgerTransaction.count({
+        where: { type: 'SELLER_FUNDS_RELEASED', referenceId: hold.id },
+      }),
+    ).toBe(1);
+    expect(
+      (await app.get(FinancialLedgerService).getSellerFinancialBalance(order.sellerProfileId))
+        .available,
+    ).toBe(9000n);
+  });
+
+  it('observes an OPEN dispute that wins the order lock before release', async () => {
+    const { hold } = await eligibleHold();
+    let locked!: () => void;
+    let unlock!: () => void;
+    const acquired = new Promise<void>((resolve) => (locked = resolve));
+    const gate = new Promise<void>((resolve) => (unlock = resolve));
+    const dispute = prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "Order" WHERE "id" = ${hold.orderId}::uuid FOR UPDATE`;
+      await tx.order.update({ where: { id: hold.orderId! }, data: { disputeStatus: 'OPEN' } });
+      locked();
+      await gate;
+    });
+    await acquired;
+    const attempt = release.processOne(hold.id);
+    unlock();
+    await dispute;
+    expect(await attempt).toBe('BUSINESS_BLOCKED');
+    expect((await prisma.financialHold.findUniqueOrThrow({ where: { id: hold.id } })).status).toBe(
+      'RELEASE_ELIGIBLE',
+    );
+    expect(
+      await prisma.ledgerTransaction.count({
+        where: { type: 'SELLER_FUNDS_RELEASED', referenceId: hold.id },
+      }),
+    ).toBe(0);
   });
 
   it('contains no PSP, HTTP, withdrawal, timer, or release-to-available dependency', () => {

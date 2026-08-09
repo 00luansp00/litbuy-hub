@@ -1451,19 +1451,20 @@ model LedgerAccount {
 }
 
 model LedgerTransaction {
-  id                 String          @id @default(uuid()) @db.Uuid
-  currency           String          @default("BRL")
-  type               String
-  referenceType      String?
-  referenceId        String?         @db.Uuid
-  idempotencyKeyHash String          @unique
-  requestHash        String
-  reversalOfId       String?         @db.Uuid
-  metadata           Json            @default("{}")
-  createdAt          DateTime        @default(now())
-  entries            LedgerEntry[]
-  financialEvent     FinancialEvent?
-  financialHold      FinancialHold?
+  id                       String          @id @default(uuid()) @db.Uuid
+  currency                 String          @default("BRL")
+  type                     String
+  referenceType            String?
+  referenceId              String?         @db.Uuid
+  idempotencyKeyHash       String          @unique
+  requestHash              String
+  reversalOfId             String?         @db.Uuid
+  metadata                 Json            @default("{}")
+  createdAt                DateTime        @default(now())
+  entries                  LedgerEntry[]
+  financialEvent           FinancialEvent?
+  originatingFinancialHold FinancialHold?  @relation("FinancialHoldOriginatingTransaction")
+  releasedFinancialHold    FinancialHold?  @relation("FinancialHoldReleaseTransaction")
 }
 
 model LedgerEntry {
@@ -1486,6 +1487,7 @@ model FinancialHold {
   paymentId                    String?                  @db.Uuid
   orderId                      String?                  @db.Uuid
   ledgerTransactionId          String?                  @unique @db.Uuid
+  releaseLedgerTransactionId   String?                  @unique @db.Uuid
   sellerReleasePolicyVersionId String?                  @db.Uuid
   sellerReleasePolicyRuleId    String?                  @db.Uuid
   releaseDelayHours            Int?
@@ -1501,7 +1503,8 @@ model FinancialHold {
   sellerProfile                SellerProfile            @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
   payment                      Payment?                 @relation(fields: [paymentId, orderId], references: [id, orderId], onDelete: Restrict)
   order                        Order?                   @relation(fields: [orderId, sellerProfileId], references: [id, sellerProfileId], onDelete: Restrict)
-  ledgerTransaction            LedgerTransaction?       @relation(fields: [ledgerTransactionId], references: [id], onDelete: Restrict)
+  ledgerTransaction            LedgerTransaction?       @relation("FinancialHoldOriginatingTransaction", fields: [ledgerTransactionId], references: [id], onDelete: Restrict)
+  releaseLedgerTransaction     LedgerTransaction?       @relation("FinancialHoldReleaseTransaction", fields: [releaseLedgerTransactionId], references: [id], onDelete: Restrict)
   sellerReleasePolicyRule      SellerReleasePolicyRule? @relation(fields: [sellerReleasePolicyRuleId, sellerReleasePolicyVersionId], references: [id, policyVersionId], onDelete: Restrict)
 
   @@index([orderId, reason])

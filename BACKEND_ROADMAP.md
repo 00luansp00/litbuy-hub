@@ -209,3 +209,7 @@ The versioned, immutable global delivery-protection delay policy and fail-closed
 ## Seller hold release snapshot (PR #52)
 
 Positive delivery-protection holds freeze the effective policy and PostgreSQL-time eligibility schedule atomically with the existing pending-to-held posting. Legacy unscheduled holds are upgraded without ledger mutation. Holds remain `ACTIVE`; observing the clock and moving held funds are later increments.
+
+## Completed: internal held-funds release
+
+Delivery-protection holds can now progress `RELEASE_ELIGIBLE -> RELEASED` atomically with `DR SELLER_HELD / CR SELLER_AVAILABLE`. Withdrawal/reservation, PSP transfer, scheduling, API, and UI remain future scope.

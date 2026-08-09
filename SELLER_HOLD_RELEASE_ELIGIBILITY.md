@@ -23,3 +23,7 @@ PostgreSQL enforces the monotonic lifecycle: a delivery-protection hold is inser
 may transition only to `RELEASE_ELIGIBLE`, and can never return to `ACTIVE`. A replay returns
 `ALREADY_ELIGIBLE` only after the frozen snapshot, historical rule, order/payment correlations,
 and original posting have been validated again; the historical policy may be `RETIRED`.
+
+## Downstream monetary release
+
+Eligibility remains non-monetary. A separately identified internal operation revalidates the frozen snapshot and moves `SELLER_HELD` to `SELLER_AVAILABLE` atomically with `RELEASED`; see `SELLER_HELD_FUNDS_RELEASE.md`.
