@@ -5,7 +5,10 @@ import { AccessTokenGuard } from '../auth/access-token.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { PlatformRolesGuard } from '../auth/platform-roles.guard';
 import { RequireRoles } from '../auth/platform-roles';
-import { SellerFinanceActivityQueryDto } from './seller-finance.dto';
+import {
+  SellerFinanceActivityQueryDto,
+  SellerFinanceSummaryQueryDto,
+} from './seller-finance.dto';
 import { SellerFinanceReadService } from './seller-finance-read.service';
 
 @ApiTags('Seller finance')
@@ -15,10 +18,15 @@ import { SellerFinanceReadService } from './seller-finance-read.service';
 @Controller('seller/finance')
 export class SellerFinanceController {
   constructor(private readonly service: SellerFinanceReadService) {}
-  @Get('summary') summary(@CurrentUser() user: { userId: string }) {
+  @Get('summary')
+  summary(
+    @CurrentUser() user: { userId: string },
+    @Query() _query: SellerFinanceSummaryQueryDto,
+  ) {
     return this.service.summary(user.userId);
   }
-  @Get('activity') activity(
+  @Get('activity')
+  activity(
     @CurrentUser() user: { userId: string },
     @Query() query: SellerFinanceActivityQueryDto,
   ) {
