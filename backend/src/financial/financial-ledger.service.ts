@@ -97,7 +97,11 @@ export class FinancialLedgerService {
     });
   }
   async getSellerFinancialBalance(sellerProfileId: string) {
-    const accounts = await this.ensureSellerLedgerAccounts(sellerProfileId);
+    // Reads must never provision accounts. Posting workflows explicitly call
+    // ensureSellerLedgerAccounts before writing.
+    const accounts = await this.prisma.ledgerAccount.findMany({
+      where: { ownerType: 'SELLER', ownerId: sellerProfileId, currency: 'BRL' },
+    });
     const ids = accounts.map((a) => a.id);
     const grouped = await this.prisma.ledgerEntry.groupBy({
       by: ['accountId', 'direction'],

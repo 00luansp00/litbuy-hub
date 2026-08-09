@@ -6,6 +6,8 @@ import { SellerPendingHoldService } from './seller-pending-hold.service';
 import { SellerHoldEligibilityService } from './seller-hold-eligibility.service';
 import { SellerHeldFundsReleaseService } from './seller-held-funds-release.service';
 import { SellerReleasePolicyService } from './seller-release-policy.service';
+import { SellerFinanceController } from './seller-finance.controller';
+import { SellerFinanceReadService } from './seller-finance-read.service';
 import {
   PaymentOrchestrationService,
   PAYMENT_PROVIDER_PORT,
@@ -30,9 +32,10 @@ import {
 } from './provider-webhook-event.processor';
 @Module({
   imports: [DatabaseModule],
-  controllers: [ProviderNotificationController],
+  controllers: [ProviderNotificationController, SellerFinanceController],
   providers: [
     FinancialLedgerService,
+    SellerFinanceReadService,
     SaleFinancialRecognitionService,
     SellerPendingHoldService,
     SellerHoldEligibilityService,

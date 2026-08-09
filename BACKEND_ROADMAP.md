@@ -213,3 +213,7 @@ Positive delivery-protection holds freeze the effective policy and PostgreSQL-ti
 ## Completed: internal held-funds release
 
 Delivery-protection holds can now progress `RELEASE_ELIGIBLE -> RELEASED` atomically with `DR SELLER_HELD / CR SELLER_AVAILABLE`. Withdrawal/reservation, PSP transfer, scheduling, API, and UI remain future scope.
+
+## Seller finance read API (PR #55)
+
+Authenticated active sellers can read their ledger-derived BRL `PENDING`, `HELD`, `AVAILABLE`, `RESERVED`, and `DEFICIT` buckets and cursor-paginated activity through owner-only, read-only endpoints. Minor-unit JSON values are decimal strings. No accounts or postings are created by reads; withdrawal and the seller finance frontend remain unimplemented.
