@@ -2,6 +2,8 @@ Status: arquitetura aprovada para implementação incremental
 Escopo: carrinho, checkout, pedidos, estoque e fronteira financeira
 Implementação: ainda não iniciada
 
+> Atualização financeira incremental: após conclusão e confirmação autoritativas, o serviço interno descrito em `SELLER_PENDING_HOLD_FOUNDATION.md` move exclusivamente os proceeds do snapshot de `SELLER_PENDING` para `SELLER_HELD`. Não há liberação para available ou saque nesta etapa.
+
 # Arquitetura comercial autoritativa
 
 Este documento é a fonte de verdade do domínio comercial. Ele congela contratos futuros, não implementa carrinho, pedido, pagamento, ledger ou integração financeira. O sistema não está pronto para dinheiro real.

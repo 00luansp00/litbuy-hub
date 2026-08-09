@@ -349,6 +349,7 @@ model SellerProfile {
   paymentProviderAccounts PaymentProviderAccount[]
   ledgerAccounts          LedgerAccount[]
   financialHolds          FinancialHold[]
+  sellerPendingHoldZeros  SellerPendingHoldZero[]
   withdrawals             Withdrawal[]
   orderDeliveries         OrderDelivery[]
 
@@ -935,6 +936,8 @@ model Order {
   events                   OrderEvent[]
   payment                  Payment?
   delivery                 OrderDelivery?
+  financialHolds           FinancialHold[]
+  sellerPendingHoldZero    SellerPendingHoldZero?
   refunds                  Refund[]
   feePolicyVersion         FeePolicyVersion?      @relation(fields: [feePolicyVersionId], references: [id], onDelete: Restrict)
   platformCommissionRule   FeeRule?               @relation("OrderPlatformCommissionRule", fields: [platformCommissionRuleId, feePolicyVersionId], references: [id, policyVersionId], onDelete: Restrict)
@@ -1351,21 +1354,22 @@ enum WithdrawalPolicyStatus {
 }
 
 model Payment {
-  id          String           @id @default(uuid()) @db.Uuid
-  orderId     String           @unique @db.Uuid
-  amountMinor BigInt
-  currency    String           @default("BRL")
-  status      PaymentStatus    @default(PENDING)
-  paidAt      DateTime?
-  version     Int              @default(1)
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  attempts    PaymentAttempt[]
-  refunds     Refund[]
-  settlements Settlement[]
-  chargebacks Chargeback[]
-  holds       FinancialHold[]
-  order       Order            @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  id                    String                 @id @default(uuid()) @db.Uuid
+  orderId               String                 @unique @db.Uuid
+  amountMinor           BigInt
+  currency              String                 @default("BRL")
+  status                PaymentStatus          @default(PENDING)
+  paidAt                DateTime?
+  version               Int                    @default(1)
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  attempts              PaymentAttempt[]
+  refunds               Refund[]
+  settlements           Settlement[]
+  chargebacks           Chargeback[]
+  holds                 FinancialHold[]
+  sellerPendingHoldZero SellerPendingHoldZero?
+  order                 Order                  @relation(fields: [orderId], references: [id], onDelete: Restrict)
 
   @@unique([id, orderId])
 }
@@ -1450,6 +1454,7 @@ model LedgerTransaction {
   createdAt          DateTime        @default(now())
   entries            LedgerEntry[]
   financialEvent     FinancialEvent?
+  financialHold      FinancialHold?
 }
 
 model LedgerEntry {
@@ -1467,19 +1472,40 @@ model LedgerEntry {
 }
 
 model FinancialHold {
-  id                String              @id @default(uuid()) @db.Uuid
-  sellerProfileId   String              @db.Uuid
-  paymentId         String?             @db.Uuid
-  amountMinor       BigInt
-  currency          String              @default("BRL")
-  reason            FinancialHoldReason
-  status            FinancialHoldStatus @default(ACTIVE)
-  releaseEligibleAt DateTime?
-  releasedAt        DateTime?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  sellerProfile     SellerProfile       @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
-  payment           Payment?            @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  id                  String              @id @default(uuid()) @db.Uuid
+  sellerProfileId     String              @db.Uuid
+  paymentId           String?             @db.Uuid
+  orderId             String?             @db.Uuid
+  ledgerTransactionId String?             @unique @db.Uuid
+  amountMinor         BigInt
+  currency            String              @default("BRL")
+  reason              FinancialHoldReason
+  status              FinancialHoldStatus @default(ACTIVE)
+  releaseEligibleAt   DateTime?
+  releasedAt          DateTime?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  sellerProfile       SellerProfile       @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
+  payment             Payment?            @relation(fields: [paymentId, orderId], references: [id, orderId], onDelete: Restrict)
+  order               Order?              @relation(fields: [orderId, sellerProfileId], references: [id, sellerProfileId], onDelete: Restrict)
+  ledgerTransaction   LedgerTransaction?  @relation(fields: [ledgerTransactionId], references: [id], onDelete: Restrict)
+
+  @@index([orderId, reason])
+}
+
+/// Non-monetary completion marker for the valid full-commission case only.
+model SellerPendingHoldZero {
+  orderId         String        @id @db.Uuid
+  paymentId       String        @unique @db.Uuid
+  sellerProfileId String        @db.Uuid
+  completedAt     DateTime      @default(now())
+  order           Order         @relation(fields: [orderId, sellerProfileId], references: [id, sellerProfileId], onDelete: Restrict)
+  payment         Payment       @relation(fields: [paymentId, orderId], references: [id, orderId], onDelete: Restrict)
+  sellerProfile   SellerProfile @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
+
+  @@unique([orderId, sellerProfileId])
+  @@unique([paymentId, orderId])
+  @@index([sellerProfileId])
 }
 
 model Settlement {
