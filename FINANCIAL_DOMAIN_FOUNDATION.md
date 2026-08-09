@@ -48,3 +48,7 @@ Completed, paid, confirmed, undisputed orders with a valid sale recognition now 
 ## Delivery-hold release snapshot (PR #52)
 
 Positive-proceeds delivery holds now freeze the effective release-policy version, rule, delay, PostgreSQL application timestamp, and calculated eligibility timestamp without moving held funds. Legacy unscheduled holds are upgraded conservatively from the time of policy application. See `SELLER_HOLD_RELEASE_SNAPSHOT.md`.
+
+## Held funds release
+
+Delivery-protection proceeds become internally available only through the atomic release described in `SELLER_HELD_FUNDS_RELEASE.md`; `RELEASE_ELIGIBLE` alone does not change ledger balances.

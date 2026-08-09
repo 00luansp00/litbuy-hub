@@ -4,6 +4,7 @@ import { FinancialLedgerService } from './financial-ledger.service';
 import { SaleFinancialRecognitionService } from './sale-financial-recognition.service';
 import { SellerPendingHoldService } from './seller-pending-hold.service';
 import { SellerHoldEligibilityService } from './seller-hold-eligibility.service';
+import { SellerHeldFundsReleaseService } from './seller-held-funds-release.service';
 import { SellerReleasePolicyService } from './seller-release-policy.service';
 import {
   PaymentOrchestrationService,
@@ -35,6 +36,7 @@ import {
     SaleFinancialRecognitionService,
     SellerPendingHoldService,
     SellerHoldEligibilityService,
+    SellerHeldFundsReleaseService,
     SellerReleasePolicyService,
     PaymentOrchestrationService,
     { provide: PAYMENT_PROVIDER_PORT, useFactory: () => new EfiPaymentProvider(readEfiConfig()) },
@@ -67,6 +69,7 @@ import {
     SaleFinancialRecognitionService,
     SellerPendingHoldService,
     SellerHoldEligibilityService,
+    SellerHeldFundsReleaseService,
     SellerReleasePolicyService,
     PaymentOrchestrationService,
     ProviderNotificationIngressService,
