@@ -148,14 +148,8 @@ export class SellerHeldFundsReleaseService {
     await tx.$queryRaw`SELECT "id" FROM "Order" WHERE "id" = ${hold.orderId}::uuid FOR UPDATE`;
     const order = await tx.order.findUnique({ where: { id: hold.orderId } });
     if (!order) return this.fail(tx, holdId, 'MISSING_LOCAL', 'ORDER_INVALID');
-    if (order.disputeStatus === 'OPEN' || order.disputeStatus === 'UNDER_REVIEW')
-      return 'BUSINESS_BLOCKED' as const;
     const proceeds = order.totalAmountMinor - order.platformFeeAmountMinor;
     if (
-      order.status !== 'COMPLETED' ||
-      order.paymentStatus !== 'PAID' ||
-      order.fulfillmentStatus !== 'CONFIRMED' ||
-      order.disputeStatus !== 'NONE' ||
       order.currency !== 'BRL' ||
       order.sellerProfileId !== hold.sellerProfileId ||
       proceeds <= 0n ||
@@ -170,7 +164,6 @@ export class SellerHeldFundsReleaseService {
       payments.length !== 1 ||
       !payment ||
       payment.id !== hold.paymentId ||
-      payment.status !== 'PAID' ||
       !payment.paidAt ||
       payment.currency !== 'BRL' ||
       payment.amountMinor !== order.totalAmountMinor
@@ -208,8 +201,25 @@ export class SellerHeldFundsReleaseService {
         )
       )
         return this.fail(tx, holdId, 'OTHER', 'RELEASE_POSTING_INVALID');
+      const releasePosting = releases[0];
+      if (
+        hold.releasedAt!.getTime() < hold.releaseEligibleAt!.getTime() ||
+        releasePosting.createdAt.getTime() < hold.releaseEligibleAt!.getTime() ||
+        hold.releasedAt!.getTime() !== releasePosting.createdAt.getTime()
+      )
+        return this.fail(tx, holdId, 'STATUS_MISMATCH', 'SELLER_HELD_FUNDS_RELEASE_TIMING_INVALID');
       return 'ALREADY_RELEASED' as const;
     }
+    if (order.disputeStatus === 'OPEN' || order.disputeStatus === 'UNDER_REVIEW')
+      return 'BUSINESS_BLOCKED' as const;
+    if (
+      order.status !== 'COMPLETED' ||
+      order.paymentStatus !== 'PAID' ||
+      order.fulfillmentStatus !== 'CONFIRMED' ||
+      order.disputeStatus !== 'NONE'
+    )
+      return this.fail(tx, holdId, 'STATUS_MISMATCH', 'ORDER_INVALID');
+    if (payment.status !== 'PAID') return this.fail(tx, holdId, 'OTHER', 'PAYMENT_INVALID');
     if (releases.length)
       return this.fail(tx, holdId, 'OTHER', 'RELEASE_POSTING_PARTIAL_OR_INVALID');
     if (!hold.due) return this.fail(tx, holdId, 'STATUS_MISMATCH', 'SELLER_HOLD_RELEASE_PREMATURE');

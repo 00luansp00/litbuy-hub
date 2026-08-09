@@ -825,7 +825,81 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
     expect(postings).toHaveLength(1);
     expect(postings[0].entries).toHaveLength(2);
     expect(postings[0].financialEvent?.outbox).not.toBeNull();
+    expect(released.releasedAt!.getTime()).toBeGreaterThanOrEqual(
+      released.releaseEligibleAt!.getTime(),
+    );
+    expect(postings[0].createdAt.getTime()).toBeGreaterThanOrEqual(
+      released.releaseEligibleAt!.getTime(),
+    );
+    expect(postings[0].createdAt.getTime()).toBe(released.releasedAt!.getTime());
   });
+
+  it('rejects RELEASED when releasedAt is before releaseEligibleAt at the database boundary', async () => {
+    const { hold } = await eligibleHold();
+    const original = await prisma.ledgerTransaction.findUniqueOrThrow({
+      where: { id: hold.ledgerTransactionId! },
+    });
+    await expect(
+      prisma.$executeRaw`
+        UPDATE "FinancialHold" SET "status" = 'RELEASED',
+          "releaseLedgerTransactionId" = ${original.id}::uuid,
+          "releasedAt" = "releaseEligibleAt" - interval '1 millisecond'
+        WHERE "id" = ${hold.id}::uuid
+      `,
+    ).rejects.toBeDefined();
+    expect((await prisma.financialHold.findUniqueOrThrow({ where: { id: hold.id } })).status).toBe(
+      'RELEASE_ELIGIBLE',
+    );
+  });
+
+  it('validates release history rather than mutable dispute state on replay', async () => {
+    const { order, hold } = await eligibleHold();
+    expect(await release.processOne(hold.id)).toBe('RELEASED');
+    const beforeHold = await prisma.financialHold.findUniqueOrThrow({ where: { id: hold.id } });
+    const beforeBalance = await app
+      .get(FinancialLedgerService)
+      .getSellerFinancialBalance(order.sellerProfileId);
+    const before = {
+      transactions: await prisma.ledgerTransaction.count(),
+      entries: await prisma.ledgerEntry.count(),
+      events: await prisma.financialEvent.count(),
+      outbox: await prisma.financialOutboxEvent.count(),
+    };
+    await prisma.order.update({ where: { id: order.id }, data: { disputeStatus: 'OPEN' } });
+
+    expect(await release.processOne(hold.id)).toBe('ALREADY_RELEASED');
+    expect(await prisma.financialHold.findUniqueOrThrow({ where: { id: hold.id } })).toMatchObject({
+      status: 'RELEASED',
+      releasedAt: beforeHold.releasedAt,
+      releaseLedgerTransactionId: beforeHold.releaseLedgerTransactionId,
+    });
+    expect(
+      await app.get(FinancialLedgerService).getSellerFinancialBalance(order.sellerProfileId),
+    ).toEqual(beforeBalance);
+    expect({
+      transactions: await prisma.ledgerTransaction.count(),
+      entries: await prisma.ledgerEntry.count(),
+      events: await prisma.financialEvent.count(),
+      outbox: await prisma.financialOutboxEvent.count(),
+    }).toEqual(before);
+  });
+
+  it.each(['OPEN', 'UNDER_REVIEW'] as const)(
+    'business-blocks a new release for a %s dispute',
+    async (disputeStatus) => {
+      const { order, hold } = await eligibleHold();
+      await prisma.order.update({ where: { id: order.id }, data: { disputeStatus } });
+      expect(await release.processOne(hold.id)).toBe('BUSINESS_BLOCKED');
+      expect(
+        await prisma.ledgerTransaction.count({
+          where: { type: 'SELLER_FUNDS_RELEASED', referenceId: hold.id },
+        }),
+      ).toBe(0);
+      expect(
+        (await prisma.financialHold.findUniqueOrThrow({ where: { id: hold.id } })).status,
+      ).toBe('RELEASE_ELIGIBLE');
+    },
+  );
 
   it('converges six concurrent workers on exactly one monetary release', async () => {
     const { order, hold } = await eligibleHold();

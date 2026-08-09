@@ -42,7 +42,9 @@ ALTER TABLE "FinancialHold"
           AND "releaseDelayHours" IS NOT NULL AND "releaseDelayHours" >= 0
           AND "releasePolicyAppliedAt" IS NOT NULL
           AND "releaseEligibleAt" IS NOT NULL
-          AND "releasedAt" IS NOT NULL AND "releaseLedgerTransactionId" IS NOT NULL)
+          AND "releasedAt" IS NOT NULL
+          AND "releasedAt" >= "releaseEligibleAt"
+          AND "releaseLedgerTransactionId" IS NOT NULL)
       )
     )
   );
