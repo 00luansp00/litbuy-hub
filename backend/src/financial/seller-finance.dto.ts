@@ -1,5 +1,10 @@
 import { Transform } from 'class-transformer';
-import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsEmpty, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+
+export class SellerFinanceSummaryQueryDto {
+  @IsEmpty()
+  sellerProfileId?: string;
+}
 
 export class SellerFinanceActivityQueryDto {
   @IsOptional()
