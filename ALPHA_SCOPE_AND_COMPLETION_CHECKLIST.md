@@ -6,21 +6,23 @@ Este documento é a fonte autoritativa para a linha de chegada da fase atual do 
 
 > **“Finalizar aqui” significa concluir todas as implementações deliberadamente pertencentes ao Handoff Alpha v1. Não significa produção pública nem dinheiro real habilitado.**
 
-A condição necessária para encerrar a fase atual de implementação é:
+A condição necessária para encerrar a fase atual de implementação e iniciar o feature freeze é:
 
-`PENDENTE PARA ALPHA = 0`
+`PENDENTE DE IMPLEMENTAÇÃO ALPHA = 0`
 
-Enquanto existir qualquer item em `PENDENTE PARA ALPHA`, é proibido iniciar auditoria geral, refatoração geral, polishing arquitetural, revisão geral por outra IA, tentativa de reinventar módulos antigos ou feature freeze prematuro.
+Enquanto existir qualquer item em `PENDENTE DE IMPLEMENTAÇÃO ALPHA`, é proibido iniciar auditoria geral, refatoração geral, polishing arquitetural, revisão geral por outra IA, tentativa de reinventar módulos antigos ou feature freeze prematuro. Depois do freeze, a estabilização termina somente quando `GATES DE ESTABILIZAÇÃO / HANDOFF = 0`.
 
 ## Ordem oficial das fases
 
-`IMPLEMENTAR TODO O ESCOPO DO ALPHA`
-→ `PENDENTE PARA ALPHA = 0`
+`IMPLEMENTAR TODO O ESCOPO FUNCIONAL DO ALPHA`
+→ `PENDENTE DE IMPLEMENTAÇÃO ALPHA = 0`
 → `FEATURE FREEZE`
 → `ESTABILIZAÇÃO LOCAL`
 → `STAGING`
-→ `E2E / TESTES DO FLUXO COMPLETO`
+→ `OBSERVABILIDADE MÍNIMA`
+→ `TESTES MANUAIS / E2E DO FLUXO COMPLETO`
 → `CORREÇÃO DE BUGS OBJETIVOS`
+→ `GATES DE ESTABILIZAÇÃO / HANDOFF = 0`
 → `HANDOFF ALPHA V1 ESTÁVEL`
 → `AUDITORIA EXTERNA READ-ONLY`
 → `TRIAGEM DOS ACHADOS`
@@ -36,7 +38,8 @@ Não usar o fluxo incorreto:
 ## Critério de classificação
 
 - `CONCLUÍDO` exige implementação real persistida/ligada ao backend quando isso fizer parte do contrato; UI ou mock isolado não basta.
-- `PENDENTE PARA ALPHA` contém somente lacunas verificadas do caminho crítico já decidido e os gates operacionais necessários antes do freeze.
+- `PENDENTE DE IMPLEMENTAÇÃO ALPHA` contém somente funcionalidades e integrações verificadas do caminho crítico que precisam estar implementadas antes do freeze.
+- `GATES DE ESTABILIZAÇÃO / HANDOFF` contém as validações e gates operacionais executados depois do freeze e antes do Handoff Alpha v1 estável.
 - `FORA DO ALPHA / PRODUÇÃO` preserva blockers de produção sem fazê-los bloquear o Alpha.
 - As referências a PR indicam o incremento principal, não necessariamente todo o histórico que sustenta o item.
 
@@ -69,26 +72,34 @@ A cadeia construída da venda é:
 
 Isso fecha o núcleo financeiro da venda até saldo **internamente disponível**. Não finaliza todo o domínio financeiro e não habilita cash-out, payout ou dinheiro real.
 
-## PENDENTE PARA ALPHA
+## PENDENTE DE IMPLEMENTAÇÃO ALPHA
 
-Cada linha abaixo é um blocker até ser implementada e validada ou até uma decisão humana autoritativa alterar seu estado. A contagem chega a zero somente quando não restar nenhuma linha aberta.
+Cada linha abaixo bloqueia o feature freeze até ser implementada ou até uma decisão humana autoritativa alterar seu estado. O freeze começa somente quando não restar nenhuma linha aberta: `PENDENTE DE IMPLEMENTAÇÃO ALPHA = 0`.
 
-| Domínio                            | Estado                  | PR responsável | Entrega necessária e evidência atual                                                                                                                                                                                                                                                                                              |
-| ---------------------------------- | ----------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Buyer — carrinho real no navegador | **PENDENTE PARA ALPHA** | futura         | Conectar a experiência do carrinho ao `CartsModule` persistente. `src/services/cartService.ts` permanece mockado.                                                                                                                                                                                                                 |
-| Buyer — checkout real              | **PENDENTE PARA ALPHA** | futura         | Conectar o frontend de checkout ao commerce backend real, preservando idempotência, reserva e snapshots. `src/services/checkoutService.ts` ainda simula criação de pedido.                                                                                                                                                        |
-| Buyer — pagamento Alpha            | **PENDENTE PARA ALPHA** | futura         | Oferecer pelo navegador pagamento fake/sandbox seguro e utilizável, ligado à orquestração backend e à ativação do pedido; `src/services/paymentService.ts` permanece 100% mockado. Não é pagamento real.                                                                                                                          |
-| Buyer — pós-compra                 | **PENDENTE PARA ALPHA** | futura         | Ligar acompanhamento, entrega e confirmação explícita de recebimento ao order/fulfillment backend. As leituras básicas existem, mas `src/services/orderService.ts` ainda simula ações de pós-compra.                                                                                                                              |
-| Seller — vendas e entrega          | **PENDENTE PARA ALPHA** | futura         | Ligar as telas de venda/entrega ao fluxo real de fulfillment, incluindo a progressão observável da venda. `src/services/sellerSaleService.ts` ainda é mockado.                                                                                                                                                                    |
-| Seller — financeiro                | **PENDENTE PARA ALPHA** | futura         | Fazer o frontend consumir as APIs owner-only de resumo/atividade da PR #55 e representar corretamente `PENDING`, `HELD` e `AVAILABLE`, sem sugerir saque real. A tela atual usa dados mockados.                                                                                                                                   |
-| Admin — operação mínima integrada  | **PENDENTE PARA ALPHA** | futura         | Validar e completar somente as superfícies reais indispensáveis ao caminho crítico: seller onboarding, moderação e catálogo/anúncios. Partes do admin continuam explicitamente mockadas; módulos não críticos não viram blocker automaticamente.                                                                                  |
-| Fluxo crítico sem mocks            | **PENDENTE PARA ALPHA** | futura         | Demonstrar no navegador Buyer (auth → catálogo → produto → carrinho → checkout → pagamento Alpha → pedido → acompanhamento → recebimento), Seller (onboarding → anúncio → publicação → venda → entrega → `PENDING` → `HELD` → `AVAILABLE` → financeiro) e o suporte Admin mínimo. O caminho principal não pode depender de mocks. |
-| Execução e handoff local           | **PENDENTE PARA ALPHA** | futura         | Revalidar ambiente local reproduzível e consolidar instruções claras para executar o fluxo completo com PostgreSQL, Redis e object storage reais; concluir a documentação de handoff e a lista explícita de production blockers. A foundation local já existe, mas a aplicação Alpha completa ainda não foi aceita.               |
-| Staging Alpha                      | **PENDENTE PARA ALPHA** | futura         | Hospedar staging e configurar/validar environments, secrets não produtivos, migrations, PostgreSQL, Redis e object storage de staging. Não há evidência versionada de staging hospedado e validado para o fluxo completo.                                                                                                         |
-| Observabilidade Alpha              | **PENDENTE PARA ALPHA** | futura         | Definir e validar observabilidade mínima suficiente para diagnosticar o fluxo crítico em staging, sem antecipar o hardening/stack completo de produção.                                                                                                                                                                           |
-| Testes do fluxo completo           | **PENDENTE PARA ALPHA** | futura         | Após o feature freeze, executar testes manuais e E2E críticos pelo navegador em staging, corrigir bugs objetivos e registrar a estabilização do Handoff Alpha v1. Testes unitários/integrados atuais não provam esse fluxo E2E.                                                                                                   |
+| Domínio                            | Estado                              | PR responsável | Entrega necessária e evidência atual                                                                                                                                                                     |
+| ---------------------------------- | ----------------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Buyer — carrinho real no navegador | **PENDENTE DE IMPLEMENTAÇÃO ALPHA** | futura         | Conectar a experiência do carrinho ao `CartsModule` persistente. `src/services/cartService.ts` permanece mockado.                                                                                        |
+| Buyer — checkout real              | **PENDENTE DE IMPLEMENTAÇÃO ALPHA** | futura         | Conectar o frontend de checkout ao commerce backend real, preservando idempotência, reserva e snapshots. `src/services/checkoutService.ts` ainda simula criação de pedido.                               |
+| Buyer — pagamento Alpha            | **PENDENTE DE IMPLEMENTAÇÃO ALPHA** | futura         | Oferecer pelo navegador pagamento fake/sandbox seguro e utilizável, ligado à orquestração backend e à ativação do pedido; `src/services/paymentService.ts` permanece 100% mockado. Não é pagamento real. |
+| Buyer — pós-compra                 | **PENDENTE DE IMPLEMENTAÇÃO ALPHA** | futura         | Ligar acompanhamento, entrega e confirmação explícita de recebimento ao order/fulfillment backend. As leituras básicas existem, mas `src/services/orderService.ts` ainda simula ações de pós-compra.     |
+| Seller — vendas e entrega          | **PENDENTE DE IMPLEMENTAÇÃO ALPHA** | futura         | Ligar as telas de venda/entrega ao fluxo real de fulfillment, incluindo a progressão observável da venda. `src/services/sellerSaleService.ts` ainda é mockado.                                           |
+| Seller — financeiro                | **PENDENTE DE IMPLEMENTAÇÃO ALPHA** | futura         | Fazer o frontend consumir as APIs owner-only de resumo/atividade da PR #55 e representar corretamente `PENDING`, `HELD` e `AVAILABLE`, sem sugerir saque real. A tela atual usa dados mockados.          |
+| Admin — operação mínima integrada  | **PENDENTE DE IMPLEMENTAÇÃO ALPHA** | futura         | Completar somente as superfícies reais indispensáveis ao caminho crítico: seller onboarding, moderação e catálogo/anúncios. Partes do admin continuam explicitamente mockadas.                           |
+| Integrações do fluxo sem mocks     | **PENDENTE DE IMPLEMENTAÇÃO ALPHA** | futura         | Remover do caminho crítico Buyer/Seller/Admin as dependências de mocks restantes. A comprovação ponta a ponta ocorre somente nos gates pós-freeze.                                                       |
 
 Busca, seller store, favoritos, reviews, chat, afiliados, growth e painéis administrativos não indispensáveis **não são transformados automaticamente em blockers** por esta checklist. Se sua inclusão no Alpha for proposta, registrar `DECISION REQUIRED`; não ampliar o escopo silenciosamente.
+
+## GATES DE ESTABILIZAÇÃO / HANDOFF
+
+Estes gates começam **depois** de `PENDENTE DE IMPLEMENTAÇÃO ALPHA = 0` e do feature freeze; portanto, não impedem o freeze. O Handoff Alpha v1 torna-se estável somente quando não restar nenhum gate aberto: `GATES DE ESTABILIZAÇÃO / HANDOFF = 0`.
+
+| Gate                        | Estado              | Evidência de conclusão necessária                                                                                                                             |
+| --------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Revalidação local e handoff | **GATE PÓS-FREEZE** | Executar rehearsal/aceitação do ambiente local completo; consolidar instruções finais, documentação de handoff e production blockers explícitos.              |
+| Staging Alpha               | **GATE PÓS-FREEZE** | Hospedar staging e validar environments, secrets não produtivos, migrations, PostgreSQL, Redis e object storage de staging.                                   |
+| Observabilidade mínima      | **GATE PÓS-FREEZE** | Validar observabilidade suficiente para diagnosticar o fluxo crítico em staging, sem antecipar o stack completo de produção.                                  |
+| Fluxo crítico sem mocks     | **GATE PÓS-FREEZE** | Comprovar ponta a ponta, localmente e em staging, que Buyer, Seller e Admin mínimo funcionam sem mocks no caminho crítico já implementado.                    |
+| Testes e estabilização      | **GATE PÓS-FREEZE** | Executar testes manuais e E2E críticos pelo navegador, corrigir bugs objetivos e revalidar o fluxo completo. Testes atuais isolados não substituem este gate. |
 
 ## FORA DO ALPHA / PRODUÇÃO
 
@@ -107,14 +118,14 @@ Os itens abaixo permanecem rastreáveis e deliberadamente reservados para a fase
 
 ## Auditoria externa: momento e protocolo fixos
 
-A auditoria externa geral **não ocorrerá** enquanto houver `PENDENTE PARA ALPHA`. Quando `PENDENTE PARA ALPHA = 0`, ocorre feature freeze e, nesta ordem:
+A auditoria externa geral **não ocorrerá** enquanto houver `PENDENTE DE IMPLEMENTAÇÃO ALPHA` ou gates pós-freeze abertos. Quando `PENDENTE DE IMPLEMENTAÇÃO ALPHA = 0`, ocorre feature freeze. Depois, nesta ordem:
 
 1. estabilização local;
 2. staging;
 3. testes manuais;
 4. E2E;
 5. correção de bugs óbvios;
-6. congelamento do Handoff Alpha v1 estável.
+6. confirmação de `GATES DE ESTABILIZAÇÃO / HANDOFF = 0` e congelamento do Handoff Alpha v1 estável.
 
 Somente então ocorre a auditoria externa.
 

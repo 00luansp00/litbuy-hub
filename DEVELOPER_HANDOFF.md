@@ -4,7 +4,7 @@
 
 [`ALPHA_SCOPE_AND_COMPLETION_CHECKLIST.md`](./ALPHA_SCOPE_AND_COMPLETION_CHECKLIST.md) é a fonte autoritativa para a linha de chegada do **LIT Buy — Handoff Alpha v1** e para a classificação atual entre concluído, pendente para Alpha e reservado para produção.
 
-> Enquanto houver itens em `PENDENTE PARA ALPHA`, não iniciar revisão geral, refatoração geral ou auditoria externa do projeto. O objetivo da fase atual é concluir o escopo definido em `ALPHA_SCOPE_AND_COMPLETION_CHECKLIST.md`. PRs mergeadas só devem ser revisitadas por bug objetivo, segurança, integridade ou bloqueio real.
+> Enquanto houver itens em `PENDENTE DE IMPLEMENTAÇÃO ALPHA`, não iniciar revisão geral, refatoração geral, auditoria externa ou feature freeze. Depois do freeze, a auditoria externa aguarda `GATES DE ESTABILIZAÇÃO / HANDOFF = 0`. O objetivo é seguir as etapas definidas em `ALPHA_SCOPE_AND_COMPLETION_CHECKLIST.md`. PRs mergeadas só devem ser revisitadas por bug objetivo, segurança, integridade ou bloqueio real.
 
 ## PR #53: delivery-protection eligibility
 
