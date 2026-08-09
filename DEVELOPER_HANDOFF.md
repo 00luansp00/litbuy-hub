@@ -1,5 +1,12 @@
 # DEVELOPER_HANDOFF.md — LIT Buy
 
+## PR #53: delivery-protection eligibility
+
+Use `SellerHoldEligibilityService` internally to evaluate frozen delivery-protection deadlines.
+It changes only `FinancialHold.status`; funds remain in `SELLER_HELD`, and there is no scheduler,
+external API, current-policy lookup, ledger posting, or PSP interaction in this phase. See
+`SELLER_HOLD_RELEASE_ELIGIBILITY.md` for validation and reconciliation semantics.
+
 ## PR #48 — reconhecimento financeiro de vendas ativadas
 
 Pedidos `ACTIVE` com pagamento `PAID` e snapshot financeiro imutável agora podem ser reconhecidos no ledger por `SaleFinancialRecognitionService`. O serviço usa somente verdade persistida, valida Payment/Attempt/snapshot, posta via `FinancialLedgerService.postWithOutcome()` com idempotência determinística e cria event/outbox financeiro; o outcome diferencia criação real de replay idempotente, enquanto `post()` permanece como wrapper compatível do ledger. O seller permanece em `SELLER_PENDING`. Não há PSP, Settlement, FinancialHold, saque, refund, chargeback, fulfillment ou frontend. Consulte `SALE_FINANCIAL_RECOGNITION.md`.
