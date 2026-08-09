@@ -12,7 +12,7 @@ import { SellerFinanceReadService } from './seller-finance-read.service';
 @ApiBearerAuth()
 @UseGuards(AccessTokenGuard, PlatformRolesGuard)
 @RequireRoles(PlatformRole.SELLER)
-@Controller({ path: 'seller/finance', version: '1' })
+@Controller('seller/finance')
 export class SellerFinanceController {
   constructor(private readonly service: SellerFinanceReadService) {}
   @Get('summary') summary(@CurrentUser() user: { userId: string }) {
