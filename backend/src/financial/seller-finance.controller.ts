@@ -21,8 +21,9 @@ export class SellerFinanceController {
   @Get('summary')
   summary(
     @CurrentUser() user: { userId: string },
-    @Query() _query: SellerFinanceSummaryQueryDto,
+    @Query() query: SellerFinanceSummaryQueryDto,
   ) {
+    void query;
     return this.service.summary(user.userId);
   }
   @Get('activity')
