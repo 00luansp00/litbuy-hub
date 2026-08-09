@@ -278,3 +278,7 @@ The authoritative post-payment fulfillment lifecycle is implemented in `OrderFul
 # Seller pending-to-held handoff
 
 `SellerPendingHoldService` is the only internal consumer that moves completed-order proceeds from pending to held. Its authoritative contract is `SELLER_PENDING_HOLD_FOUNDATION.md`. Do not schedule release, populate `releaseEligibleAt`, create settlement, or touch available/reserved/withdrawal until the future held-to-available policy increment.
+
+## Seller release policy handoff
+
+Read `SELLER_RELEASE_POLICY_FOUNDATION.md` before implementing hold eligibility. `SellerReleasePolicyService` resolves one global, ACTIVE version using PostgreSQL time and fails closed on absence or ambiguity. There is no production seed and the policy is not yet applied to `FinancialHold`; do not infer a commercial delay from test fixtures.

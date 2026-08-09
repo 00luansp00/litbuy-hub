@@ -249,46 +249,48 @@ enum SecurityEventOutcome {
 }
 
 model User {
-  id                          String                      @id @default(uuid()) @db.Uuid
-  email                       String                      @unique
-  phoneE164                   String?
-  phoneVerifiedAt             DateTime?
-  birthDate                   DateTime                    @db.Date
-  status                      UserStatus                  @default(PENDING_EMAIL)
-  emailVerifiedAt             DateTime?
-  termsVersion                String
-  termsAcceptedAt             DateTime
-  privacyVersion              String
-  privacyAcceptedAt           DateTime
-  createdAt                   DateTime                    @default(now())
-  updatedAt                   DateTime                    @updatedAt
-  deletedAt                   DateTime?
-  sensitiveActionHoldUntil    DateTime?
-  lastSensitiveChangeAt       DateTime?
-  passwordCredential          PasswordCredential?
-  devices                     Device[]
-  sessions                    Session[]
-  verificationChallenges      VerificationChallenge[]
-  securityEvents              SecurityEvent[]
-  emailChangeRequests         EmailChangeRequest[]
-  twoFactorSettings           TwoFactorSettings?
-  twoFactorRecoveryCodes      TwoFactorRecoveryCode[]
-  stepUpGrants                StepUpGrant[]
-  roleAssignments             UserRoleAssignment[]
-  sellerApplication           SellerApplication?          @relation("SellerApplicationOwner")
-  reviewedSellerApplications  SellerApplication[]         @relation("SellerApplicationReviewer")
-  sellerProfile               SellerProfile?
-  reviewedListingDrafts       ListingDraft[]              @relation("ListingDraftReviewer")
-  carts                       Cart[]                      @relation("CartBuyer")
-  orders                      Order[]                     @relation("OrderBuyer")
-  commerceIdempotencyRecords  CommerceIdempotencyRecord[]
-  reviewedWithdrawals         Withdrawal[]                @relation("WithdrawalReviewer")
-  createdFeePolicies          FeePolicyVersion[]          @relation("FeePolicyCreator")
-  publishedFeePolicies        FeePolicyVersion[]          @relation("FeePolicyPublisher")
-  createdWithdrawalPolicies   WithdrawalPolicyVersion[]   @relation("WithdrawalPolicyCreator")
-  publishedWithdrawalPolicies WithdrawalPolicyVersion[]   @relation("WithdrawalPolicyPublisher")
-  financialEvents             FinancialEvent[]            @relation("FinancialEventActor")
-  requestedRefunds            Refund[]                    @relation("RefundRequester")
+  id                             String                       @id @default(uuid()) @db.Uuid
+  email                          String                       @unique
+  phoneE164                      String?
+  phoneVerifiedAt                DateTime?
+  birthDate                      DateTime                     @db.Date
+  status                         UserStatus                   @default(PENDING_EMAIL)
+  emailVerifiedAt                DateTime?
+  termsVersion                   String
+  termsAcceptedAt                DateTime
+  privacyVersion                 String
+  privacyAcceptedAt              DateTime
+  createdAt                      DateTime                     @default(now())
+  updatedAt                      DateTime                     @updatedAt
+  deletedAt                      DateTime?
+  sensitiveActionHoldUntil       DateTime?
+  lastSensitiveChangeAt          DateTime?
+  passwordCredential             PasswordCredential?
+  devices                        Device[]
+  sessions                       Session[]
+  verificationChallenges         VerificationChallenge[]
+  securityEvents                 SecurityEvent[]
+  emailChangeRequests            EmailChangeRequest[]
+  twoFactorSettings              TwoFactorSettings?
+  twoFactorRecoveryCodes         TwoFactorRecoveryCode[]
+  stepUpGrants                   StepUpGrant[]
+  roleAssignments                UserRoleAssignment[]
+  sellerApplication              SellerApplication?           @relation("SellerApplicationOwner")
+  reviewedSellerApplications     SellerApplication[]          @relation("SellerApplicationReviewer")
+  sellerProfile                  SellerProfile?
+  reviewedListingDrafts          ListingDraft[]               @relation("ListingDraftReviewer")
+  carts                          Cart[]                       @relation("CartBuyer")
+  orders                         Order[]                      @relation("OrderBuyer")
+  commerceIdempotencyRecords     CommerceIdempotencyRecord[]
+  reviewedWithdrawals            Withdrawal[]                 @relation("WithdrawalReviewer")
+  createdFeePolicies             FeePolicyVersion[]           @relation("FeePolicyCreator")
+  publishedFeePolicies           FeePolicyVersion[]           @relation("FeePolicyPublisher")
+  createdWithdrawalPolicies      WithdrawalPolicyVersion[]    @relation("WithdrawalPolicyCreator")
+  publishedWithdrawalPolicies    WithdrawalPolicyVersion[]    @relation("WithdrawalPolicyPublisher")
+  createdSellerReleasePolicies   SellerReleasePolicyVersion[] @relation("SellerReleasePolicyCreator")
+  publishedSellerReleasePolicies SellerReleasePolicyVersion[] @relation("SellerReleasePolicyPublisher")
+  financialEvents                FinancialEvent[]             @relation("FinancialEventActor")
+  requestedRefunds               Refund[]                     @relation("RefundRequester")
 
   @@unique([phoneE164])
   @@index([email])
@@ -1353,6 +1355,13 @@ enum WithdrawalPolicyStatus {
   RETIRED
 }
 
+enum SellerReleasePolicyStatus {
+  DRAFT
+  SCHEDULED
+  ACTIVE
+  RETIRED
+}
+
 model Payment {
   id                    String                 @id @default(uuid()) @db.Uuid
   orderId               String                 @unique @db.Uuid
@@ -1782,4 +1791,33 @@ model WithdrawalPolicyRule {
   policyVersion       WithdrawalPolicyVersion @relation(fields: [policyVersionId], references: [id], onDelete: Restrict)
 
   @@unique([policyVersionId, speed])
+}
+
+model SellerReleasePolicyVersion {
+  id                String                    @id @default(uuid()) @db.Uuid
+  publicVersion     Int                       @unique
+  status            SellerReleasePolicyStatus @default(DRAFT)
+  effectiveFrom     DateTime
+  effectiveTo       DateTime?
+  createdByUserId   String                    @db.Uuid
+  publishedByUserId String?                   @db.Uuid
+  publishedAt       DateTime?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+  rules             SellerReleasePolicyRule[]
+  createdBy         User                      @relation("SellerReleasePolicyCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  publishedBy       User?                     @relation("SellerReleasePolicyPublisher", fields: [publishedByUserId], references: [id], onDelete: Restrict)
+}
+
+model SellerReleasePolicyRule {
+  id              String                     @id @default(uuid()) @db.Uuid
+  policyVersionId String                     @db.Uuid
+  code            String
+  delayHours      Int
+  enabled         Boolean                    @default(true)
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+  policyVersion   SellerReleasePolicyVersion @relation(fields: [policyVersionId], references: [id], onDelete: Restrict)
+
+  @@unique([policyVersionId, code])
 }
