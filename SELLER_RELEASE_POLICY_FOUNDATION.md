@@ -17,3 +17,7 @@ No real commercial duration has been selected. There is **no production policy s
 ## Explicit boundary
 
 This foundation neither changes nor is consulted by `SellerPendingHoldService`. It does not update `FinancialHold`, its `status`, or `releaseEligibleAt`; it creates no ledger transaction or entry and never moves `SELLER_HELD` to `SELLER_AVAILABLE`. It adds no endpoint, scheduler, PSP operation, settlement, withdrawal, refund, or dispute behavior. The next separately reviewed increment may snapshot the resolved policy onto the hold lifecycle and define the authoritative protection-start event.
+
+## Delivery-hold consumer (PR #52)
+
+`SellerPendingHoldService` now consumes the resolver inside its SERIALIZABLE transaction and freezes the result as specified by `SELLER_HOLD_RELEASE_SNAPSHOT.md`. Resolution remains read-only; the consumer owns the hold snapshot. Neither component releases funds, and no production duration is seeded.

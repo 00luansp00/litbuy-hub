@@ -12,6 +12,10 @@ import { acquireAdvisoryTransactionLock } from '../database/advisory-lock';
 import { PrismaService } from '../database/prisma.service';
 import { FinancialDomainError } from './financial.errors';
 import { FinancialLedgerService } from './financial-ledger.service';
+import {
+  SellerReleasePolicyError,
+  SellerReleasePolicyService,
+} from './seller-release-policy.service';
 
 const LEDGER_TYPE = 'SELLER_FUNDS_HELD';
 const LEDGER_REFERENCE_TYPE = 'OrderSellerHold';
@@ -45,6 +49,7 @@ export class SellerPendingHoldService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ledger: FinancialLedgerService,
+    private readonly releasePolicy: SellerReleasePolicyService,
   ) {}
 
   async processOne(orderId?: string): Promise<SellerPendingHoldCandidateResult> {
@@ -106,9 +111,13 @@ export class SellerPendingHoldService {
         }
         return result;
       } catch (error) {
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
+        if (this.isSerializationFailure(error)) {
           if (attempt === 3) throw new FinancialDomainError('FINANCIAL_CONCURRENCY_CONFLICT');
           continue;
+        }
+        if (error instanceof SellerReleasePolicyError) {
+          await this.ensureIssue(orderId, { type: 'OTHER', code: error.code });
+          return 'PROCESSED';
         }
         if (
           error instanceof FinancialDomainError ||
@@ -222,12 +231,25 @@ export class SellerPendingHoldService {
     const hold = holds[0];
     if (hold && !posting)
       return { failure: { type: 'OTHER', code: 'SELLER_HOLD_ARTIFACT_MISMATCH' } };
-    if (hold && posting && !this.validHold(hold, posting.id, order, payment, proceeds))
+    if (hold && posting && !this.validHoldBase(hold, posting.id, order, payment, proceeds))
       return { failure: { type: 'OTHER', code: 'SELLER_HOLD_ARTIFACT_MISMATCH' } };
-    if (hold && posting) return 'ALREADY_HANDLED';
+    if (hold && posting) {
+      if (this.hasCompleteSnapshot(hold))
+        return (await this.validSnapshot(tx, hold))
+          ? 'ALREADY_HANDLED'
+          : {
+              failure: { type: 'OTHER', code: 'SELLER_HOLD_ARTIFACT_MISMATCH' },
+            };
+      if (!this.hasEmptySnapshot(hold))
+        return { failure: { type: 'OTHER', code: 'SELLER_HOLD_ARTIFACT_MISMATCH' } };
+      const snapshot = await this.resolveSnapshot(tx);
+      await tx.financialHold.update({ where: { id: hold.id }, data: snapshot });
+      return 'PROCESSED';
+    }
+    const snapshot = await this.resolveSnapshot(tx);
     if (posting) {
-      await this.createHold(tx, order, payment, proceeds, posting.id);
-      return 'ALREADY_HANDLED';
+      await this.createHold(tx, order, payment, proceeds, posting.id, snapshot);
+      return 'PROCESSED';
     }
 
     const accounts = await tx.ledgerAccount.findMany({
@@ -262,11 +284,11 @@ export class SellerPendingHoldService {
         { accountId: held.id, direction: 'CREDIT', amountMinor: proceeds },
       ],
     });
-    await this.createHold(tx, order, payment, proceeds, outcome.transaction.id);
+    await this.createHold(tx, order, payment, proceeds, outcome.transaction.id, snapshot);
     return outcome.created ? 'PROCESSED' : 'ALREADY_HANDLED';
   }
 
-  private validHold(
+  private validHoldBase(
     hold: Prisma.FinancialHoldGetPayload<Record<string, never>>,
     ledgerTransactionId: string,
     order: Snapshot,
@@ -282,9 +304,68 @@ export class SellerPendingHoldService {
       hold.currency === 'BRL' &&
       hold.reason === 'DELIVERY_PROTECTION' &&
       hold.status === 'ACTIVE' &&
-      hold.releaseEligibleAt === null &&
       hold.releasedAt === null
     );
+  }
+
+  private hasEmptySnapshot(hold: Prisma.FinancialHoldGetPayload<Record<string, never>>) {
+    return (
+      hold.sellerReleasePolicyVersionId === null &&
+      hold.sellerReleasePolicyRuleId === null &&
+      hold.releaseDelayHours === null &&
+      hold.releasePolicyAppliedAt === null &&
+      hold.releaseEligibleAt === null
+    );
+  }
+
+  private hasCompleteSnapshot(hold: Prisma.FinancialHoldGetPayload<Record<string, never>>) {
+    return (
+      hold.sellerReleasePolicyVersionId !== null &&
+      hold.sellerReleasePolicyRuleId !== null &&
+      hold.releaseDelayHours !== null &&
+      hold.releasePolicyAppliedAt !== null &&
+      hold.releaseEligibleAt !== null
+    );
+  }
+
+  private async validSnapshot(
+    tx: Prisma.TransactionClient,
+    hold: Prisma.FinancialHoldGetPayload<Record<string, never>>,
+  ) {
+    if (
+      !this.hasCompleteSnapshot(hold) ||
+      hold.releaseDelayHours! < 0 ||
+      hold.releaseEligibleAt!.getTime() !==
+        hold.releasePolicyAppliedAt!.getTime() + hold.releaseDelayHours! * 3_600_000
+    )
+      return false;
+    const rule = await tx.sellerReleasePolicyRule.findUnique({
+      where: {
+        id_policyVersionId: {
+          id: hold.sellerReleasePolicyRuleId!,
+          policyVersionId: hold.sellerReleasePolicyVersionId!,
+        },
+      },
+      select: { code: true, delayHours: true },
+    });
+    return (
+      rule?.code === 'DELIVERY_PROTECTION_DEFAULT' && rule.delayHours === hold.releaseDelayHours
+    );
+  }
+
+  private async resolveSnapshot(tx: Prisma.TransactionClient) {
+    const policy = await this.releasePolicy.resolveEffectivePolicy(tx);
+    const [clock] = await tx.$queryRaw<Array<{ appliedAt: Date; eligibleAt: Date }>>`
+      SELECT transaction_timestamp()::timestamp(3) AS "appliedAt",
+        (transaction_timestamp() + make_interval(hours => ${policy.delayHours}::integer))::timestamp(3) AS "eligibleAt"
+    `;
+    return {
+      sellerReleasePolicyVersionId: policy.policyVersionId,
+      sellerReleasePolicyRuleId: policy.ruleId,
+      releaseDelayHours: policy.delayHours,
+      releasePolicyAppliedAt: clock.appliedAt,
+      releaseEligibleAt: clock.eligibleAt,
+    };
   }
 
   private async createHold(
@@ -293,6 +374,7 @@ export class SellerPendingHoldService {
     payment: PaymentSnapshot,
     amountMinor: bigint,
     ledgerTransactionId: string,
+    snapshot: Awaited<ReturnType<SellerPendingHoldService['resolveSnapshot']>>,
   ): Promise<void> {
     await tx.financialHold.create({
       data: {
@@ -304,7 +386,7 @@ export class SellerPendingHoldService {
         currency: 'BRL',
         reason: 'DELIVERY_PROTECTION',
         status: 'ACTIVE',
-        releaseEligibleAt: null,
+        ...snapshot,
         releasedAt: null,
       },
     });
@@ -403,5 +485,15 @@ export class SellerPendingHoldService {
   }
   private recognitionKey(orderId: string) {
     return createHash('sha256').update(`sale-recognition:v1:${orderId}`).digest('hex');
+  }
+
+  private isSerializationFailure(error: unknown): boolean {
+    return (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      (error.code === 'P2034' ||
+        (error.code === 'P2010' &&
+          typeof error.meta?.code === 'string' &&
+          error.meta.code === '40001'))
+    );
   }
 }
