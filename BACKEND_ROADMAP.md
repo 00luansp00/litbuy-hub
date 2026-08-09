@@ -9,7 +9,7 @@
 
 > **Seller hold foundation:** pedidos concluídos e confirmados movem proceeds do snapshot de `SELLER_PENDING` para `SELLER_HELD`, com hold de proteção sem prazo. `AVAILABLE`, settlement, saque e PSP permanecem fora do escopo.
 
-> **Contrato comercial vigente:** `COMMERCE_ARCHITECTURE.md` é a fonte autoritativa. O conteúdo comercial histórico abaixo é preliminar ou substituído quando divergir; pagamentos e ledger não estão implementados, e nenhum gateway foi escolhido.
+> **Nota histórica/superseded:** `COMMERCE_ARCHITECTURE.md` continua sendo a fonte autoritativa do contrato comercial, mas a afirmação antiga de que pagamentos e ledger não estavam implementados e nenhum gateway havia sido escolhido não descreve mais o estado atual. As PRs #39–#55 implementaram a fundação financeira, ledger, adapter Efí sandbox e o núcleo da venda até `SELLER_AVAILABLE`; isso não habilita dinheiro real nem conclui todo o domínio financeiro. Consulte `ALPHA_SCOPE_AND_COMPLETION_CHECKLIST.md` para o estado atual.
 
 > Concluída a fundação isolada de dados locais determinísticos para PostgreSQL e MinIO; ela não adiciona endpoints nem altera lifecycle.
 
@@ -194,9 +194,11 @@ Persistent buyer carts are implemented as an isolated `CartsModule`, including P
 
 The backend now contains the server-side checkout and persistent pending-order foundation described in `ORDER_CHECKOUT_FOUNDATION.md`. It uses cart preview fingerprints, immutable snapshots, BIGINT minor units, transactional inventory reservations, idempotency, order events/outbox, buyer-only reads, pre-payment cancellation, and controlled expiration. This does **not** implement payments, a gateway, a financial ledger, webhooks, fulfillment, or a connected frontend. PR #38 remains responsible for real frontend order reading after CI validates this foundation.
 
-## PR #39 financial foundation (ready for review; not merged)
+## PR #39 financial foundation (historical snapshot; merged and superseded by later increments)
 
-The provider-neutral financial/ledger and versioned policy foundation is specified in [FINANCIAL_DOMAIN_FOUNDATION.md](./FINANCIAL_DOMAIN_FOUNDATION.md), [PAYMENT_PROVIDER_STRATEGY.md](./PAYMENT_PROVIDER_STRATEGY.md), [FINANCIAL_FEE_POLICY.md](./FINANCIAL_FEE_POLICY.md), and [WITHDRAWAL_POLICY.md](./WITHDRAWAL_POLICY.md). It introduces persistence and internal services only: no public endpoint, frontend flow, PSP adapter, real payment, or checkout/order behavior change. Existing displayed economics remain mocks. The next increment is sandbox integration only after written commercial approval of a selected provider.
+> This paragraph records the scope at the time of PR #39 and is not a current-status statement. PR #39 was merged; later increments through PR #55 added the sandbox/payment and seller-funds capabilities summarized in `ALPHA_SCOPE_AND_COMPLETION_CHECKLIST.md`.
+
+The provider-neutral financial/ledger and versioned policy foundation is specified in [FINANCIAL_DOMAIN_FOUNDATION.md](./FINANCIAL_DOMAIN_FOUNDATION.md), [PAYMENT_PROVIDER_STRATEGY.md](./PAYMENT_PROVIDER_STRATEGY.md), [FINANCIAL_FEE_POLICY.md](./FINANCIAL_FEE_POLICY.md), and [WITHDRAWAL_POLICY.md](./WITHDRAWAL_POLICY.md). At that historical increment it introduced persistence and internal services only: no public endpoint, frontend flow, PSP adapter, real payment, or checkout/order behavior change. Displayed economics were still mocks, and sandbox integration was a later increment.
 
 ## Fulfillment foundation (PR #49)
 
