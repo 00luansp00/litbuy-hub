@@ -37,3 +37,7 @@ Serializable financial posting retries the complete atomic transaction at most t
 ## Seller pending-to-held phase
 
 Completed, paid, confirmed, undisputed orders with a valid sale recognition now move snapshot seller proceeds from `SELLER_PENDING` to `SELLER_HELD`. The movement creates an active delivery-protection hold but no release date, settlement, available balance, or withdrawal. See `SELLER_PENDING_HOLD_FOUNDATION.md`.
+
+## Seller release policy foundation
+
+`SellerReleasePolicyVersion` is a separate, immutable policy domain for resolving a global delivery-protection delay. It deliberately does not reuse withdrawal policy, seed a production duration, modify a hold, or post ledger entries. See `SELLER_RELEASE_POLICY_FOUNDATION.md`.

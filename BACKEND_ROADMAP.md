@@ -196,3 +196,7 @@ The provider-neutral financial/ledger and versioned policy foundation is specifi
 ## Fulfillment foundation (PR #49)
 
 The authoritative post-payment fulfillment lifecycle is implemented in `OrderFulfillmentService` and specified in `ORDER_FULFILLMENT_FOUNDATION.md`. Delivery requires hashed evidence, buyer confirmation is explicit, disputes fail closed, and completion requires the valid PR #48 `SALE_RECOGNIZED` transaction. This phase does not transport secrets, auto-confirm, simulate automatic delivery, or release seller funds; proceeds remain `SELLER_PENDING` for the next financial-release phase.
+
+## Seller release policy foundation (PR #51)
+
+The versioned, immutable global delivery-protection delay policy and fail-closed PostgreSQL-time resolver are defined in `SELLER_RELEASE_POLICY_FOUNDATION.md`. No production duration is seeded and no hold, ledger balance, settlement, withdrawal, endpoint, or scheduler changes. Applying a policy snapshot and moving held funds remain separate future increments.
