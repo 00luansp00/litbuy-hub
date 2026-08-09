@@ -1,5 +1,8 @@
 # Financial domain foundation (PR #39)
 
+> Release eligibility is now an explicit non-monetary lifecycle step. See
+> `SELLER_HOLD_RELEASE_ELIGIBILITY.md`; `RELEASE_ELIGIBLE` does not make seller funds available.
+
 ## Boundary and invariants
 
 The LIT Buy ledger is the internal accounting source of truth; a future PSP is evidence for external movement. Divergence opens a `ReconciliationIssue` and is never silently repaired. All authoritative money is BRL `BIGINT` minor units in PostgreSQL and TypeScript `bigint`; future JSON exposes canonical decimal strings.

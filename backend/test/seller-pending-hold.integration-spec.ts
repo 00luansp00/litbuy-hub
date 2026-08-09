@@ -9,6 +9,7 @@ import { parseIdempotencyKey } from '../src/commerce/idempotency-key';
 import { CheckoutService } from '../src/checkout/checkout.service';
 import { PrismaService } from '../src/database/prisma.service';
 import { FinancialLedgerService } from '../src/financial/financial-ledger.service';
+import { SellerHoldEligibilityService } from '../src/financial/seller-hold-eligibility.service';
 import { SaleFinancialRecognitionService } from '../src/financial/sale-financial-recognition.service';
 import { SellerPendingHoldService } from '../src/financial/seller-pending-hold.service';
 import { PaidOrderActivationService } from '../src/orders/paid-order-activation.service';
@@ -25,6 +26,7 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
   let activation: PaidOrderActivationService;
   let recognition: SaleFinancialRecognitionService;
   let service: SellerPendingHoldService;
+  let eligibility: SellerHoldEligibilityService;
   let fulfillment: OrderFulfillmentService;
   let version = 50_000;
 
@@ -37,6 +39,7 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
     activation = app.get(PaidOrderActivationService);
     recognition = app.get(SaleFinancialRecognitionService);
     service = app.get(SellerPendingHoldService);
+    eligibility = app.get(SellerHoldEligibilityService);
     fulfillment = app.get(OrderFulfillmentService);
   });
   beforeEach(() =>
@@ -259,6 +262,48 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
     expect(hold.releaseEligibleAt).toEqual(hold.releasePolicyAppliedAt);
     expect(hold.status).toBe('ACTIVE');
     expect(hold.releasedAt).toBeNull();
+    const ledgerEntries = await prisma.ledgerEntry.count();
+    expect(await eligibility.processOne(hold.id)).toBe('RELEASE_ELIGIBLE');
+    expect(await eligibility.processOne(hold.id)).toBe('ALREADY_ELIGIBLE');
+    expect(await prisma.financialHold.findUniqueOrThrow({ where: { id: hold.id } })).toMatchObject({
+      status: 'RELEASE_ELIGIBLE',
+      releasedAt: null,
+    });
+    expect(await prisma.ledgerEntry.count()).toBe(ledgerEntries);
+  });
+
+  it('uses the frozen PostgreSQL deadline and leaves a future hold ACTIVE', async () => {
+    const { order, actorUserId } = await completedOrder(1000n);
+    await publishSellerReleasePolicy(actorUserId, 72);
+    await service.processOne(order.id);
+    const hold = await prisma.financialHold.findFirstOrThrow({ where: { orderId: order.id } });
+    expect(await eligibility.processOne(hold.id)).toBe('NOT_DUE');
+    expect((await prisma.financialHold.findUniqueOrThrow({ where: { id: hold.id } })).status).toBe(
+      'ACTIVE',
+    );
+    expect(
+      await prisma.reconciliationIssue.count({
+        where: { referenceType: 'SellerHoldEligibility', referenceId: hold.id },
+      }),
+    ).toBe(0);
+  });
+
+  it('honors a retired historical policy under six concurrent workers', async () => {
+    const { order, actorUserId } = await completedOrder(1000n);
+    const policy = await publishSellerReleasePolicy(actorUserId, 0);
+    await service.processOne(order.id);
+    await prisma.sellerReleasePolicyVersion.update({
+      where: { id: policy.id },
+      data: { status: 'RETIRED', effectiveTo: new Date() },
+    });
+    const hold = await prisma.financialHold.findFirstOrThrow({ where: { orderId: order.id } });
+    const ledgerTransactions = await prisma.ledgerTransaction.count();
+    const results = await Promise.all(
+      Array.from({ length: 6 }, () => eligibility.processOne(hold.id)),
+    );
+    expect(results.filter((result) => result === 'RELEASE_ELIGIBLE')).toHaveLength(1);
+    expect(results.filter((result) => result === 'ALREADY_ELIGIBLE')).toHaveLength(5);
+    expect(await prisma.ledgerTransaction.count()).toBe(ledgerTransactions);
   });
 
   it('durably marks zero proceeds without monetary artifacts or a batch busy loop', async () => {

@@ -1,5 +1,8 @@
 # Seller hold release-policy snapshot
 
+The immutable snapshot is the sole temporal authority used by the PR #53 eligibility phase;
+the current effective policy is never consulted and a retired historical policy remains valid.
+
 `SellerPendingHoldService` resolves the effective `SellerReleasePolicy` inside the same SERIALIZABLE transaction that validates the order and payment, posts `SELLER_PENDING -> SELLER_HELD`, and creates a new delivery-protection hold. PostgreSQL `transaction_timestamp()` is the sole clock authority. The hold stores the resolved version, rule, delay, application timestamp, and `releaseEligibleAt = releasePolicyAppliedAt + delayHours` at `TIMESTAMP(3)` precision. Every new positive-proceeds hold is born with a complete schedule.
 
 A valid PR #50 hold whose five snapshot fields are all null is a supported legacy artifact. Its first successful processing locks and validates the existing order, payment, posting, and hold, then resolves the currently effective policy and schedules the hold from the current transaction timestamp. It does not backdate eligibility and creates no ledger transaction, entry, financial event, or outbox event. After the all-null-to-complete transition, a PostgreSQL trigger makes the snapshot immutable; later policies never rewrite historical holds.
