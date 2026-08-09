@@ -259,7 +259,11 @@ export class SellerHeldFundsReleaseService {
     await tx.$executeRaw`
       UPDATE "FinancialHold" SET "status" = 'RELEASED',
         "releaseLedgerTransactionId" = ${outcome.transaction.id}::uuid,
-        "releasedAt" = transaction_timestamp(), "updatedAt" = transaction_timestamp()
+        "releasedAt" = (
+          SELECT "createdAt" FROM "LedgerTransaction"
+          WHERE "id" = ${outcome.transaction.id}::uuid
+        ),
+        "updatedAt" = transaction_timestamp()
       WHERE "id" = ${hold.id}::uuid
     `;
     return 'RELEASED' as const;
