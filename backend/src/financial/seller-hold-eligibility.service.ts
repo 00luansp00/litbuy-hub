@@ -112,8 +112,8 @@ export class SellerHoldEligibilityService {
     if (!hold) return this.fail(tx, holdId, { type: 'MISSING_LOCAL', code: 'HOLD_MISSING' });
     if (hold.reason !== 'DELIVERY_PROTECTION')
       return this.fail(tx, holdId, { type: 'STATUS_MISMATCH', code: 'HOLD_REASON_INVALID' });
-    if (hold.status === 'RELEASE_ELIGIBLE') return 'ALREADY_ELIGIBLE';
-    if (hold.status !== 'ACTIVE')
+    const replay = hold.status === 'RELEASE_ELIGIBLE';
+    if (!replay && hold.status !== 'ACTIVE')
       return this.fail(tx, holdId, { type: 'STATUS_MISMATCH', code: 'HOLD_STATUS_INVALID' });
     if (
       hold.amountMinor <= 0n ||
@@ -140,15 +140,6 @@ export class SellerHoldEligibilityService {
 
     const order = await tx.order.findUnique({ where: { id: hold.orderId } });
     if (!order) return this.fail(tx, holdId, { type: 'MISSING_LOCAL', code: 'ORDER_MISSING' });
-    if (order.disputeStatus === 'OPEN' || order.disputeStatus === 'UNDER_REVIEW')
-      return 'BUSINESS_BLOCKED';
-    if (
-      order.status !== 'COMPLETED' ||
-      order.paymentStatus !== 'PAID' ||
-      order.fulfillmentStatus !== 'CONFIRMED' ||
-      order.disputeStatus !== 'NONE'
-    )
-      return this.fail(tx, holdId, { type: 'STATUS_MISMATCH', code: 'ORDER_STATE_INVALID' });
     const proceeds = order.totalAmountMinor - order.platformFeeAmountMinor;
     if (
       proceeds <= 0n ||
@@ -184,6 +175,16 @@ export class SellerHoldEligibilityService {
         type: postings.length ? 'OTHER' : 'MISSING_LOCAL',
         code: postings.length ? 'SELLER_HOLD_POSTING_INVALID' : 'SELLER_HOLD_POSTING_MISSING',
       });
+    if (replay) return 'ALREADY_ELIGIBLE';
+    if (order.disputeStatus === 'OPEN' || order.disputeStatus === 'UNDER_REVIEW')
+      return 'BUSINESS_BLOCKED';
+    if (
+      order.status !== 'COMPLETED' ||
+      order.paymentStatus !== 'PAID' ||
+      order.fulfillmentStatus !== 'CONFIRMED' ||
+      order.disputeStatus !== 'NONE'
+    )
+      return this.fail(tx, holdId, { type: 'STATUS_MISMATCH', code: 'ORDER_STATE_INVALID' });
     if (!hold.due) return 'NOT_DUE';
 
     await tx.financialHold.update({ where: { id: hold.id }, data: { status: 'RELEASE_ELIGIBLE' } });

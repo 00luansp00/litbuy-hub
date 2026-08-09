@@ -18,3 +18,8 @@ are business blocks without reconciliation.
 This phase creates no ledger entry, event, settlement, withdrawal, reserved balance, PSP call,
 public endpoint, scheduler, production policy seed, or `SELLER_HELD -> SELLER_AVAILABLE`
 movement.
+
+PostgreSQL enforces the monotonic lifecycle: a delivery-protection hold is inserted `ACTIVE`,
+may transition only to `RELEASE_ELIGIBLE`, and can never return to `ACTIVE`. A replay returns
+`ALREADY_ELIGIBLE` only after the frozen snapshot, historical rule, order/payment correlations,
+and original posting have been validated again; the historical policy may be `RETIRED`.
