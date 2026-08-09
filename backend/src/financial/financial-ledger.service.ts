@@ -108,7 +108,9 @@ export class FinancialLedgerService {
       where: { accountId: { in: ids } },
       _sum: { amountMinor: true },
     });
-    const values = new Map(accounts.map((a) => [a.purpose, 0n]));
+    const values = new Map<LedgerAccountPurpose, bigint>(
+      SELLER_PURPOSES.map((purpose) => [purpose, 0n]),
+    );
     for (const row of grouped) {
       const account = accounts.find((a) => a.id === row.accountId)!;
       const amount = row._sum.amountMinor ?? 0n;
