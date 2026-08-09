@@ -111,7 +111,7 @@ export class SellerPendingHoldService {
         }
         return result;
       } catch (error) {
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
+        if (this.isSerializationFailure(error)) {
           if (attempt === 3) throw new FinancialDomainError('FINANCIAL_CONCURRENCY_CONFLICT');
           continue;
         }
@@ -235,7 +235,7 @@ export class SellerPendingHoldService {
       return { failure: { type: 'OTHER', code: 'SELLER_HOLD_ARTIFACT_MISMATCH' } };
     if (hold && posting) {
       if (this.hasCompleteSnapshot(hold))
-        return this.validSnapshot(hold)
+        return (await this.validSnapshot(tx, hold))
           ? 'ALREADY_HANDLED'
           : {
               failure: { type: 'OTHER', code: 'SELLER_HOLD_ARTIFACT_MISMATCH' },
@@ -328,12 +328,28 @@ export class SellerPendingHoldService {
     );
   }
 
-  private validSnapshot(hold: Prisma.FinancialHoldGetPayload<Record<string, never>>) {
-    return (
-      this.hasCompleteSnapshot(hold) &&
-      hold.releaseDelayHours! >= 0 &&
-      hold.releaseEligibleAt!.getTime() ===
+  private async validSnapshot(
+    tx: Prisma.TransactionClient,
+    hold: Prisma.FinancialHoldGetPayload<Record<string, never>>,
+  ) {
+    if (
+      !this.hasCompleteSnapshot(hold) ||
+      hold.releaseDelayHours! < 0 ||
+      hold.releaseEligibleAt!.getTime() !==
         hold.releasePolicyAppliedAt!.getTime() + hold.releaseDelayHours! * 3_600_000
+    )
+      return false;
+    const rule = await tx.sellerReleasePolicyRule.findUnique({
+      where: {
+        id_policyVersionId: {
+          id: hold.sellerReleasePolicyRuleId!,
+          policyVersionId: hold.sellerReleasePolicyVersionId!,
+        },
+      },
+      select: { code: true, delayHours: true },
+    });
+    return (
+      rule?.code === 'DELIVERY_PROTECTION_DEFAULT' && rule.delayHours === hold.releaseDelayHours
     );
   }
 
@@ -341,7 +357,7 @@ export class SellerPendingHoldService {
     const policy = await this.releasePolicy.resolveEffectivePolicy(tx);
     const [clock] = await tx.$queryRaw<Array<{ appliedAt: Date; eligibleAt: Date }>>`
       SELECT transaction_timestamp()::timestamp(3) AS "appliedAt",
-        (transaction_timestamp() + make_interval(hours => ${policy.delayHours}))::timestamp(3) AS "eligibleAt"
+        (transaction_timestamp() + make_interval(hours => ${policy.delayHours}::integer))::timestamp(3) AS "eligibleAt"
     `;
     return {
       sellerReleasePolicyVersionId: policy.policyVersionId,
@@ -469,5 +485,15 @@ export class SellerPendingHoldService {
   }
   private recognitionKey(orderId: string) {
     return createHash('sha256').update(`sale-recognition:v1:${orderId}`).digest('hex');
+  }
+
+  private isSerializationFailure(error: unknown): boolean {
+    return (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      (error.code === 'P2034' ||
+        (error.code === 'P2010' &&
+          typeof error.meta?.code === 'string' &&
+          error.meta.code === '40001'))
+    );
   }
 }
