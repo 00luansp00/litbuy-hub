@@ -3,6 +3,8 @@ import { PrismaService } from '../database/prisma.service';
 import { FinancialLedgerService } from './financial-ledger.service';
 import { SellerFinanceActivityQueryDto } from './seller-finance.dto';
 
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 const keys: Record<string, keyof Movements> = {
   SELLER_PENDING: 'pendingMinor',
   SELLER_HELD: 'heldMinor',
@@ -55,7 +57,12 @@ export class SellerFinanceReadService {
     if (query.cursor) {
       try {
         cursor = JSON.parse(Buffer.from(query.cursor, 'base64url').toString()) as typeof cursor;
-        if (!cursor?.id || !cursor.createdAt || Number.isNaN(new Date(cursor.createdAt).valueOf()))
+        if (
+          !cursor?.id ||
+          !UUID_V4.test(cursor.id) ||
+          !cursor.createdAt ||
+          Number.isNaN(new Date(cursor.createdAt).valueOf())
+        )
           throw new Error('invalid');
       } catch {
         throw new BadRequestException('Invalid cursor');

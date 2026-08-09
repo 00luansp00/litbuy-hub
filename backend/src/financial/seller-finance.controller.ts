@@ -1,13 +1,17 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { PlatformRole } from '@prisma/client';
 import { AccessTokenGuard } from '../auth/access-token.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { PlatformRolesGuard } from '../auth/platform-roles.guard';
+import { RequireRoles } from '../auth/platform-roles';
 import { SellerFinanceActivityQueryDto } from './seller-finance.dto';
 import { SellerFinanceReadService } from './seller-finance-read.service';
 
 @ApiTags('Seller finance')
 @ApiBearerAuth()
-@UseGuards(AccessTokenGuard)
+@UseGuards(AccessTokenGuard, PlatformRolesGuard)
+@RequireRoles(PlatformRole.SELLER)
 @Controller({ path: 'seller/finance', version: '1' })
 export class SellerFinanceController {
   constructor(private readonly service: SellerFinanceReadService) {}

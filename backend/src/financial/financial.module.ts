@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { JwtModule } from '@nestjs/jwt';
+import { AuthModule } from '../auth/auth.module';
 import { DatabaseModule } from '../database/database.module';
 import { FinancialLedgerService } from './financial-ledger.service';
 import { SaleFinancialRecognitionService } from './sale-financial-recognition.service';
@@ -31,7 +33,7 @@ import {
   ProviderWebhookEventProcessor,
 } from './provider-webhook-event.processor';
 @Module({
-  imports: [DatabaseModule],
+  imports: [DatabaseModule, AuthModule, JwtModule.register({})],
   controllers: [ProviderNotificationController, SellerFinanceController],
   providers: [
     FinancialLedgerService,
