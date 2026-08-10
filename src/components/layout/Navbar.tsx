@@ -5,7 +5,6 @@ import { Search, Menu, Heart, ShoppingCart, MessageSquare, LayoutGrid, X } from 
 import { Logo } from "@/components/common/Logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,7 +15,6 @@ import { useQuery } from "@tanstack/react-query";
 import { catalogService } from "@/services/catalogService";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/AuthContext";
-import { useCart } from "@/providers/CartProvider";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { UserMenu } from "./UserMenu";
 
@@ -37,7 +35,6 @@ export function Navbar() {
   const [searchQuery, setSearchQuery] = useState("");
   const [mobileSearchQuery, setMobileSearchQuery] = useState("");
   const { isAuthenticated } = useAuth();
-  const { itemCount } = useCart();
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -164,14 +161,9 @@ export function Navbar() {
             <NotificationBell compact />
           </div>
 
-          <Button asChild variant="ghost" size="icon" aria-label="Carrinho" className="relative">
-            <Link to="/carrinho">
+          <Button asChild variant="ghost" size="icon" className="relative">
+            <Link to="/carrinho" aria-label="Carrinho">
               <ShoppingCart className="h-5 w-5" />
-              {itemCount > 0 && (
-                <Badge className="absolute -top-1 -right-1 h-4 min-w-4 px-1 text-[10px] bg-primary border-0">
-                  {itemCount > 99 ? "99+" : itemCount}
-                </Badge>
-              )}
             </Link>
           </Button>
 
