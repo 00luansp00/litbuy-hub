@@ -14,7 +14,7 @@ interface CheckoutLayoutProps {
 export function CheckoutLayout({
   step,
   title = "Finalizar compra",
-  subtitle = "Revise seus itens, confirme os dados e simule o pagamento com segurança.",
+  subtitle = "Revise o carrinho escolhido antes de criar seu pedido.",
   children,
 }: CheckoutLayoutProps) {
   return (
@@ -34,9 +34,7 @@ export function CheckoutLayout({
         className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between"
       >
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground md:text-4xl">
-            {title}
-          </h1>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground md:text-4xl">{title}</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{subtitle}</p>
         </div>
         <CheckoutSteps current={step} />

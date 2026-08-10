@@ -14,9 +14,15 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@tanstack/react-router", () => ({
-  Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
-    <a href={to}>{children}</a>
-  ),
+  Link: ({
+    children,
+    to,
+    search,
+  }: {
+    children: React.ReactNode;
+    to: string;
+    search?: { sellerSlug: string };
+  }) => <a href={search ? `${to}?sellerSlug=${search.sellerSlug}` : to}>{children}</a>,
 }));
 vi.mock("@/services/cartApiHooks", () => ({
   useBuyerSellerCart: () => ({ data: mocks.synchronizedData, refetch: mocks.refetch }),
@@ -60,6 +66,26 @@ beforeEach(() => {
 });
 
 describe("BuyerCartSellerSection", () => {
+  it("links each ready seller only to its own single-seller checkout", () => {
+    const { rerender } = render(<BuyerCartSellerSection cart={cart()} />);
+    expect(screen.getByRole("link", { name: "Ir para checkout" }).getAttribute("href")).toBe(
+      "/checkout?sellerSlug=seller-a",
+    );
+    rerender(
+      <BuyerCartSellerSection
+        cart={cart({ id: "cart-b", seller: { slug: "seller-b", storeName: "Loja B" } })}
+      />,
+    );
+    expect(screen.getByRole("link", { name: "Ir para checkout" }).getAttribute("href")).toBe(
+      "/checkout?sellerSlug=seller-b",
+    );
+  });
+
+  it("does not expose checkout when the seller cart is not ready", () => {
+    render(<BuyerCartSellerSection cart={cart({ checkoutReady: false })} />);
+    expect(screen.queryByRole("link", { name: "Ir para checkout" })).toBeNull();
+    expect(screen.getByText("Ajuste os itens deste carrinho para continuar.")).toBeTruthy();
+  });
   it("keeps a newer listed cart instead of stale seller cache data", () => {
     const listed = cart({ version: 20, items: [{ ...cart().items[0], quantity: 4 }] });
     mocks.synchronizedData = cart({ version: 18, items: [{ ...cart().items[0], quantity: 2 }] });

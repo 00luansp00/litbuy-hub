@@ -15,12 +15,9 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/providers/AuthProvider";
-import { CartProvider } from "@/providers/CartProvider";
 import { NotificationProvider } from "@/providers/NotificationProvider";
 import { ErrorBoundary } from "@/components/error/ErrorBoundary";
 import { OfflineNotice } from "@/components/status/OfflineNotice";
-
-
 
 function NotFoundComponent() {
   return (
@@ -54,12 +51,8 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          Algo deu errado
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Tente novamente ou volte para a home.
-        </p>
+        <h1 className="text-xl font-semibold tracking-tight text-foreground">Algo deu errado</h1>
+        <p className="mt-2 text-sm text-muted-foreground">Tente novamente ou volte para a home.</p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
             onClick={() => {
@@ -140,25 +133,21 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <CartProvider>
-          <NotificationProvider>
-            <ErrorBoundary area="root">
-              <div className="flex min-h-screen flex-col bg-background text-foreground">
-                <OfflineNotice />
-                <Navbar />
-                <main className="flex-1">
-                  {/* Required: nested routes render here. */}
-                  <Outlet />
-                </main>
-                <Footer />
-              </div>
-            </ErrorBoundary>
-            <Toaster />
-          </NotificationProvider>
-        </CartProvider>
+        <NotificationProvider>
+          <ErrorBoundary area="root">
+            <div className="flex min-h-screen flex-col bg-background text-foreground">
+              <OfflineNotice />
+              <Navbar />
+              <main className="flex-1">
+                {/* Required: nested routes render here. */}
+                <Outlet />
+              </main>
+              <Footer />
+            </div>
+          </ErrorBoundary>
+          <Toaster />
+        </NotificationProvider>
       </AuthProvider>
-
-
     </QueryClientProvider>
   );
 }

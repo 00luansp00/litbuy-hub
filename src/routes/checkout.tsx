@@ -1,304 +1,216 @@
-import { useMemo, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { AlertTriangle } from "lucide-react";
-import { toast } from "sonner";
+import { useState } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { CheckoutLayout } from "@/components/checkout/CheckoutLayout";
-import { CheckoutItemsReview } from "@/components/checkout/CheckoutItemsReview";
-import { CheckoutBuyerCard } from "@/components/checkout/CheckoutBuyerCard";
-import { CheckoutPaymentMethods } from "@/components/checkout/CheckoutPaymentMethods";
-import { CheckoutProtectionPlanSection } from "@/components/checkout/CheckoutProtectionPlanSection";
-import { CheckoutLitPointsCard } from "@/components/checkout/CheckoutLitPointsCard";
-import { PaymentMethodBlock } from "@/components/checkout/PaymentMethodBlock";
-import { CheckoutSummaryCard } from "@/components/checkout/CheckoutSummaryCard";
-import { CheckoutSecurityNotice } from "@/components/checkout/CheckoutSecurityNotice";
-import { EmptyCheckoutState } from "@/components/checkout/EmptyCheckoutState";
 import { Button } from "@/components/ui/button";
-import { useCart } from "@/providers/CartProvider";
-import { useAuth } from "@/providers/AuthContext";
-import { checkoutService } from "@/services/checkoutService";
-import { paymentService } from "@/services/paymentService";
-import { cartService } from "@/services/cartService";
-import { analyticsService } from "@/services/analyticsService";
-import { products as allProducts } from "@/data/products";
-import type { CheckoutProtectionPlanId, CheckoutStep, PaymentMethodId } from "@/types";
+import { ApiError } from "@/lib/api/client";
+import { buyerCartKeys, useBuyerSellerCart } from "@/services/cartApiHooks";
+import { checkoutIntentKey, useCreateCheckoutSession } from "@/services/checkoutApiHooks";
+import { buyerOrderKeys } from "@/services/orders";
+import { formatBrlMinorUnits } from "@/components/cart/formatMinorUnits";
+
+const SELLER_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+type CheckoutSearch = { sellerSlug?: string };
 
 export const Route = createFileRoute("/checkout")({
+  validateSearch: (search: Record<string, unknown>): CheckoutSearch => ({
+    sellerSlug:
+      typeof search.sellerSlug === "string" && SELLER_SLUG.test(search.sellerSlug)
+        ? search.sellerSlug
+        : undefined,
+  }),
   component: CheckoutPage,
 });
 
 function CheckoutPage() {
+  const { sellerSlug } = Route.useSearch();
   return (
     <AuthGate
       title="Entre para finalizar a compra"
-      description="Você precisa estar logado na LIT Buy para concluir o checkout."
+      description="Entre como Buyer para criar o pedido."
     >
-      <CheckoutContent />
+      {sellerSlug ? <CheckoutContent sellerSlug={sellerSlug} /> : <ChooseCart />}
     </AuthGate>
   );
 }
 
-function CheckoutContent() {
-  const { items, summary, coupon, clearCart, removeItem } = useCart();
-  const { user } = useAuth();
-  const navigate = useNavigate();
-
-  const [selected, setSelected] = useState<PaymentMethodId | undefined>();
-  const [protectionId, setProtectionId] =
-    useState<CheckoutProtectionPlanId>("standard");
-  const [loading, setLoading] = useState(false);
-
-  // ------------------------------------------------------------------
-  // Bloqueios
-  // ------------------------------------------------------------------
-  const unavailableItems = useMemo(
-    () => cartService.findUnavailableItems(items),
-    [items],
-  );
-  const hasUnavailable = unavailableItems.length > 0;
-
-  // Serviço sob orçamento não pode ir para checkout.
-  const quoteOnlyItems = useMemo(() => {
-    return items.filter((it) => {
-      const p = allProducts.find((pp) => pp.id === it.productId);
-      return (
-        p?.listingModel === "service" && p?.servicePricingType === "quote"
-      );
-    });
-  }, [items]);
-  const hasQuoteOnly = quoteOnlyItems.length > 0;
-
-  const hasAccountProduct = useMemo(
-    () =>
-      items.some((it) => {
-        const p = allProducts.find((pp) => pp.id === it.productId);
-        return p?.productType === "account";
-      }),
-    [items],
-  );
-
-  // ------------------------------------------------------------------
-  // Serviços
-  // ------------------------------------------------------------------
-  const methods = useMemo(() => paymentService.getPaymentMethods(), []);
-  const plans = useMemo(() => paymentService.getProtectionPlans(), []);
-  const wallet = paymentService.getMockWalletBalance();
-
-  const buyer = useMemo(
-    () => ({
-      ...checkoutService.getBuyerMockProfile(
-        user ? { name: user.name, email: user.email } : undefined,
-      ),
-      maskedTaxId: "***.***.***-00",
-    }),
-    [user],
-  );
-
-  const protectionEnabled = protectionId === "lit_protection";
-  const paySummary = useMemo(
-    () => paymentService.buildPaymentSummary(summary, selected, protectionEnabled),
-    [summary, selected, protectionEnabled],
-  );
-  const litPointsPreview = useMemo(
-    () =>
-      paymentService.buildLitPointsPreview(paySummary.total, protectionEnabled),
-    [paySummary.total, protectionEnabled],
-  );
-
-  const selectedMethod = selected
-    ? paymentService.getPaymentMethod(selected)
-    : undefined;
-
-  const step: CheckoutStep = selected ? "payment" : "review";
-
-  const handleSelect = (id: PaymentMethodId) => {
-    setSelected(id);
-    const m = paymentService.getPaymentMethod(id);
-    if (m) toast.success(`Método selecionado: ${m.label}`);
-    analyticsService.track("select_payment_method", { method: id });
-  };
-
-  const handleSelectProtection = (id: CheckoutProtectionPlanId) => {
-    setProtectionId(id);
-    analyticsService.track("add_protection_plan", { plan: id });
-  };
-
-  const handleGeneratePayment = async () => {
-    if (items.length === 0) {
-      toast.error("Seu carrinho está vazio.");
-      return;
-    }
-    if (hasUnavailable) {
-      toast.error("Remova os itens indisponíveis antes de finalizar.");
-      return;
-    }
-    if (hasQuoteOnly) {
-      toast.error(
-        "Serviço sob orçamento não pode ser finalizado no checkout. Fale com o vendedor.",
-      );
-      return;
-    }
-    if (!selected) {
-      toast.error("Selecione um método de pagamento para continuar.");
-      return;
-    }
-    setLoading(true);
-    try {
-      analyticsService.track("generate_payment", {
-        method: selected,
-        protection: protectionEnabled,
-        total: paySummary.total,
-      });
-      const intent = await paymentService.simulateCreatePayment({
-        items,
-        cartSummary: summary,
-        buyer,
-        method: selected,
-        protectionEnabled,
-      });
-      analyticsService.track("purchase_mocked", { paymentId: intent.id });
-      clearCart();
-      toast.success("Pagamento demonstrativo gerado.");
-      navigate({ to: "/pagamento/$id", params: { id: intent.id } });
-    } catch (err) {
-      toast.error("Falha ao gerar pagamento demonstrativo.");
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (items.length === 0) {
-    return (
-      <CheckoutLayout step="review">
-        <EmptyCheckoutState />
-      </CheckoutLayout>
-    );
-  }
-
+function ChooseCart() {
   return (
-    <CheckoutLayout step={step}>
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="min-w-0 space-y-6">
-          {hasQuoteOnly && (
-            <BlockingNotice
-              title="Serviço sob orçamento no carrinho"
-              description="Serviços sob orçamento não podem ser finalizados no checkout. Fale com o vendedor para receber uma proposta."
-              items={quoteOnlyItems.map((i) => ({ key: i.key, title: i.title }))}
-              onRemove={(key) => {
-                removeItem(key);
-                toast.success("Item removido do carrinho.");
-              }}
-            />
-          )}
-
-          {hasUnavailable && (
-            <BlockingNotice
-              title="Alguns itens ficaram indisponíveis"
-              description="Remova os itens abaixo para continuar."
-              items={unavailableItems.map(({ item, reason }) => ({
-                key: item.key,
-                title: `${item.title} — ${reason.label}`,
-              }))}
-              onRemove={(key) => {
-                removeItem(key);
-                toast.success("Item removido do carrinho.");
-              }}
-            />
-          )}
-
-          <CheckoutItemsReview items={items} />
-          <CheckoutBuyerCard buyer={buyer} />
-
-          <CheckoutProtectionPlanSection
-            plans={plans}
-            selected={protectionId}
-            onSelect={handleSelectProtection}
-            highlightAccount={hasAccountProduct}
-          />
-
-          <CheckoutLitPointsCard
-            preview={litPointsPreview}
-            protectionEnabled={protectionEnabled}
-          />
-
-          <CheckoutPaymentMethods
-            methods={methods}
-            selected={selected}
-            onSelect={handleSelect}
-          />
-
-          {selected && (
-            <PaymentMethodBlock
-              method={selected}
-              buyer={buyer}
-              total={paySummary.total}
-              walletBalance={wallet}
-              litPoints={litPointsPreview}
-              loading={loading}
-              onGenerate={handleGeneratePayment}
-            />
-          )}
-
-          <CheckoutSecurityNotice />
-        </div>
-
-        <aside className="lg:sticky lg:top-24 lg:self-start">
-          <CheckoutSummaryCard
-            summary={{
-              ...summary,
-              paymentMethodId: selected,
-              protectionFee: paySummary.protectionFee,
-              operationalFee: paySummary.operationalFee,
-              litPointsEarned: paySummary.litPointsEarned,
-              total: paySummary.total,
-            }}
-            items={items}
-            coupon={coupon}
-            paymentMethod={selectedMethod}
-            protectionEnabled={protectionEnabled}
-            onConfirm={handleGeneratePayment}
-            loading={loading || hasUnavailable || hasQuoteOnly}
-          />
-        </aside>
+    <CheckoutLayout step="review">
+      <div className="mx-auto max-w-lg rounded-2xl border p-8 text-center">
+        <h2 className="text-xl font-semibold">Escolha um carrinho para continuar</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          O checkout é feito separadamente para cada loja.
+        </p>
+        <Button asChild className="mt-5">
+          <Link to="/carrinho">Voltar ao carrinho</Link>
+        </Button>
       </div>
     </CheckoutLayout>
   );
 }
 
-function BlockingNotice({
-  title,
-  description,
-  items,
-  onRemove,
-}: {
-  title: string;
-  description: string;
-  items: { key: string; title: string }[];
-  onRemove: (key: string) => void;
-}) {
-  return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
-      <div className="flex items-start gap-2">
-        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-        <div className="space-y-1">
-          <p className="font-semibold">{title}</p>
-          <p className="text-xs text-destructive/80">{description}</p>
+const errorMessages: Record<string, string> = {
+  CART_VERSION_CONFLICT: "Seu carrinho mudou. Sincronizamos os dados; revise e confirme novamente.",
+  CHECKOUT_PREVIEW_CHANGED:
+    "O preço ou a seleção mudou. Revise o carrinho atualizado e confirme novamente.",
+  CART_NOT_CHECKOUT_READY: "Este carrinho necessita de ajustes antes do checkout.",
+  CART_EMPTY: "Este carrinho está vazio.",
+  INSUFFICIENT_STOCK: "O estoque mudou. Revise as quantidades antes de tentar novamente.",
+  PRODUCT_REQUIRES_QUOTE: "Um item requer orçamento e não pode seguir pelo checkout.",
+  CHECKOUT_CONFLICT:
+    "Houve conflito ao criar o pedido. Confira seus pedidos antes de tentar novamente.",
+  IDEMPOTENCY_KEY_REUSED:
+    "Esta tentativa não corresponde mais ao carrinho atual. Revise e tente novamente.",
+};
+const refetchCodes = new Set([
+  "CART_VERSION_CONFLICT",
+  "CHECKOUT_PREVIEW_CHANGED",
+  "CART_NOT_CHECKOUT_READY",
+  "CART_EMPTY",
+  "INSUFFICIENT_STOCK",
+  "PRODUCT_REQUIRES_QUOTE",
+]);
+const money = (value: string | null) =>
+  value === null ? "Valor indisponível" : formatBrlMinorUnits(value);
+
+export function CheckoutContent({ sellerSlug }: { sellerSlug: string }) {
+  const cartQuery = useBuyerSellerCart(sellerSlug);
+  const create = useCreateCheckoutSession();
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const [feedback, setFeedback] = useState<string>();
+  const cart = cartQuery.data;
+
+  const confirm = () => {
+    if (!cart || !cart.checkoutReady || cart.items.length === 0 || create.isPending) return;
+    setFeedback(undefined);
+    create.mutate(
+      {
+        sellerSlug: cart.seller.slug,
+        expectedCartVersion: cart.version,
+        expectedPreviewFingerprint: cart.previewFingerprint,
+        idempotencyKey: checkoutIntentKey(cart.seller.slug, cart.version, cart.previewFingerprint),
+      },
+      {
+        onSuccess: async (order) => {
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: buyerCartKeys.all }),
+            queryClient.invalidateQueries({ queryKey: buyerOrderKeys.all }),
+            queryClient.invalidateQueries({ queryKey: buyerOrderKeys.detail(order.orderCode) }),
+          ]);
+          navigate({ to: "/pedidos/$id", params: { id: order.orderCode } });
+        },
+        onError: (error) => {
+          const code = error instanceof ApiError ? error.code : "UNKNOWN";
+          setFeedback(errorMessages[code] ?? "Não foi possível criar o pedido. Tente novamente.");
+          if (refetchCodes.has(code)) void cartQuery.refetch();
+        },
+      },
+    );
+  };
+
+  if (cartQuery.isPending)
+    return (
+      <CheckoutLayout step="review">
+        <p role="status">Carregando carrinho…</p>
+      </CheckoutLayout>
+    );
+  if (cartQuery.isError || !cart)
+    return (
+      <CheckoutLayout step="review">
+        <div role="alert">
+          Não foi possível carregar este carrinho.{" "}
+          <Link to="/carrinho" className="underline">
+            Voltar ao carrinho
+          </Link>
         </div>
-      </div>
-      <ul className="space-y-2">
-        {items.map((it) => (
-          <li
-            key={it.key}
-            className="flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-background/40 p-2 text-xs"
+      </CheckoutLayout>
+    );
+  if (cart.items.length === 0)
+    return (
+      <CheckoutLayout step="review">
+        <div>
+          Este carrinho está vazio.{" "}
+          <Link to="/carrinho" className="underline">
+            Editar carrinho
+          </Link>
+        </div>
+      </CheckoutLayout>
+    );
+
+  return (
+    <CheckoutLayout step="review">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <section className="space-y-4" aria-labelledby="checkout-seller">
+          <div>
+            <p className="text-sm text-muted-foreground">Carrinho da loja</p>
+            <h2 id="checkout-seller" className="text-2xl font-semibold">
+              {cart.seller.storeName}
+            </h2>
+          </div>
+          {cart.items.map((item) => (
+            <article key={item.id} className="rounded-xl border p-4">
+              <div className="flex justify-between gap-4">
+                <div>
+                  <h3 className="font-semibold">{item.product.title}</h3>
+                  {item.variant && (
+                    <p className="text-sm text-muted-foreground">Variante: {item.variant.title}</p>
+                  )}
+                  <p className="text-sm">Quantidade: {item.quantity}</p>
+                </div>
+                <div className="text-right">
+                  <p>{money(item.currentLineAmountMinor)}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {money(item.currentUnitAmountMinor)} por unidade
+                  </p>
+                </div>
+              </div>
+              {item.issues.length > 0 && (
+                <div role="alert" className="mt-3 rounded-lg bg-destructive/5 p-3">
+                  <p className="font-medium">Este item precisa de atenção.</p>
+                  <ul className="list-inside list-disc text-sm">
+                    {item.issues.map((issue) => (
+                      <li key={issue}>{issue.replaceAll("_", " ")}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </article>
+          ))}
+          <Link to="/carrinho" className="text-sm underline">
+            Editar carrinho
+          </Link>
+        </section>
+        <aside className="h-fit rounded-xl border p-5">
+          <p className="text-sm text-muted-foreground">Subtotal previsto</p>
+          <p className="text-2xl font-bold">{money(cart.previewSubtotalMinor)}</p>
+          <p className="mt-3 text-sm">
+            {cart.checkoutReady ? "Pronto para checkout" : "Este carrinho necessita de ajustes."}
+          </p>
+          {feedback && (
+            <p role="alert" className="mt-3 text-sm text-destructive">
+              {feedback}
+            </p>
+          )}
+          {feedback?.includes("Confira seus pedidos") && (
+            <Link to="/pedidos" className="mt-2 block text-sm underline">
+              Conferir pedidos
+            </Link>
+          )}
+          <Button
+            className="mt-5 w-full"
+            disabled={!cart.checkoutReady || create.isPending}
+            onClick={confirm}
           >
-            <span className="truncate text-foreground">{it.title}</span>
-            <Button size="sm" variant="outline" onClick={() => onRemove(it.key)}>
-              Remover
-            </Button>
-          </li>
-        ))}
-      </ul>
-    </div>
+            {create.isPending ? "Criando pedido…" : "Confirmar e criar pedido"}
+          </Button>
+          <p className="mt-3 text-xs text-muted-foreground">
+            O pedido será criado com pagamento pendente. Nenhuma cobrança é feita nesta etapa.
+          </p>
+        </aside>
+      </div>
+    </CheckoutLayout>
   );
 }

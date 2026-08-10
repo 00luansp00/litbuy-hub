@@ -128,8 +128,22 @@ export function BuyerCartSellerSection({ cart: listedCart }: { cart: BuyerCart }
         </p>
       )}
 
-      <footer className="flex flex-col justify-between gap-2 border-t pt-4 sm:flex-row sm:items-end">
-        <p className="text-xs text-muted-foreground">Checkout será conectado na próxima etapa.</p>
+      <footer className="flex flex-col justify-between gap-3 border-t pt-4 sm:flex-row sm:items-end">
+        <div>
+          {cart.items.length > 0 && cart.checkoutReady ? (
+            <Link
+              to="/checkout"
+              search={{ sellerSlug: cart.seller.slug }}
+              className="inline-flex h-10 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            >
+              Ir para checkout
+            </Link>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Ajuste os itens deste carrinho para continuar.
+            </p>
+          )}
+        </div>
         <div className="sm:text-right">
           <p className="text-xs text-muted-foreground">Subtotal de {cart.seller.storeName}</p>
           <p className="text-xl font-bold" data-testid={`subtotal-${cart.seller.slug}`}>
