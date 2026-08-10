@@ -13,12 +13,12 @@ import { formatBrlMinorUnits } from "@/components/cart/formatMinorUnits";
 const SELLER_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 type CheckoutSearch = { sellerSlug?: string };
 
+export const parseCheckoutSellerSlug = (value: unknown): string | undefined =>
+  typeof value === "string" && SELLER_SLUG.test(value) ? value : undefined;
+
 export const Route = createFileRoute("/checkout")({
   validateSearch: (search: Record<string, unknown>): CheckoutSearch => ({
-    sellerSlug:
-      typeof search.sellerSlug === "string" && SELLER_SLUG.test(search.sellerSlug)
-        ? search.sellerSlug
-        : undefined,
+    sellerSlug: parseCheckoutSellerSlug(search.sellerSlug),
   }),
   component: CheckoutPage,
 });
@@ -35,7 +35,7 @@ function CheckoutPage() {
   );
 }
 
-function ChooseCart() {
+export function ChooseCart() {
   return (
     <CheckoutLayout step="review">
       <div className="mx-auto max-w-lg rounded-2xl border p-8 text-center">

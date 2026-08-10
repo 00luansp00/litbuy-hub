@@ -11,9 +11,15 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => (options: unknown) => options,
-  Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
-    <a href={to}>{children}</a>
-  ),
+  Link: ({
+    children,
+    to,
+    search,
+  }: {
+    children: React.ReactNode;
+    to: string;
+    search?: { sellerSlug: string };
+  }) => <a href={search ? `${to}?sellerSlug=${search.sellerSlug}` : to}>{children}</a>,
 }));
 vi.mock("@/providers/AuthContext", () => ({
   useAuth: () => ({ status: mocks.authStatus }),
@@ -192,7 +198,14 @@ describe("CarrinhoPage", () => {
     expect(screen.getByTestId("subtotal-seller-a").textContent).toBe("R$ 10,00");
     expect(screen.getByTestId("subtotal-seller-b").textContent).toBe("R$ 25,00");
     expect(screen.queryByText("R$ 35,00")).toBeNull();
-    expect(screen.queryByRole("link", { name: /checkout/i })).toBeNull();
+    expect(sellerA.getByRole("link", { name: "Ir para checkout" }).getAttribute("href")).toBe(
+      "/checkout?sellerSlug=seller-a",
+    );
+    expect(sellerB.getByRole("link", { name: "Ir para checkout" }).getAttribute("href")).toBe(
+      "/checkout?sellerSlug=seller-b",
+    );
+    expect(screen.getAllByRole("link", { name: "Ir para checkout" })).toHaveLength(2);
+    expect(screen.queryByText("R$ 35,00")).toBeNull();
   });
 
   it("offers the next page for a full response and queries page two after the click", () => {
