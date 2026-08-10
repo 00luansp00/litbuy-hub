@@ -1,12 +1,10 @@
 import { motion } from "motion/react";
-import { Heart, ShieldCheck, ShoppingCart, Star } from "lucide-react";
-import { toast } from "sonner";
+import { Heart, ShieldCheck, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ProductBadges } from "./ProductBadges";
 import { SellerInfo } from "./SellerInfo";
 import { formatBRL, formatCompact } from "@/lib/format";
-import { useCart } from "@/providers/CartProvider";
 import { getUnavailabilityReason } from "@/services/productService";
 import { cn } from "@/lib/utils";
 import type { Product } from "@/types";
@@ -23,7 +21,6 @@ function isServiceQuote(p: Product): boolean {
 }
 
 export function ProductCard({ product }: ProductCardProps) {
-  const { addItem } = useCart();
   const unavailability = getUnavailabilityReason(product);
   const isAvailable = !unavailability;
   const isDynamic = product.listingModel === "dynamic";
@@ -32,27 +29,6 @@ export function ProductCard({ product }: ProductCardProps) {
   const isQuote = isServiceQuote(product);
 
   const requiresPage = isDynamic || isVirtualCurrency || isQuote;
-
-  const handleAdd = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (requiresPage) {
-      toast.info(
-        isDynamic
-          ? "Selecione uma variação na página do anúncio."
-          : isVirtualCurrency
-            ? "Escolha a quantidade na página do anúncio."
-            : "Este serviço exige contato com o vendedor.",
-      );
-      return;
-    }
-    if (unavailability) {
-      toast.error(unavailability.toast);
-      return;
-    }
-    addItem(product);
-    toast.success("Adicionado ao carrinho", { description: product.title });
-  };
 
   const trustTone =
     (product.trustScore ?? 0) >= 90
@@ -190,24 +166,9 @@ export function ProductCard({ product }: ProductCardProps) {
                 : `${formatCompact(product.soldCount)} vendidos`}
             </div>
           </div>
-          {requiresPage ? (
+          {requiresPage && (
             <Button size="sm" variant="secondary" disabled>
               {isQuote ? "Solicitar" : isDynamic ? "Ver opções" : "Ver oferta"}
-            </Button>
-          ) : (
-            <Button
-              size="icon"
-              variant="default"
-              aria-label={isAvailable ? "Adicionar ao carrinho" : unavailability!.label}
-              onClick={handleAdd}
-              disabled={!isAvailable}
-              aria-disabled={!isAvailable}
-              className={cn(
-                "transition-transform",
-                isAvailable ? "hover:scale-110" : "cursor-not-allowed opacity-60",
-              )}
-            >
-              <ShoppingCart className="h-4 w-4" />
             </Button>
           )}
         </div>
