@@ -108,6 +108,22 @@ describe("PublicProductPurchasePanel", () => {
     expect(mocks.mutate).not.toHaveBeenCalled();
   });
 
+  it.each(["emailVerificationRequired", "deviceApprovalRequired", "twoFactorRequired"] as const)(
+    "blocks cart access while auth status is %s",
+    (status) => {
+      mocks.authStatus = status;
+      mocks.cartQuery = { isPending: true, refetch: mocks.refetch };
+      render(<PublicProductPurchasePanel product={product()} />);
+
+      expect(
+        screen.getByText("Conclua a autenticação da sua conta para continuar a compra."),
+      ).toBeTruthy();
+      expect(screen.queryByText("Sincronizando carrinho…")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Adicionar ao carrinho" })).toBeNull();
+      expect(mocks.mutate).not.toHaveBeenCalled();
+    },
+  );
+
   it("treats only CART_NOT_FOUND as an absent cart and sends version zero", () => {
     mocks.cartQuery = {
       error: new ApiError(404, "CART_NOT_FOUND", "CART_NOT_FOUND"),
@@ -139,15 +155,24 @@ describe("PublicProductPurchasePanel", () => {
     expect(mocks.mutate.mock.calls[0][0].input.expectedVersion).toBe(12);
   });
 
-  it("requires an in-stock DYNAMIC variant and sends its id", () => {
+  it("shows DYNAMIC details, requires in-stock selection, and sends only its id", () => {
     const dynamic = product({
       model: "DYNAMIC",
       variants: [
-        { id: "available", title: "Disponível", description: null, price: "12", stock: 2 },
-        { id: "sold-out", title: "Esgotada", description: null, price: "13", stock: 0 },
+        {
+          id: "available",
+          title: "Disponível",
+          description: "Entrega em até duas horas",
+          price: "12.00",
+          stock: 2,
+        },
+        { id: "sold-out", title: "Esgotada", description: null, price: "13.50", stock: 0 },
       ],
     });
     render(<PublicProductPurchasePanel product={dynamic} />);
+    expect(screen.getByText("Entrega em até duas horas")).toBeTruthy();
+    expect(screen.getByText(/R\$\s*12,00/)).toBeTruthy();
+    expect(screen.getByText(/R\$\s*13,50/)).toBeTruthy();
     const add = screen.getByRole("button", { name: "Adicionar ao carrinho" });
     expect((add as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole("button", { name: /Esgotada/ }) as HTMLButtonElement).disabled).toBe(
@@ -157,7 +182,8 @@ describe("PublicProductPurchasePanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /Disponível/ }));
     expect((add as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(add);
-    expect(mocks.mutate.mock.calls[0][0].input).toMatchObject({
+    expect(mocks.mutate.mock.calls[0][0].input).toEqual({
+      productId: "11111111-1111-4111-8111-111111111111",
       productVariantId: "available",
       quantity: 1,
       expectedVersion: 7,

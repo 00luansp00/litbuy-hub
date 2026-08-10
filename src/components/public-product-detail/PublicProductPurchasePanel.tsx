@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { formatPublicCatalogPrice } from "@/components/public-catalog/formatPublicCatalogPrice";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api/client";
 import { useAuth } from "@/providers/AuthContext";
@@ -47,7 +48,13 @@ export function PublicProductPurchasePanel({ product }: { product: PublicCatalog
   );
 
   const addToCart = () => {
-    if (!cartKnown || duplicate || (product.model === "DYNAMIC" && !selectedVariant)) return;
+    if (
+      status !== "authenticated" ||
+      !cartKnown ||
+      duplicate ||
+      (product.model === "DYNAMIC" && !selectedVariant)
+    )
+      return;
     setFeedback(undefined);
     addItem.reset();
     addItem.mutate(
@@ -107,6 +114,12 @@ export function PublicProductPurchasePanel({ product }: { product: PublicCatalog
                   }`}
                 >
                   <span className="block font-medium">{variant.title}</span>
+                  {variant.description && (
+                    <span className="mt-1 block text-muted-foreground">{variant.description}</span>
+                  )}
+                  <span className="mt-2 block font-semibold text-primary">
+                    {formatPublicCatalogPrice({ kind: "FIXED", amount: variant.price })}
+                  </span>
                   <span className="text-muted-foreground">
                     {unavailable ? "Sem estoque" : `${variant.stock} em estoque`}
                   </span>
@@ -125,6 +138,10 @@ export function PublicProductPurchasePanel({ product }: { product: PublicCatalog
         <Button asChild className="w-full">
           <Link to="/login">Entrar para comprar</Link>
         </Button>
+      ) : status !== "authenticated" ? (
+        <p className="rounded-lg bg-muted p-3 text-sm">
+          Conclua a autenticação da sua conta para continuar a compra.
+        </p>
       ) : isQuote ? (
         <p className="rounded-lg bg-muted p-3 text-sm">
           Este serviço exige orçamento antes da compra.
