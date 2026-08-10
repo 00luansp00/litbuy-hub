@@ -3,18 +3,27 @@ export type ApiErrorPayload = {
   code?: string;
   message?: string | string[];
   requestId?: string;
+  details?: unknown[];
 };
 
 export class ApiError extends Error {
   status: number;
   code: string;
   requestId?: string;
-  constructor(status: number, code: string, message: string, requestId?: string) {
+  details: unknown[];
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    requestId?: string,
+    details: unknown[] = [],
+  ) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
     this.requestId = requestId;
+    this.details = details;
   }
 }
 
@@ -144,6 +153,7 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
       payload?.code ?? "HTTP_ERROR",
       messageFromPayload(payload),
       payload?.requestId,
+      Array.isArray(payload?.details) ? payload.details : [],
     );
     throw error;
   }
