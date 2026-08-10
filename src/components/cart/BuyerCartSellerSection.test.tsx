@@ -60,6 +60,46 @@ beforeEach(() => {
 });
 
 describe("BuyerCartSellerSection", () => {
+  it("keeps a newer listed cart instead of stale seller cache data", () => {
+    const listed = cart({ version: 20, items: [{ ...cart().items[0], quantity: 4 }] });
+    mocks.synchronizedData = cart({ version: 18, items: [{ ...cart().items[0], quantity: 2 }] });
+
+    render(<BuyerCartSellerSection cart={listed} />);
+    expect(screen.getByText("4")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Aumentar quantidade de Produto A" }));
+    expect(mocks.updateMutate.mock.calls[0][0].input).toEqual({
+      quantity: 5,
+      expectedVersion: 20,
+    });
+  });
+
+  it("uses a strictly newer synchronized version of the same cart", () => {
+    const listed = cart({ version: 20, items: [{ ...cart().items[0], quantity: 4 }] });
+    mocks.synchronizedData = cart({ version: 21, items: [{ ...cart().items[0], quantity: 5 }] });
+
+    render(<BuyerCartSellerSection cart={listed} />);
+    expect(screen.getByText("5")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Aumentar quantidade de Produto A" }));
+    expect(mocks.updateMutate.mock.calls[0][0].input).toEqual({
+      quantity: 6,
+      expectedVersion: 21,
+    });
+  });
+
+  it("does not replace the listed cart with cached data from another cart id", () => {
+    const listed = cart({ version: 20, items: [{ ...cart().items[0], quantity: 4 }] });
+    mocks.synchronizedData = cart({
+      id: "cart-other",
+      version: 21,
+      items: [{ ...cart().items[0], quantity: 5 }],
+    });
+
+    render(<BuyerCartSellerSection cart={listed} />);
+    expect(screen.getByText("4")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Aumentar quantidade de Produto A" }));
+    expect(mocks.updateMutate.mock.calls[0][0].input.expectedVersion).toBe(20);
+  });
+
   it("sends seller, item, quantity, and the cart expectedVersion unchanged", () => {
     render(<BuyerCartSellerSection cart={cart()} />);
     fireEvent.click(screen.getByRole("button", { name: "Aumentar quantidade de Produto A" }));

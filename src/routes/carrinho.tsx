@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { BuyerCartSellerSection } from "@/components/cart/BuyerCartSellerSection";
@@ -13,7 +14,8 @@ export const Route = createFileRoute("/carrinho")({
 
 export function CarrinhoPage() {
   const { status } = useAuth();
-  const cartsQuery = useBuyerCarts(1, 20);
+  const [page, setPage] = useState(1);
+  const cartsQuery = useBuyerCarts(page, 20);
 
   return (
     <div className="container-lit space-y-8 py-6 md:py-10">
@@ -61,7 +63,14 @@ export function CarrinhoPage() {
             Tentar novamente
           </Button>
         </div>
-      ) : !cartsQuery.data?.items.some((cart) => cart.items.length > 0) ? (
+      ) : page > 1 && cartsQuery.data.items.length === 0 ? (
+        <div className="space-y-4 rounded-2xl border bg-card p-6 text-center">
+          <p className="text-muted-foreground">Não há carrinhos nesta página.</p>
+          <Button type="button" variant="outline" onClick={() => setPage((current) => current - 1)}>
+            Voltar para a página anterior
+          </Button>
+        </div>
+      ) : page === 1 && !cartsQuery.data.items.some((cart) => cart.items.length > 0) ? (
         <EmptyCartState />
       ) : (
         <div className="space-y-6">
@@ -69,6 +78,28 @@ export function CarrinhoPage() {
             <BuyerCartSellerSection key={cart.id} cart={cart} />
           ))}
           <CartSecurityNotice />
+          <nav
+            className="flex items-center justify-center gap-3"
+            aria-label="Paginação dos carrinhos"
+          >
+            <Button
+              type="button"
+              variant="outline"
+              disabled={page === 1}
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+            >
+              Anterior
+            </Button>
+            <span className="text-sm text-muted-foreground">Página {page}</span>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={cartsQuery.data.items.length < cartsQuery.data.limit}
+              onClick={() => setPage((current) => current + 1)}
+            >
+              Próxima
+            </Button>
+          </nav>
         </div>
       )}
     </div>

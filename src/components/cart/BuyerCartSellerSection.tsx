@@ -26,7 +26,11 @@ const messageFor = (error: unknown) =>
 
 export function BuyerCartSellerSection({ cart: listedCart }: { cart: BuyerCart }) {
   const synchronizedCart = useBuyerSellerCart(listedCart.seller.slug, false);
-  const cart = synchronizedCart.data ?? listedCart;
+  const synchronized = synchronizedCart.data;
+  const cart =
+    synchronized && synchronized.id === listedCart.id && synchronized.version > listedCart.version
+      ? synchronized
+      : listedCart;
   const updateItem = useUpdateBuyerCartItem();
   const removeItem = useRemoveBuyerCartItem();
   const [feedback, setFeedback] = useState<string>();

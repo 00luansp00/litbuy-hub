@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { BuyerCart } from "@/services/cartApiService";
 import { CarrinhoPage } from "./carrinho";
@@ -6,6 +6,7 @@ import { CarrinhoPage } from "./carrinho";
 const mocks = vi.hoisted(() => ({
   authStatus: "authenticated",
   cartsQuery: {} as Record<string, unknown>,
+  useBuyerCarts: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -21,7 +22,7 @@ vi.mock("@/providers/CartProvider", () => {
   throw new Error("The real cart route must not import CartProvider");
 });
 vi.mock("@/services/cartApiHooks", () => ({
-  useBuyerCarts: vi.fn(() => mocks.cartsQuery),
+  useBuyerCarts: mocks.useBuyerCarts,
   useBuyerSellerCart: () => ({ refetch: vi.fn() }),
   useUpdateBuyerCartItem: () => ({ mutate: vi.fn(), isPending: false }),
   useRemoveBuyerCartItem: () => ({ mutate: vi.fn(), isPending: false }),
@@ -58,9 +59,16 @@ const cart = (
 beforeEach(() => {
   mocks.authStatus = "authenticated";
   mocks.cartsQuery = { data: { page: 1, limit: 20, items: [] }, isPending: false, isError: false };
+  mocks.useBuyerCarts.mockReset();
+  mocks.useBuyerCarts.mockImplementation(() => mocks.cartsQuery);
 });
 
 describe("CarrinhoPage", () => {
+  it("loads the initial page with the backend limit", () => {
+    render(<CarrinhoPage />);
+    expect(mocks.useBuyerCarts).toHaveBeenCalledWith(1, 20);
+  });
+
   it("handles initializing, anonymous, and intermediate authentication without cart content", () => {
     mocks.authStatus = "initializing";
     const { rerender } = render(<CarrinhoPage />);
@@ -146,5 +154,84 @@ describe("CarrinhoPage", () => {
     expect(screen.getByTestId("subtotal-seller-b").textContent).toBe("R$ 25,00");
     expect(screen.queryByText("R$ 35,00")).toBeNull();
     expect(screen.queryByRole("link", { name: /checkout/i })).toBeNull();
+  });
+
+  it("offers the next page for a full response and queries page two after the click", () => {
+    mocks.cartsQuery = {
+      data: {
+        page: 1,
+        limit: 20,
+        items: Array.from({ length: 20 }, (_, index) =>
+          cart(`seller-${index}`, `Produto ${index}`, "100"),
+        ),
+      },
+      isPending: false,
+      isError: false,
+    };
+    render(<CarrinhoPage />);
+
+    const next = screen.getByRole("button", { name: "Próxima" }) as HTMLButtonElement;
+    expect(next.disabled).toBe(false);
+    fireEvent.click(next);
+    expect(mocks.useBuyerCarts).toHaveBeenLastCalledWith(2, 20);
+    expect(screen.getByText("Página 2")).toBeTruthy();
+  });
+
+  it("disables next for a partial page", () => {
+    mocks.cartsQuery = {
+      data: { page: 1, limit: 20, items: [cart("seller-a", "Produto A", "100")] },
+      isPending: false,
+      isError: false,
+    };
+    render(<CarrinhoPage />);
+    expect((screen.getByRole("button", { name: "Próxima" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+  });
+
+  it("returns from page two to page one", () => {
+    mocks.cartsQuery = {
+      data: {
+        page: 1,
+        limit: 20,
+        items: Array.from({ length: 20 }, (_, index) =>
+          cart(`seller-${index}`, `Produto ${index}`, "100"),
+        ),
+      },
+      isPending: false,
+      isError: false,
+    };
+    render(<CarrinhoPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Próxima" }));
+    fireEvent.click(screen.getByRole("button", { name: "Anterior" }));
+    expect(mocks.useBuyerCarts).toHaveBeenLastCalledWith(1, 20);
+    expect(screen.getByText("Página 1")).toBeTruthy();
+  });
+
+  it("distinguishes an empty later page and lets the buyer return", () => {
+    mocks.cartsQuery = {
+      data: {
+        page: 1,
+        limit: 20,
+        items: Array.from({ length: 20 }, (_, index) =>
+          cart(`seller-${index}`, `Produto ${index}`, "100"),
+        ),
+      },
+      isPending: false,
+      isError: false,
+    };
+    const { rerender } = render(<CarrinhoPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Próxima" }));
+
+    mocks.cartsQuery = {
+      data: { page: 2, limit: 20, items: [] },
+      isPending: false,
+      isError: false,
+    };
+    rerender(<CarrinhoPage />);
+    expect(screen.getByText("Não há carrinhos nesta página.")).toBeTruthy();
+    expect(screen.queryByText("Seu carrinho está vazio")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Voltar para a página anterior" }));
+    expect(mocks.useBuyerCarts).toHaveBeenLastCalledWith(1, 20);
   });
 });
