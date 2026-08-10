@@ -50,6 +50,13 @@ vi.mock("@/services/productService", () => ({
   productService: { byId: mocks.productService, related: mocks.productService },
 }));
 vi.mock("@/services/reviewService", () => ({ reviewService: { byProduct: mocks.reviewService } }));
+vi.mock("@/providers/AuthContext", () => ({
+  useAuth: () => ({ status: "anonymous" }),
+}));
+vi.mock("@/services/cartApiHooks", () => ({
+  useBuyerSellerCart: () => ({ isPending: true }),
+  useAddBuyerCartItem: () => ({ mutate: vi.fn(), reset: vi.fn(), isPending: false }),
+}));
 
 const realProduct: PublicCatalogProductDetail = {
   id: "real-id",
