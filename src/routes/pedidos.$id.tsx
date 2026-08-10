@@ -7,6 +7,7 @@ import { BuyerOrderItems } from "@/components/orders/BuyerOrderItems";
 import { BuyerOrderStateSummary } from "@/components/orders/BuyerOrderStateSummary";
 import { BuyerOrderStatusBadge } from "@/components/orders/BuyerOrderStatusBadge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api/client";
 import { formatOrderDate, useBuyerOrder } from "@/services/orders";
 export const Route = createFileRoute("/pedidos/$id")({ component: OrderDetailPage });
@@ -80,6 +81,14 @@ export function OrderDetailContent({ orderCode }: { orderCode: string }) {
         )}
       </header>
       <BuyerOrderStateSummary order={order} />
+      {order.status === "PENDING_PAYMENT" &&
+        ["NOT_CREATED", "PENDING"].includes(order.paymentStatus) && (
+          <Button asChild>
+            <Link to="/pagamento/$id" params={{ id: order.orderCode }}>
+              Ir para pagamento Alpha
+            </Link>
+          </Button>
+        )}
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <div className="space-y-6">
           <section aria-labelledby="seller-title" className="rounded-xl border p-5">
