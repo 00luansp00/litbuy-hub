@@ -32,6 +32,13 @@ vi.mock("@tanstack/react-router", () => ({
     );
   },
 }));
+vi.mock("@/providers/AuthContext", () => ({
+  useAuth: () => ({ status: "anonymous" }),
+}));
+vi.mock("@/services/cartApiHooks", () => ({
+  useBuyerSellerCart: () => ({ isPending: true }),
+  useAddBuyerCartItem: () => ({ mutate: vi.fn(), reset: vi.fn(), isPending: false }),
+}));
 
 const image = (id: string, url: string, isCover = false, altText: string | null = null) => ({
   id,
@@ -69,8 +76,6 @@ const product = (
 
 const absentCommerce = () => {
   for (const label of [
-    "Comprar",
-    "Adicionar ao carrinho",
     "Favoritar",
     "Quantidade",
     "Checkout",
@@ -103,6 +108,10 @@ describe("public product detail content", () => {
     );
     expect(screen.queryByRole("link", { name: /Loja Real|loja-real/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/reputa|verificad|nível|vendas/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Entrar para comprar" })).toHaveAttribute(
+      "href",
+      "/login",
+    );
     absentCommerce();
   });
   it("renders FROM variants in API order and hides a generic NORMAL option", () => {
@@ -116,14 +125,13 @@ describe("public product detail content", () => {
       />,
     );
     expect(screen.getByText(/A partir de R\$\s*9,90/)).toBeInTheDocument();
-    const options = screen.getByRole("heading", { name: "Opções disponíveis" }).parentElement!;
+    const options = screen.getByRole("group", { name: "Escolha uma variante" });
     expect(
       within(options)
-        .getAllByRole("article")
-        .map((node) => node.querySelector("h3")?.textContent),
+        .getAllByRole("button")
+        .map((node) => node.querySelector("span")?.textContent),
     ).toEqual(["Primeira", "Segunda"]);
-    expect(within(options).getByText("Descrição um")).toBeInTheDocument();
-    expect(within(options).getByText("Estoque: 30")).toBeInTheDocument();
+    expect(within(options).getByText("30 em estoque")).toBeInTheDocument();
     rerender(
       <PublicProductDetailContent
         product={product({
@@ -133,7 +141,7 @@ describe("public product detail content", () => {
         })}
       />,
     );
-    expect(screen.queryByText("Opções disponíveis")).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Escolha uma variante" })).not.toBeInTheDocument();
   });
   it("renders automatic delivery, non-applicable stock and FIXED/QUOTE services", () => {
     const fixed = product({
@@ -152,7 +160,9 @@ describe("public product detail content", () => {
     const { rerender } = render(<PublicProductDetailContent product={fixed} />);
     expect(screen.getByText("Não aplicável")).toBeInTheDocument();
     expect(screen.getByText("Entrega automática")).toBeInTheDocument();
-    expect(screen.getByText("A compra ainda não está disponível nesta etapa.")).toBeInTheDocument();
+    expect(
+      screen.queryByText("A compra ainda não está disponível nesta etapa."),
+    ).not.toBeInTheDocument();
     expect(screen.getByText("Formatos do serviço")).toBeInTheDocument();
     expect(screen.getByText("Preço fixo")).toBeInTheDocument();
     expect(screen.getAllByText(/R\$\s*79,90/).length).toBeGreaterThan(0);

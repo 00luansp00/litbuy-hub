@@ -2,6 +2,7 @@ import { Breadcrumb } from "@/components/common/Breadcrumb";
 import { formatPublicCatalogPrice } from "@/components/public-catalog/formatPublicCatalogPrice";
 import type { PublicCatalogProductDetail } from "@/services/publicCatalog";
 import { PublicProductDetailGallery } from "./PublicProductDetailGallery";
+import { PublicProductPurchasePanel } from "./PublicProductPurchasePanel";
 
 const typeLabels: Record<PublicCatalogProductDetail["productType"], string> = {
   ACCOUNT: "Conta",
@@ -21,8 +22,7 @@ const money = (value: string) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value));
 
 export function PublicProductDetailContent({ product }: { product: PublicCatalogProductDetail }) {
-  const showVariants =
-    product.model === "DYNAMIC" || (product.model === "SERVICE" && product.variants.length > 0);
+  const showServiceVariants = product.model === "SERVICE" && product.variants.length > 0;
   return (
     <main className="container-lit space-y-8 py-6 md:py-10">
       <Breadcrumb
@@ -81,11 +81,7 @@ export function PublicProductDetailContent({ product }: { product: PublicCatalog
               </dd>
             </div>
           </dl>
-          {product.deliveryMode === "AUTOMATIC" && (
-            <p className="text-sm text-muted-foreground">
-              A compra ainda não está disponível nesta etapa.
-            </p>
-          )}
+          <PublicProductPurchasePanel product={product} />
           <section className="rounded-2xl border bg-card p-5">
             <h2 className="font-semibold">Sobre a loja</h2>
             <p className="mt-2">{product.seller.storeName}</p>
@@ -93,9 +89,7 @@ export function PublicProductDetailContent({ product }: { product: PublicCatalog
           </section>
           <div className="rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground">
             <p>Este anúncio é carregado diretamente do catálogo público da LIT Buy.</p>
-            <p>
-              Compra, pagamento e comunicação com o vendedor serão conectados em etapas posteriores.
-            </p>
+            <p>Pagamento e comunicação com o vendedor serão conectados em etapas posteriores.</p>
           </div>
         </section>
       </div>
@@ -105,11 +99,9 @@ export function PublicProductDetailContent({ product }: { product: PublicCatalog
           {product.description}
         </p>
       </section>
-      {showVariants && (
+      {showServiceVariants && (
         <section>
-          <h2 className="text-xl font-semibold">
-            {product.model === "DYNAMIC" ? "Opções disponíveis" : "Formatos do serviço"}
-          </h2>
+          <h2 className="text-xl font-semibold">Formatos do serviço</h2>
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             {product.variants.map((variant) => (
               <article key={variant.id} className="rounded-xl border bg-card p-5">
