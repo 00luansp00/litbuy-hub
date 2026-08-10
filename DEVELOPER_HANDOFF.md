@@ -1,5 +1,11 @@
 # DEVELOPER_HANDOFF.md — LIT Buy
 
+## Linha de chegada atual do Alpha
+
+[`ALPHA_SCOPE_AND_COMPLETION_CHECKLIST.md`](./ALPHA_SCOPE_AND_COMPLETION_CHECKLIST.md) é a fonte autoritativa para a linha de chegada do **LIT Buy — Handoff Alpha v1** e para a classificação atual entre concluído, pendente para Alpha e reservado para produção.
+
+> Enquanto houver itens em `PENDENTE DE IMPLEMENTAÇÃO ALPHA`, não iniciar revisão geral, refatoração geral, auditoria externa ou feature freeze. Depois do freeze, a auditoria externa aguarda `GATES DE ESTABILIZAÇÃO / HANDOFF = 0`. O objetivo é seguir as etapas definidas em `ALPHA_SCOPE_AND_COMPLETION_CHECKLIST.md`. PRs mergeadas só devem ser revisitadas por bug objetivo, segurança, integridade ou bloqueio real.
+
 ## PR #53: delivery-protection eligibility
 
 Use `SellerHoldEligibilityService` internally to evaluate frozen delivery-protection deadlines.
@@ -15,7 +21,7 @@ Pedidos `ACTIVE` com pagamento `PAID` e snapshot financeiro imutável agora pode
 
 Novos checkouts exigem uma `FeePolicyVersion ACTIVE` efetiva e uma regra geral `PLATFORM_COMMISSION` cobrada do seller. Política, regra, `publicVersion` e valor calculado são congelados no `Order`, e os itens recebem o mesmo `pricingPolicyVersion`. Fixtures de teste publicam explicitamente uma regra zero; não existe fallback nem seed comercial de produção. Nenhum lançamento contábil ou chamada PSP foi adicionado. Detalhes em `CHECKOUT_PLATFORM_COMMISSION_SNAPSHOT.md`.
 
-> **Contrato comercial vigente:** `COMMERCE_ARCHITECTURE.md` é a fonte autoritativa. O conteúdo comercial histórico abaixo é preliminar ou substituído quando divergir; pagamentos e ledger não estão implementados, e nenhum gateway foi escolhido.
+> **Nota histórica/superseded:** `COMMERCE_ARCHITECTURE.md` continua sendo a fonte autoritativa do contrato comercial, mas a afirmação antiga de que pagamentos e ledger não estavam implementados e nenhum gateway havia sido escolhido não descreve mais o estado atual. As PRs #39–#55 implementaram a fundação financeira, ledger, adapter Efí sandbox e o núcleo da venda até `SELLER_AVAILABLE`; isso não habilita dinheiro real nem conclui todo o domínio financeiro. Consulte `ALPHA_SCOPE_AND_COMPLETION_CHECKLIST.md` para o estado atual.
 
 > A fundação isolada de dados locais está em `LOCAL_DEMO_DATA.md`: oito produtos fictícios, imagens privadas no MinIO e reset seletivo. Home, categoria e detalhe de produto consomem a API pública real; busca, loja e comércio continuam mockados.
 
@@ -58,6 +64,8 @@ Funcionalidades presentes visualmente:
 - Equipe do vendedor (cargos e convites mockados).
 
 ## 2. Estado atual
+
+> **Snapshot histórico/superseded:** os bullets desta seção preservam o estado no momento em que este handoff foi escrito. Eles não são autoritativos para o estado atual dos domínios marketplace, seller, catálogo, commerce e financeiro; use `ALPHA_SCOPE_AND_COMPLETION_CHECKLIST.md`.
 
 - Frontend avançado, MVP visual/mockado.
 - Backend NestJS/PostgreSQL/Redis real existe para autenticação conforme `AUTHENTICATION_FINAL_AUDIT.md`.
@@ -275,9 +283,11 @@ Preserve `orderCode.ts` como fonte única do formato público e a verificação 
 
 Qualquer mutação futura, inclusive cancelamento ou pagamento, deve ser implementada em PR separada, invalidar `buyerOrderKeys.all` e o detalhe afetado e preservar contratos e autorização no backend.
 
-## PR #39 financial foundation (ready for review; not merged)
+## PR #39 financial foundation (historical snapshot; merged and superseded by later increments)
 
-The provider-neutral financial/ledger and versioned policy foundation is specified in [FINANCIAL_DOMAIN_FOUNDATION.md](./FINANCIAL_DOMAIN_FOUNDATION.md), [PAYMENT_PROVIDER_STRATEGY.md](./PAYMENT_PROVIDER_STRATEGY.md), [FINANCIAL_FEE_POLICY.md](./FINANCIAL_FEE_POLICY.md), and [WITHDRAWAL_POLICY.md](./WITHDRAWAL_POLICY.md). It introduces persistence and internal services only: no public endpoint, frontend flow, PSP adapter, real payment, or checkout/order behavior change. Existing displayed economics remain mocks. The next increment is sandbox integration only after written commercial approval of a selected provider.
+> This paragraph records the scope at the time of PR #39 and is not a current-status statement. PR #39 was merged; later increments through PR #55 added the sandbox/payment and seller-funds capabilities summarized in `ALPHA_SCOPE_AND_COMPLETION_CHECKLIST.md`.
+
+The provider-neutral financial/ledger and versioned policy foundation is specified in [FINANCIAL_DOMAIN_FOUNDATION.md](./FINANCIAL_DOMAIN_FOUNDATION.md), [PAYMENT_PROVIDER_STRATEGY.md](./PAYMENT_PROVIDER_STRATEGY.md), [FINANCIAL_FEE_POLICY.md](./FINANCIAL_FEE_POLICY.md), and [WITHDRAWAL_POLICY.md](./WITHDRAWAL_POLICY.md). At that historical increment it introduced persistence and internal services only: no public endpoint, frontend flow, PSP adapter, real payment, or checkout/order behavior change. Displayed economics were still mocks, and sandbox integration was a later increment.
 
 ## Fulfillment foundation (PR #49)
 
