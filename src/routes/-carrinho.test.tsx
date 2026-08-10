@@ -104,17 +104,56 @@ describe("CarrinhoPage", () => {
     expect(refetch).toHaveBeenCalledTimes(1);
   });
 
-  it("uses the empty state for no carts and carts that are all empty", () => {
+  it("uses the empty state without next for zero carts and a partial page of empty carts", () => {
     const { rerender } = render(<CarrinhoPage />);
     expect(screen.getByText("Seu carrinho está vazio")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Próxima" })).toBeNull();
 
     mocks.cartsQuery = {
-      data: { page: 1, limit: 20, items: [cart("seller-a", "Produto A", "0", 0)] },
+      data: {
+        page: 1,
+        limit: 20,
+        items: Array.from({ length: 5 }, (_, index) =>
+          cart(`seller-empty-${index}`, `Produto ${index}`, "0", 0),
+        ),
+      },
       isPending: false,
       isError: false,
     };
     rerender(<CarrinhoPage />);
     expect(screen.getByText("Seu carrinho está vazio")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Próxima" })).toBeNull();
+  });
+
+  it("keeps next reachable through 20 empty active carts and reveals real items on page two", () => {
+    mocks.cartsQuery = {
+      data: {
+        page: 1,
+        limit: 20,
+        items: Array.from({ length: 20 }, (_, index) =>
+          cart(`seller-empty-${index}`, `Produto vazio ${index}`, "0", 0),
+        ),
+      },
+      isPending: false,
+      isError: false,
+    };
+    const { rerender } = render(<CarrinhoPage />);
+
+    expect(screen.getByText("Seu carrinho está vazio")).toBeTruthy();
+    const next = screen.getByRole("button", { name: "Próxima" }) as HTMLButtonElement;
+    expect(next.disabled).toBe(false);
+    fireEvent.click(next);
+    expect(mocks.useBuyerCarts).toHaveBeenLastCalledWith(2, 20);
+
+    mocks.cartsQuery = {
+      data: { page: 2, limit: 20, items: [cart("seller-a", "Produto real", "12345")] },
+      isPending: false,
+      isError: false,
+    };
+    rerender(<CarrinhoPage />);
+    expect(screen.queryByText("Seu carrinho está vazio")).toBeNull();
+    expect(screen.getByText("Loja A")).toBeTruthy();
+    expect(screen.getByText("Produto real")).toBeTruthy();
   });
 
   it("renders one real seller cart", () => {

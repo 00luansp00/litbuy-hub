@@ -16,6 +16,8 @@ export function CarrinhoPage() {
   const { status } = useAuth();
   const [page, setPage] = useState(1);
   const cartsQuery = useBuyerCarts(page, 20);
+  const carts = cartsQuery.data?.items ?? [];
+  const hasPotentialNextPage = cartsQuery.data ? carts.length === cartsQuery.data.limit : false;
 
   return (
     <div className="container-lit space-y-8 py-6 md:py-10">
@@ -63,45 +65,63 @@ export function CarrinhoPage() {
             Tentar novamente
           </Button>
         </div>
-      ) : page > 1 && cartsQuery.data.items.length === 0 ? (
+      ) : page > 1 && carts.length === 0 ? (
         <div className="space-y-4 rounded-2xl border bg-card p-6 text-center">
           <p className="text-muted-foreground">Não há carrinhos nesta página.</p>
           <Button type="button" variant="outline" onClick={() => setPage((current) => current - 1)}>
             Voltar para a página anterior
           </Button>
         </div>
-      ) : page === 1 && !cartsQuery.data.items.some((cart) => cart.items.length > 0) ? (
-        <EmptyCartState />
+      ) : page === 1 && !carts.some((cart) => cart.items.length > 0) ? (
+        <div className="space-y-6">
+          <EmptyCartState />
+          {hasPotentialNextPage && (
+            <CartPagination
+              page={page}
+              hasPotentialNextPage={hasPotentialNextPage}
+              onPrevious={() => setPage((current) => Math.max(1, current - 1))}
+              onNext={() => setPage((current) => current + 1)}
+            />
+          )}
+        </div>
       ) : (
         <div className="space-y-6">
-          {cartsQuery.data.items.map((cart) => (
+          {carts.map((cart) => (
             <BuyerCartSellerSection key={cart.id} cart={cart} />
           ))}
           <CartSecurityNotice />
-          <nav
-            className="flex items-center justify-center gap-3"
-            aria-label="Paginação dos carrinhos"
-          >
-            <Button
-              type="button"
-              variant="outline"
-              disabled={page === 1}
-              onClick={() => setPage((current) => Math.max(1, current - 1))}
-            >
-              Anterior
-            </Button>
-            <span className="text-sm text-muted-foreground">Página {page}</span>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={cartsQuery.data.items.length < cartsQuery.data.limit}
-              onClick={() => setPage((current) => current + 1)}
-            >
-              Próxima
-            </Button>
-          </nav>
+          <CartPagination
+            page={page}
+            hasPotentialNextPage={hasPotentialNextPage}
+            onPrevious={() => setPage((current) => Math.max(1, current - 1))}
+            onNext={() => setPage((current) => current + 1)}
+          />
         </div>
       )}
     </div>
+  );
+}
+
+function CartPagination({
+  page,
+  hasPotentialNextPage,
+  onPrevious,
+  onNext,
+}: {
+  page: number;
+  hasPotentialNextPage: boolean;
+  onPrevious: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <nav className="flex items-center justify-center gap-3" aria-label="Paginação dos carrinhos">
+      <Button type="button" variant="outline" disabled={page === 1} onClick={onPrevious}>
+        Anterior
+      </Button>
+      <span className="text-sm text-muted-foreground">Página {page}</span>
+      <Button type="button" variant="outline" disabled={!hasPotentialNextPage} onClick={onNext}>
+        Próxima
+      </Button>
+    </nav>
   );
 }
