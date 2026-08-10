@@ -25,12 +25,12 @@ export function useBuyerCarts(page = 1, limit = 20) {
   });
 }
 
-export function useBuyerSellerCart(sellerSlug: string) {
+export function useBuyerSellerCart(sellerSlug: string, enabled = true) {
   const { status } = useAuth();
   return useQuery({
     queryKey: buyerCartKeys.seller(sellerSlug),
     queryFn: () => cartApiService.getCart(sellerSlug),
-    enabled: status === "authenticated" && sellerSlug.trim().length > 0,
+    enabled: enabled && status === "authenticated" && sellerSlug.trim().length > 0,
   });
 }
 
