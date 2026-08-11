@@ -229,6 +229,30 @@ describe('provider payment event application with real PostgreSQL', () => {
     expect(provider.calls).toBe(1);
   });
 
+  it('claims only the requested durable event even when unrelated events are older', async () => {
+    const unrelated = [];
+    for (let index = 0; index < 26; index += 1) unrelated.push(await scenario('PENDING'));
+    const target = await scenario('SUCCEEDED');
+    provider.observed = {
+      id: target.externalPaymentId,
+      status: 'SUCCEEDED',
+      money: { amountMinor: 1_000n, currency: 'BRL' },
+    };
+
+    await expect(processor.processOne(target.event.id)).resolves.toBe(true);
+
+    expect(
+      await prisma.providerWebhookEvent.findUniqueOrThrow({ where: { id: target.event.id } }),
+    ).toMatchObject({ status: 'PROCESSED', attempts: 1 });
+    for (const item of unrelated)
+      expect(
+        await prisma.providerWebhookEvent.findUniqueOrThrow({ where: { id: item.event.id } }),
+      ).toMatchObject({ status: 'RECEIVED', attempts: 0 });
+    expect(
+      await prisma.payment.findUniqueOrThrow({ where: { id: target.payment.id } }),
+    ).toMatchObject({ status: 'PAID' });
+  });
+
   it('reconciles an amount mismatch without false success', async () => {
     const created = await scenario('SUCCEEDED');
     provider.observed = {

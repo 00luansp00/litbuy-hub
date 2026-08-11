@@ -6,7 +6,7 @@ import type {
   ProviderWebhook,
 } from './payment-provider.port';
 export class FakePaymentProvider implements PaymentProviderPort, PaymentProviderNotificationPort {
-  readonly providerCode = 'FAKE';
+  constructor(readonly providerCode = 'FAKE') {}
   private sequence = 0;
   private readonly payments = new Map<string, ProviderPayment>();
   private readonly keyed = new Map<string, ProviderPayment>();

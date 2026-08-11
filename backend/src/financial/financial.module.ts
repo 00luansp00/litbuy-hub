@@ -1,4 +1,9 @@
 import { Module } from '@nestjs/common';
+import { OrdersModule } from '../orders/orders.module';
+import { FakePaymentProvider } from './fake-payment-provider';
+import { ALPHA_PAYMENT_CONFIG, readAlphaPaymentConfig } from './alpha-payment.config';
+import { BuyerPaymentController } from './buyer-payment.controller';
+import { BuyerPaymentService } from './buyer-payment.service';
 import { JwtModule } from '@nestjs/jwt';
 import { AuthModule } from '../auth/auth.module';
 import { DatabaseModule } from '../database/database.module';
@@ -33,8 +38,8 @@ import {
   ProviderWebhookEventProcessor,
 } from './provider-webhook-event.processor';
 @Module({
-  imports: [DatabaseModule, AuthModule, JwtModule.register({})],
-  controllers: [ProviderNotificationController, SellerFinanceController],
+  imports: [DatabaseModule, AuthModule, OrdersModule, JwtModule.register({})],
+  controllers: [ProviderNotificationController, SellerFinanceController, BuyerPaymentController],
   providers: [
     FinancialLedgerService,
     SellerFinanceReadService,
@@ -44,7 +49,15 @@ import {
     SellerHeldFundsReleaseService,
     SellerReleasePolicyService,
     PaymentOrchestrationService,
-    { provide: PAYMENT_PROVIDER_PORT, useFactory: () => new EfiPaymentProvider(readEfiConfig()) },
+    BuyerPaymentService,
+    { provide: ALPHA_PAYMENT_CONFIG, useFactory: readAlphaPaymentConfig },
+    {
+      provide: PAYMENT_PROVIDER_PORT,
+      useFactory: () =>
+        readAlphaPaymentConfig().enabled
+          ? new FakePaymentProvider('FAKE_ALPHA')
+          : new EfiPaymentProvider(readEfiConfig()),
+    },
     {
       provide: PROVIDER_NOTIFICATION_INGRESS_CONFIG,
       useFactory: () => {
