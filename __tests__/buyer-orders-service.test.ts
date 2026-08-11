@@ -43,6 +43,9 @@ describe("buyerOrdersService", () => {
       "INVALID_ORDER_QUERY",
     );
     await expect(buyerOrdersService.detail("invalid")).rejects.toThrow("INVALID_ORDER_CODE");
+    await expect(buyerOrdersService.confirmReceipt("invalid")).rejects.toThrow(
+      "INVALID_ORDER_CODE",
+    );
     expect(mocked).not.toHaveBeenCalled();
   });
   it("reads a matching detail from the encoded GET endpoint", async () => {
@@ -51,6 +54,18 @@ describe("buyerOrdersService", () => {
     await expect(service.detail("LIT-23456789ABCDEF")).resolves.toEqual(makeOrder());
     expect(fetcher).toHaveBeenCalledWith("/orders/LIT-23456789ABCDEF");
     expect(fetcher.mock.calls[0]).toHaveLength(1);
+  });
+  it("confirms receipt with only the public order code and an empty POST", async () => {
+    const fetcher = vi.fn(async () =>
+      makeOrder({ status: "COMPLETED", paymentStatus: "PAID", fulfillmentStatus: "CONFIRMED" }),
+    );
+    const service = createBuyerOrdersService(fetcher);
+    await service.confirmReceipt("LIT-23456789ABCDEF");
+    expect(fetcher).toHaveBeenCalledWith("/orders/LIT-23456789ABCDEF/fulfillment/confirm", {
+      method: "POST",
+    });
+    expect(fetcher.mock.calls[0]?.[1]).not.toHaveProperty("body");
+    expect(fetcher.mock.calls[0]?.[1]).not.toHaveProperty("headers");
   });
   it("rejects a different order code as MALFORMED_RESPONSE", async () => {
     const service = createBuyerOrdersService(async () =>

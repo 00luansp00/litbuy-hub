@@ -31,14 +31,14 @@ export const paymentState: Record<PaymentStatus, [string, string]> = {
   CHARGEBACK: ["Chargeback", "O pagamento consta com chargeback."],
 };
 export const fulfillmentState: Record<FulfillmentStatus, [string, string]> = {
-  NOT_AVAILABLE: ["Entrega não disponível", "Entrega ainda não disponível."],
+  NOT_AVAILABLE: ["Entrega não disponível", "A etapa de entrega ainda não está disponível."],
   AWAITING_SELLER: ["Aguardando seller", "A entrega aguarda o seller."],
-  DELIVERED: ["Entregue", "A entrega consta como realizada."],
+  DELIVERED: ["Entrega registrada", "O backend registrou a entrega."],
   AWAITING_BUYER_CONFIRMATION: [
     "Aguardando confirmação",
     "A entrega aguarda confirmação do comprador.",
   ],
-  CONFIRMED: ["Entrega confirmada", "A entrega consta como confirmada."],
+  CONFIRMED: ["Recebimento confirmado", "Você confirmou o recebimento da entrega."],
 };
 export const disputeState: Record<DisputeStatus, [string, string]> = {
   NONE: ["Sem disputa", "Não há disputa registrada."],

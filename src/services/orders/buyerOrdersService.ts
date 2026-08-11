@@ -5,7 +5,7 @@ import { BuyerOrderParseError } from "./parserError";
 import { ORDER_STATUSES, type OrderStatus } from "./types";
 const validInteger = (value: number, min: number, max: number) =>
   Number.isInteger(value) && value >= min && value <= max;
-type Fetcher = (path: string) => Promise<unknown>;
+type Fetcher = (path: string, options?: RequestInit) => Promise<unknown>;
 export const createBuyerOrdersService = (fetcher: Fetcher = apiFetch) => ({
   async list({ page, limit, status }: { page: number; limit: number; status?: OrderStatus }) {
     if (
@@ -21,6 +21,16 @@ export const createBuyerOrdersService = (fetcher: Fetcher = apiFetch) => ({
   async detail(orderCode: string) {
     if (!isBuyerOrderCode(orderCode)) throw new TypeError("INVALID_ORDER_CODE");
     const order = parseBuyerOrder(await fetcher(`/orders/${encodeURIComponent(orderCode)}`));
+    if (order.orderCode !== orderCode) throw new BuyerOrderParseError();
+    return order;
+  },
+  async confirmReceipt(orderCode: string) {
+    if (!isBuyerOrderCode(orderCode)) throw new TypeError("INVALID_ORDER_CODE");
+    const order = parseBuyerOrder(
+      await fetcher(`/orders/${encodeURIComponent(orderCode)}/fulfillment/confirm`, {
+        method: "POST",
+      }),
+    );
     if (order.orderCode !== orderCode) throw new BuyerOrderParseError();
     return order;
   },

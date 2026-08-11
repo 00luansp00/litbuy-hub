@@ -280,10 +280,6 @@ export const orderService = {
   },
 
   /** Ações mockadas — não persistem nada. Apenas simulam o retorno. */
-  simulateConfirmDelivery(orderId: string): Promise<{ ok: true; orderId: string }> {
-    return delay({ ok: true, orderId });
-  },
-
   simulateOpenDispute(
     orderId: string,
     payload: { reason: string; description: string },

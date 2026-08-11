@@ -9,7 +9,7 @@ import { BuyerOrderStatusBadge } from "@/components/orders/BuyerOrderStatusBadge
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api/client";
-import { formatOrderDate, useBuyerOrder } from "@/services/orders";
+import { formatOrderDate, useBuyerOrder, useConfirmBuyerOrderReceipt } from "@/services/orders";
 export const Route = createFileRoute("/pedidos/$id")({ component: OrderDetailPage });
 function OrderDetailPage() {
   const { id } = Route.useParams();
@@ -24,6 +24,7 @@ function OrderDetailPage() {
 }
 export function OrderDetailContent({ orderCode }: { orderCode: string }) {
   const query = useBuyerOrder(orderCode);
+  const confirmReceipt = useConfirmBuyerOrderReceipt(orderCode);
   if (query.isPending)
     return (
       <div className="container-lit py-10" aria-live="polite">
@@ -55,6 +56,22 @@ export function OrderDetailContent({ orderCode }: { orderCode: string }) {
     );
   }
   const order = query.data;
+  const canConfirm =
+    order.status === "ACTIVE" &&
+    order.paymentStatus === "PAID" &&
+    order.fulfillmentStatus === "AWAITING_BUYER_CONFIRMATION" &&
+    !["OPEN", "UNDER_REVIEW"].includes(order.disputeStatus);
+  const confirmationError = confirmReceipt.isError
+    ? confirmReceipt.error instanceof ApiError &&
+      [
+        "ACTIVE_DISPUTE",
+        "FULFILLMENT_STATE_MISMATCH",
+        "ORDER_STATE_MISMATCH",
+        "PAYMENT_NOT_PAID",
+      ].includes(confirmReceipt.error.code)
+      ? "O pedido não está disponível para confirmação. Atualizamos o estado para você tentar novamente."
+      : "Não foi possível confirmar o recebimento. Verifique o estado do pedido e tente novamente."
+    : null;
   return (
     <main className="container-lit space-y-6 py-6 md:py-10">
       <Breadcrumb
@@ -81,6 +98,28 @@ export function OrderDetailContent({ orderCode }: { orderCode: string }) {
         )}
       </header>
       <BuyerOrderStateSummary order={order} />
+      {canConfirm && (
+        <section aria-labelledby="confirm-receipt-title" className="rounded-xl border p-5">
+          <h2 id="confirm-receipt-title" className="text-lg font-bold">
+            Confirmar entrega
+          </h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Confirme somente depois de realmente ter recebido a entrega.
+          </p>
+          <Button
+            className="mt-4"
+            disabled={confirmReceipt.isPending}
+            onClick={() => confirmReceipt.mutate()}
+          >
+            {confirmReceipt.isPending ? "Confirmando..." : "Confirmar recebimento"}
+          </Button>
+        </section>
+      )}
+      {confirmationError && (
+        <p role="alert" className="text-sm text-destructive">
+          {confirmationError}
+        </p>
+      )}
       {order.status === "PENDING_PAYMENT" &&
         ["NOT_CREATED", "PENDING"].includes(order.paymentStatus) && (
           <Button asChild>

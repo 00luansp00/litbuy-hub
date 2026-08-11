@@ -9,12 +9,18 @@ import { AuthMailer } from '../src/auth/auth.service';
 import { GlobalExceptionFilter } from '../src/common/filters/global-exception.filter';
 import type { AppConfig } from '../src/config/app.config';
 import { PrismaService } from '../src/database/prisma.service';
+import { SaleFinancialRecognitionService } from '../src/financial/sale-financial-recognition.service';
+import { OrderFulfillmentService } from '../src/orders/order-fulfillment.service';
+import { PaidOrderActivationService } from '../src/orders/paid-order-activation.service';
 import { RedisService } from '../src/redis/redis.service';
 import { authHeaders, commerceFixture, createActor } from './order-checkout-test.helpers';
 
 describe('Checkout and orders HTTP with real auth, guards, CSRF and PostgreSQL', () => {
   jest.setTimeout(120_000);
   let app: INestApplication, prisma: PrismaService, mailer: AuthMailer, redis: RedisService;
+  let activation: PaidOrderActivationService;
+  let recognition: SaleFinancialRecognitionService;
+  let fulfillment: OrderFulfillmentService;
   beforeAll(async () => {
     const ref = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = ref.createNestApplication();
@@ -30,6 +36,9 @@ describe('Checkout and orders HTTP with real auth, guards, CSRF and PostgreSQL',
     prisma = app.get(PrismaService);
     mailer = app.get(AuthMailer);
     redis = app.get(RedisService);
+    activation = app.get(PaidOrderActivationService);
+    recognition = app.get(SaleFinancialRecognitionService);
+    fulfillment = app.get(OrderFulfillmentService);
   });
   beforeEach(async () => {
     await (await redis.getClient()).flushdb();
@@ -83,6 +92,51 @@ describe('Checkout and orders HTTP with real auth, guards, CSRF and PostgreSQL',
       .set(authHeaders(actor))
       .set('Idempotency-Key', idempotencyKey)
       .send(body(f));
+
+  async function awaitingConfirmation(owner: Awaited<ReturnType<typeof createActor>>) {
+    const f = await cart(owner);
+    const created = await checkout(owner, f).expect(201);
+    const order = await prisma.order.findUniqueOrThrow({
+      where: { publicCode: String(created.body.orderCode) },
+    });
+    await prisma.order.update({ where: { id: order.id }, data: { buyerUserId: owner.user.id } });
+    const payment = await prisma.payment.create({
+      data: {
+        orderId: order.id,
+        amountMinor: order.totalAmountMinor,
+        status: 'PAID',
+        paidAt: new Date(),
+      },
+    });
+    await prisma.paymentAttempt.create({
+      data: {
+        paymentId: payment.id,
+        attemptNumber: 1,
+        providerCode: 'LOCAL_TEST',
+        status: 'SUCCEEDED',
+        amountMinor: payment.amountMinor,
+        externalPaymentId: `pay-${crypto.randomUUID()}`,
+        idempotencyKeyHash: crypto.randomUUID(),
+        requestHash: crypto.randomUUID(),
+      },
+    });
+    await prisma.order.update({ where: { id: order.id }, data: { paymentStatus: 'PENDING' } });
+    await activation.processOne(order.id);
+    await recognition.processOne(order.id);
+    await fulfillment.makeAvailable(order.id);
+    await fulfillment.recordDelivered({
+      orderCode: order.publicCode,
+      actorUserId: f.sellerUser.id,
+      deliveryType: 'MANUAL_REFERENCE',
+      evidenceHash: 'a'.repeat(64),
+    });
+    return { order: await prisma.order.findUniqueOrThrow({ where: { id: order.id } }), f };
+  }
+
+  const confirm = (owner: Awaited<ReturnType<typeof createActor>>, orderCode: string) =>
+    request(app.getHttpServer())
+      .post(`/api/v1/orders/${orderCode}/fulfillment/confirm`)
+      .set(authHeaders(owner));
   it('enforces anonymous access, BUYER RBAC and persisted-session CSRF', async () => {
     const actor = await createActor(app, prisma, mailer),
       other = await createActor(app, prisma, mailer),
@@ -251,5 +305,114 @@ describe('Checkout and orders HTTP with real auth, guards, CSRF and PostgreSQL',
       .expect(({ body: response }) => expect(response.code).toBe('CART_EMPTY'));
     await checkout(actor, quote).expect(422);
     expect(await prisma.order.count()).toBe(0);
+  });
+
+  it('protects buyer receipt confirmation with auth, BUYER RBAC, CSRF and IDOR-safe lookup', async () => {
+    const owner = await createActor(app, prisma, mailer);
+    const intruder = await createActor(app, prisma, mailer);
+    const { order } = await awaitingConfirmation(owner);
+    const endpoint = `/api/v1/orders/${order.publicCode}/fulfillment/confirm`;
+    await request(app.getHttpServer()).post(endpoint).expect(401);
+    await request(app.getHttpServer()).post(endpoint).set(authHeaders(owner, false)).expect(401);
+    await request(app.getHttpServer())
+      .post(endpoint)
+      .set(authHeaders(owner))
+      .set('X-CSRF-Token', 'invalid')
+      .expect(401);
+    await confirm(intruder, order.publicCode).expect(404);
+    await confirm(owner, 'LIT-00000000000000').expect(404);
+    await prisma.userRoleAssignment.delete({
+      where: { userId_role: { userId: owner.user.id, role: 'BUYER' } },
+    });
+    await prisma.userRoleAssignment.create({ data: { userId: owner.user.id, role: 'ADMIN' } });
+    await confirm(owner, order.publicCode).expect(403);
+  });
+
+  it.each(['OPEN', 'UNDER_REVIEW'] as const)(
+    'blocks HTTP confirmation during a %s dispute without changing persisted state',
+    async (disputeStatus) => {
+      const owner = await createActor(app, prisma, mailer);
+      const { order } = await awaitingConfirmation(owner);
+      await prisma.order.update({ where: { id: order.id }, data: { disputeStatus } });
+      const before = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+      await confirm(owner, order.publicCode)
+        .expect(409)
+        .expect(({ body: response }) => expect(response.code).toBe('ACTIVE_DISPUTE'));
+      expect(await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).toEqual(before);
+    },
+  );
+
+  it('rejects an incorrect fulfillment state through the HTTP boundary', async () => {
+    const owner = await createActor(app, prisma, mailer);
+    const { order } = await awaitingConfirmation(owner);
+    await prisma.order.update({
+      where: { id: order.id },
+      data: { fulfillmentStatus: 'AWAITING_SELLER' },
+    });
+    await confirm(owner, order.publicCode)
+      .expect(409)
+      .expect(({ body: response }) => expect(response.code).toBe('FULFILLMENT_STATE_MISMATCH'));
+  });
+
+  it('returns the persisted public order and serializes concurrent/replayed confirmations', async () => {
+    const owner = await createActor(app, prisma, mailer);
+    const { order } = await awaitingConfirmation(owner);
+    const financialBefore = {
+      transactions: await prisma.ledgerTransaction.count(),
+      entries: await prisma.ledgerEntry.count(),
+      events: await prisma.financialEvent.count(),
+      outbox: await prisma.financialOutboxEvent.count(),
+      settlements: await prisma.settlement.count(),
+      holds: await prisma.financialHold.count(),
+    };
+    const responses = await Promise.all([
+      confirm(owner, order.publicCode),
+      confirm(owner, order.publicCode),
+    ]);
+    expect(responses.map(({ status }) => status)).toEqual([200, 200]);
+    for (const response of responses) {
+      expect(response.body).toMatchObject({
+        orderCode: order.publicCode,
+        status: 'COMPLETED',
+        paymentStatus: 'PAID',
+        fulfillmentStatus: 'CONFIRMED',
+        disputeStatus: 'NONE',
+        version: order.version + 2,
+      });
+      const serialized = JSON.stringify(response.body);
+      for (const privateField of ['orderId', 'deliveryId', 'evidenceHash', 'secureReference'])
+        expect(serialized).not.toContain(privateField);
+    }
+    const replay = await confirm(owner, order.publicCode).expect(200);
+    expect(replay.body).toEqual(responses[0].body);
+    expect(
+      await prisma.orderEvent.count({
+        where: { orderId: order.id, type: 'FULFILLMENT_CONFIRMED' },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.orderEvent.count({ where: { orderId: order.id, type: 'ORDER_COMPLETED' } }),
+    ).toBe(1);
+    expect(
+      await prisma.outboxEvent.count({
+        where: {
+          aggregateId: order.id,
+          eventType: { in: ['fulfillment.confirmed', 'order.completed'] },
+        },
+      }),
+    ).toBe(2);
+    expect(await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).toMatchObject({
+      version: order.version + 2,
+      status: 'COMPLETED',
+      fulfillmentStatus: 'CONFIRMED',
+    });
+    expect({
+      transactions: await prisma.ledgerTransaction.count(),
+      entries: await prisma.ledgerEntry.count(),
+      events: await prisma.financialEvent.count(),
+      outbox: await prisma.financialOutboxEvent.count(),
+      settlements: await prisma.settlement.count(),
+      holds: await prisma.financialHold.count(),
+    }).toEqual(financialBefore);
   });
 });
