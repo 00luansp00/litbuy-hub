@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api/client";
 import { buyerOrdersService } from "./buyerOrdersService";
 import { BuyerOrderParseError } from "./parserError";
@@ -30,3 +30,21 @@ export const useBuyerOrder = (code: string) =>
     staleTime: 30_000,
     refetchOnWindowFocus: true,
   });
+
+export const useConfirmBuyerOrderReceipt = (code: string) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => buyerOrdersService.confirmReceipt(code),
+    retry: false,
+    onSuccess: async (order) => {
+      queryClient.setQueryData(buyerOrderKeys.detail(code), order);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: buyerOrderKeys.detail(code) }),
+        queryClient.invalidateQueries({ queryKey: buyerOrderKeys.all }),
+      ]);
+    },
+    onError: async () => {
+      await queryClient.invalidateQueries({ queryKey: buyerOrderKeys.detail(code) });
+    },
+  });
+};

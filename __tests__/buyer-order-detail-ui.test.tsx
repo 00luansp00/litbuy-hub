@@ -1,5 +1,8 @@
 import React from "react";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { ApiError } from "@/lib/api/client";
@@ -42,6 +45,14 @@ const renderDetail = () =>
       </AuthGate>
     </QueryWrapper>,
   );
+const renderDetailWithClient = (client: QueryClient) =>
+  render(
+    <QueryClientProvider client={client}>
+      <AuthGate>
+        <OrderDetailContent orderCode={code} />
+      </AuthGate>
+    </QueryClientProvider>,
+  );
 describe("/pedidos/$id real UI", () => {
   beforeEach(() => {
     auth.initializing = false;
@@ -79,7 +90,7 @@ describe("/pedidos/$id real UI", () => {
     expect(
       screen.getByText("A etapa de pagamento ainda não foi disponibilizada."),
     ).toBeInTheDocument();
-    expect(screen.getByText("Entrega ainda não disponível.")).toBeInTheDocument();
+    expect(screen.getByText("A etapa de entrega ainda não está disponível.")).toBeInTheDocument();
     for (const text of [
       "Pagar",
       "Confirmar recebimento",
@@ -97,6 +108,96 @@ describe("/pedidos/$id real UI", () => {
       "Proteção LIT",
     ])
       expect(screen.queryByText(new RegExp(text, "i"))).not.toBeInTheDocument();
+  });
+  it.each([
+    { fulfillmentStatus: "NOT_AVAILABLE" as const },
+    { fulfillmentStatus: "AWAITING_SELLER" as const },
+    { fulfillmentStatus: "DELIVERED" as const },
+    { fulfillmentStatus: "CONFIRMED" as const, status: "COMPLETED" as const },
+    { fulfillmentStatus: "AWAITING_BUYER_CONFIRMATION" as const, disputeStatus: "OPEN" as const },
+    {
+      fulfillmentStatus: "AWAITING_BUYER_CONFIRMATION" as const,
+      disputeStatus: "UNDER_REVIEW" as const,
+    },
+  ])("does not offer confirmation for an ineligible persisted state", async (state) => {
+    vi.spyOn(buyerOrdersService, "detail").mockResolvedValue(
+      makeOrder({ status: "ACTIVE", paymentStatus: "PAID", ...state }),
+    );
+    renderDetail();
+    await screen.findByRole("heading", { name: `Pedido ${code}` });
+    expect(screen.queryByRole("button", { name: "Confirmar recebimento" })).not.toBeInTheDocument();
+  });
+  it("confirms through the backend, blocks double submit and adopts persisted completion", async () => {
+    const awaiting = makeOrder({
+      status: "ACTIVE",
+      paymentStatus: "PAID",
+      fulfillmentStatus: "AWAITING_BUYER_CONFIRMATION",
+    });
+    const confirmed = makeOrder({
+      status: "COMPLETED",
+      paymentStatus: "PAID",
+      fulfillmentStatus: "CONFIRMED",
+      version: 4,
+    });
+    vi.spyOn(buyerOrdersService, "detail")
+      .mockResolvedValueOnce(awaiting)
+      .mockResolvedValue(confirmed);
+    let resolveConfirm!: (order: typeof confirmed) => void;
+    const confirm = vi.spyOn(buyerOrdersService, "confirmReceipt").mockReturnValue(
+      new Promise((resolve) => {
+        resolveConfirm = resolve;
+      }),
+    );
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    renderDetailWithClient(client);
+    const button = await screen.findByRole("button", { name: "Confirmar recebimento" });
+    expect(screen.getByText(/somente depois de realmente ter recebido/)).toBeInTheDocument();
+    fireEvent.click(button);
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
+    const pendingButton = screen.getByRole("button", { name: "Confirmando..." });
+    expect(pendingButton).toBeDisabled();
+    fireEvent.click(pendingButton);
+    expect(confirm).toHaveBeenCalledTimes(1);
+    resolveConfirm(confirmed);
+    expect(await screen.findByText("Pedido concluído")).toBeInTheDocument();
+    expect(screen.getByText("Recebimento confirmado")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ["buyer-order", code] });
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ["buyer-orders"] });
+    });
+  });
+  it("keeps the persisted state on confirmation failure and shows a safe error", async () => {
+    vi.spyOn(buyerOrdersService, "detail").mockResolvedValue(
+      makeOrder({
+        status: "ACTIVE",
+        paymentStatus: "PAID",
+        fulfillmentStatus: "AWAITING_BUYER_CONFIRMATION",
+      }),
+    );
+    vi.spyOn(buyerOrdersService, "confirmReceipt").mockRejectedValue(
+      new ApiError(409, "ACTIVE_DISPUTE", "internal dispute data"),
+    );
+    renderDetail();
+    fireEvent.click(await screen.findByRole("button", { name: "Confirmar recebimento" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "O pedido não está disponível para confirmação.",
+    );
+    expect(screen.getByText("Aguardando confirmação")).toBeInTheDocument();
+    expect(screen.queryByText("Pedido concluído")).not.toBeInTheDocument();
+    expect(screen.queryByText("internal dispute data")).not.toBeInTheDocument();
+    await waitFor(() => expect(buyerOrdersService.confirmReceipt).toHaveBeenCalledTimes(1));
+  });
+  it("guards the real buyer order path against the legacy mock service", () => {
+    for (const relativePath of [
+      "src/routes/pedidos.tsx",
+      "src/routes/pedidos.$id.tsx",
+      "src/services/orders/buyerOrdersService.ts",
+      "src/services/orders/queries.ts",
+    ]) {
+      const source = readFileSync(join(process.cwd(), relativePath), "utf8");
+      expect(source).not.toMatch(/services\/orderService|simulateConfirmDelivery/);
+    }
   });
   it("renders cancelled and expired timestamps from the response", async () => {
     vi.spyOn(buyerOrdersService, "detail").mockResolvedValue(
