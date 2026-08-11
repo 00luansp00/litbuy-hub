@@ -6,7 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/lib/api/client";
 import { formatBrlMinor, useBuyerOrder } from "@/services/orders";
-import { useBuyerPayment, usePaymentActions } from "@/services/payments";
+import {
+  createInitiationKeyManager,
+  useBuyerPayment,
+  usePaymentActions,
+} from "@/services/payments";
 export const Route = createFileRoute("/pagamento/$id")({ component: PaymentPage });
 const key = (kind: string, code: string) => `${kind}-${code}-${crypto.randomUUID()}`;
 function PaymentPage() {
@@ -24,7 +28,7 @@ export function PaymentContent({ orderCode }: { orderCode: string }) {
   const order = useBuyerOrder(orderCode),
     payment = useBuyerPayment(orderCode),
     actions = usePaymentActions(orderCode);
-  const initiateKey = useRef(key("payment", orderCode));
+  const initiateKey = useRef(createInitiationKeyManager(() => key("payment", orderCode)));
   const confirmKeys = useRef(new Map<string, string>());
   if (order.isPending || payment.isPending)
     return (
@@ -90,7 +94,11 @@ export function PaymentContent({ orderCode }: { orderCode: string }) {
         {eligible && !blocking && (
           <Button
             disabled={busy}
-            onClick={() => actions.initiate.mutate({ key: initiateKey.current })}
+            onClick={() =>
+              actions.initiate.mutate({
+                key: initiateKey.current({ attemptId: p.attemptId, status: p.status }),
+              })
+            }
           >
             Iniciar pagamento Alpha
           </Button>

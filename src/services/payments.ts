@@ -5,7 +5,6 @@ export type BuyerPayment = {
   orderCode: string;
   orderStatus: string;
   paymentStatus: string;
-  paymentId: string | null;
   attemptId: string | null;
   attemptNumber: number | null;
   providerCode: string | null;
@@ -15,6 +14,15 @@ export type BuyerPayment = {
   currency: string;
   alphaSimulationAvailable: boolean;
 };
+export type InitiationIntent = { attemptId: string | null; status: string | null };
+export function createInitiationKeyManager(makeKey: () => string) {
+  let active: { fingerprint: string; key: string } | undefined;
+  return (intent: InitiationIntent) => {
+    const fingerprint = `${intent.attemptId ?? "none"}:${intent.status ?? "none"}`;
+    if (!active || active.fingerprint !== fingerprint) active = { fingerprint, key: makeKey() };
+    return active.key;
+  };
+}
 export const paymentKeys = { detail: (orderCode: string) => ["buyer-payment", orderCode] as const };
 const request = (path: string, key: string) =>
   apiFetch<BuyerPayment>(path, { method: "POST", headers: { "Idempotency-Key": key }, body: "{}" });

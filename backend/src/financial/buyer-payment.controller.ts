@@ -1,4 +1,13 @@
-import { Controller, Get, Headers, HttpCode, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Headers,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger';
 import { PlatformRole } from '@prisma/client';
 import { AccessTokenGuard } from '../auth/access-token.guard';
@@ -39,7 +48,7 @@ export class BuyerPaymentController {
   confirm(
     @CurrentUser() u: { userId: string },
     @Param('orderCode') c: string,
-    @Param('attemptId') a: string,
+    @Param('attemptId', new ParseUUIDPipe()) a: string,
     @Headers('idempotency-key') k: unknown,
   ) {
     return this.payments.confirm(u.userId, c, a, parseIdempotencyKey(k));

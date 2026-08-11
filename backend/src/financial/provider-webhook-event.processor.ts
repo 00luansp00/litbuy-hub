@@ -45,8 +45,8 @@ export class ProviderWebhookEventProcessor {
     this.providers = new Map(providers.map((provider) => [provider.providerCode, provider]));
   }
 
-  async processOne(): Promise<boolean> {
-    const claim = await this.claimOne();
+  async processOne(eventId?: string): Promise<boolean> {
+    const claim = await this.claimOne(eventId);
     if (!claim) return false;
 
     if (claim.normalizedPaymentStatus === ProviderPaymentStatus.PENDING) {
@@ -87,13 +87,14 @@ export class ProviderWebhookEventProcessor {
     return processed;
   }
 
-  private async claimOne(): Promise<Claim | null> {
+  private async claimOne(eventId?: string): Promise<Claim | null> {
     return this.prisma.$transaction(async (tx) => {
       const rows = await tx.$queryRaw<Claim[]>`
         WITH candidate AS (
           SELECT "id"
           FROM "ProviderWebhookEvent"
-          WHERE (
+          WHERE (${eventId ?? null}::uuid IS NULL OR "id" = ${eventId ?? null}::uuid)
+          AND (
             ("status" IN ('RECEIVED', 'FAILED') AND "availableAt" <= NOW())
             OR ("status" = 'PROCESSING'
               AND "processingStartedAt" < NOW() - (${LEASE_MINUTES} * INTERVAL '1 minute'))
