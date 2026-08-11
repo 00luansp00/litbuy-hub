@@ -9,6 +9,7 @@ import { CartCsrfGuard } from '../carts/cart-csrf.guard';
 import { RecordOrderDeliveryDto } from './order-fulfillment.dto';
 import { OrderFulfillmentService } from './order-fulfillment.service';
 import { OrdersService } from './orders.service';
+import { SellerOrdersService } from './seller-orders.service';
 
 @ApiTags('order fulfillment')
 @ApiBearerAuth()
@@ -18,17 +19,21 @@ export class OrderFulfillmentController {
   constructor(
     private readonly fulfillment: OrderFulfillmentService,
     private readonly orders: OrdersService,
+    private readonly sellerOrders: SellerOrdersService,
   ) {}
 
   @Post('delivered')
   @HttpCode(200)
   @RequireRoles(PlatformRole.SELLER)
-  delivered(
+  @UseGuards(CartCsrfGuard)
+  async delivered(
     @CurrentUser() actor: { userId: string },
     @Param('orderCode') orderCode: string,
     @Body() dto: RecordOrderDeliveryDto,
   ) {
-    return this.fulfillment.recordDelivered({ orderCode, actorUserId: actor.userId, ...dto });
+    void dto;
+    await this.fulfillment.recordSellerDeclaredDelivery(orderCode, actor.userId);
+    return this.sellerOrders.get(actor.userId, orderCode);
   }
 
   @Post('confirm')

@@ -9,15 +9,18 @@ import { OrderExpirationService } from './order-expiration.service';
 import { PaidOrderActivationService } from './paid-order-activation.service';
 import { OrderFulfillmentController } from './order-fulfillment.controller';
 import { OrderFulfillmentService } from './order-fulfillment.service';
+import { SellerOrdersController } from './seller-orders.controller';
+import { SellerOrdersService } from './seller-orders.service';
 @Module({
   imports: [DatabaseModule, AuthModule, JwtModule.register({})],
-  controllers: [OrdersController, OrderFulfillmentController],
+  controllers: [OrdersController, OrderFulfillmentController, SellerOrdersController],
   providers: [
     OrdersService,
     OrderExpirationService,
     PaidOrderActivationService,
     OrderFulfillmentService,
     CartCsrfGuard,
+    SellerOrdersService,
   ],
   exports: [
     OrdersService,

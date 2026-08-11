@@ -4,3 +4,4 @@ export * from "./orderCode";
 export * from "./format";
 export * from "./buyerOrdersService";
 export * from "./queries";
+export * from "./sellerSales";
