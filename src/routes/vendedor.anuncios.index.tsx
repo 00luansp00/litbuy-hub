@@ -175,7 +175,9 @@ function ListingsPage() {
                   )}
                   {draft.status === "APPROVED" && (
                     <p className="mt-2 text-sm text-primary">
-                      Aprovado pela moderação. A publicação pública ainda não está disponível.
+                      Aprovado pela moderação. O produto materializado é gerenciado abaixo; sua
+                      exposição pública depende do lifecycle e das regras de elegibilidade do
+                      backend.
                     </p>
                   )}
                   {draft.materializedProduct?.status === "UNPUBLISHED" && (

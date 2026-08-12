@@ -45,7 +45,8 @@ export function PublicCatalogSection({ catalog, error = false, loading = false, 
         <PublicCatalogGrid items={catalog.items} />
       ) : null}
       <p className="mt-6 text-center text-xs text-muted-foreground">
-        Estes anúncios vêm da API real. Detalhes e compra serão conectados nas próximas etapas.
+        Estes anúncios, seus detalhes e disponibilidade vêm da API real. A compra Alpha segue pelo
+        carrinho e checkout persistentes.
       </p>
     </section>
   );

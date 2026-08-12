@@ -107,7 +107,7 @@ function AdminSellersPage() {
   return (
     <AdminLayout
       title="Vendedores"
-      description="Análise real de solicitações de vendedor. Produtos, vendas e financeiro seguem demonstrativos."
+      description="Análise real de solicitações de vendedor. Vendas e financeiro administrativos permanecem fora desta operação mínima."
     >
       <AdminFilters
         search={search}

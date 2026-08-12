@@ -70,7 +70,7 @@ const moderationStatusLabel: Record<ListingDraftRecord["status"], string> = {
   REJECTED: "Rejeitado — corrija e reenvie",
   PENDING_REVIEW: "Pendente de análise — somente leitura",
   UNDER_REVIEW: "Em análise — somente leitura",
-  APPROVED: "Aprovado pela moderação — ainda não publicado",
+  APPROVED: "Aprovado pela moderação — o produto materializado possui lifecycle próprio",
 };
 
 const promotionTiers: PromotionTierInfo[] = [
@@ -704,7 +704,8 @@ export function ListingDraftWizard({ initialDraft }: { initialDraft?: ListingDra
       )}
       {form.status === "APPROVED" && (
         <div className="rounded-lg border border-primary/30 bg-primary/10 p-3 text-sm">
-          Aprovado pela moderação. A publicação pública ainda não está disponível.
+          Aprovado pela moderação. O produto materializado possui lifecycle próprio; sua exposição
+          depende do status ACTIVE e das regras de elegibilidade do backend.
         </div>
       )}
       <div className="rounded-2xl border bg-card p-4">

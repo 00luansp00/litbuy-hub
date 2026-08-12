@@ -39,10 +39,20 @@ describe("ProductLifecycleManager", () => {
     expect(await screen.findByText(/remoção é terminal/i)).toBeInTheDocument();
     expect(screen.queryAllByRole("button")).toHaveLength(0);
   });
-  it("warns that activation does not expose the public catalog", async () => {
+  it("explains that activation requires public-catalog eligibility", async () => {
     vi.mocked(productLifecycleService.get).mockResolvedValue(state("UNPUBLISHED"));
     render(<ProductLifecycleManager productId={id} />);
-    expect(await screen.findByText(/exposição no catálogo público/i)).toBeInTheDocument();
+    expect(await screen.findByText(/backend só aceita a ativação/i)).toHaveTextContent(
+      /elegível para o catálogo público/i,
+    );
+  });
+  it("communicates that public exposure for an ACTIVE product remains conditional", async () => {
+    vi.mocked(productLifecycleService.get).mockResolvedValue(state("ACTIVE"));
+    render(<ProductLifecycleManager productId={id} />);
+    expect(await screen.findByText(/produto ativo/i)).toHaveTextContent(
+      /exposição no catálogo público permanece condicionada às regras de elegibilidade vigentes no backend/i,
+    );
+    expect(screen.queryByText(/produto ativo e elegível/i)).not.toBeInTheDocument();
   });
   it("requires removal confirmation and reloads only after backend success", async () => {
     vi.mocked(productLifecycleService.get)
