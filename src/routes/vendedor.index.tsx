@@ -47,7 +47,7 @@ function VendedorPage() {
   );
 }
 
-function VendedorDashboard() {
+export function VendedorDashboard() {
   const [summary, setSummary] = useState<SellerDashboardSummary | null>(null);
   const [sales, setSales] = useState<SellerSalePreview[]>([]);
   const [listings, setListings] = useState<SellerListing[]>([]);
