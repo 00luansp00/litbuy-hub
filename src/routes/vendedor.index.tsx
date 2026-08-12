@@ -5,7 +5,7 @@ import { AuthGate } from "@/components/auth/AuthGate";
 import { SellerDashboardLayout } from "@/components/seller-dashboard/SellerDashboardLayout";
 import { SellerMetricCard } from "@/components/seller-dashboard/SellerMetricCard";
 import { SellerRecentSalesCard } from "@/components/seller-dashboard/SellerRecentSalesCard";
-import { SellerFinancialCard } from "@/components/seller-dashboard/SellerFinancialCard";
+import { SellerFinanceSummaryCard } from "@/components/seller-dashboard/SellerFinanceSummaryCard";
 import { SellerReviewsCard } from "@/components/seller-dashboard/SellerReviewsCard";
 import { SellerNotificationsCard } from "@/components/seller-dashboard/SellerNotificationsCard";
 import { SellerQuickActions } from "@/components/seller-dashboard/SellerQuickActions";
@@ -17,12 +17,12 @@ import { VerificationStatusCard } from "@/components/verification/VerificationSt
 import { sellerDashboardService } from "@/services/sellerDashboardService";
 import type {
   SellerDashboardSummary,
-  SellerFinancialSummary,
   SellerListing,
   SellerNotification,
   SellerReview,
   SellerSalePreview,
 } from "@/types";
+import { useSellerFinanceSummary } from "@/services/finance/sellerFinance";
 
 export const Route = createFileRoute("/vendedor/")({
   component: VendedorPage,
@@ -33,8 +33,8 @@ function VendedorPage() {
     <>
       <div className="container-lit pt-4">
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-          Os dados de anúncios, vendas e financeiro desta área ainda são demonstrativos. A conta e o
-          acesso de vendedor já são reais.
+          Os dados de anúncios e métricas gerais desta área ainda são demonstrativos. O financeiro
+          usa o ledger real do Alpha.
         </div>
       </div>
       <AuthGate
@@ -47,12 +47,12 @@ function VendedorPage() {
   );
 }
 
-function VendedorDashboard() {
+export function VendedorDashboard() {
   const [summary, setSummary] = useState<SellerDashboardSummary | null>(null);
   const [sales, setSales] = useState<SellerSalePreview[]>([]);
   const [listings, setListings] = useState<SellerListing[]>([]);
   const [reviews, setReviews] = useState<SellerReview[]>([]);
-  const [financial, setFinancial] = useState<SellerFinancialSummary | null>(null);
+  const financial = useSellerFinanceSummary();
   const [notifications, setNotifications] = useState<SellerNotification[]>([]);
 
   useEffect(() => {
@@ -62,15 +62,13 @@ function VendedorDashboard() {
       sellerDashboardService.getSellerRecentSales(5),
       sellerDashboardService.getSellerListings(),
       sellerDashboardService.getSellerReviews(4),
-      sellerDashboardService.getSellerFinancialSummary(),
       sellerDashboardService.getSellerNotifications(),
-    ]).then(([s, sa, li, re, fi, no]) => {
+    ]).then(([s, sa, li, re, no]) => {
       if (!mounted) return;
       setSummary(s);
       setSales(sa);
       setListings(li);
       setReviews(re);
-      setFinancial(fi);
       setNotifications(no);
     });
     return () => {
@@ -81,7 +79,7 @@ function VendedorDashboard() {
   return (
     <SellerDashboardLayout
       title="Visão geral"
-      description="Acompanhe seus anúncios, vendas e finanças em modo demonstração."
+      description="Acompanhe seus anúncios e vendas; os saldos financeiros vêm do ledger Alpha."
     >
       {/* Métricas */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -105,7 +103,7 @@ function VendedorDashboard() {
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <SellerRecentSalesCard sales={sales} />
         <div className="space-y-6">
-          {financial && <SellerFinancialCard financial={financial} compact />}
+          {financial.data && <SellerFinanceSummaryCard financial={financial.data} compact />}
           <SellerPerformanceCard listings={listings} />
         </div>
       </div>
