@@ -1,5 +1,8 @@
 # Runbook da fundação pública local
 
+> [!NOTE]
+> Este runbook focado continua válido para reproduzir a fundação pública. As descrições históricas abaixo sobre commerce demonstrativo não representam o Alpha completo atual. O runbook operacional pós-freeze é `ALPHA_LOCAL_STABILIZATION_RUNBOOK.md`.
+
 ## O que este ambiente representa
 
 Esta é uma simulação local, não produção. Os dados são fictícios. Home, categoria e detalhe consultam o backend local real; busca, loja e comércio continuam demonstrativos. Nunca insira dados pessoais ou financeiros reais.

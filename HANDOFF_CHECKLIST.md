@@ -6,7 +6,7 @@
 - storage privado S3 compatível (MinIO no rehearsal);
 - React, TypeScript e TanStack Start/Router no frontend.
 
-## Reproduzir a fundação pública
+## Reproduzir o Alpha pós-freeze
 
 ```bash
 bun install --frozen-lockfile
@@ -15,7 +15,7 @@ bun run demo:check
 bun run audit:public-foundation
 ```
 
-Consulte `LOCAL_PUBLIC_FOUNDATION_RUNBOOK.md`; não use dados reais.
+Consulte `ALPHA_LOCAL_STABILIZATION_RUNBOOK.md`, o runbook operacional atual; não use dados reais. `LOCAL_PUBLIC_FOUNDATION_RUNBOOK.md` permanece como referência histórica e focada na fundação pública. O browser E2E completo continua pendente.
 
 ## Gate antes de dinheiro real
 

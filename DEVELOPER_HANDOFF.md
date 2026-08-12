@@ -4,7 +4,7 @@
 
 [`ALPHA_SCOPE_AND_COMPLETION_CHECKLIST.md`](./ALPHA_SCOPE_AND_COMPLETION_CHECKLIST.md) é a fonte autoritativa para a linha de chegada do **LIT Buy — Handoff Alpha v1** e para a classificação atual entre concluído, pendente para Alpha e reservado para produção.
 
-> Enquanto houver itens em `PENDENTE DE IMPLEMENTAÇÃO ALPHA`, não iniciar revisão geral, refatoração geral, auditoria externa ou feature freeze. Depois do freeze, a auditoria externa aguarda `GATES DE ESTABILIZAÇÃO / HANDOFF = 0`. O objetivo é seguir as etapas definidas em `ALPHA_SCOPE_AND_COMPLETION_CHECKLIST.md`. PRs mergeadas só devem ser revisitadas por bug objetivo, segurança, integridade ou bloqueio real.
+> **Estado atual:** `PENDENTE DE IMPLEMENTAÇÃO ALPHA = 0`; o feature freeze está ativo no baseline `aceb8b26b7205b03b28e0681aba9fb71a175f67f` e a fase corrente é **estabilização local**. Novas features estão congeladas. Somente bugs objetivos reproduzidos, problemas de segurança/integridade ou blockers reais podem gerar alteração funcional. A auditoria externa continua proibida até `GATES DE ESTABILIZAÇÃO / HANDOFF = 0`. Use `ALPHA_LOCAL_STABILIZATION_RUNBOOK.md` para a operação pós-freeze.
 
 ## PR #53: delivery-protection eligibility
 
@@ -292,6 +292,7 @@ The provider-neutral financial/ledger and versioned policy foundation is specifi
 ## Fulfillment foundation (PR #49)
 
 The authoritative post-payment fulfillment lifecycle is implemented in `OrderFulfillmentService` and specified in `ORDER_FULFILLMENT_FOUNDATION.md`. Delivery requires hashed evidence, buyer confirmation is explicit, disputes fail closed, and completion requires the valid PR #48 `SALE_RECOGNIZED` transaction. This phase does not transport secrets, auto-confirm, simulate automatic delivery, or release seller funds; proceeds remain `SELLER_PENDING` for the next financial-release phase.
+
 # Seller pending-to-held handoff
 
 `SellerPendingHoldService` is the only internal consumer that moves completed-order proceeds from pending to held. Its authoritative contract is `SELLER_PENDING_HOLD_FOUNDATION.md`. Do not schedule release, populate `releaseEligibleAt`, create settlement, or touch available/reserved/withdrawal until the future held-to-available policy increment.
