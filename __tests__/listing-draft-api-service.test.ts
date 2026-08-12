@@ -1,5 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const { apiFetch } = vi.hoisted(() => ({ apiFetch: vi.fn() }));
+vi.mock("@/lib/api/client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api/client")>()),
+  apiFetch,
+}));
 import {
+  listingDraftApiService,
   parseAdminListingDraftDetail,
   parseAdminListingDraftSummary,
   parseListingDraft,
@@ -67,6 +74,7 @@ const adminMeta = {
 };
 
 describe("listing draft response parser", () => {
+  beforeEach(() => apiFetch.mockReset());
   it("accepts seller/admin summary and detail contracts separately", () => {
     expect(parseSellerListingDraftSummary(base).id).toBe(base.id);
     expect(parseSellerListingDraftDetail(base).deliveryMode).toBe("MANUAL");
@@ -207,5 +215,32 @@ describe("listing draft response parser", () => {
     expect(payload.model).toBe("DYNAMIC");
     expect(payload.price).toBeNull();
     expect(payload.variants?.[0].status).toBe("ACTIVE");
+  });
+
+  it("sends versioned admin decisions without browser-owned seller identity", async () => {
+    apiFetch.mockResolvedValue({ ...base, ...adminMeta });
+
+    await listingDraftApiService.startReview(base.id, 7);
+    await listingDraftApiService.approve(base.id, 8);
+    await listingDraftApiService.reject(base.id, 9, "OTHER", "Corrija a descricao.");
+
+    expect(apiFetch).toHaveBeenNthCalledWith(1, `/admin/listing-drafts/${base.id}/start-review`, {
+      method: "POST",
+      body: JSON.stringify({ expectedVersion: 7 }),
+    });
+    expect(apiFetch).toHaveBeenNthCalledWith(2, `/admin/listing-drafts/${base.id}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ expectedVersion: 8 }),
+    });
+    expect(apiFetch).toHaveBeenNthCalledWith(3, `/admin/listing-drafts/${base.id}/reject`, {
+      method: "POST",
+      body: JSON.stringify({
+        expectedVersion: 9,
+        rejectionCode: "OTHER",
+        rejectionReason: "Corrija a descricao.",
+      }),
+    });
+    expect(apiFetch.mock.calls.flat().join(" ")).not.toContain("sellerId");
+    expect(apiFetch.mock.calls.flat().join(" ")).not.toContain("userId");
   });
 });

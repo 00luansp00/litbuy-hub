@@ -3,7 +3,7 @@ import { AdminGate } from "@/components/admin/AdminGate";
 
 /**
  * Layout do Painel Administrativo. O AdminGate protege visualmente todas
- * as subrotas /admin/*. Segurança real deve ser implementada no backend.
+ * as subrotas /admin/*; os endpoints mantêm a autorização real no backend.
  */
 export const Route = createFileRoute("/admin")({
   component: AdminLayoutRoute,
