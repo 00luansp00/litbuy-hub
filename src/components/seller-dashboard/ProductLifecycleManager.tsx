@@ -95,7 +95,8 @@ export function ProductLifecycleManager({
       )}
       {product.status === "ACTIVE" && (
         <p className="mt-1 text-xs text-muted-foreground">
-          Produto ativo e elegível para o catálogo público.
+          Produto ativo. A exposição no catálogo público permanece condicionada às regras de
+          elegibilidade vigentes no backend.
         </p>
       )}
       {product.status === "REMOVED" && (

@@ -46,12 +46,13 @@ describe("ProductLifecycleManager", () => {
       /elegível para o catálogo público/i,
     );
   });
-  it("communicates that an ACTIVE product is eligible for the public catalog", async () => {
+  it("communicates that public exposure for an ACTIVE product remains conditional", async () => {
     vi.mocked(productLifecycleService.get).mockResolvedValue(state("ACTIVE"));
     render(<ProductLifecycleManager productId={id} />);
-    expect(await screen.findByText(/produto ativo e elegível/i)).toHaveTextContent(
-      /catálogo público/i,
+    expect(await screen.findByText(/produto ativo/i)).toHaveTextContent(
+      /exposição no catálogo público permanece condicionada às regras de elegibilidade vigentes no backend/i,
     );
+    expect(screen.queryByText(/produto ativo e elegível/i)).not.toBeInTheDocument();
   });
   it("requires removal confirmation and reloads only after backend success", async () => {
     vi.mocked(productLifecycleService.get)
