@@ -12,8 +12,8 @@ interface AdminGateProps {
 }
 
 /**
- * AdminGate — gate visual para /admin baseado exclusivamente nos papéis reais
- * retornados por /auth/me. APIs futuras ainda devem usar guards server-side.
+ * AdminGate — defesa em profundidade para /admin baseada exclusivamente nos papéis reais
+ * retornados por /auth/me. A autorização permanece nos guards server-side das APIs Admin.
  */
 export function AdminGate({ children, className }: AdminGateProps) {
   const { isAuthenticated, isAdmin, initializing } = useAuth();
