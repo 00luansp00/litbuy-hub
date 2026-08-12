@@ -4,32 +4,29 @@
 
 Este documento é a fonte autoritativa para a linha de chegada da fase atual do Alpha. Ele preserva o escopo entre conversas, checkpoints e PRs; não substitui os contratos técnicos específicos de cada domínio.
 
+> **FEATURE FREEZE ATIVO.** Baseline oficial: `aceb8b26b7205b03b28e0681aba9fb71a175f67f`. `PENDENTE DE IMPLEMENTAÇÃO ALPHA = 0`; a fase atual é preparação de handoff pós-freeze. Os gates ainda abertos registram trabalho não executado, mas não bloqueiam a auditoria pre-handoff read-only nem a auditoria/orçamento inicial de um profissional sênior.
+
 > **“Finalizar aqui” significa concluir todas as implementações deliberadamente pertencentes ao Handoff Alpha v1. Não significa produção pública nem dinheiro real habilitado.**
 
 A condição necessária para encerrar a fase atual de implementação e iniciar o feature freeze é:
 
 `PENDENTE DE IMPLEMENTAÇÃO ALPHA = 0`
 
-Enquanto existir qualquer item em `PENDENTE DE IMPLEMENTAÇÃO ALPHA`, é proibido iniciar auditoria geral, refatoração geral, polishing arquitetural, revisão geral por outra IA, tentativa de reinventar módulos antigos ou feature freeze prematuro. Depois do freeze, a estabilização termina somente quando `GATES DE ESTABILIZAÇÃO / HANDOFF = 0`.
+Enquanto existir qualquer item em `PENDENTE DE IMPLEMENTAÇÃO ALPHA`, é proibido iniciar auditoria geral, refatoração geral, polishing arquitetural, revisão geral por outra IA, tentativa de reinventar módulos antigos ou feature freeze prematuro. Depois do freeze, gates abertos continuam como trabalho de validação/productionização, sem bloquear a auditoria pre-handoff read-only.
 
-## Ordem oficial das fases
+## Ordem estratégica pós-freeze
 
-`IMPLEMENTAR TODO O ESCOPO FUNCIONAL DO ALPHA`
-→ `PENDENTE DE IMPLEMENTAÇÃO ALPHA = 0`
-→ `FEATURE FREEZE`
-→ `ESTABILIZAÇÃO LOCAL`
-→ `STAGING`
-→ `OBSERVABILIDADE MÍNIMA`
-→ `TESTES MANUAIS / E2E DO FLUXO COMPLETO`
-→ `CORREÇÃO DE BUGS OBJETIVOS`
-→ `GATES DE ESTABILIZAÇÃO / HANDOFF = 0`
-→ `HANDOFF ALPHA V1 ESTÁVEL`
-→ `AUDITORIA EXTERNA READ-ONLY`
+`FEATURE FREEZE`
+→ `REPRODUÇÃO / HANDOFF LOCAL`
+→ `REPOSITORY CLARITY / DOCUMENTAÇÃO ATUAL`
+→ `SANITY CHECK LIMITADO DO FLUXO CRÍTICO`
+→ `CLAUDE CODE FULL-REPO AUDIT READ-ONLY`
 → `TRIAGEM DOS ACHADOS`
-→ `CORREÇÕES APROVADAS VIA CODEX/PR NORMAL`
-→ `REVALIDAÇÃO`
-→ `FREELANCER SÊNIOR`
-→ `PRODUÇÃO`
+→ `CORREÇÕES POR IA SOMENTE DE BAIXO RISCO / ALTO RETORNO`
+→ `PRODUCTION HANDOFF PACKAGE`
+→ `WORKANA: AUDITORIA HUMANA SÊNIOR`
+→ `ORÇAMENTO DE PRODUCTIONIZAÇÃO`
+→ `IMPLEMENTAÇÃO PROFISSIONAL / PRODUÇÃO`
 
 Não usar o fluxo incorreto:
 
@@ -39,7 +36,7 @@ Não usar o fluxo incorreto:
 
 - `CONCLUÍDO` exige implementação real persistida/ligada ao backend quando isso fizer parte do contrato; UI ou mock isolado não basta.
 - `PENDENTE DE IMPLEMENTAÇÃO ALPHA` contém somente funcionalidades e integrações verificadas do caminho crítico que precisam estar implementadas antes do freeze.
-- `GATES DE ESTABILIZAÇÃO / HANDOFF` contém as validações e gates operacionais executados depois do freeze e antes do Handoff Alpha v1 estável.
+- `GATES DE ESTABILIZAÇÃO / HANDOFF` preserva validações operacionais ainda necessárias antes da produção; gates abertos não impedem a auditoria pre-handoff read-only nem o orçamento humano inicial.
 - `FORA DO ALPHA / PRODUÇÃO` preserva blockers de produção sem fazê-los bloquear o Alpha.
 - As referências a PR indicam o incremento principal, não necessariamente todo o histórico que sustenta o item.
 
@@ -91,7 +88,7 @@ Busca, seller store, favoritos, reviews, chat, afiliados, growth e painéis admi
 
 ## GATES DE ESTABILIZAÇÃO / HANDOFF
 
-Estes gates começam **depois** de `PENDENTE DE IMPLEMENTAÇÃO ALPHA = 0` e do feature freeze; portanto, não impedem o freeze. O Handoff Alpha v1 torna-se estável somente quando não restar nenhum gate aberto: `GATES DE ESTABILIZAÇÃO / HANDOFF = 0`.
+Estes gates permanecem abertos até que sua evidência específica exista; esta atualização não declara nenhum deles concluído. Eles registram necessidades de **productionization / human review**, mas não são pré-requisitos para iniciar o **pre-handoff / vibe-coding readiness**: reprodução local, clareza documental, sanity check limitado e auditoria Claude Code read-only. A composição staging-like e os smokes do CI são evidência técnica, não staging hospedado.
 
 | Gate                        | Estado              | Evidência de conclusão necessária                                                                                                                             |
 | --------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -116,40 +113,25 @@ Os itens abaixo permanecem rastreáveis e deliberadamente reservados para a fase
 | Infra e escala                        | **FORA DO ALPHA / PRODUÇÃO** | futura         | Infraestrutura final e performance final.                                                                                      |
 | Compliance e lançamento               | **FORA DO ALPHA / PRODUÇÃO** | futura         | LGPD, jurídico, revisão humana sênior e aprovação final para lançamento.                                                       |
 
-## Auditoria externa: momento e protocolo fixos
+## Auditorias e production handoff
 
-A auditoria externa geral **não ocorrerá** enquanto houver `PENDENTE DE IMPLEMENTAÇÃO ALPHA` ou gates pós-freeze abertos. Quando `PENDENTE DE IMPLEMENTAÇÃO ALPHA = 0`, ocorre feature freeze. Depois, nesta ordem:
+### Claude Code pre-handoff audit
 
-1. estabilização local;
-2. staging;
-3. testes manuais;
-4. E2E;
-5. correção de bugs óbvios;
-6. confirmação de `GATES DE ESTABILIZAÇÃO / HANDOFF = 0` e congelamento do Handoff Alpha v1 estável.
+Depois da reprodução/handoff local, repository clarity e sanity check limitado do fluxo crítico, uma IA independente — Claude Code ou equivalente — pode realizar uma auditoria full-repo inicialmente **read-only**, antes da Workana. Hosted staging, observabilidade hospedada, browser E2E completo e o fechamento de todos os gates não são pré-requisitos para iniciar essa auditoria.
 
-Somente então ocorre a auditoria externa.
+O objetivo é compreender e auditar arquitetura, funcionalidade, segurança, autenticação/RBAC, isolamento Buyer/Seller/Admin, pagamentos/webhooks, ledger e invariantes financeiras; identificar dead code, documentação stale e production blockers; e produzir um relatório que reduza horas humanas de descoberta. A IA não tem autoridade automática para alterar código, criar branch/commit/PR, refatorar, mudar arquitetura ou implementar recomendações. Essa auditoria **não certifica segurança para produção**.
 
-Uma IA independente, preferencialmente Claude/Anthropic ou equivalente no momento da auditoria, atua estritamente como `AUDITOR READ-ONLY`. Ela não tem autoridade para alterar código, criar branch, criar commit, abrir PR, refatorar, mudar arquitetura, substituir decisões deliberadas ou implementar recomendações.
+### Triagem dos achados
 
-O resultado deve ser um relatório técnico. Para cada achado, idealmente: arquivo/linha, comportamento atual, evidência, cenário de reprodução, risco, severidade, correção mínima sugerida e indicação se considera production blocker.
+Nenhuma recomendação da IA vira código automaticamente. Cada apontamento deve ser confrontado com arquitetura, documentação autoritativa, migrations, constraints e testes, recebendo uma classificação: válido e corrigível agora; válido mas reservado à produção; melhoria opcional; falso positivo; ou incompatível com decisão deliberada. Somente correções aprovadas de baixo risco e alto retorno voltam por PR pequena e CI normal.
 
-## Triagem da auditoria
+### Workana / human senior audit
 
-Nenhuma recomendação externa vira código automaticamente. Cada apontamento deve ser confrontado com GitHub remoto, arquitetura, documentação autoritativa, migrations, constraints, testes e decisões deliberadas, recebendo uma classificação:
+A revisão humana sênior paga ocorre antes de dinheiro real e tem foco especial em segurança. Ela valida o estado real, determina o trabalho necessário para produção, produz estimativa/orçamento e pode posteriormente executar a productionização. Segurança final, especialmente para dinheiro real, **não pode depender apenas da conclusão de IA**.
 
-- válido e precisa corrigir;
-- válido, mas pertence à produção/futuro;
-- melhoria opcional;
-- falso positivo;
-- contradiz decisão arquitetural deliberada.
+Staging hospedado, observabilidade, browser E2E completo e infraestrutura final continuam importantes antes da produção, mas podem ser recomendações das auditorias, itens do production handoff ou milestones da contratação profissional; não bloqueiam a auditoria Claude Code nem a auditoria/orçamento humano inicial.
 
-Somente itens aprovados voltam ao Codex, sempre por PR pequena e CI normal. Depois pode haver apenas uma segunda conferência curta do auditor para verificar os próprios achados; não iniciar outra reescrita geral.
-
-## Handoff para freelancer sênior
-
-O objetivo não é eliminar revisão humana, mas reduzir horas humanas gastas em trabalho que pode ser concluído antes. O freelancer deve idealmente receber repositório funcional, staging, documentação, CI, E2E, arquitetura, Handoff Alpha v1, relatório da auditoria externa, correções triadas e production blockers explícitos.
-
-Priorizar as horas humanas para revisão técnica final, segurança, infraestrutura, PSP de produção, KYC, payout, antifraude, observabilidade, backups/restore, secrets, performance, LGPD/jurídico e lançamento.
+O objetivo do processo é entregar ao profissional um repositório funcional, claro e reproduzível, com arquitetura compreensível, CI, evidências disponíveis, relatório técnico triado e blockers explícitos — reduzindo descoberta sem gastar tempo em infraestrutura que o profissional poderá decidir ou substituir.
 
 ## Governança de PRs mergeadas
 

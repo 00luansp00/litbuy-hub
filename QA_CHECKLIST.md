@@ -1,5 +1,8 @@
 # QA Checklist — LIT Buy
 
+> [!WARNING]
+> **Checklist histórica do MVP visual.** Este arquivo não é a checklist autoritativa do Alpha atual e suas expectativas de mocks/placeholders não devem ser usadas para pedir que integrações reais voltem a mocks. Preserve os itens abaixo apenas como histórico. Para o estado e os gates atuais, use `ALPHA_SCOPE_AND_COMPLETION_CHECKLIST.md`; para a estabilização pós-freeze, use `ALPHA_LOCAL_STABILIZATION_RUNBOOK.md`.
+
 Checklist manual para validar a estabilidade do MVP antes de novas sprints.
 Marque cada item ao rodar a suíte manual em desktop, tablet e mobile.
 
