@@ -4,12 +4,14 @@ Este é o runbook operacional atual da fase pós-freeze. A checklist autoritativ
 
 ## Estado
 
-- **Feature freeze ativo.** Não adicionar funcionalidades, fazer refactor geral ou iniciar hardening/auditoria externa.
+- **Feature freeze ativo.** Não adicionar funcionalidades, fazer refactor geral ou iniciar hardening.
 - Baseline oficial: `aceb8b26b7205b03b28e0681aba9fb71a175f67f`.
 - `PENDENTE DE IMPLEMENTAÇÃO ALPHA = 0`.
-- Fase atual: estabilização local; os cinco gates pós-freeze continuam abertos.
+- Fase atual: preparação de handoff — reprodução local, repository clarity e sanity check limitado — antes da auditoria full-repo read-only do Claude Code.
 - Este ambiente é local e não é produção. Não inserir dados pessoais, credenciais ou dados financeiros reais.
 - Alteração funcional exige bug objetivo reproduzido, evidência e correção mínima, com teste de regressão quando apropriado.
+
+Esta fase prepara evidências e reduz o custo de descoberta para a sequência `repository clarity → sanity check crítico limitado → Claude Code audit read-only`. A auditoria da IA não depende de hosted staging, observabilidade hospedada ou browser E2E completo, não tem autoridade automática para alterar código e não certifica segurança para produção. Revisão humana sênior continua obrigatória antes de dinheiro real e da productionização.
 
 ## Pré-requisitos
 
@@ -150,7 +152,7 @@ Validar que a autoridade permanece nas integrações reais na ordem atual:
 5. **Financeiro:** lifecycle do ledger `SELLER_PENDING → SELLER_HELD → SELLER_AVAILABLE` → leitura owner-only do Seller.
 6. **Admin:** onboarding → moderação → catálogo/taxonomia.
 
-Os guards automatizados demonstram as fronteiras estruturais, não a aceitação completa pelo navegador. A validação manual ponta a ponta local e em staging pertence ao gate posterior **Fluxo crítico sem mocks**, e browser E2E/testes manuais completos pertencem a **Testes e estabilização**. Não fechar esses gates neste rehearsal.
+Os guards automatizados demonstram as fronteiras estruturais, não a aceitação completa pelo navegador. Hosted staging, observabilidade e browser E2E/testes manuais completos continuam pendentes e importantes antes da produção, mas não bloqueiam a auditoria pre-handoff read-only nem a auditoria/orçamento humano inicial. Não fechar esses gates neste rehearsal, e não chamar a composição staging-like local/CI de staging hospedado.
 
 ## Troubleshooting
 

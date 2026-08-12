@@ -4,7 +4,7 @@
 
 [`ALPHA_SCOPE_AND_COMPLETION_CHECKLIST.md`](./ALPHA_SCOPE_AND_COMPLETION_CHECKLIST.md) é a fonte autoritativa para a linha de chegada do **LIT Buy — Handoff Alpha v1** e para a classificação atual entre concluído, pendente para Alpha e reservado para produção.
 
-> **Estado atual:** `PENDENTE DE IMPLEMENTAÇÃO ALPHA = 0`; o feature freeze está ativo no baseline `aceb8b26b7205b03b28e0681aba9fb71a175f67f` e a fase corrente é **estabilização local**. Novas features estão congeladas. Somente bugs objetivos reproduzidos, problemas de segurança/integridade ou blockers reais podem gerar alteração funcional. A auditoria externa continua proibida até `GATES DE ESTABILIZAÇÃO / HANDOFF = 0`. Use `ALPHA_LOCAL_STABILIZATION_RUNBOOK.md` para a operação pós-freeze.
+> **Estado atual:** `PENDENTE DE IMPLEMENTAÇÃO ALPHA = 0`; o feature freeze está ativo no baseline `aceb8b26b7205b03b28e0681aba9fb71a175f67f`, com novas features congeladas e foco na preparação de handoff. Depois da reprodução, clareza documental e sanity check limitado, Claude Code pode executar auditoria full-repo inicialmente read-only; isso não certifica produção. Revisão humana sênior de segurança continua obrigatória antes de dinheiro real, e staging/observabilidade finais podem integrar a productionização. Use `ALPHA_LOCAL_STABILIZATION_RUNBOOK.md` para a operação pós-freeze.
 
 ## PR #53: delivery-protection eligibility
 

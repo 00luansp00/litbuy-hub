@@ -123,14 +123,12 @@ Marque cada item ao rodar a suíte manual em desktop, tablet e mobile.
 ## Navegação e Rotas (Hotfix 16.2)
 
 ### Navbar
-
 - [ ] Logo volta para `/`
 - [ ] Ícone do carrinho abre `/carrinho` e mostra contador correto
 - [ ] Links de "Entrar" e "Criar conta" abrem `/login` e `/cadastro`
 - [ ] Avatar abre `UserMenu` quando autenticado
 
 ### UserMenu — modo comprador
-
 - [ ] Meu perfil → `/perfil`
 - [ ] Pedidos → `/pedidos`
 - [ ] Favoritos → `/favoritos`
@@ -141,7 +139,6 @@ Marque cada item ao rodar a suíte manual em desktop, tablet e mobile.
 - [ ] Sair mostra toast e desloga
 
 ### UserMenu — modo vendedor
-
 - [ ] Painel do vendedor → `/vendedor`
 - [ ] Meus anúncios → `/vendedor/anuncios`
 - [ ] Criar anúncio → `/vendedor/anuncios/novo`
@@ -151,7 +148,6 @@ Marque cada item ao rodar a suíte manual em desktop, tablet e mobile.
 - [ ] "Mudar para modo comprador" volta com toast
 
 ### Área do vendedor
-
 - [ ] Sidebar destaca a rota ativa
 - [ ] Botão "Criar anúncio" (header + sidebar + quick actions) abre `/vendedor/anuncios/novo`
 - [ ] "Ver loja pública" abre `/loja/$slug`
@@ -159,14 +155,12 @@ Marque cada item ao rodar a suíte manual em desktop, tablet e mobile.
 - [ ] Todas as subrotas carregam sem ficar presas no dashboard
 
 ### Área admin
-
 - [ ] Sidebar destaca a rota ativa
 - [ ] Todas as subrotas carregam dentro do `AdminLayout`
 - [ ] "Voltar ao marketplace" abre `/`
 - [ ] Ações administrativas exibem toast
 
 ### Produto
-
 - [ ] Breadcrumb navega corretamente
 - [ ] Link do vendedor abre `/loja/$slug`
 - [ ] Link da categoria abre `/categoria/$slug`
@@ -174,13 +168,11 @@ Marque cada item ao rodar a suíte manual em desktop, tablet e mobile.
 - [ ] Produto indisponível bloqueia compra e carrinho
 
 ### Loja pública
-
 - [ ] Produtos da loja abrem `/produto/$id`
 - [ ] Ações mockadas (seguir, mensagem, compartilhar) exibem toast
 - [ ] Slug inexistente exibe EmptyState
 
 ### Carrinho e checkout
-
 - [ ] "Continuar comprando" (carrinho vazio) leva a rota válida
 - [ ] "Ir para checkout" só habilita com itens no carrinho
 - [ ] "Editar carrinho" no checkout volta para `/carrinho`
@@ -190,64 +182,54 @@ Marque cada item ao rodar a suíte manual em desktop, tablet e mobile.
 ## QA Geral do MVP (Sprint 17)
 
 ### Typecheck e build
-
 - [ ] `bunx tsgo --noEmit` roda sem erros
 - [ ] Nenhum import quebrado no console do preview
 - [ ] Nenhum warning novo de hidratação
 
 ### Services
-
 - [ ] Nenhuma rota em `src/routes/` importa de `src/data/` diretamente
 - [ ] `productService`, `categoryService`, `sellerService`, `reviewService`, `accountService`, `cartService`, `checkoutService`, `sellerDashboardService`, `adminService` continuam expostos
 
 ### Providers
-
 - [ ] `AuthProvider` disponível em toda a app; `useAuth()` funciona
 - [ ] `CartProvider` disponível em toda a app; `useCart()` funciona
 - [ ] Alternância comprador ↔ vendedor funciona no `UserMenu`
 - [ ] Contador do carrinho atualiza ao adicionar/remover item
 
 ### Rotas principais
-
 - [ ] Todas as rotas listadas em `ROUTE_AUDIT.md` carregam sem erro
 - [ ] Nenhuma rota fica em branco após navegação (parent com `<Outlet />`)
 - [ ] `/vendedor/anuncios/novo` continua abrindo o wizard
 
 ### Responsividade
-
 - [ ] Sem overflow horizontal na home em 375px
 - [ ] Sidebar do vendedor vira menu horizontal no mobile
 - [ ] Sidebar do admin vira menu horizontal no mobile
 - [ ] Tabelas (admin/vendedor) rolam horizontalmente no mobile
 
 ### Produtos indisponíveis
-
 - [ ] `ProductCard` mostra badge e desabilita CTA
 - [ ] `PurchaseCard` bloqueia compra e adicionar ao carrinho
 - [ ] `CartProvider.addItem` recusa e mostra toast
 - [ ] Checkout bloqueia finalização se houver item indisponível
 
 ### Carrinho e checkout
-
 - [ ] Adicionar/remover/atualizar quantidade funciona
 - [ ] Cupom mockado aplica desconto
 - [ ] Checkout exige login (`AuthGate`)
 - [ ] Sucesso do checkout deixa claro que não houve cobrança real
 
 ### Vendedor
-
 - [ ] Sidebar destaca rota ativa
 - [ ] Wizard `/vendedor/anuncios/novo` mostra `ImageUploader`
 - [ ] Financeiro deixa claro que é mockado
 
 ### Admin
-
 - [ ] `AdminGate` bloqueia acesso quando `isAdmin` é false
 - [ ] Todas as ações administrativas exibem toast mockado
 - [ ] Nenhuma rota admin importa `src/data/` diretamente
 
 ### Ações mockadas
-
 - [ ] Favoritar / compartilhar / seguir / enviar mensagem exibem toast
 - [ ] Editar perfil exibe toast
 - [ ] Sacar / adicionar saldo exibe toast
@@ -255,60 +237,50 @@ Marque cada item ao rodar a suíte manual em desktop, tablet e mobile.
 - [ ] Ações de disputa e denúncia exibem toast
 
 ### Console
-
 - [ ] Sem erros vermelhos no console do navegador
 - [ ] Sem 404 de assets no painel de rede
 
 ## Polimento Visual (Sprint 18)
 
 ### Headers de página
-
 - [ ] Título e subtítulo consistentes entre `/perfil`, `/vendedor` e `/admin`
 - [ ] Badges de contexto ("Modo demonstração", "Admin", "Protegido") aparecem onde faz sentido
 - [ ] Breadcrumbs (quando existem) usam o componente `Breadcrumb`
 
 ### Cards
-
 - [ ] Bordas, sombras e espaçamento internos consistentes
 - [ ] Hover discreto (sem transformações exageradas)
 - [ ] Alinhamento de CTAs no rodapé do card
 
 ### Botões e CTAs
-
 - [ ] Primário / secundário / destructive claramente distintos
 - [ ] Nenhum botão fica mudo — ação real ou toast
 - [ ] Botões desabilitados legíveis (produto indisponível, checkout vazio)
 
 ### Toasts
-
 - [ ] Mensagens curtas, em pt-BR, sem termos técnicos
 - [ ] "Adicionado ao carrinho", "Produto indisponível no momento", "Nenhuma cobrança real foi realizada"
 - [ ] Sonner é a única API de toast usada
 
 ### EmptyStates
-
 - [ ] Todos usam o componente `EmptyState` (ícone + título + descrição + CTA)
 - [ ] Carrinho vazio, checkout vazio, favoritos, mensagens, pedidos, listas admin
 
 ### Responsividade
-
 - [ ] Sem overflow horizontal em 375px nas áreas principais
 - [ ] Sidebar do vendedor e do admin viram menu horizontal no mobile
 - [ ] Cards não estouram largura em 375px
 - [ ] Sticky do checkout/produto não quebra no mobile
 
 ### Tabelas mobile
-
 - [ ] `SellerListingsTable` rola horizontalmente sem cortar conteúdo
 - [ ] Tabelas admin (pedidos, transações, disputas, denúncias) rolam sem quebrar
 
 ### Sidebars
-
 - [ ] `AccountSidebar`, `SellerDashboardSidebar`, `AdminSidebar` destacam item ativo
 - [ ] CTA secundário ("Vender na LIT Buy", "Voltar para minha conta", "Voltar ao marketplace") presente
 
 ### Acessibilidade básica
-
 - [ ] Botões ícone-only têm `aria-label`
 - [ ] Inputs têm `<Label>` ou `aria-label`
 - [ ] Foco visível em botões, links e inputs
@@ -316,7 +288,6 @@ Marque cada item ao rodar a suíte manual em desktop, tablet e mobile.
 - [ ] Nenhuma cor é o único indicador de status (sempre acompanha texto/ícone)
 
 ### Microinterações
-
 - [ ] Framer Motion apenas em entradas de seção e hovers de card
 - [ ] Nenhuma animação bloqueia interação do usuário
 
@@ -325,7 +296,6 @@ Marque cada item ao rodar a suíte manual em desktop, tablet e mobile.
 ## Sprint 18.6 — QA final dos fluxos críticos
 
 ### Busca global (`/buscar`)
-
 - [ ] Navbar (desktop e mobile) submete `<form>` para `/buscar?q=termo`.
 - [ ] `/buscar` sem `q` renderiza estado inicial (buscas populares + categorias).
 - [ ] `/buscar?q=steam` mostra resultados via `ProductGrid`/`ProductCard`.
@@ -335,7 +305,6 @@ Marque cada item ao rodar a suíte manual em desktop, tablet e mobile.
 - [ ] Nenhuma rota consome `@/data/*` diretamente para busca — sempre `searchService`.
 
 ### Pedidos (`/pedidos` e `/pedidos/$id`)
-
 - [ ] `/pedidos` lista pedidos do comprador via `orderService`.
 - [ ] `RecentOrdersCard` "Ver detalhes" abre `/pedidos/$id`.
 - [ ] `/pedidos/$id` cai em `notFoundComponent` para id inexistente.
@@ -345,7 +314,6 @@ Marque cada item ao rodar a suíte manual em desktop, tablet e mobile.
 - [ ] `AuthGate` bloqueia o detalhe quando deslogado.
 
 ### Entrega digital
-
 - [ ] `DigitalDeliveryCard` mostra status e método (auto/manual).
 - [ ] Payload aparece mascarado (`••••`) com blur até o "Revelar".
 - [ ] Botão "Revelar" apenas dispara toast — nenhum dado sensível real.
@@ -353,19 +321,16 @@ Marque cada item ao rodar a suíte manual em desktop, tablet e mobile.
 - [ ] Aviso de segurança (`OrderSecurityNotice`) aparece no aside.
 
 ### Disputa visual
-
 - [ ] `OrderDisputeCard` abre modal com motivo + descrição.
 - [ ] Envio dispara toast via `orderService.simulateOpenDispute` sem persistir.
 - [ ] Disputa existente aparece com status; disputa é bloqueada em pedidos `cancelled`/`refunded`.
 
 ### Avaliação visual
-
 - [ ] `OrderReviewCard` só libera formulário quando `status === "completed"`.
 - [ ] Avaliação separada de produto e vendedor.
 - [ ] Envio dispara toast via `orderService.simulateSubmitReview` — nenhuma nota é salva.
 
 ### Mensagens (`/mensagens` e `/mensagens/$id`)
-
 - [ ] `/mensagens` mostra lista de conversas + painel vazio no desktop.
 - [ ] `/mensagens` em mobile mostra somente a lista.
 - [ ] `/mensagens/$id` abre `ConversationHeader`, `ConversationContextCard`, `MessagesThread` e `MessageComposer`.
@@ -381,7 +346,6 @@ Marque cada item ao rodar a suíte manual em desktop, tablet e mobile.
 - [ ] Id inválido em `/mensagens/$id` cai em `notFoundComponent`.
 
 ### Compra e checkout
-
 - [ ] `ProductCard` adiciona ao carrinho normalmente.
 - [ ] Produto indisponível é bloqueado por `getUnavailabilityReason` (`ProductCard`/`PurchaseCard`).
 - [ ] `PurchaseCard` respeita estoque e status.
@@ -391,7 +355,6 @@ Marque cada item ao rodar a suíte manual em desktop, tablet e mobile.
 - [ ] Pedido fictício NÃO é persistido em backend/LocalStorage.
 
 ### Vendedor
-
 - [ ] `/vendedor` carrega dashboard.
 - [ ] `/vendedor/anuncios` e `/vendedor/anuncios/novo` carregam; `ImageUploader` aparece (mock).
 - [ ] `/vendedor/vendas`, `/vendedor/financeiro`, `/vendedor/avaliacoes` carregam.
@@ -399,7 +362,6 @@ Marque cada item ao rodar a suíte manual em desktop, tablet e mobile.
 - [ ] Todos usuários logados podem vender — nenhuma barreira real.
 
 ### Admin
-
 - [ ] `/admin` exige AdminGate.
 - [ ] `admin@litbuy.com` ativa `isAdmin` no `AuthProvider`.
 - [ ] Usuário comum é bloqueado no AdminGate.
@@ -407,14 +369,12 @@ Marque cada item ao rodar a suíte manual em desktop, tablet e mobile.
 - [ ] Ações admin usam toast e sinalizam modo demonstração.
 
 ### Regras globais
-
 - [ ] Ações mockadas sempre têm toast em pt-BR.
 - [ ] Nenhum dado sensível real é exibido em qualquer tela.
 - [ ] `sonner` continua sendo a única API de toast.
 - [ ] Typecheck (`tsgo --noEmit`) passa limpo.
 
 ### Handoff técnico
-
 - [ ] `MVP_STATUS.md` reflete todas as sprints 17→18.5.
 - [ ] `PROJECT_RULES.md` documenta regras de mensagens/pedidos/pós-compra.
 - [ ] `MARKETPLACE_RULES.md`, `ORDER_LIFECYCLE.md`, `DIGITAL_DELIVERY_FLOW.md`, `DISPUTE_FLOW.md`, `WALLET_AND_ESCROW_RULES.md`, `LISTING_STATUS_RULES.md`, `REVIEW_RULES.md`, `MESSAGING_RULES.md` presentes.
@@ -422,7 +382,6 @@ Marque cada item ao rodar a suíte manual em desktop, tablet e mobile.
 - [ ] Nenhum backend, Supabase, WebSocket, pagamento, upload ou permissão real foi implementado no MVP.
 
 ## Sprint 18.20 — Checklist final
-
 - [ ] SEO básico presente em rotas públicas.
 - [ ] ErrorBoundary global captura erro de renderização.
 - [ ] Página 404 amigável.
