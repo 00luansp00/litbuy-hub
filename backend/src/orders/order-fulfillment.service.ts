@@ -56,6 +56,18 @@ export type RecordDeliveryInput = {
 export class OrderFulfillmentService {
   constructor(private readonly prisma: PrismaService) {}
 
+  recordSellerDeclaredDelivery(orderCode: string, actorUserId: string) {
+    const evidenceHash = createHash('sha256')
+      .update(`seller-declaration:v1:${orderCode}:${actorUserId}`)
+      .digest('hex');
+    return this.recordDelivered({
+      orderCode,
+      actorUserId,
+      deliveryType: OrderDeliveryType.MANUAL_REFERENCE,
+      evidenceHash,
+    });
+  }
+
   async processAvailabilityBatch(limit = 25): Promise<number> {
     return this.processBatch(
       limit,
