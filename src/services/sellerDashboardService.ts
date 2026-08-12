@@ -4,8 +4,6 @@ import type {
   CreateListingDraft,
   Seller,
   SellerDashboardSummary,
-  SellerFinancialMovement,
-  SellerFinancialSummary,
   SellerListing,
   SellerNotification,
   SellerReview,
@@ -19,7 +17,7 @@ import type {
  * facilitar substituição futura por API/Supabase.
  */
 
-const delay = <T,>(data: T, ms = 220): Promise<T> =>
+const delay = <T>(data: T, ms = 220): Promise<T> =>
   new Promise((resolve) => setTimeout(() => resolve(data), ms));
 
 /** Vendedor mockado que representa o usuário logado nesta demo. */
@@ -62,14 +60,7 @@ const salesStatusPool: SellerSalePreview["status"][] = [
   "completed",
 ];
 
-const BUYER_NAMES = [
-  "Lucas M.",
-  "Amanda R.",
-  "Diego S.",
-  "Renata C.",
-  "Bruno F.",
-  "Isabela T.",
-];
+const BUYER_NAMES = ["Lucas M.", "Amanda R.", "Diego S.", "Renata C.", "Bruno F.", "Isabela T."];
 
 const recentSales: SellerSalePreview[] = products.slice(0, 6).map((p, i) => ({
   id: `sale-${i + 1}`,
@@ -82,60 +73,6 @@ const recentSales: SellerSalePreview[] = products.slice(0, 6).map((p, i) => ({
   status: salesStatusPool[i % salesStatusPool.length]!,
   createdAt: new Date(Date.now() - i * 1000 * 60 * 60 * 26).toISOString(),
 }));
-
-const movements: SellerFinancialMovement[] = [
-  {
-    id: "fm-1",
-    kind: "sale",
-    description: "Venda — Conta Valorant Imortal",
-    amount: 349.9,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(),
-  },
-  {
-    id: "fm-2",
-    kind: "fee",
-    description: "Taxa da plataforma (10%)",
-    amount: -34.99,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(),
-  },
-  {
-    id: "fm-3",
-    kind: "sale",
-    description: "Venda — Gift Card Steam R$ 100",
-    amount: 98.9,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 28).toISOString(),
-  },
-  {
-    id: "fm-4",
-    kind: "withdraw",
-    description: "Saque solicitado (Pix)",
-    amount: -800,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 60).toISOString(),
-  },
-  {
-    id: "fm-5",
-    kind: "refund",
-    description: "Estorno — Pedido cancelado",
-    amount: -79.9,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 120).toISOString(),
-  },
-  {
-    id: "fm-6",
-    kind: "adjustment",
-    description: "Ajuste de bonificação LIT",
-    amount: 25,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 240).toISOString(),
-  },
-];
-
-const financial: SellerFinancialSummary = {
-  available: 1284.5,
-  pending: 432.9,
-  totalSold: 18942.3,
-  totalFees: 1894.23,
-  currency: "BRL",
-  movements,
-};
 
 const notifications: SellerNotification[] = [
   {
@@ -245,7 +182,7 @@ function generateSellerReviews(count: number): SellerReview[] {
       sellerId: CURRENT_SELLER.id,
       author: BUYER_NAMES[i % BUYER_NAMES.length]!,
       avatarUrl: `https://i.pravatar.cc/64?u=review-${i}`,
-      rating: 4 + ((i % 3) === 0 ? 1 : 0.5),
+      rating: 4 + (i % 3 === 0 ? 1 : 0.5),
       comment: REVIEW_COMMENTS[i % REVIEW_COMMENTS.length]!,
       date: new Date(Date.now() - (i + 1) * 86400000).toISOString(),
       productTitle: related?.title,
@@ -256,22 +193,20 @@ function generateSellerReviews(count: number): SellerReview[] {
 export const sellerDashboardService = {
   getCurrentSeller: (): Promise<Seller> => delay(CURRENT_SELLER),
 
-  getSellerDashboardSummary: (): Promise<SellerDashboardSummary> =>
-    delay(dashboardSummary),
+  getSellerDashboardSummary: (): Promise<SellerDashboardSummary> => delay(dashboardSummary),
 
   getSellerListings: (): Promise<SellerListing[]> => delay(listings),
 
   getSellerRecentSales: (limit = 6): Promise<SellerSalePreview[]> =>
     delay(recentSales.slice(0, limit)),
 
-  getSellerFinancialSummary: (): Promise<SellerFinancialSummary> => delay(financial),
-
-  getSellerReviews: (limit = 8): Promise<SellerReview[]> =>
-    delay(generateSellerReviews(limit)),
+  getSellerReviews: (limit = 8): Promise<SellerReview[]> => delay(generateSellerReviews(limit)),
 
   getSellerNotifications: (): Promise<SellerNotification[]> => delay(notifications),
 
-  createListingDraft: async (payload: CreateListingDraft): Promise<{ ok: true; draftId: string }> => {
+  createListingDraft: async (
+    payload: CreateListingDraft,
+  ): Promise<{ ok: true; draftId: string }> => {
     await delay(null, 400);
     // Nenhum dado é persistido — apenas gera um id fictício.
     const draftId = `draft-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;

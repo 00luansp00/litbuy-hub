@@ -1,127 +1,116 @@
-import { useEffect, useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowDownRight, ArrowUpRight, ExternalLink } from "lucide-react";
+import { createFileRoute } from "@tanstack/react-router";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { SellerDashboardLayout } from "@/components/seller-dashboard/SellerDashboardLayout";
-import { SellerFinancialCard } from "@/components/seller-dashboard/SellerFinancialCard";
-import { SellerLevelCard } from "@/components/seller-dashboard/SellerLevelCard";
-import { EmptyState } from "@/components/common/EmptyState";
-import { Badge } from "@/components/ui/badge";
-import { formatBRL } from "@/lib/format";
-import { sellerDashboardService } from "@/services/sellerDashboardService";
-import type { SellerFinancialSummary } from "@/types";
-
+import { SellerFinanceSummaryCard } from "@/components/seller-dashboard/SellerFinanceSummaryCard";
+import { Button } from "@/components/ui/button";
+import {
+  balanceKeys,
+  formatBrlMinor,
+  useSellerFinanceActivity,
+  useSellerFinanceSummary,
+} from "@/services/finance/sellerFinance";
 
 export const Route = createFileRoute("/vendedor/financeiro")({
   component: () => (
     <AuthGate
       title="Entre para acessar o financeiro"
-      description="Você precisa estar logado para ver seu saldo e histórico."
+      description="Você precisa estar logado para consultar os saldos internos."
     >
       <FinanceiroPage />
     </AuthGate>
   ),
 });
+const labels = {
+  pendingMinor: "Pendente",
+  heldMinor: "Em proteção",
+  availableMinor: "Disponível internamente",
+  reservedMinor: "Reservado",
+  deficitMinor: "Déficit",
+} as const;
+const activityLabels: Record<string, string> = {
+  SALE_RECOGNIZED: "Venda reconhecida",
+  SELLER_FUNDS_HELD: "Valor movido para proteção",
+  SELLER_FUNDS_RELEASED: "Valor liberado internamente",
+};
 
-function FinanceiroPage() {
-  const [financial, setFinancial] = useState<SellerFinancialSummary | null>(null);
-
-  useEffect(() => {
-    let mounted = true;
-    sellerDashboardService.getSellerFinancialSummary().then((f) => {
-      if (mounted) setFinancial(f);
-    });
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  if (!financial) {
-    return (
-      <SellerDashboardLayout title="Financeiro">
-        <div className="h-40 animate-pulse rounded-2xl border border-border bg-card" />
-      </SellerDashboardLayout>
-    );
-  }
-
+export function FinanceiroPage() {
+  const summary = useSellerFinanceSummary();
+  const activity = useSellerFinanceActivity();
   return (
     <SellerDashboardLayout
       title="Financeiro"
-      description="Saldo, taxas e repasses fictícios — nenhum valor real."
+      description="Saldos internos e movimentações registradas no ledger da sua conta Seller."
     >
-      <SellerLevelCard />
-
-      <div className="rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">
-        Taxas e prazos exibidos são demonstrativos conforme seu nível.{" "}
-        <Link to="/taxas" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
-          Ver tarifas e prazos <ExternalLink className="h-3 w-3" />
-        </Link>
+      <div className="rounded-xl border border-border bg-card p-4 text-sm">
+        Valores disponíveis nesta tela são saldos internos do Alpha e não representam saque ou
+        payout habilitado.
       </div>
-
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <SellerFinancialCard financial={financial} />
-
-        <section className="rounded-2xl border border-border bg-card p-5 shadow-card">
-          <header className="mb-4 flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-bold text-foreground">Histórico de repasses</h3>
-              <p className="text-xs text-muted-foreground">
-                Movimentações fictícias apenas para preview.
-              </p>
-            </div>
-            <Badge variant="secondary" className="text-[10px]">Demo</Badge>
-          </header>
-          {financial.movements.length === 0 ? (
-            <EmptyState
-              icon="Wallet"
-              title="Sem movimentações"
-              description="As movimentações aparecerão aqui quando houver vendas."
-            />
-          ) : (
-            <ul className="divide-y divide-border">
-              {financial.movements.map((m) => {
-                const positive = m.amount >= 0;
-                return (
-                  <li
-                    key={m.id}
-                    className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"
-                  >
-                    <span
-                      className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${
-                        positive
-                          ? "bg-success/10 text-success"
-                          : "bg-destructive/10 text-destructive"
-                      }`}
-                    >
-                      {positive ? (
-                        <ArrowUpRight className="h-4 w-4" />
-                      ) : (
-                        <ArrowDownRight className="h-4 w-4" />
-                      )}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="line-clamp-1 text-sm font-medium text-foreground">
-                        {m.description}
-                      </div>
-                      <div className="text-[11px] uppercase text-muted-foreground">
-                        {new Date(m.createdAt).toLocaleString("pt-BR")}
-                      </div>
-                    </div>
-                    <div
-                      className={`text-sm font-semibold ${
-                        positive ? "text-success" : "text-destructive"
-                      }`}
-                    >
-                      {positive ? "+" : ""}
-                      {formatBRL(m.amount)}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
-      </div>
+      {summary.isPending ? (
+        <div aria-label="Carregando saldos" className="h-40 animate-pulse rounded-2xl bg-card" />
+      ) : summary.isError ? (
+        <div role="alert" className="rounded-xl border border-destructive p-4">
+          Não foi possível carregar os saldos financeiros.
+        </div>
+      ) : (
+        <SellerFinanceSummaryCard financial={summary.data} />
+      )}
+      <section className="rounded-2xl border border-border bg-card p-5 shadow-card">
+        <h2 className="text-lg font-bold">Atividade financeira</h2>
+        {activity.isPending ? (
+          <p className="mt-4 text-sm text-muted-foreground">Carregando movimentações…</p>
+        ) : activity.isError ? (
+          <p role="alert" className="mt-4 text-sm text-destructive">
+            Não foi possível carregar a atividade financeira.
+          </p>
+        ) : activity.data.pages.flatMap((p) => p.items).length === 0 ? (
+          <p className="mt-4 text-sm text-muted-foreground">
+            Nenhuma movimentação financeira registrada.
+          </p>
+        ) : (
+          <ul className="mt-3 divide-y divide-border">
+            {activity.data.pages
+              .flatMap((p) => p.items)
+              .map((item) => (
+                <li key={item.id} className="py-4">
+                  <div className="flex justify-between gap-3">
+                    <strong>{activityLabels[item.type] ?? "Movimentação financeira"}</strong>
+                    <time className="text-xs text-muted-foreground">
+                      {new Intl.DateTimeFormat("pt-BR", {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      }).format(new Date(item.createdAt))}
+                    </time>
+                  </div>
+                  <dl className="mt-2 space-y-1">
+                    {balanceKeys
+                      .filter((key) => BigInt(item.movements[key]) !== 0n)
+                      .map((key) => (
+                        <div key={key} className="flex justify-between text-sm">
+                          <dt>{labels[key]}</dt>
+                          <dd>{formatBrlMinor(item.movements[key], true)}</dd>
+                        </div>
+                      ))}
+                  </dl>
+                </li>
+              ))}
+          </ul>
+        )}
+        {activity.hasNextPage && (
+          <Button
+            className="mt-4"
+            variant="outline"
+            disabled={activity.isFetchingNextPage}
+            onClick={() => activity.fetchNextPage()}
+          >
+            {activity.isFetchingNextPage ? "Carregando…" : "Carregar mais"}
+          </Button>
+        )}
+        {activity.isFetchNextPageError && (
+          <p role="alert" className="mt-2 text-sm text-destructive">
+            Não foi possível carregar mais movimentações.
+          </p>
+        )}
+      </section>
     </SellerDashboardLayout>
   );
 }

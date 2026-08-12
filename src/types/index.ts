@@ -770,30 +770,6 @@ export interface SellerSalePreview {
   createdAt: string;
 }
 
-export type SellerFinancialMovementKind =
-  | "sale"
-  | "fee"
-  | "refund"
-  | "withdraw"
-  | "adjustment";
-
-export interface SellerFinancialMovement {
-  id: string;
-  kind: SellerFinancialMovementKind;
-  description: string;
-  amount: number; // positivo/negativo
-  createdAt: string;
-}
-
-export interface SellerFinancialSummary {
-  available: number;
-  pending: number;
-  totalSold: number;
-  totalFees: number;
-  currency: "BRL";
-  movements: SellerFinancialMovement[];
-}
-
 export type SellerNotificationTone = "info" | "success" | "warning" | "danger";
 
 export interface SellerNotification {
