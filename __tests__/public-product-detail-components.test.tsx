@@ -78,7 +78,6 @@ const absentCommerce = () => {
   for (const label of [
     "Favoritar",
     "Quantidade",
-    "Checkout",
     "LIT Points",
     "Proteção LIT",
     "avaliações",
@@ -112,6 +111,8 @@ describe("public product detail content", () => {
       "href",
       "/login",
     );
+    expect(screen.getByText(/pagamento Alpha usam o fluxo persistente/i)).toBeInTheDocument();
+    expect(screen.getByText(/comunicação com o vendedor permanece fora/i)).toBeInTheDocument();
     absentCommerce();
   });
   it("renders FROM variants in API order and hides a generic NORMAL option", () => {

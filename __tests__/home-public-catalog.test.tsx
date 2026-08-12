@@ -28,7 +28,7 @@ vi.mock("@tanstack/react-router", () => ({
     </a>
   ),
 }));
-vi.mock("@/services/productService", () => ({ categoryService: { list: categoryList } }));
+vi.mock("@/services/catalogService", () => ({ categoryService: { list: categoryList } }));
 vi.mock("@/services/publicCatalog", async (importOriginal) => ({
   ...(await importOriginal()),
   publicCatalogService: { list: catalogList },

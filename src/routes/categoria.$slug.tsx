@@ -124,7 +124,10 @@ function CategoryPage() {
       <CategoryHero category={category} />
       <div className="rounded-lg border bg-muted/40 px-4 py-2 text-sm text-muted-foreground">
         <p>Os anúncios desta página são carregados diretamente do catálogo público da LIT Buy.</p>
-        <p>Detalhes e compra serão conectados em etapas posteriores.</p>
+        <p>
+          Os detalhes e a disponibilidade vêm do catálogo real. A compra Alpha segue pelo carrinho e
+          checkout persistentes.
+        </p>
       </div>
       <section id="category-catalog" className="scroll-mt-24">
         {catalogError ? (

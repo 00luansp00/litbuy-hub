@@ -89,7 +89,10 @@ export function PublicProductDetailContent({ product }: { product: PublicCatalog
           </section>
           <div className="rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground">
             <p>Este anúncio é carregado diretamente do catálogo público da LIT Buy.</p>
-            <p>Pagamento e comunicação com o vendedor serão conectados em etapas posteriores.</p>
+            <p>
+              Carrinho, checkout e pagamento Alpha usam o fluxo persistente; a comunicação com o
+              vendedor permanece fora desta etapa.
+            </p>
           </div>
         </section>
       </div>

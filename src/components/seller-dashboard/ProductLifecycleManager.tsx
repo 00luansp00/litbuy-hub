@@ -89,13 +89,13 @@ export function ProductLifecycleManager({
       </p>
       {product.status === "UNPUBLISHED" && (
         <p className="mt-1 text-xs text-muted-foreground">
-          A ativação é real no backend, mas a exposição no catálogo público será conectada em uma
-          próxima etapa.
+          Prepare os requisitos de publicação e ative o produto. O backend só aceita a ativação
+          quando a oferta está elegível para o catálogo público.
         </p>
       )}
       {product.status === "ACTIVE" && (
         <p className="mt-1 text-xs text-muted-foreground">
-          Ativo ainda não significa exposição no catálogo público.
+          Produto ativo e elegível para o catálogo público.
         </p>
       )}
       {product.status === "REMOVED" && (

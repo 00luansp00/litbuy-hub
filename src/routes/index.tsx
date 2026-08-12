@@ -5,7 +5,7 @@ import { PublicCatalogSection } from "@/components/public-catalog";
 import { MarketplaceStats } from "@/components/home/MarketplaceStats";
 import { Benefits } from "@/components/home/Benefits";
 import { Newsletter } from "@/components/home/Newsletter";
-import { categoryService } from "@/services/productService";
+import { categoryService } from "@/services/catalogService";
 import { publicCatalogService } from "@/services/publicCatalog";
 
 async function loadHomeData() {
