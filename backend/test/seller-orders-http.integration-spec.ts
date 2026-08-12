@@ -14,6 +14,7 @@ import { RedisService } from '../src/redis/redis.service';
 import { authHeaders, commerceFixture, createActor } from './order-checkout-test.helpers';
 
 type Actor = Awaited<ReturnType<typeof createActor>>;
+type SellerFixture = Awaited<ReturnType<typeof commerceFixture>>;
 type State = Partial<{
   status: OrderStatus;
   paymentStatus: PaymentStatus;
@@ -60,6 +61,7 @@ const expectPublic = (body: unknown) => {
 describe('Seller orders HTTP with real auth, CSRF and PostgreSQL', () => {
   jest.setTimeout(120_000);
   let app: INestApplication, prisma: PrismaService, mailer: AuthMailer, redis: RedisService;
+  const sellerFixtures = new Map<string, SellerFixture>();
   beforeAll(async () => {
     const ref = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = ref.createNestApplication();
@@ -77,6 +79,7 @@ describe('Seller orders HTTP with real auth, CSRF and PostgreSQL', () => {
     redis = app.get(RedisService);
   });
   beforeEach(async () => {
+    sellerFixtures.clear();
     await (await redis.getClient()).flushdb();
     mailer.sent.splice(0);
     await prisma.$executeRawUnsafe('TRUNCATE TABLE "User", "CatalogCategory" CASCADE');
@@ -91,11 +94,15 @@ describe('Seller orders HTTP with real auth, CSRF and PostgreSQL', () => {
     return actor;
   }
   async function sale(owner: Actor, state: State = {}) {
-    const fixture = await commerceFixture(prisma);
-    await prisma.sellerProfile.update({
-      where: { id: fixture.seller.id },
-      data: { userId: owner.user.id },
-    });
+    let fixture = sellerFixtures.get(owner.user.id);
+    if (!fixture) {
+      fixture = await commerceFixture(prisma);
+      fixture.seller = await prisma.sellerProfile.update({
+        where: { id: fixture.seller.id },
+        data: { userId: owner.user.id },
+      });
+      sellerFixtures.set(owner.user.id, fixture);
+    }
     const cart = await prisma.cart.create({
       data: {
         buyerUserId: fixture.buyer.id,
