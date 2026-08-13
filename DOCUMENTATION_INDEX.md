@@ -1,0 +1,119 @@
+# LIT Buy — Documentation index
+
+This index answers two questions for an external reviewer: **what should I read first, and what must not be treated as current implementation status?** Classification is based on document content at baseline `419a17cfff0237830f342b4ae5df339dfa744c78`, not on filenames alone.
+
+## Authority rules
+
+1. [`ALPHA_SCOPE_AND_COMPLETION_CHECKLIST.md`](./ALPHA_SCOPE_AND_COMPLETION_CHECKLIST.md) has highest authority for current functional status, Alpha limits, feature freeze, and production blockers.
+2. Current domain references define narrower contracts and evidence; they cannot expand the Alpha or claim production readiness.
+3. Historical documents are preserved for context and must not override current authority, even when their body uses words such as “canonical”, “current”, or “pending”.
+4. Planning documents describe intended/future work, not proof of implementation. Verify implementation in code and current authority.
+
+## A. AUTHORITATIVE / CURRENT (8)
+
+| Path                                                                                   | Purpose                                                                                 | Authority / scope                                                                                                |
+| -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| [`README.md`](./README.md)                                                             | Repository entry point and concise status/operation map.                                | Current overview; defers detailed status to the Alpha checklist.                                                 |
+| [`ALPHA_SCOPE_AND_COMPLETION_CHECKLIST.md`](./ALPHA_SCOPE_AND_COMPLETION_CHECKLIST.md) | Defines the Alpha finish line, completed scope, freeze, gates, and production blockers. | **Highest functional-status authority.**                                                                         |
+| [`ALPHA_LOCAL_STABILIZATION_RUNBOOK.md`](./ALPHA_LOCAL_STABILIZATION_RUNBOOK.md)       | Reproduces and validates the feature-frozen Alpha locally.                              | Current post-freeze operational authority.                                                                       |
+| [`PRE_HANDOFF_READINESS_CHECKLIST.md`](./PRE_HANDOFF_READINESS_CHECKLIST.md)           | Tracks the operational sequence from freeze to external review.                         | Current process status; does not redefine functional scope.                                                      |
+| [`DEVELOPER_HANDOFF.md`](./DEVELOPER_HANDOFF.md)                                       | Detailed technical handoff accumulated across implemented increments.                   | Current implementation reference where consistent with the Alpha checklist; older embedded notes are contextual. |
+| [`HANDOFF_CHECKLIST.md`](./HANDOFF_CHECKLIST.md)                                       | Short reproduction and pre-real-money gate checklist.                                   | Current handoff summary; the stabilization runbook is operationally more detailed.                               |
+| [`PROJECT_RULES.md`](./PROJECT_RULES.md)                                               | Repository working rules and implementation constraints.                                | Current engineering governance, subordinate to explicit task instructions.                                       |
+| [`AGENTS.md`](./AGENTS.md)                                                             | Lovable-connected Git-history handling instructions.                                    | Current agent/repository governance.                                                                             |
+
+## B. CURRENT DOMAIN REFERENCE (27)
+
+These documents provide implemented domain contracts or evidence. “Current” is limited to the named domain and never means production approval.
+
+| Path                                                                                             | Purpose                                                             | Authority / scope                                                                              |
+| ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| [`AUTHENTICATION_FINAL_AUDIT.md`](./AUTHENTICATION_FINAL_AUDIT.md)                               | Records implemented authentication flows and residual risks.        | Authentication evidence within audited Alpha limits.                                           |
+| [`MARKETPLACE_RBAC_FOUNDATION.md`](./MARKETPLACE_RBAC_FOUNDATION.md)                             | Defines persistent roles and authorization foundation.              | Buyer/Seller/Admin RBAC contract.                                                              |
+| [`SELLER_ONBOARDING_FOUNDATION.md`](./SELLER_ONBOARDING_FOUNDATION.md)                           | Documents Seller application, approval, and role grant.             | Alpha onboarding foundation; not real KYC.                                                     |
+| [`CATALOG_TAXONOMY_FOUNDATION.md`](./CATALOG_TAXONOMY_FOUNDATION.md)                             | Documents persistent catalog taxonomy.                              | Taxonomy foundation only.                                                                      |
+| [`LISTING_DRAFT_FOUNDATION.md`](./LISTING_DRAFT_FOUNDATION.md)                                   | Documents listing drafts and moderation/materialization.            | Implemented listing foundation.                                                                |
+| [`LISTING_STATUS_RULES.md`](./LISTING_STATUS_RULES.md)                                           | Defines listing state transitions and visibility.                   | Domain rule reference, bounded by current code.                                                |
+| [`PRODUCT_FOUNDATION.md`](./PRODUCT_FOUNDATION.md)                                               | Describes persistent products created from approved listings.       | Product foundation contract.                                                                   |
+| [`PRODUCT_IMAGE_STORAGE_FOUNDATION.md`](./PRODUCT_IMAGE_STORAGE_FOUNDATION.md)                   | Defines private product-image storage and signed access.            | Implemented S3-compatible image boundary.                                                      |
+| [`PRODUCT_LIFECYCLE_FOUNDATION.md`](./PRODUCT_LIFECYCLE_FOUNDATION.md)                           | Defines persistent product lifecycle operations.                    | Implemented lifecycle foundation.                                                              |
+| [`PUBLIC_CATALOG_READ_FOUNDATION.md`](./PUBLIC_CATALOG_READ_FOUNDATION.md)                       | Defines anonymous public catalog reads.                             | Backend public-read contract.                                                                  |
+| [`HOME_PUBLIC_CATALOG_INTEGRATION.md`](./HOME_PUBLIC_CATALOG_INTEGRATION.md)                     | Records Home integration with the public catalog.                   | Frontend integration evidence.                                                                 |
+| [`CATEGORY_PUBLIC_CATALOG_INTEGRATION.md`](./CATEGORY_PUBLIC_CATALOG_INTEGRATION.md)             | Records category route integration.                                 | Frontend integration evidence.                                                                 |
+| [`PRODUCT_DETAIL_PUBLIC_CATALOG_INTEGRATION.md`](./PRODUCT_DETAIL_PUBLIC_CATALOG_INTEGRATION.md) | Records product-detail integration.                                 | Frontend integration evidence.                                                                 |
+| [`CART_FOUNDATION.md`](./CART_FOUNDATION.md)                                                     | Defines persistent Buyer carts and reconciliation.                  | Implemented commerce foundation; later frontend completion is governed by the Alpha checklist. |
+| [`ORDER_CHECKOUT_FOUNDATION.md`](./ORDER_CHECKOUT_FOUNDATION.md)                                 | Defines server-authoritative checkout and order creation.           | Implemented checkout/order core.                                                               |
+| [`BUYER_ORDER_READ_FRONTEND.md`](./BUYER_ORDER_READ_FRONTEND.md)                                 | Documents Buyer order-list/detail API integration.                  | Buyer read-model frontend contract.                                                            |
+| [`ORDER_LIFECYCLE.md`](./ORDER_LIFECYCLE.md)                                                     | Defines order states and transitions.                               | Domain rules; use implemented increments/Alpha checklist for completion.                       |
+| [`PAYMENT_ORCHESTRATION_SANDBOX.md`](./PAYMENT_ORCHESTRATION_SANDBOX.md)                         | Documents provider-neutral sandbox orchestration.                   | Non-production payment boundary.                                                               |
+| [`EFI_PROVIDER_INTEGRATION.md`](./EFI_PROVIDER_INTEGRATION.md)                                   | Documents the Efí sandbox adapter boundary.                         | Reference adapter; not production PSP approval.                                                |
+| [`PROVIDER_NOTIFICATION_INGRESS.md`](./PROVIDER_NOTIFICATION_INGRESS.md)                         | Defines authenticated/idempotent provider notification ingress.     | Implemented backend boundary, not final production webhook signoff.                            |
+| [`PROVIDER_PAYMENT_EVENT_APPLICATION.md`](./PROVIDER_PAYMENT_EVENT_APPLICATION.md)               | Defines application of normalized provider events.                  | Implemented payment event processing.                                                          |
+| [`PAID_ORDER_ACTIVATION.md`](./PAID_ORDER_ACTIVATION.md)                                         | Defines activation of paid orders.                                  | Implemented backend transition.                                                                |
+| [`ORDER_FULFILLMENT_FOUNDATION.md`](./ORDER_FULFILLMENT_FOUNDATION.md)                           | Defines delivery and receipt-confirmation foundation.               | Implemented fulfillment core.                                                                  |
+| [`FINANCIAL_DOMAIN_FOUNDATION.md`](./FINANCIAL_DOMAIN_FOUNDATION.md)                             | Defines provider-neutral double-entry ledger aggregates/invariants. | Implemented internal foundation; no real money.                                                |
+| [`CHECKOUT_PLATFORM_COMMISSION_SNAPSHOT.md`](./CHECKOUT_PLATFORM_COMMISSION_SNAPSHOT.md)         | Defines immutable versioned fee snapshots at checkout.              | Implemented checkout financial invariant.                                                      |
+| [`SALE_FINANCIAL_RECOGNITION.md`](./SALE_FINANCIAL_RECOGNITION.md)                               | Defines paid-sale ledger recognition.                               | Implemented internal accounting transition.                                                    |
+| [`SELLER_HOLD_RELEASE_ELIGIBILITY.md`](./SELLER_HOLD_RELEASE_ELIGIBILITY.md)                     | Defines non-monetary release eligibility.                           | Implemented lifecycle rule; not payout.                                                        |
+
+## C. HISTORICAL / SUPERSEDED (13)
+
+Preserved for context/history; **do not use as authority for current status**.
+
+| Path                                                                         | Purpose                                                               | Authority / scope                                                                                            |
+| ---------------------------------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| [`MVP_STATUS.md`](./MVP_STATUS.md)                                           | Snapshot of the earlier visual/mock MVP.                              | Explicitly historical.                                                                                       |
+| [`QA_CHECKLIST.md`](./QA_CHECKLIST.md)                                       | Manual QA checklist for the earlier mock-heavy UI.                    | Historical test context.                                                                                     |
+| [`PRE_HANDOFF_AUDIT.md`](./PRE_HANDOFF_AUDIT.md)                             | Earlier repository handoff audit.                                     | Historical findings; superseded by current Alpha status.                                                     |
+| [`LIT_BUY_REPOSITORY_AUDIT_V1.md`](./LIT_BUY_REPOSITORY_AUDIT_V1.md)         | Repository audit made before the current backend/commerce completion. | Historical discovery snapshot.                                                                               |
+| [`LIT_BUY_BACKEND_MASTER_SPEC_V2.md`](./LIT_BUY_BACKEND_MASTER_SPEC_V2.md)   | Earlier canonical backend design specification.                       | Historical design input; its self-declared precedence is superseded by the current Alpha checklist.          |
+| [`BACKEND_ROADMAP.md`](./BACKEND_ROADMAP.md)                                 | Incremental backend roadmap with accumulated completion notes.        | Historical roadmap, not current backlog authority.                                                           |
+| [`COMMERCE_IMPLEMENTATION_ROADMAP.md`](./COMMERCE_IMPLEMENTATION_ROADMAP.md) | Planned sequence for commerce increments.                             | Historical sequencing; many phases are now implemented.                                                      |
+| [`API_CONTRACTS_DRAFT.md`](./API_CONTRACTS_DRAFT.md)                         | Early API draft plus later partial annotations.                       | Mixed historical snapshot; verify against code/current domain docs.                                          |
+| [`DATABASE_SCHEMA.md`](./DATABASE_SCHEMA.md)                                 | Earlier planned database model.                                       | Historical plan; Prisma is the schema source.                                                                |
+| [`ENTITY_RELATIONSHIP.md`](./ENTITY_RELATIONSHIP.md)                         | Early entity-relationship intent claiming tables did not exist.       | Superseded by Prisma and migrations.                                                                         |
+| [`PUBLIC_FOUNDATION_FINAL_AUDIT.md`](./PUBLIC_FOUNDATION_FINAL_AUDIT.md)     | Audit at the public-catalog foundation milestone.                     | Historical milestone evidence, not full Alpha status.                                                        |
+| [`LOCAL_PUBLIC_FOUNDATION_RUNBOOK.md`](./LOCAL_PUBLIC_FOUNDATION_RUNBOOK.md) | Reproduces the earlier public-foundation milestone.                   | Specialized historical runbook; use the Alpha stabilization runbook now.                                     |
+| [`MOCKS_INVENTORY.md`](./MOCKS_INVENTORY.md)                                 | Incremental record of real versus mock boundaries.                    | Historical/mixed inventory; current critical-path authority is the Alpha checklist and new legacy inventory. |
+
+## D. PLANNING / FUTURE / PRODUCTION (12)
+
+These documents express desired controls, decisions, or future production work. Presence does not prove implementation.
+
+| Path                                                                                       | Purpose                                                  | Authority / scope                                                                         |
+| ------------------------------------------------------------------------------------------ | -------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| [`SECURITY_IMPLEMENTATION_PLAN.md`](./SECURITY_IMPLEMENTATION_PLAN.md)                     | Plans security hardening work.                           | Future production/security plan; do not execute during freeze.                            |
+| [`SUPABASE_RLS_PLAN.md`](./SUPABASE_RLS_PLAN.md)                                           | Explores an RLS approach.                                | Future/alternative planning, not current PostgreSQL/NestJS authority.                     |
+| [`PAYMENT_AND_ESCROW_IMPLEMENTATION_PLAN.md`](./PAYMENT_AND_ESCROW_IMPLEMENTATION_PLAN.md) | Plans payment/escrow implementation phases.              | Future production planning; not real-money evidence.                                      |
+| [`PAYMENT_PROVIDER_STRATEGY.md`](./PAYMENT_PROVIDER_STRATEGY.md)                           | Frames provider selection and integration strategy.      | Decision/planning reference; no production provider approval.                             |
+| [`FINANCIAL_LEDGER_AND_PAYMENT_BOUNDARY.md`](./FINANCIAL_LEDGER_AND_PAYMENT_BOUNDARY.md)   | Earlier conceptual future ledger/payment boundary.       | Superseded as implementation-status claim; useful only as design history.                 |
+| [`COMMERCE_THREAT_MODEL.md`](./COMMERCE_THREAT_MODEL.md)                                   | Enumerates commerce threats and expected controls.       | Review input; not evidence that every control is implemented.                             |
+| [`EXTERNAL_SERVICES_DECISION_HANDOFF.md`](./EXTERNAL_SERVICES_DECISION_HANDOFF.md)         | Structures future external-service decisions.            | Production decision input; providers remain unapproved.                                   |
+| [`EXTERNAL_SERVICE_DECISION_TEMPLATE.md`](./EXTERNAL_SERVICE_DECISION_TEMPLATE.md)         | Template for evaluating a provider.                      | Future decision template.                                                                 |
+| [`AUTH_STAGING_HOMOLOGATION_RUNBOOK.md`](./AUTH_STAGING_HOMOLOGATION_RUNBOOK.md)           | Describes future hosted-staging auth homologation.       | Operational planning; local rehearsal is not hosted staging.                              |
+| [`DISPUTE_FLOW.md`](./DISPUTE_FLOW.md)                                                     | Describes intended dispute behavior.                     | Future/incomplete domain, outside critical Alpha.                                         |
+| [`DIGITAL_DELIVERY_FLOW.md`](./DIGITAL_DELIVERY_FLOW.md)                                   | Describes expected delivery modes and legacy mock state. | Planning/history; current fulfillment authority is the Alpha checklist/domain foundation. |
+| [`WITHDRAWAL_POLICY.md`](./WITHDRAWAL_POLICY.md)                                           | Describes withdrawal/payout policy concepts.             | Future production work; withdrawal is not implemented for real money.                     |
+
+## E. AUXILIARY / SPECIALIZED (12)
+
+Useful for focused investigation, but not overall status authority.
+
+| Path                                                                       | Purpose                                                         | Authority / scope                                                                                    |
+| -------------------------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| [`ARCHITECTURE.md`](./ARCHITECTURE.md)                                     | High-level structure and stack map.                             | Orientation; verify changing details in manifests/code.                                              |
+| [`ROUTES_MAP.md`](./ROUTES_MAP.md)                                         | Inventory of frontend routes.                                   | Route discovery, not feature-completion proof.                                                       |
+| [`SERVICES_MAP.md`](./SERVICES_MAP.md)                                     | Inventory of frontend service boundaries.                       | Service discovery; includes legacy/mock surfaces.                                                    |
+| [`PROVIDERS_MAP.md`](./PROVIDERS_MAP.md)                                   | Maps frontend providers.                                        | Specialized frontend reference.                                                                      |
+| [`ANALYTICS_EVENTS.md`](./ANALYTICS_EVENTS.md)                             | Catalogs mock analytics events.                                 | Non-critical/legacy analytics reference.                                                             |
+| [`LOCAL_DEMO_DATA.md`](./LOCAL_DEMO_DATA.md)                               | Defines deterministic fictitious local data and reset guards.   | Current specialized demo-data reference; stale commerce prose does not override the Alpha checklist. |
+| [`DATABASE_IMPLEMENTATION_NOTES.md`](./DATABASE_IMPLEMENTATION_NOTES.md)   | Records database conventions and implementation considerations. | Specialized reference; Prisma remains authoritative for schema.                                      |
+| [`FINANCIAL_FEE_POLICY.md`](./FINANCIAL_FEE_POLICY.md)                     | Defines versioned fee-policy resolution.                        | Narrow financial rule reference.                                                                     |
+| [`SELLER_PENDING_HOLD_FOUNDATION.md`](./SELLER_PENDING_HOLD_FOUNDATION.md) | Documents pending-to-held ledger movement.                      | Narrow implemented ledger increment.                                                                 |
+| [`SELLER_HELD_FUNDS_RELEASE.md`](./SELLER_HELD_FUNDS_RELEASE.md)           | Documents held-to-available release.                            | Narrow internal ledger increment; not payout.                                                        |
+| [`SELLER_HOLD_RELEASE_SNAPSHOT.md`](./SELLER_HOLD_RELEASE_SNAPSHOT.md)     | Defines immutable hold-release policy snapshotting.             | Narrow financial invariant.                                                                          |
+| [`TECH_DEBT_AND_RISKS.md`](./TECH_DEBT_AND_RISKS.md)                       | Collects technical debt and risk observations.                  | Triage input; validate age and evidence before acting.                                               |
+
+## Especially misleading historical statements
+
+Several preserved files state or imply that commerce, payments, or ledger work is unimplemented, or that no database tables exist. Those statements may have been correct at their milestone but are not current after the Alpha increments. No banners were added broadly: this central index, the rewritten README, and the Alpha checklist establish precedence while preserving history unchanged.
