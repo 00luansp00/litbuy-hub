@@ -3,7 +3,8 @@
 ## Baseline
 
 - Repository: `00luansp00/litbuy-hub`
-- Authoritative main baseline: `8b8031f21e5c9037ce7742374e91dd7b2a1a4f16`
+- Readiness source baseline: `8b8031f21e5c9037ce7742374e91dd7b2a1a4f16`
+- Future audit target: an explicit immutable SHA supplied in the operational audit prompt after PR #72 is merged; this source baseline is not the audit target.
 - Prepared scope: documentation/readiness only; the Claude Code audit was not executed.
 
 ## Documentation readiness

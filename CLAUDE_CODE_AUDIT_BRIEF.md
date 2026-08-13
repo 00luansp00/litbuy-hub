@@ -2,13 +2,16 @@
 
 This brief is factual readiness context for a future full-repository audit. It is not an audit report, an operational audit prompt, a production approval, or authorization to change the repository.
 
-## Audited baseline
+## Audit baseline selection
 
 - Repository: `00luansp00/litbuy-hub`
-- Baseline: `8b8031f21e5c9037ce7742374e91dd7b2a1a4f16`
-- Branch: `main`
+- Readiness source baseline: `8b8031f21e5c9037ce7742374e91dd7b2a1a4f16`
+- Readiness branch/base: `main`
+- Future audit target: **MUST BE AN EXPLICIT IMMUTABLE SHA PROVIDED IN THE OPERATIONAL AUDIT PROMPT AFTER PR #72 IS MERGED.**
 
-The future audit must target this exact SHA, or a later SHA that the owner has expressly approved. The auditor must record the actual audited SHA and must not silently audit a `main` branch that has advanced.
+The readiness source baseline is the `main` SHA from which PR #72 was prepared; it is not the future audit target. The target must contain this readiness package, including `CLAUDE_CODE_AUDIT_BRIEF.md`, `CLAUDE_CODE_READINESS_REPORT.md`, `DOCUMENTATION_INDEX.md`, and `PRE_HANDOFF_READINESS_CHECKLIST.md`. It will be selected after PR #72 is merged and will normally be the confirmed merge commit or resulting `main` SHA.
+
+The operational audit prompt must provide that immutable target without making this document self-referential. Claude must record the exact SHA received, must not substitute “latest main”, and must not advance to any later SHA without express authorization.
 
 ## Current state
 
