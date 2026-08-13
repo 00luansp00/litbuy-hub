@@ -1,6 +1,6 @@
 # LIT Buy — Documentation index
 
-This index answers two questions for an external reviewer: **what should I read first, and what must not be treated as current implementation status?** Classification is based on document content at baseline `419a17cfff0237830f342b4ae5df339dfa744c78`, not on filenames alone.
+This index answers two questions for an external reviewer: **what should I read first, and what must not be treated as current implementation status?** Classification is based on document content through the Claude Code readiness baseline rooted at `8b8031f21e5c9037ce7742374e91dd7b2a1a4f16`, not on filenames alone.
 
 ## Authority rules
 
@@ -9,18 +9,20 @@ This index answers two questions for an external reviewer: **what should I read 
 3. Historical documents are preserved for context and must not override current authority, even when their body uses words such as “canonical”, “current”, or “pending”.
 4. Planning documents describe intended/future work, not proof of implementation. Verify implementation in code and current authority.
 
-## A. AUTHORITATIVE / CURRENT (8)
+## A. AUTHORITATIVE / CURRENT (10)
 
-| Path                                                                                   | Purpose                                                                                 | Authority / scope                                                                                                |
-| -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| [`README.md`](./README.md)                                                             | Repository entry point and concise status/operation map.                                | Current overview; defers detailed status to the Alpha checklist.                                                 |
-| [`ALPHA_SCOPE_AND_COMPLETION_CHECKLIST.md`](./ALPHA_SCOPE_AND_COMPLETION_CHECKLIST.md) | Defines the Alpha finish line, completed scope, freeze, gates, and production blockers. | **Highest functional-status authority.**                                                                         |
-| [`ALPHA_LOCAL_STABILIZATION_RUNBOOK.md`](./ALPHA_LOCAL_STABILIZATION_RUNBOOK.md)       | Reproduces and validates the feature-frozen Alpha locally.                              | Current post-freeze operational authority.                                                                       |
-| [`PRE_HANDOFF_READINESS_CHECKLIST.md`](./PRE_HANDOFF_READINESS_CHECKLIST.md)           | Tracks the operational sequence from freeze to external review.                         | Current process status; does not redefine functional scope.                                                      |
-| [`DEVELOPER_HANDOFF.md`](./DEVELOPER_HANDOFF.md)                                       | Detailed technical handoff accumulated across implemented increments.                   | Current implementation reference where consistent with the Alpha checklist; older embedded notes are contextual. |
-| [`HANDOFF_CHECKLIST.md`](./HANDOFF_CHECKLIST.md)                                       | Short reproduction and pre-real-money gate checklist.                                   | Current handoff summary; the stabilization runbook is operationally more detailed.                               |
-| [`PROJECT_RULES.md`](./PROJECT_RULES.md)                                               | Repository working rules and implementation constraints.                                | Current engineering governance, subordinate to explicit task instructions.                                       |
-| [`AGENTS.md`](./AGENTS.md)                                                             | Lovable-connected Git-history handling instructions.                                    | Current agent/repository governance.                                                                             |
+| Path                                                                                   | Purpose                                                                                    | Authority / scope                                                                                                |
+| -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| [`README.md`](./README.md)                                                             | Repository entry point and concise status/operation map.                                   | Current overview; defers detailed status to the Alpha checklist.                                                 |
+| [`ALPHA_SCOPE_AND_COMPLETION_CHECKLIST.md`](./ALPHA_SCOPE_AND_COMPLETION_CHECKLIST.md) | Defines the Alpha finish line, completed scope, freeze, gates, and production blockers.    | **Highest functional-status authority.**                                                                         |
+| [`ALPHA_LOCAL_STABILIZATION_RUNBOOK.md`](./ALPHA_LOCAL_STABILIZATION_RUNBOOK.md)       | Reproduces and validates the feature-frozen Alpha locally.                                 | Current post-freeze operational authority.                                                                       |
+| [`PRE_HANDOFF_READINESS_CHECKLIST.md`](./PRE_HANDOFF_READINESS_CHECKLIST.md)           | Tracks the operational sequence from freeze to external review.                            | Current process status; does not redefine functional scope.                                                      |
+| [`CLAUDE_CODE_AUDIT_BRIEF.md`](./CLAUDE_CODE_AUDIT_BRIEF.md)                           | Defines the factual baseline, boundaries, rules, and output contract for the future audit. | Current audit-readiness authority; not an audit result or operational prompt.                                    |
+| [`CLAUDE_CODE_READINESS_REPORT.md`](./CLAUDE_CODE_READINESS_REPORT.md)                 | Records the bounded readiness checks and conclusion.                                       | Current readiness result; not security or production approval.                                                   |
+| [`DEVELOPER_HANDOFF.md`](./DEVELOPER_HANDOFF.md)                                       | Detailed technical handoff accumulated across implemented increments.                      | Current implementation reference where consistent with the Alpha checklist; older embedded notes are contextual. |
+| [`HANDOFF_CHECKLIST.md`](./HANDOFF_CHECKLIST.md)                                       | Short reproduction and pre-real-money gate checklist.                                      | Current handoff summary; the stabilization runbook is operationally more detailed.                               |
+| [`PROJECT_RULES.md`](./PROJECT_RULES.md)                                               | Repository working rules and implementation constraints.                                   | Current engineering governance, subordinate to explicit task instructions.                                       |
+| [`AGENTS.md`](./AGENTS.md)                                                             | Lovable-connected Git-history handling instructions.                                       | Current agent/repository governance.                                                                             |
 
 ## B. CURRENT DOMAIN REFERENCE (27)
 
