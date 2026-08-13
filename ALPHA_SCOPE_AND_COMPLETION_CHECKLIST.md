@@ -4,6 +4,8 @@
 
 Este documento é a fonte autoritativa para a linha de chegada da fase atual do Alpha. Ele preserva o escopo entre conversas, checkpoints e PRs; não substitui os contratos técnicos específicos de cada domínio.
 
+Para o acompanhamento operacional entre o feature freeze e a entrega externa, consulte `PRE_HANDOFF_READINESS_CHECKLIST.md`; essa checklist não substitui a autoridade de escopo deste documento.
+
 > **FEATURE FREEZE ATIVO.** Baseline oficial: `aceb8b26b7205b03b28e0681aba9fb71a175f67f`. `PENDENTE DE IMPLEMENTAÇÃO ALPHA = 0`; a fase atual é preparação de handoff pós-freeze. Os gates ainda abertos registram trabalho não executado, mas não bloqueiam a auditoria pre-handoff read-only nem a auditoria/orçamento inicial de um profissional sênior.
 
 > **“Finalizar aqui” significa concluir todas as implementações deliberadamente pertencentes ao Handoff Alpha v1. Não significa produção pública nem dinheiro real habilitado.**
