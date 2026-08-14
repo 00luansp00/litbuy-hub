@@ -20,7 +20,7 @@ describe("public foundation rehearsal", () => {
     const rehearsalEnv = readFileSync(resolve(root, "backend/.env.staging.local.example"), "utf8");
 
     for (const service of ["migrate", "backend", "demo-data"]) {
-      const serviceBlock = compose.split(`  ${service}:`)[1]?.split(/^  [\w-]+:/m)[0];
+      const serviceBlock = compose.split(`  ${service}:`)[1]?.split(/^ {2}[\w-]+:/m)[0];
       expect(serviceBlock).toContain("env_file: ./backend/.env.staging.local.example");
     }
     expect(rehearsalEnv).toMatch(/^PAYMENT_PROVIDER_MODE=FAKE_ALPHA$/m);
