@@ -29,13 +29,14 @@ This index answers two questions for an external reviewer: **what should I read 
 | [`PROJECT_RULES.md`](./PROJECT_RULES.md)                                                                         | Repository working rules and implementation constraints.                                    | Current engineering governance, subordinate to explicit task instructions.                                       |
 | [`AGENTS.md`](./AGENTS.md)                                                                                       | Lovable-connected Git-history handling instructions.                                        | Current agent/repository governance.                                                                             |
 
-## B. CURRENT DOMAIN REFERENCE (27)
+## B. CURRENT DOMAIN REFERENCE (28)
 
 These documents provide implemented domain contracts or evidence. “Current” is limited to the named domain and never means production approval.
 
 | Path                                                                                             | Purpose                                                             | Authority / scope                                                                              |
 | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | [`AUTHENTICATION_FINAL_AUDIT.md`](./AUTHENTICATION_FINAL_AUDIT.md)                               | Records implemented authentication flows and residual risks.        | Authentication evidence within audited Alpha limits.                                           |
+| [`CSRF_SESSION_THREAT_MODEL.md`](./CSRF_SESSION_THREAT_MODEL.md)                                 | Records the approved CSRF/session boundary and cookie contract.     | P3-F1 design authority; does not close the broader P3-F10 documentation gap.                   |
 | [`MARKETPLACE_RBAC_FOUNDATION.md`](./MARKETPLACE_RBAC_FOUNDATION.md)                             | Defines persistent roles and authorization foundation.              | Buyer/Seller/Admin RBAC contract.                                                              |
 | [`SELLER_ONBOARDING_FOUNDATION.md`](./SELLER_ONBOARDING_FOUNDATION.md)                           | Documents Seller application, approval, and role grant.             | Alpha onboarding foundation; not real KYC.                                                     |
 | [`CATALOG_TAXONOMY_FOUNDATION.md`](./CATALOG_TAXONOMY_FOUNDATION.md)                             | Documents persistent catalog taxonomy.                              | Taxonomy foundation only.                                                                      |

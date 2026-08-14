@@ -643,6 +643,87 @@ describe('Auth HTTP e2e flows', () => {
       .expect(HttpStatus.CREATED)
       .expect((r: request.Response) => expect(r.body).not.toHaveProperty('tokenHash'));
   });
+
+  it('uses purpose-specific cookie paths and clears the legacy auth-path CSRF cookie', async () => {
+    const registration = await register().expect(HttpStatus.CREATED);
+    const deviceCookies = registration.headers['set-cookie'] as unknown as string[];
+    const device = deviceCookies.find((cookie) => cookie.startsWith('litbuy_device='));
+    expect(device).toEqual(expect.stringContaining('HttpOnly'));
+    expect(device).toEqual(expect.stringContaining('Path=/api/v1/auth'));
+    expect(device).toEqual(expect.stringContaining('SameSite=Lax'));
+
+    await verifyLatest().expect(HttpStatus.OK);
+    const login = await request(app.getHttpServer())
+      .post('/api/v1/auth/login')
+      .set('Cookie', deviceCookies)
+      .send({ email: base.email, password: base.password })
+      .expect(HttpStatus.OK);
+    const loginCookies = login.headers['set-cookie'] as unknown as string[];
+    const refresh = loginCookies.find((cookie) => cookie.startsWith('litbuy_refresh='));
+    const csrf = loginCookies.find(
+      (cookie) => cookie.startsWith('litbuy_csrf=') && cookie.includes('Path=/;'),
+    );
+    const legacyCsrfClear = loginCookies.find(
+      (cookie) => cookie.startsWith('litbuy_csrf=;') && cookie.includes('Path=/api/v1/auth'),
+    );
+    expect(refresh).toEqual(expect.stringContaining('HttpOnly'));
+    expect(refresh).toEqual(expect.stringContaining('Path=/api/v1/auth'));
+    expect(refresh).toEqual(expect.stringContaining('SameSite=Lax'));
+    expect(csrf).toEqual(expect.stringContaining('Path=/;'));
+    expect(csrf).toEqual(expect.stringContaining('SameSite=Lax'));
+    expect(csrf).not.toContain('HttpOnly');
+    expect(legacyCsrfClear).toEqual(expect.stringContaining('Expires=Thu, 01 Jan 1970'));
+
+    const csrfValue = String(csrf).split(';')[0].split('=')[1];
+    const requestCookies = [refresh!, csrf!];
+    const refreshed = await request(app.getHttpServer())
+      .post('/api/v1/auth/refresh')
+      .set('Cookie', requestCookies)
+      .set('X-CSRF-Token', csrfValue)
+      .expect(HttpStatus.OK);
+    const rotatedCookies = refreshed.headers['set-cookie'] as unknown as string[];
+    expect(rotatedCookies.find((cookie) => cookie.startsWith('litbuy_refresh='))).toEqual(
+      expect.stringContaining('Path=/api/v1/auth'),
+    );
+    expect(
+      rotatedCookies.find(
+        (cookie) => cookie.startsWith('litbuy_csrf=') && cookie.includes('Path=/;'),
+      ),
+    ).not.toContain('HttpOnly');
+    expect(
+      rotatedCookies.find(
+        (cookie) => cookie.startsWith('litbuy_csrf=;') && cookie.includes('Path=/api/v1/auth'),
+      ),
+    ).toEqual(expect.stringContaining('Expires=Thu, 01 Jan 1970'));
+
+    const rotatedRefresh = rotatedCookies.find((cookie) => cookie.startsWith('litbuy_refresh='))!;
+    const rotatedCsrf = rotatedCookies.find(
+      (cookie) => cookie.startsWith('litbuy_csrf=') && cookie.includes('Path=/;'),
+    )!;
+    const logout = await request(app.getHttpServer())
+      .post('/api/v1/auth/logout')
+      .set('Cookie', [rotatedRefresh, rotatedCsrf])
+      .set('X-CSRF-Token', rotatedCsrf.split(';')[0].split('=')[1])
+      .expect(HttpStatus.OK);
+    const clearedCookies = logout.headers['set-cookie'] as unknown as string[];
+    expect(
+      clearedCookies.find(
+        (cookie) => cookie.startsWith('litbuy_refresh=;') && cookie.includes('Path=/api/v1/auth'),
+      ),
+    ).toEqual(expect.stringContaining('HttpOnly'));
+    expect(
+      clearedCookies.find(
+        (cookie) => cookie.startsWith('litbuy_csrf=;') && cookie.includes('Path=/;'),
+      ),
+    ).not.toContain('HttpOnly');
+    expect(
+      clearedCookies.find(
+        (cookie) => cookie.startsWith('litbuy_csrf=;') && cookie.includes('Path=/api/v1/auth'),
+      ),
+    ).toBeDefined();
+    expect(clearedCookies.some((cookie) => cookie.startsWith('litbuy_device=;'))).toBe(false);
+  });
+
   async function authenticated(email: string) {
     const reg = await register(email);
     await verifyLatest();
