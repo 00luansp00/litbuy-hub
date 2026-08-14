@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   buildPlan,
@@ -12,6 +14,21 @@ import {
 } from "../scripts/public-foundation-rehearsal";
 const names = (mode: "prepare" | "check" | "ci") => buildPlan(mode).map((s) => s.name);
 describe("public foundation rehearsal", () => {
+  it("wires the official local rehearsal explicitly to FAKE_ALPHA without a real PSP", () => {
+    const root = resolve(import.meta.dirname, "..");
+    const compose = readFileSync(resolve(root, "docker-compose.staging.yml"), "utf8");
+    const rehearsalEnv = readFileSync(resolve(root, "backend/.env.staging.local.example"), "utf8");
+
+    for (const service of ["migrate", "backend", "demo-data"]) {
+      const serviceBlock = compose.split(`  ${service}:`)[1]?.split(/^  [\w-]+:/m)[0];
+      expect(serviceBlock).toContain("env_file: ./backend/.env.staging.local.example");
+    }
+    expect(rehearsalEnv).toMatch(/^PAYMENT_PROVIDER_MODE=FAKE_ALPHA$/m);
+    expect(rehearsalEnv).not.toMatch(/^EFI_ENABLED=true$/m);
+    expect(rehearsalEnv).not.toMatch(
+      /^(EFI_CLIENT_ID|EFI_CLIENT_SECRET|EFI_PIX_MTLS_CERTIFICATE|EFI_PIX_MTLS_PRIVATE_KEY|EFI_PRODUCTION_APPROVED)=/m,
+    );
+  });
   it("builds the complete plans", () => {
     expect(names("prepare")).toEqual([
       "docker",

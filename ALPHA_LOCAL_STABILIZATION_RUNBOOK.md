@@ -47,7 +47,7 @@ Reutilize a composição existente; não crie um Compose paralelo:
 bun run demo:prepare
 ```
 
-O comando sobe `docker-compose.staging.yml`, aplica as migrations existentes, cria o bucket local, semeia/verifica os dados fictícios e mantém o ambiente ativo. Operação posterior:
+O comando sobe `docker-compose.staging.yml`, cuja configuração oficial seleciona explicitamente `PAYMENT_PROVIDER_MODE=FAKE_ALPHA` apenas para a simulação local não produtiva; aplica as migrations existentes, cria o bucket local, semeia/verifica os dados fictícios e mantém o ambiente ativo. Esse modo não representa PSP real nem autoriza dinheiro real. Operação posterior:
 
 ```bash
 bun run demo:check

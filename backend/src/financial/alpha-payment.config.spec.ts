@@ -6,6 +6,10 @@ describe('Alpha payment configuration', () => {
     expect(
       readAlphaPaymentConfig({ NODE_ENV: 'test', PAYMENT_PROVIDER_MODE: 'FAKE_ALPHA' }),
     ).toEqual({ enabled: true }));
+  it('also enables the explicit FAKE_ALPHA mode in development', () =>
+    expect(
+      readAlphaPaymentConfig({ NODE_ENV: 'development', PAYMENT_PROVIDER_MODE: 'FAKE_ALPHA' }),
+    ).toEqual({ enabled: true }));
   it('fails closed when FAKE_ALPHA is requested in production', () =>
     expect(() =>
       readAlphaPaymentConfig({ NODE_ENV: 'production', PAYMENT_PROVIDER_MODE: 'FAKE_ALPHA' }),
