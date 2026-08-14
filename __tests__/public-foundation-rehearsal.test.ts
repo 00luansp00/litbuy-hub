@@ -29,6 +29,12 @@ describe("public foundation rehearsal", () => {
       /^(EFI_CLIENT_ID|EFI_CLIENT_SECRET|EFI_PIX_MTLS_CERTIFICATE|EFI_PIX_MTLS_PRIVATE_KEY|EFI_PRODUCTION_APPROVED)=/m,
     );
   });
+  it("runs the Node-compatible TanStack Start output instead of an Nginx static fallback", () => {
+    const dockerfile = readFileSync(resolve(import.meta.dirname, "..", "Dockerfile"), "utf8");
+    expect(dockerfile).toContain("NITRO_PRESET=node-server");
+    expect(dockerfile).toContain('CMD ["node", ".output/server/index.mjs"]');
+    expect(dockerfile).not.toMatch(/FROM nginx|nginx\.staging\.conf|\/usr\/share\/nginx\/html/);
+  });
   it("builds the complete plans", () => {
     expect(names("prepare")).toEqual([
       "docker",
@@ -38,6 +44,8 @@ describe("public foundation rehearsal", () => {
       "compose:up",
       "health:live",
       "health:ready",
+      "frontend:root",
+      "frontend:login",
       "demo:seed",
       "demo:verify",
       "smoke:home-catalog",
@@ -47,6 +55,8 @@ describe("public foundation rehearsal", () => {
     expect(names("check")).toEqual([
       "health:live",
       "health:ready",
+      "frontend:root",
+      "frontend:login",
       "demo:verify",
       "smoke:home-catalog",
       "smoke:category-catalog",
@@ -54,6 +64,8 @@ describe("public foundation rehearsal", () => {
       "smoke:infra",
     ]);
     expect(names("ci")).toEqual([
+      "frontend:root",
+      "frontend:login",
       "demo:seed",
       "demo:verify",
       "smoke:home-catalog",
@@ -89,6 +101,17 @@ describe("public foundation rehearsal", () => {
       executePlan([{ kind: "http", name: "health:ready", url: defaults.api }], runner, () => {}),
     ).rejects.toMatchObject({ exitCode: 1 });
     expect(fetcher).toHaveBeenCalledOnce();
+  });
+  it("requires real LIT Buy HTML and rejects the Nginx welcome page", async () => {
+    const rootStep = buildPlan("check").find((step) => step.name === "frontend:root")!;
+    const good = createDefaultRunner(
+      vi.fn(async () => new Response("<title>LIT Buy — Marketplace premium para gamers</title>")),
+    );
+    const nginx = createDefaultRunner(
+      vi.fn(async () => new Response("<title>Welcome to nginx!</title>")),
+    );
+    expect(await good(rootStep)).toBe(0);
+    expect(await nginx(rootStep)).toBe(1);
   });
   it("stops, preserves exit code, and handles thrown runners", async () => {
     let calls = 0;
@@ -188,6 +211,7 @@ describe("public foundation rehearsal", () => {
       demoDataRemaining: true,
       publicProducts: 6,
       publicSmokes: 3,
+      frontendSmokes: 2,
     });
     expect(safeSummary("check")).toEqual({
       ok: true,
@@ -199,6 +223,7 @@ describe("public foundation rehearsal", () => {
       verifiedPublicProducts: 6,
       publicSmokes: 3,
       infrastructureSmoke: true,
+      frontendSmokes: 2,
     });
     expect(safeSummary("ci")).toEqual({
       ok: true,
@@ -207,6 +232,7 @@ describe("public foundation rehearsal", () => {
       api: defaults.api,
       minioConsole: defaults.minioConsole,
       publicSmokes: 3,
+      frontendSmokes: 2,
       secondSeedVerify: true,
       resets: 2,
       demoDataRemaining: false,
