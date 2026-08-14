@@ -78,35 +78,35 @@ describe('BuyerPaymentService Alpha confirmation', () => {
       order: { findFirst: jest.fn().mockResolvedValue(order) },
     };
     const events = { processOne: jest.fn().mockResolvedValue(true) };
-    const activation = { processOne: jest.fn().mockResolvedValue(true) };
+    const availability = { ensureAvailable: jest.fn().mockResolvedValue(undefined) };
     const service = new BuyerPaymentService(
       prisma as never,
       { initiateBilling: jest.fn() } as never,
       events as never,
-      activation as never,
+      availability as never,
       provider,
       { enabled: true },
     );
-    return { service, provider, simulate, tx, prisma, events, activation };
+    return { service, provider, simulate, tx, prisma, events, availability };
   }
   const key = (hash: string) => ({ hash }) as never;
 
-  it('persists then processes exactly the created event and activates only after PAID', async () => {
+  it('persists then processes exactly the created event and ensures availability only after PAID', async () => {
     const s = subject();
     await s.service.confirm('buyer', order.publicCode, attempt.id, key('same'));
     expect(s.tx.providerWebhookEvent.create.mock.invocationCallOrder[0]).toBeLessThan(
       s.simulate.mock.invocationCallOrder[0],
     );
     expect(s.events.processOne).toHaveBeenCalledWith(event.id);
-    expect(s.activation.processOne).toHaveBeenCalledWith(order.id);
+    expect(s.availability.ensureAvailable).toHaveBeenCalledWith(order.id);
   });
 
-  it('does not activate when the specific processor leaves payment unconfirmed', async () => {
+  it('does not progress the order when the specific processor leaves payment unconfirmed', async () => {
     const s = subject({ confirmed: false });
     await expect(
       s.service.confirm('buyer', order.publicCode, attempt.id, key('same')),
     ).rejects.toMatchObject({ code: 'PAYMENT_RECONCILIATION_REQUIRED' });
-    expect(s.activation.processOne).not.toHaveBeenCalled();
+    expect(s.availability.ensureAvailable).not.toHaveBeenCalled();
   });
 
   it('rejects incompatible key reuse before mutating fake provider', async () => {
@@ -125,6 +125,6 @@ describe('BuyerPaymentService Alpha confirmation', () => {
     await s.service.confirm('buyer', order.publicCode, attempt.id, key('same'));
     expect(s.simulate).not.toHaveBeenCalled();
     expect(s.events.processOne).not.toHaveBeenCalled();
-    expect(s.activation.processOne).toHaveBeenCalledTimes(1);
+    expect(s.availability.ensureAvailable).toHaveBeenCalledTimes(1);
   });
 });

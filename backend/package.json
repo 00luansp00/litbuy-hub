@@ -30,7 +30,8 @@
     "demo:verify": "ts-node src/cli/demo-data.ts verify",
     "demo:reset": "ts-node src/cli/demo-data.ts reset --confirm",
     "orders:expire": "ts-node src/orders/order-expiration.cli.ts",
-    "orders:activate-paid": "ts-node src/orders/paid-order-activation.cli.ts"
+    "orders:activate-paid": "ts-node src/orders/paid-order-activation.cli.ts",
+    "orders:make-fulfillment-available": "ts-node src/orders/order-fulfillment-availability.cli.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1095.0",

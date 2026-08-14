@@ -11,6 +11,7 @@ import { OrderFulfillmentController } from './order-fulfillment.controller';
 import { OrderFulfillmentService } from './order-fulfillment.service';
 import { SellerOrdersController } from './seller-orders.controller';
 import { SellerOrdersService } from './seller-orders.service';
+import { PaidOrderAvailabilityOrchestrator } from './paid-order-availability.orchestrator';
 @Module({
   imports: [DatabaseModule, AuthModule, JwtModule.register({})],
   controllers: [OrdersController, OrderFulfillmentController, SellerOrdersController],
@@ -19,6 +20,7 @@ import { SellerOrdersService } from './seller-orders.service';
     OrderExpirationService,
     PaidOrderActivationService,
     OrderFulfillmentService,
+    PaidOrderAvailabilityOrchestrator,
     CartCsrfGuard,
     SellerOrdersService,
   ],
@@ -27,6 +29,7 @@ import { SellerOrdersService } from './seller-orders.service';
     OrderExpirationService,
     PaidOrderActivationService,
     OrderFulfillmentService,
+    PaidOrderAvailabilityOrchestrator,
   ],
 })
 export class OrdersModule {}
