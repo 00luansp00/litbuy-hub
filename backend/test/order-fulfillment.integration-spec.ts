@@ -12,6 +12,7 @@ import { FinancialLedgerService } from '../src/financial/financial-ledger.servic
 import { SaleFinancialRecognitionService } from '../src/financial/sale-financial-recognition.service';
 import { OrderFulfillmentService } from '../src/orders/order-fulfillment.service';
 import { PaidOrderActivationService } from '../src/orders/paid-order-activation.service';
+import { PaidOrderAvailabilityOrchestrator } from '../src/orders/paid-order-availability.orchestrator';
 import { commerceFixture, publishPlatformCommissionPolicy } from './order-checkout-test.helpers';
 
 const cleanupSql = 'TRUNCATE TABLE "User", "CatalogCategory" CASCADE';
@@ -27,6 +28,7 @@ describe('OrderFulfillmentService with real PostgreSQL', () => {
   let recognition: SaleFinancialRecognitionService;
   let ledger: FinancialLedgerService;
   let fulfillment: OrderFulfillmentService;
+  let availability: PaidOrderAvailabilityOrchestrator;
   let policyVersion = 50_000;
 
   beforeAll(async () => {
@@ -39,6 +41,7 @@ describe('OrderFulfillmentService with real PostgreSQL', () => {
     recognition = app.get(SaleFinancialRecognitionService);
     ledger = app.get(FinancialLedgerService);
     fulfillment = app.get(OrderFulfillmentService);
+    availability = app.get(PaidOrderAvailabilityOrchestrator);
   });
   beforeEach(() => cleanup.$executeRawUnsafe(cleanupSql));
   afterAll(async () => {
@@ -187,6 +190,84 @@ describe('OrderFulfillmentService with real PostgreSQL', () => {
     expect(balance('SELLER_HELD')).toBe(0n);
     expect(balance('SELLER_AVAILABLE')).toBe(0n);
     expect(balance('SELLER_RESERVED')).toBe(0n);
+  });
+
+  it('orchestrates an already active paid order and treats availability replay as success', async () => {
+    const { order } = await activePaid(false);
+    const initialVersion = order.version;
+    const financialBaseline = await financialCounts();
+
+    await availability.ensureAvailable(order.id);
+    await availability.ensureAvailable(order.id);
+
+    expect(await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).toMatchObject({
+      status: 'ACTIVE',
+      paymentStatus: 'PAID',
+      fulfillmentStatus: 'AWAITING_SELLER',
+      version: initialVersion + 1,
+    });
+    expect(
+      await prisma.orderEvent.count({
+        where: { orderId: order.id, type: 'FULFILLMENT_AVAILABLE' },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.outboxEvent.count({
+        where: { aggregateId: order.id, eventType: 'fulfillment.available' },
+      }),
+    ).toBe(1);
+    expect(await financialCounts()).toEqual(financialBaseline);
+    expect(
+      await prisma.ledgerTransaction.count({
+        where: { type: 'SALE_RECOGNIZED', referenceId: order.id },
+      }),
+    ).toBe(0);
+  });
+
+  it('fails closed for active fulfillment reconciliation in direct and batch paths', async () => {
+    for (const status of ['OPEN', 'INVESTIGATING'] as const) {
+      const { order } = await activePaid(false);
+      await prisma.reconciliationIssue.create({
+        data: {
+          type: 'OTHER',
+          referenceType: 'OrderFulfillment',
+          referenceId: order.id,
+          status,
+          details: { errorCode: 'TEST_QUARANTINE' },
+        },
+      });
+
+      expect(await fulfillment.makeAvailable(order.id)).toBe(false);
+      await expect(availability.ensureAvailable(order.id)).rejects.toMatchObject({ status: 409 });
+      expect(await fulfillment.processAvailabilityBatch()).toBe(0);
+      expect(await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).toMatchObject({
+        fulfillmentStatus: 'NOT_AVAILABLE',
+      });
+    }
+  });
+
+  it('recovers stuck availability in a finite batch and replays without duplication', async () => {
+    const first = await activePaid(false);
+    const second = await activePaid(false);
+    const ids = [first.order.id, second.order.id];
+
+    expect(await fulfillment.processAvailabilityBatch()).toBe(2);
+    expect(await fulfillment.processAvailabilityBatch()).toBe(0);
+    expect(
+      await prisma.order.count({
+        where: { id: { in: ids }, fulfillmentStatus: 'AWAITING_SELLER' },
+      }),
+    ).toBe(2);
+    expect(
+      await prisma.orderEvent.count({
+        where: { orderId: { in: ids }, type: 'FULFILLMENT_AVAILABLE' },
+      }),
+    ).toBe(2);
+    expect(
+      await prisma.outboxEvent.count({
+        where: { aggregateId: { in: ids }, eventType: 'fulfillment.available' },
+      }),
+    ).toBe(2);
   });
 
   it('serializes availability, delivery, confirmation, and completion replays', async () => {

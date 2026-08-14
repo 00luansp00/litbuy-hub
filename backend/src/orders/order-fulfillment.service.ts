@@ -255,6 +255,7 @@ export class OrderFulfillmentService {
       await acquireAdvisoryTransactionLock(tx, `order:${orderId}`);
       const order = await this.lockOrder(tx, orderId);
       if (!order) return 'ALREADY_HANDLED';
+      if (await this.hasActiveIssue(tx, order.id)) return 'ALREADY_HANDLED';
       if (order.fulfillmentStatus === FulfillmentStatus.AWAITING_SELLER) return 'ALREADY_HANDLED';
       const validation = await this.validateProgression(tx, order, FulfillmentStatus.NOT_AVAILABLE);
       if (validation) return 'ALREADY_HANDLED';
