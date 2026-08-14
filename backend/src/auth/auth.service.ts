@@ -574,24 +574,36 @@ export class AuthService {
     );
   }
 
-  private cookieOptions(httpOnly = true): CookieOptions {
+  private cookieOptions(httpOnly: boolean, path: string): CookieOptions {
     const c = this.authConfig();
     return {
       httpOnly,
       secure: c.cookieSecure,
       sameSite: c.cookieSameSite,
       domain: c.cookieDomain,
-      path: '/api/v1/auth',
+      path,
     };
   }
 
-  private clearCookieOptions(): CookieOptions {
-    return this.cookieOptions(true);
+  private refreshCookieOptions(): CookieOptions {
+    return this.cookieOptions(true, '/api/v1/auth');
+  }
+
+  private csrfCookieOptions(): CookieOptions {
+    return this.cookieOptions(false, '/');
+  }
+
+  private legacyCsrfCookieOptions(): CookieOptions {
+    return this.cookieOptions(false, '/api/v1/auth');
+  }
+
+  private deviceCookieOptions(): CookieOptions {
+    return this.cookieOptions(true, '/api/v1/auth');
   }
 
   private setDevice(res: Response, token: string): void {
     res.cookie(this.authConfig().deviceCookieName, token, {
-      ...this.cookieOptions(true),
+      ...this.deviceCookieOptions(),
       maxAge: 400 * 24 * 3600_000,
     });
   }
@@ -599,19 +611,21 @@ export class AuthService {
   private setRefreshAndCsrfCookies(res: Response, refresh: string, csrf: string): void {
     const c = this.authConfig();
     res.cookie(c.refreshCookieName, refresh, {
-      ...this.cookieOptions(true),
+      ...this.refreshCookieOptions(),
       maxAge: c.refreshTtlDays * 86400_000,
     });
     res.cookie(c.csrfCookieName, csrf, {
-      ...this.cookieOptions(false),
+      ...this.csrfCookieOptions(),
       maxAge: c.refreshTtlDays * 86400_000,
     });
+    res.clearCookie(c.csrfCookieName, this.legacyCsrfCookieOptions());
   }
 
   private clearAuth(res: Response): void {
     const c = this.authConfig();
-    res.clearCookie(c.refreshCookieName, this.clearCookieOptions());
-    res.clearCookie(c.csrfCookieName, this.clearCookieOptions());
+    res.clearCookie(c.refreshCookieName, this.refreshCookieOptions());
+    res.clearCookie(c.csrfCookieName, this.csrfCookieOptions());
+    res.clearCookie(c.csrfCookieName, this.legacyCsrfCookieOptions());
   }
 
   private ipHash(req: Request): string {
@@ -3146,7 +3160,7 @@ export class AuthService {
       });
     if (deviceId === auth.deviceId) {
       this.clearAuth(res);
-      res.clearCookie(this.authConfig().deviceCookieName, this.clearCookieOptions());
+      res.clearCookie(this.authConfig().deviceCookieName, this.deviceCookieOptions());
     }
     return { message: 'Dispositivo revogado.' };
   }

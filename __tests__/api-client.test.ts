@@ -115,6 +115,57 @@ describe("apiFetch", () => {
     expect(fetch.mock.calls[0][1].headers.has("X-CSRF-Token")).toBe(false);
   });
 
+  it.each(["POST", "PUT", "PATCH", "DELETE"])(
+    "adds the current CSRF cookie to unsafe %s requests",
+    async (method) => {
+      document.cookie = "litbuy_csrf=current%20csrf; path=/";
+      const fetch = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+      vi.stubGlobal("fetch", fetch);
+
+      await apiFetch("/protected", { method });
+
+      expect(fetch.mock.calls[0][1].credentials).toBe("include");
+      expect(fetch.mock.calls[0][1].headers.get("X-CSRF-Token")).toBe("current csrf");
+    },
+  );
+
+  it("does not add a CSRF header to GET or fabricate one when the cookie is absent", async () => {
+    const fetch = vi
+      .fn()
+      .mockImplementation(() => Promise.resolve(new Response("{}", { status: 200 })));
+    vi.stubGlobal("fetch", fetch);
+
+    await apiFetch("/safe");
+    await apiFetch("/unsafe-without-cookie", { method: "POST" });
+
+    expect(fetch.mock.calls[0][1].headers.has("X-CSRF-Token")).toBe(false);
+    expect(fetch.mock.calls[1][1].headers.has("X-CSRF-Token")).toBe(false);
+  });
+
+  it("re-reads a rotated CSRF cookie before retrying the original request", async () => {
+    document.cookie = "litbuy_csrf=old; path=/";
+    setAccessToken("old-access");
+    const fetch = vi.fn(async (url: string) => {
+      if (url.endsWith("/auth/refresh")) {
+        document.cookie = "litbuy_csrf=rotated; path=/";
+        return new Response(JSON.stringify({ accessToken: "new-access" }), { status: 200 });
+      }
+      const privateCalls = fetch.mock.calls.filter((call) => String(call[0]).endsWith("/private"));
+      return new Response(JSON.stringify({ ok: privateCalls.length > 1 }), {
+        status: privateCalls.length > 1 ? 200 : 401,
+      });
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(apiFetch("/private", { method: "POST" })).resolves.toEqual({ ok: true });
+
+    const privateCalls = fetch.mock.calls.filter((call) => String(call[0]).endsWith("/private"));
+    const refreshCall = fetch.mock.calls.find((call) => String(call[0]).endsWith("/auth/refresh"))!;
+    expect(privateCalls[0][1].headers.get("X-CSRF-Token")).toBe("old");
+    expect(refreshCall[1].headers.get("X-CSRF-Token")).toBe("old");
+    expect(privateCalls[1][1].headers.get("X-CSRF-Token")).toBe("rotated");
+  });
+
   it("single-flights refresh, retries once, and does not loop on a second 401", async () => {
     setAccessToken("old");
     let refresh = 0;
