@@ -27,10 +27,30 @@ export class ApiError extends Error {
   }
 }
 
-function resolveApiBaseUrl(): string {
-  const configured = import.meta.env.VITE_API_BASE_URL;
+type ApiBaseUrlOptions = {
+  isServer?: boolean;
+  internalApiBaseUrl?: string;
+  publicApiBaseUrl?: string;
+  isDevelopment?: boolean;
+  mode?: string;
+};
+
+export function resolveApiBaseUrl(options: ApiBaseUrlOptions = {}): string {
+  const isServer = options.isServer ?? typeof window === "undefined";
+  const internalApiBaseUrl =
+    options.internalApiBaseUrl ??
+    (isServer && typeof process !== "undefined"
+      ? process.env.LITBUY_INTERNAL_API_BASE_URL
+      : undefined);
+  if (isServer && internalApiBaseUrl) return internalApiBaseUrl.replace(/\/$/, "");
+
+  const configured = options.publicApiBaseUrl ?? import.meta.env.VITE_API_BASE_URL;
   if (configured) return configured.replace(/\/$/, "");
-  if (import.meta.env.DEV || import.meta.env.MODE === "test") return "http://localhost:3001/api/v1";
+  if (
+    (options.isDevelopment ?? import.meta.env.DEV) ||
+    (options.mode ?? import.meta.env.MODE) === "test"
+  )
+    return "http://localhost:3001/api/v1";
   throw new Error("VITE_API_BASE_URL deve ser definido em production.");
 }
 const API_BASE_URL = resolveApiBaseUrl();

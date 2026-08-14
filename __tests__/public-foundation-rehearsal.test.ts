@@ -35,6 +35,18 @@ describe("public foundation rehearsal", () => {
     expect(dockerfile).toContain('CMD ["node", ".output/server/index.mjs"]');
     expect(dockerfile).not.toMatch(/FROM nginx|nginx\.staging\.conf|\/usr\/share\/nginx\/html/);
   });
+  it("keeps separate public browser and internal SSR API bases in Compose", () => {
+    const compose = readFileSync(
+      resolve(import.meta.dirname, "..", "docker-compose.staging.yml"),
+      "utf8",
+    );
+    const frontend = compose.split("  frontend:")[1]?.split(/^ {2}[\w-]+:/m)[0];
+    expect(frontend).toContain(
+      "VITE_API_BASE_URL: ${STAGING_PUBLIC_API_BASE_URL:-http://localhost:13001/api/v1}",
+    );
+    expect(frontend).toContain("LITBUY_INTERNAL_API_BASE_URL: http://backend:3001/api/v1");
+    expect(frontend).not.toContain("VITE_LITBUY_INTERNAL_API_BASE_URL");
+  });
   it("builds the complete plans", () => {
     expect(names("prepare")).toEqual([
       "docker",
