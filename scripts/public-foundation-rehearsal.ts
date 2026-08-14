@@ -7,7 +7,13 @@ export type ProcessStep = {
   env?: Record<string, string>;
 };
 export type HttpStep = { kind: "http"; name: string; url: string };
-export type Step = ProcessStep | HttpStep;
+export type FrontendStep = {
+  kind: "frontend";
+  name: string;
+  url: string;
+  marker: string;
+};
+export type Step = ProcessStep | HttpStep | FrontendStep;
 export type Runner = (step: Step) => Promise<number>;
 
 const compose = ["docker", "compose", "-f", "docker-compose.staging.yml"];
@@ -93,6 +99,23 @@ function publicSmokes(targets: Targets): ProcessStep[] {
   ];
 }
 
+function frontendSmokes(targets: Targets): FrontendStep[] {
+  return [
+    {
+      kind: "frontend",
+      name: "frontend:root",
+      url: `${targets.frontend}/`,
+      marker: "LIT Buy — Marketplace premium para gamers",
+    },
+    {
+      kind: "frontend",
+      name: "frontend:login",
+      url: `${targets.frontend}/login`,
+      marker: "Entrar na LIT Buy",
+    },
+  ];
+}
+
 export function buildPlan(mode: Mode, targets = defaults): Step[] {
   const health: HttpStep[] = ["live", "ready"].map((name) => ({
     kind: "http",
@@ -101,6 +124,7 @@ export function buildPlan(mode: Mode, targets = defaults): Step[] {
   }));
   if (mode === "ci")
     return [
+      ...frontendSmokes(targets),
       processStep("demo:seed"),
       processStep("demo:verify"),
       ...publicSmokes(targets),
@@ -112,6 +136,7 @@ export function buildPlan(mode: Mode, targets = defaults): Step[] {
   if (mode === "check")
     return [
       ...health,
+      ...frontendSmokes(targets),
       processStep("demo:verify"),
       ...publicSmokes(targets),
       processStep("smoke:infra", undefined, {
@@ -126,6 +151,7 @@ export function buildPlan(mode: Mode, targets = defaults): Step[] {
     processStep("compose:demo-config", [...compose, "--profile", "demo", "config", "-q"]),
     processStep("compose:up", [...compose, "up", "-d", "--build", "--wait"]),
     ...health,
+    ...frontendSmokes(targets),
     processStep("demo:seed"),
     processStep("demo:verify"),
     ...publicSmokes(targets),
@@ -134,12 +160,17 @@ export function buildPlan(mode: Mode, targets = defaults): Step[] {
 
 export function createDefaultRunner(fetcher: typeof fetch = fetch): Runner {
   return async (step) => {
-    if (step.kind === "http") {
+    if (step.kind === "http" || step.kind === "frontend") {
       const response = await fetcher(step.url, {
         signal: AbortSignal.timeout(10_000),
         redirect: "error",
       });
-      return response.ok ? 0 : 1;
+      if (!response.ok) return 1;
+      if (step.kind === "frontend") {
+        const html = await response.text();
+        return html.includes(step.marker) && !html.includes("Welcome to nginx!") ? 0 : 1;
+      }
+      return 0;
     }
     const child = Bun.spawn(step.command, {
       cwd: import.meta.dir + "/..",
@@ -191,6 +222,7 @@ export function safeSummary(mode: Mode, targets = defaults) {
       demoDataRemaining: true,
       publicProducts: 6,
       publicSmokes: 3,
+      frontendSmokes: 2,
     };
   if (mode === "check")
     return {
@@ -201,12 +233,14 @@ export function safeSummary(mode: Mode, targets = defaults) {
       verifiedPublicProducts: 6,
       publicSmokes: 3,
       infrastructureSmoke: true,
+      frontendSmokes: 2,
     };
   return {
     ok: true,
     mode,
     ...endpoints,
     publicSmokes: 3,
+    frontendSmokes: 2,
     secondSeedVerify: true,
     resets: 2,
     demoDataRemaining: false,

@@ -100,6 +100,8 @@ services:
       context: .
       args:
         VITE_API_BASE_URL: ${STAGING_PUBLIC_API_BASE_URL:-http://localhost:13001/api/v1}
+    environment:
+      LITBUY_INTERNAL_API_BASE_URL: http://backend:3001/api/v1
     depends_on:
       backend: { condition: service_healthy }
     ports: ["127.0.0.1:${STAGING_FRONTEND_PORT:-13000}:3000"]
