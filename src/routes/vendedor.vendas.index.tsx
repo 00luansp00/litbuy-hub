@@ -9,10 +9,11 @@ import {
   fulfillmentState,
   paymentState,
   useSellerSales,
+  type SellerSale,
 } from "@/services/orders";
 
 type Search = { page?: number };
-export const Route = createFileRoute("/vendedor/vendas")({
+export const Route = createFileRoute("/vendedor/vendas/")({
   validateSearch: (raw: Record<string, unknown>): Search => ({
     page:
       typeof raw.page === "number" &&
@@ -30,7 +31,7 @@ export const Route = createFileRoute("/vendedor/vendas")({
 });
 export function Sales() {
   const page = Route.useSearch().page ?? 1;
-  const navigate = useNavigate({ from: "/vendedor/vendas" });
+  const navigate = useNavigate({ from: "/vendedor/vendas/" });
   const query = useSellerSales(page, 20);
   return (
     <SellerDashboardLayout
@@ -63,27 +64,7 @@ export function Sales() {
         <>
           <ul aria-label="Vendas do Seller" className="space-y-3">
             {query.data.items.map((sale) => (
-              <li key={sale.orderCode} className="rounded-xl border p-5">
-                <div className="flex justify-between gap-3">
-                  <Link
-                    to="/vendedor/vendas/$id"
-                    params={{ id: sale.orderCode }}
-                    className="font-semibold text-primary hover:underline"
-                  >
-                    {sale.orderCode}
-                  </Link>
-                  <strong>{formatBrlMinor(sale.saleAmountMinor)}</strong>
-                </div>
-                <p className="mt-2 text-sm">
-                  {sale.items[0].productTitle}
-                  {sale.items.length > 1 ? ` e mais ${sale.items.length - 1} item(ns)` : ""}
-                </p>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {formatOrderDate(sale.createdAt)} · Pagamento:{" "}
-                  {paymentState[sale.paymentStatus][0]} · Entrega:{" "}
-                  {fulfillmentState[sale.fulfillmentStatus][0]}
-                </p>
-              </li>
+              <SellerSaleListItem key={sale.orderCode} sale={sale} />
             ))}
           </ul>
           <nav aria-label="Paginação de vendas" className="mt-4 flex justify-between">
@@ -106,5 +87,30 @@ export function Sales() {
         </>
       )}
     </SellerDashboardLayout>
+  );
+}
+
+export function SellerSaleListItem({ sale }: { sale: SellerSale }) {
+  return (
+    <li className="rounded-xl border p-5">
+      <div className="flex justify-between gap-3">
+        <Link
+          to="/vendedor/vendas/$id"
+          params={{ id: sale.orderCode }}
+          className="font-semibold text-primary hover:underline"
+        >
+          {sale.orderCode}
+        </Link>
+        <strong>{formatBrlMinor(sale.saleAmountMinor)}</strong>
+      </div>
+      <p className="mt-2 text-sm">
+        {sale.items[0].productTitle}
+        {sale.items.length > 1 ? ` e mais ${sale.items.length - 1} item(ns)` : ""}
+      </p>
+      <p className="mt-2 text-xs text-muted-foreground">
+        {formatOrderDate(sale.createdAt)} · Pagamento: {paymentState[sale.paymentStatus][0]} ·
+        Entrega: {fulfillmentState[sale.fulfillmentStatus][0]}
+      </p>
+    </li>
   );
 }

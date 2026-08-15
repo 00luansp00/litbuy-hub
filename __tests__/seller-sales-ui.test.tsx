@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api/client";
 import { Detail } from "@/routes/vendedor.vendas.$id";
-import { Sales } from "@/routes/vendedor.vendas";
+import { Sales } from "@/routes/vendedor.vendas.index";
 import { sellerSaleKeys, sellerSalesService, type SellerSale } from "@/services/orders";
 
 const router = vi.hoisted(() => ({ search: { page: 1 } as { page?: number }, navigate: vi.fn() }));

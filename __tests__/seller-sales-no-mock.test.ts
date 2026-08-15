@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const critical = [
-  "src/routes/vendedor.vendas.tsx",
+  "src/routes/vendedor.vendas.index.tsx",
   "src/routes/vendedor.vendas.$id.tsx",
   "src/services/orders/sellerSales.ts",
 ];
