@@ -61,6 +61,9 @@ const externalUser = (id: string, email: string) => ({
 describe('local demo data with real PostgreSQL and MinIO', () => {
   jest.setTimeout(180_000);
   let app: INestApplication;
+  const cleanupIntegrationDatabase = () =>
+    prisma.$executeRawUnsafe('TRUNCATE TABLE "User", "CatalogCategory" CASCADE');
+
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
@@ -73,11 +76,16 @@ describe('local demo data with real PostgreSQL and MinIO', () => {
     );
     app.useGlobalFilters(new GlobalExceptionFilter());
     await app.init();
+    // This suite shares an ephemeral PostgreSQL database with financial integration suites.
+    // Test-only truncation prevents their immutable published policies from leaking in here.
+    await cleanupIntegrationDatabase();
     await (await app.get(RedisService).getClient()).flushdb();
     await runDemoCommand(['reset', '--confirm'], env);
   });
   afterAll(async () => {
     await runDemoCommand(['reset', '--confirm'], env);
+    // Do not leak this suite's intentionally persistent financial baseline to later suites.
+    await cleanupIntegrationDatabase();
     await app.close();
     s3.destroy();
     await prisma.$disconnect();
@@ -159,6 +167,60 @@ describe('local demo data with real PostgreSQL and MinIO', () => {
       platformCommissionAmountMinor: 0n,
       sellerNetAmountMinor: order.subtotalAmountMinor,
     });
+  });
+
+  it('fails closed for an effective external fee policy without modifying it', async () => {
+    await cleanupIntegrationDatabase();
+    const externalAuthor = await prisma.user.create({
+      data: externalUser(
+        crypto.randomUUID(),
+        `external-policy-${crypto.randomUUID()}@example.test`,
+      ),
+    });
+    const externalPolicy = await prisma.feePolicyVersion.create({
+      data: {
+        publicVersion: 1,
+        status: 'DRAFT',
+        effectiveFrom: new Date('2025-01-01T00:00:00.000Z'),
+        createdByUserId: externalAuthor.id,
+        rules: {
+          create: {
+            category: 'PLATFORM_COMMISSION',
+            code: 'external-zero-commission',
+            formula: 'FIXED',
+            partyCharged: 'SELLER',
+            fixedAmountMinor: 0n,
+          },
+        },
+      },
+    });
+    await prisma.feePolicyVersion.update({
+      where: { id: externalPolicy.id },
+      data: {
+        status: 'ACTIVE',
+        publishedByUserId: externalAuthor.id,
+        publishedAt: new Date(),
+      },
+    });
+    try {
+      await expect(runDemoCommand(['seed'], env)).rejects.toMatchObject({
+        code: 'DEMO_DATA_NAMESPACE_CONFLICT',
+      });
+      expect(
+        await prisma.feePolicyVersion.findUnique({ where: { id: externalPolicy.id } }),
+      ).toMatchObject({
+        status: 'ACTIVE',
+        publicVersion: 1,
+        createdByUserId: externalAuthor.id,
+      });
+      expect(
+        await prisma.feePolicyVersion.findUnique({ where: { id: DEMO_FEE_POLICY.id } }),
+      ).toBeNull();
+    } finally {
+      await cleanupIntegrationDatabase();
+      await runDemoCommand(['seed'], env);
+      await runDemoCommand(['verify'], env);
+    }
   });
 
   it('verifies the demo namespace while a publishable external product is interleaved', async () => {
