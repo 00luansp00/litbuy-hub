@@ -20,7 +20,6 @@ import { Route as RedefinirSenhaRouteImport } from './routes/redefinir-senha'
 import { Route as RecuperarSenhaRouteImport } from './routes/recuperar-senha'
 import { Route as PrivacidadeRouteImport } from './routes/privacidade'
 import { Route as PoliticaDeReembolsoRouteImport } from './routes/politica-de-reembolso'
-import { Route as PedidosRouteImport } from './routes/pedidos'
 import { Route as NotificacoesRouteImport } from './routes/notificacoes'
 import { Route as MensagensRouteImport } from './routes/mensagens'
 import { Route as LoginRouteImport } from './routes/login'
@@ -42,6 +41,7 @@ import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as VendedorIndexRouteImport } from './routes/vendedor.index'
 import { Route as PerfilIndexRouteImport } from './routes/perfil.index'
+import { Route as PedidosIndexRouteImport } from './routes/pedidos.index'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as VendedorVendasRouteImport } from './routes/vendedor.vendas'
 import { Route as VendedorFinanceiroRouteImport } from './routes/vendedor.financeiro'
@@ -131,11 +131,6 @@ const PrivacidadeRoute = PrivacidadeRouteImport.update({
 const PoliticaDeReembolsoRoute = PoliticaDeReembolsoRouteImport.update({
   id: '/politica-de-reembolso',
   path: '/politica-de-reembolso',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PedidosRoute = PedidosRouteImport.update({
-  id: '/pedidos',
-  path: '/pedidos',
   getParentRoute: () => rootRouteImport,
 } as any)
 const NotificacoesRoute = NotificacoesRouteImport.update({
@@ -243,6 +238,11 @@ const PerfilIndexRoute = PerfilIndexRouteImport.update({
   path: '/perfil/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PedidosIndexRoute = PedidosIndexRouteImport.update({
+  id: '/pedidos/',
+  path: '/pedidos/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminIndexRoute = AdminIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -299,9 +299,9 @@ const PerfilPreferenciasRoute = PerfilPreferenciasRouteImport.update({
   getParentRoute: () => rootRouteImport,
 } as any)
 const PedidosIdRoute = PedidosIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => PedidosRoute,
+  id: '/pedidos/$id',
+  path: '/pedidos/$id',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const PagamentoIdRoute = PagamentoIdRouteImport.update({
   id: '/pagamento/$id',
@@ -440,7 +440,6 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/mensagens': typeof MensagensRouteWithChildren
   '/notificacoes': typeof NotificacoesRoute
-  '/pedidos': typeof PedidosRouteWithChildren
   '/politica-de-reembolso': typeof PoliticaDeReembolsoRoute
   '/privacidade': typeof PrivacidadeRoute
   '/recuperar-senha': typeof RecuperarSenhaRoute
@@ -483,6 +482,7 @@ export interface FileRoutesByFullPath {
   '/vendedor/financeiro': typeof VendedorFinanceiroRoute
   '/vendedor/vendas': typeof VendedorVendasRouteWithChildren
   '/admin/': typeof AdminIndexRoute
+  '/pedidos/': typeof PedidosIndexRoute
   '/perfil/': typeof PerfilIndexRoute
   '/vendedor/': typeof VendedorIndexRoute
   '/vendedor/anuncios/novo': typeof VendedorAnunciosNovoRoute
@@ -509,7 +509,6 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/mensagens': typeof MensagensRouteWithChildren
   '/notificacoes': typeof NotificacoesRoute
-  '/pedidos': typeof PedidosRouteWithChildren
   '/politica-de-reembolso': typeof PoliticaDeReembolsoRoute
   '/privacidade': typeof PrivacidadeRoute
   '/recuperar-senha': typeof RecuperarSenhaRoute
@@ -550,6 +549,7 @@ export interface FileRoutesByTo {
   '/vendedor/financeiro': typeof VendedorFinanceiroRoute
   '/vendedor/vendas': typeof VendedorVendasRouteWithChildren
   '/admin': typeof AdminIndexRoute
+  '/pedidos': typeof PedidosIndexRoute
   '/perfil': typeof PerfilIndexRoute
   '/vendedor': typeof VendedorIndexRoute
   '/vendedor/anuncios/novo': typeof VendedorAnunciosNovoRoute
@@ -578,7 +578,6 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/mensagens': typeof MensagensRouteWithChildren
   '/notificacoes': typeof NotificacoesRoute
-  '/pedidos': typeof PedidosRouteWithChildren
   '/politica-de-reembolso': typeof PoliticaDeReembolsoRoute
   '/privacidade': typeof PrivacidadeRoute
   '/recuperar-senha': typeof RecuperarSenhaRoute
@@ -621,6 +620,7 @@ export interface FileRoutesById {
   '/vendedor/financeiro': typeof VendedorFinanceiroRoute
   '/vendedor/vendas': typeof VendedorVendasRouteWithChildren
   '/admin/': typeof AdminIndexRoute
+  '/pedidos/': typeof PedidosIndexRoute
   '/perfil/': typeof PerfilIndexRoute
   '/vendedor/': typeof VendedorIndexRoute
   '/vendedor/anuncios/novo': typeof VendedorAnunciosNovoRoute
@@ -650,7 +650,6 @@ export interface FileRouteTypes {
     | '/login'
     | '/mensagens'
     | '/notificacoes'
-    | '/pedidos'
     | '/politica-de-reembolso'
     | '/privacidade'
     | '/recuperar-senha'
@@ -693,6 +692,7 @@ export interface FileRouteTypes {
     | '/vendedor/financeiro'
     | '/vendedor/vendas'
     | '/admin/'
+    | '/pedidos/'
     | '/perfil/'
     | '/vendedor/'
     | '/vendedor/anuncios/novo'
@@ -719,7 +719,6 @@ export interface FileRouteTypes {
     | '/login'
     | '/mensagens'
     | '/notificacoes'
-    | '/pedidos'
     | '/politica-de-reembolso'
     | '/privacidade'
     | '/recuperar-senha'
@@ -760,6 +759,7 @@ export interface FileRouteTypes {
     | '/vendedor/financeiro'
     | '/vendedor/vendas'
     | '/admin'
+    | '/pedidos'
     | '/perfil'
     | '/vendedor'
     | '/vendedor/anuncios/novo'
@@ -787,7 +787,6 @@ export interface FileRouteTypes {
     | '/login'
     | '/mensagens'
     | '/notificacoes'
-    | '/pedidos'
     | '/politica-de-reembolso'
     | '/privacidade'
     | '/recuperar-senha'
@@ -830,6 +829,7 @@ export interface FileRouteTypes {
     | '/vendedor/financeiro'
     | '/vendedor/vendas'
     | '/admin/'
+    | '/pedidos/'
     | '/perfil/'
     | '/vendedor/'
     | '/vendedor/anuncios/novo'
@@ -858,7 +858,6 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   MensagensRoute: typeof MensagensRouteWithChildren
   NotificacoesRoute: typeof NotificacoesRoute
-  PedidosRoute: typeof PedidosRouteWithChildren
   PoliticaDeReembolsoRoute: typeof PoliticaDeReembolsoRoute
   PrivacidadeRoute: typeof PrivacidadeRoute
   RecuperarSenhaRoute: typeof RecuperarSenhaRoute
@@ -873,11 +872,13 @@ export interface RootRouteChildren {
   CategoriaSlugRoute: typeof CategoriaSlugRoute
   LojaSlugRoute: typeof LojaSlugRoute
   PagamentoIdRoute: typeof PagamentoIdRoute
+  PedidosIdRoute: typeof PedidosIdRoute
   PerfilPreferenciasRoute: typeof PerfilPreferenciasRoute
   PerfilSegurancaRoute: typeof PerfilSegurancaRoute
   PerfilVendedorRoute: typeof PerfilVendedorRoute
   PerfilVerificacaoRoute: typeof PerfilVerificacaoRoute
   ProdutoIdRoute: typeof ProdutoIdRoute
+  PedidosIndexRoute: typeof PedidosIndexRoute
   PerfilIndexRoute: typeof PerfilIndexRoute
 }
 
@@ -958,13 +959,6 @@ declare module '@tanstack/react-router' {
       path: '/politica-de-reembolso'
       fullPath: '/politica-de-reembolso'
       preLoaderRoute: typeof PoliticaDeReembolsoRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/pedidos': {
-      id: '/pedidos'
-      path: '/pedidos'
-      fullPath: '/pedidos'
-      preLoaderRoute: typeof PedidosRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/notificacoes': {
@@ -1114,6 +1108,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PerfilIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/pedidos/': {
+      id: '/pedidos/'
+      path: '/pedidos'
+      fullPath: '/pedidos/'
+      preLoaderRoute: typeof PedidosIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/': {
       id: '/admin/'
       path: '/'
@@ -1193,10 +1194,10 @@ declare module '@tanstack/react-router' {
     }
     '/pedidos/$id': {
       id: '/pedidos/$id'
-      path: '/$id'
+      path: '/pedidos/$id'
       fullPath: '/pedidos/$id'
       preLoaderRoute: typeof PedidosIdRouteImport
-      parentRoute: typeof PedidosRoute
+      parentRoute: typeof rootRouteImport
     }
     '/pagamento/$id': {
       id: '/pagamento/$id'
@@ -1414,17 +1415,6 @@ const MensagensRouteWithChildren = MensagensRoute._addFileChildren(
   MensagensRouteChildren,
 )
 
-interface PedidosRouteChildren {
-  PedidosIdRoute: typeof PedidosIdRoute
-}
-
-const PedidosRouteChildren: PedidosRouteChildren = {
-  PedidosIdRoute: PedidosIdRoute,
-}
-
-const PedidosRouteWithChildren =
-  PedidosRoute._addFileChildren(PedidosRouteChildren)
-
 interface VendedorAnunciosRouteChildren {
   VendedorAnunciosNovoRoute: typeof VendedorAnunciosNovoRoute
   VendedorAnunciosIndexRoute: typeof VendedorAnunciosIndexRoute
@@ -1494,7 +1484,6 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   MensagensRoute: MensagensRouteWithChildren,
   NotificacoesRoute: NotificacoesRoute,
-  PedidosRoute: PedidosRouteWithChildren,
   PoliticaDeReembolsoRoute: PoliticaDeReembolsoRoute,
   PrivacidadeRoute: PrivacidadeRoute,
   RecuperarSenhaRoute: RecuperarSenhaRoute,
@@ -1509,11 +1498,13 @@ const rootRouteChildren: RootRouteChildren = {
   CategoriaSlugRoute: CategoriaSlugRoute,
   LojaSlugRoute: LojaSlugRoute,
   PagamentoIdRoute: PagamentoIdRoute,
+  PedidosIdRoute: PedidosIdRoute,
   PerfilPreferenciasRoute: PerfilPreferenciasRoute,
   PerfilSegurancaRoute: PerfilSegurancaRoute,
   PerfilVendedorRoute: PerfilVendedorRoute,
   PerfilVerificacaoRoute: PerfilVerificacaoRoute,
   ProdutoIdRoute: ProdutoIdRoute,
+  PedidosIndexRoute: PedidosIndexRoute,
   PerfilIndexRoute: PerfilIndexRoute,
 }
 export const routeTree = rootRouteImport
