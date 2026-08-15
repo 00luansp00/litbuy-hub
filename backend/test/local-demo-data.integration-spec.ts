@@ -144,7 +144,6 @@ describe('local demo data with real PostgreSQL and MinIO', () => {
     const product = DEMO_PRODUCTS[0];
     const preview = await carts.add(DEMO_IDS.users.buyer, 'demo-lit-store', {
       productId: product.id,
-      productVariantId: product.variants[0].id,
       quantity: 1,
       expectedVersion: 0,
     });
