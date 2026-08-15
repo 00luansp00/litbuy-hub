@@ -219,7 +219,8 @@ export function safeSummary(mode: Mode, targets = defaults) {
       ok: true,
       mode,
       ...endpoints,
-      demoDataRemaining: true,
+      operationalDemoDataRemaining: true,
+      immutableFinancialBaselineRemaining: true,
       publicProducts: 6,
       publicSmokes: 3,
       frontendSmokes: 2,
@@ -229,7 +230,8 @@ export function safeSummary(mode: Mode, targets = defaults) {
       ok: true,
       mode,
       ...endpoints,
-      demoDataRemaining: true,
+      operationalDemoDataRemaining: true,
+      immutableFinancialBaselineRemaining: true,
       verifiedPublicProducts: 6,
       publicSmokes: 3,
       infrastructureSmoke: true,
@@ -243,7 +245,8 @@ export function safeSummary(mode: Mode, targets = defaults) {
     frontendSmokes: 2,
     secondSeedVerify: true,
     resets: 2,
-    demoDataRemaining: false,
+    operationalDemoDataRemaining: false,
+    immutableFinancialBaselineRemaining: true,
   };
 }
 

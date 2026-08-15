@@ -7,6 +7,7 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import { PrismaClient } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { createHash } from 'node:crypto';
@@ -14,6 +15,7 @@ import { hashPassword } from '../auth/auth.utils';
 import {
   DEMO_CATEGORIES,
   DEMO_DATE,
+  DEMO_FEE_POLICY,
   DEMO_IDS,
   DEMO_IMAGES,
   DEMO_PRODUCTS,
@@ -45,7 +47,66 @@ function runtime(config: DemoRuntimeConfig) {
   };
 }
 
+type FeePolicyWithRules = Prisma.FeePolicyVersionGetPayload<{ include: { rules: true } }>;
+function isExpectedFeePolicy(policy: FeePolicyWithRules) {
+  const rule = policy.rules[0];
+  return (
+    policy.id === DEMO_FEE_POLICY.id &&
+    policy.publicVersion === DEMO_FEE_POLICY.publicVersion &&
+    policy.status === 'ACTIVE' &&
+    policy.effectiveFrom.getTime() === DEMO_FEE_POLICY.effectiveFrom.getTime() &&
+    policy.effectiveTo === null &&
+    policy.createdByUserId === DEMO_FEE_POLICY.author.id &&
+    policy.publishedByUserId === DEMO_FEE_POLICY.author.id &&
+    policy.publishedAt?.getTime() === DEMO_DATE.getTime() &&
+    policy.rules.length === 1 &&
+    rule.id === DEMO_FEE_POLICY.rule.id &&
+    rule.code === DEMO_FEE_POLICY.rule.code &&
+    rule.category === DEMO_FEE_POLICY.rule.category &&
+    rule.partyCharged === DEMO_FEE_POLICY.rule.partyCharged &&
+    rule.formula === DEMO_FEE_POLICY.rule.formula &&
+    rule.fixedAmountMinor === DEMO_FEE_POLICY.rule.fixedAmountMinor &&
+    rule.percentBps === null &&
+    rule.minimumAmountMinor === null &&
+    rule.maximumAmountMinor === null &&
+    rule.paymentMethod === null &&
+    rule.installmentsFrom === null &&
+    rule.installmentsTo === null &&
+    rule.sellerLevel === null &&
+    rule.sellerPlan === null &&
+    rule.promotionTier === null &&
+    rule.withdrawalSpeed === null &&
+    rule.productType === null &&
+    rule.priority === 0 &&
+    rule.enabled
+  );
+}
+
 async function assertNoNamespaceConflicts({ prisma }: Runtime) {
+  const [authorByEmail, authorById, policyById, policyByVersion, ruleById] = await Promise.all([
+    prisma.user.findUnique({
+      where: { email: DEMO_FEE_POLICY.author.email },
+      select: { id: true },
+    }),
+    prisma.user.findUnique({ where: { id: DEMO_FEE_POLICY.author.id }, select: { email: true } }),
+    prisma.feePolicyVersion.findUnique({ where: { id: DEMO_FEE_POLICY.id } }),
+    prisma.feePolicyVersion.findUnique({
+      where: { publicVersion: DEMO_FEE_POLICY.publicVersion },
+      select: { id: true },
+    }),
+    prisma.feeRule.findUnique({
+      where: { id: DEMO_FEE_POLICY.rule.id },
+      select: { policyVersionId: true },
+    }),
+  ]);
+  if (
+    (authorByEmail && authorByEmail.id !== DEMO_FEE_POLICY.author.id) ||
+    (authorById && authorById.email !== DEMO_FEE_POLICY.author.email) ||
+    (policyByVersion && policyByVersion.id !== DEMO_FEE_POLICY.id) ||
+    (ruleById && ruleById.policyVersionId !== DEMO_FEE_POLICY.id) ||
+    (policyById && policyById.publicVersion !== DEMO_FEE_POLICY.publicVersion)
+  )
+    throw new DemoDataError('DEMO_DATA_NAMESPACE_CONFLICT');
   for (const user of DEMO_USERS) {
     const [byEmail, byId] = await Promise.all([
       prisma.user.findUnique({ where: { email: user.email }, select: { id: true } }),
@@ -213,6 +274,74 @@ async function seed(context: Runtime) {
   await uploadImages(context);
   const passwordHash = await hashPassword(config.password);
   await prisma.$transaction(async (tx) => {
+    const existingPolicy = await tx.feePolicyVersion.findUnique({
+      where: { id: DEMO_FEE_POLICY.id },
+      include: { rules: true },
+    });
+    const effectivePolicies = await tx.feePolicyVersion.count({
+      where: {
+        status: 'ACTIVE',
+        effectiveFrom: { lte: new Date() },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gt: new Date() } }],
+      },
+    });
+    if (
+      (existingPolicy && !isExpectedFeePolicy(existingPolicy)) ||
+      effectivePolicies > (existingPolicy ? 1 : 0)
+    )
+      throw new DemoDataError('DEMO_DATA_NAMESPACE_CONFLICT');
+    await tx.user.upsert({
+      where: { id: DEMO_FEE_POLICY.author.id },
+      create: {
+        id: DEMO_FEE_POLICY.author.id,
+        email: DEMO_FEE_POLICY.author.email,
+        birthDate: new Date('1995-01-01'),
+        status: 'ACTIVE',
+        emailVerifiedAt: DEMO_DATE,
+        termsVersion: config.termsVersion,
+        termsAcceptedAt: DEMO_DATE,
+        privacyVersion: config.privacyVersion,
+        privacyAcceptedAt: DEMO_DATE,
+        createdAt: DEMO_DATE,
+        updatedAt: DEMO_DATE,
+      },
+      update: {},
+    });
+    if (!existingPolicy) {
+      await tx.feePolicyVersion.create({
+        data: {
+          id: DEMO_FEE_POLICY.id,
+          publicVersion: DEMO_FEE_POLICY.publicVersion,
+          status: 'DRAFT',
+          effectiveFrom: DEMO_FEE_POLICY.effectiveFrom,
+          effectiveTo: null,
+          createdByUserId: DEMO_FEE_POLICY.author.id,
+          createdAt: DEMO_DATE,
+          updatedAt: DEMO_DATE,
+          rules: {
+            create: {
+              ...DEMO_FEE_POLICY.rule,
+              percentBps: null,
+              minimumAmountMinor: null,
+              maximumAmountMinor: null,
+              priority: 0,
+              enabled: true,
+              createdAt: DEMO_DATE,
+              updatedAt: DEMO_DATE,
+            },
+          },
+        },
+      });
+      await tx.feePolicyVersion.update({
+        where: { id: DEMO_FEE_POLICY.id },
+        data: {
+          status: 'ACTIVE',
+          publishedByUserId: DEMO_FEE_POLICY.author.id,
+          publishedAt: DEMO_DATE,
+          updatedAt: DEMO_DATE,
+        },
+      });
+    }
     for (const user of DEMO_USERS) {
       await tx.user.upsert({
         where: { id: user.id },
@@ -630,6 +759,27 @@ async function verify(context: Runtime) {
     error.cause = stage;
     throw error;
   };
+  const [feePolicy, feePolicyAuthor, effectiveFeePolicies] = await Promise.all([
+    prisma.feePolicyVersion.findUnique({
+      where: { id: DEMO_FEE_POLICY.id },
+      include: { rules: true },
+    }),
+    prisma.user.findUnique({ where: { id: DEMO_FEE_POLICY.author.id } }),
+    prisma.feePolicyVersion.count({
+      where: {
+        status: 'ACTIVE',
+        effectiveFrom: { lte: new Date() },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gt: new Date() } }],
+      },
+    }),
+  ]);
+  if (
+    !feePolicy ||
+    !isExpectedFeePolicy(feePolicy) ||
+    feePolicyAuthor?.email !== DEMO_FEE_POLICY.author.email ||
+    effectiveFeePolicies !== 1
+  )
+    fail('financial policy');
   const users = await prisma.user.findMany({
     where: { id: { in: DEMO_USERS.map((x) => x.id) } },
     include: { passwordCredential: true, roleAssignments: true },

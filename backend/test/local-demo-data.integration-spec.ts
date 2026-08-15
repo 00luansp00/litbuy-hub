@@ -18,6 +18,7 @@ import type { AppConfig } from '../src/config/app.config';
 import { RedisService } from '../src/redis/redis.service';
 import {
   DEMO_CATEGORIES,
+  DEMO_FEE_POLICY,
   DEMO_IDS,
   DEMO_IMAGES,
   DEMO_PRODUCTS,
@@ -25,6 +26,9 @@ import {
   DEMO_USERS,
 } from '../src/cli/demo-data.fixtures';
 import { runDemoCommand } from '../src/cli/demo-data';
+import { CartsService } from '../src/carts/carts.service';
+import { CheckoutService } from '../src/checkout/checkout.service';
+import { parseIdempotencyKey } from '../src/commerce/idempotency-key';
 
 const prisma = new PrismaClient();
 const env = process.env;
@@ -57,6 +61,9 @@ const externalUser = (id: string, email: string) => ({
 describe('local demo data with real PostgreSQL and MinIO', () => {
   jest.setTimeout(180_000);
   let app: INestApplication;
+  const cleanupIntegrationDatabase = () =>
+    prisma.$executeRawUnsafe('TRUNCATE TABLE "User", "CatalogCategory" CASCADE');
+
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
@@ -69,11 +76,16 @@ describe('local demo data with real PostgreSQL and MinIO', () => {
     );
     app.useGlobalFilters(new GlobalExceptionFilter());
     await app.init();
+    // This suite shares an ephemeral PostgreSQL database with financial integration suites.
+    // Test-only truncation prevents their immutable published policies from leaking in here.
+    await cleanupIntegrationDatabase();
     await (await app.get(RedisService).getClient()).flushdb();
     await runDemoCommand(['reset', '--confirm'], env);
   });
   afterAll(async () => {
     await runDemoCommand(['reset', '--confirm'], env);
+    // Do not leak this suite's intentionally persistent financial baseline to later suites.
+    await cleanupIntegrationDatabase();
     await app.close();
     s3.destroy();
     await prisma.$disconnect();
@@ -105,6 +117,109 @@ describe('local demo data with real PostgreSQL and MinIO', () => {
         select: { id: true, updatedAt: true },
       }),
     ).toEqual(before);
+    expect(
+      await prisma.feePolicyVersion.findUnique({
+        where: { id: DEMO_FEE_POLICY.id },
+        include: { rules: true },
+      }),
+    ).toMatchObject({
+      publicVersion: DEMO_FEE_POLICY.publicVersion,
+      status: 'ACTIVE',
+      rules: [
+        {
+          category: 'PLATFORM_COMMISSION',
+          partyCharged: 'SELLER',
+          formula: 'FIXED',
+          fixedAmountMinor: 0n,
+          percentBps: null,
+        },
+      ],
+    });
+  });
+
+  it('lets the real checkout resolver snapshot the explicit zero demo commission', async () => {
+    await runDemoCommand(['seed'], env);
+    const carts = app.get(CartsService);
+    const checkout = app.get(CheckoutService);
+    const product = DEMO_PRODUCTS[0];
+    const preview = await carts.add(DEMO_IDS.users.buyer, 'demo-lit-store', {
+      productId: product.id,
+      quantity: 1,
+      expectedVersion: 0,
+    });
+    const created = await checkout.create(
+      DEMO_IDS.users.buyer,
+      parseIdempotencyKey(crypto.randomUUID()),
+      {
+        sellerSlug: 'demo-lit-store',
+        expectedCartVersion: preview.version,
+        expectedPreviewFingerprint: preview.previewFingerprint,
+      },
+    );
+    const orderCode = (created as { orderCode: string }).orderCode;
+    const order = await prisma.order.findUniqueOrThrow({
+      where: { publicCode: orderCode },
+    });
+    expect(order).toMatchObject({
+      feePolicyVersionId: DEMO_FEE_POLICY.id,
+      platformCommissionRuleId: DEMO_FEE_POLICY.rule.id,
+      platformFeeAmountMinor: 0n,
+    });
+    expect(order.totalAmountMinor - order.platformFeeAmountMinor).toBe(order.subtotalAmountMinor);
+  });
+
+  it('fails closed for an effective external fee policy without modifying it', async () => {
+    await cleanupIntegrationDatabase();
+    const externalAuthor = await prisma.user.create({
+      data: externalUser(
+        crypto.randomUUID(),
+        `external-policy-${crypto.randomUUID()}@example.test`,
+      ),
+    });
+    const externalPolicy = await prisma.feePolicyVersion.create({
+      data: {
+        publicVersion: 1,
+        status: 'DRAFT',
+        effectiveFrom: new Date('2025-01-01T00:00:00.000Z'),
+        createdByUserId: externalAuthor.id,
+        rules: {
+          create: {
+            category: 'PLATFORM_COMMISSION',
+            code: 'external-zero-commission',
+            formula: 'FIXED',
+            partyCharged: 'SELLER',
+            fixedAmountMinor: 0n,
+          },
+        },
+      },
+    });
+    await prisma.feePolicyVersion.update({
+      where: { id: externalPolicy.id },
+      data: {
+        status: 'ACTIVE',
+        publishedByUserId: externalAuthor.id,
+        publishedAt: new Date(),
+      },
+    });
+    try {
+      await expect(runDemoCommand(['seed'], env)).rejects.toMatchObject({
+        code: 'DEMO_DATA_NAMESPACE_CONFLICT',
+      });
+      expect(
+        await prisma.feePolicyVersion.findUnique({ where: { id: externalPolicy.id } }),
+      ).toMatchObject({
+        status: 'ACTIVE',
+        publicVersion: 1,
+        createdByUserId: externalAuthor.id,
+      });
+      expect(
+        await prisma.feePolicyVersion.findUnique({ where: { id: DEMO_FEE_POLICY.id } }),
+      ).toBeNull();
+    } finally {
+      await cleanupIntegrationDatabase();
+      await runDemoCommand(['seed'], env);
+      await runDemoCommand(['verify'], env);
+    }
   });
 
   it('verifies the demo namespace while a publishable external product is interleaved', async () => {
@@ -372,6 +487,12 @@ describe('local demo data with real PostgreSQL and MinIO', () => {
       ok: true,
       action: 'reset',
     });
+    expect(
+      await prisma.feePolicyVersion.findUnique({ where: { id: DEMO_FEE_POLICY.id } }),
+    ).toMatchObject({ status: 'ACTIVE' });
+    expect(
+      await prisma.user.findUnique({ where: { id: DEMO_FEE_POLICY.author.id } }),
+    ).toMatchObject({ email: DEMO_FEE_POLICY.author.email });
     expect(await prisma.catalogCategory.findUnique({ where: { id: sentinel.id } })).not.toBeNull();
     expect(await prisma.securityEvent.count()).toBe(eventsBefore);
     expect(await runDemoCommand(['reset', '--confirm'], env)).toMatchObject({
