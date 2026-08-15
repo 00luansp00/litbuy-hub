@@ -11,7 +11,28 @@ export const DEMO_IDS = {
   users: { buyer: uuid(1, 1), seller: uuid(1, 2), admin: uuid(1, 3) },
   sellerApplication: uuid(2, 1),
   sellerProfile: uuid(2, 2),
+  feePolicy: uuid(8, 1),
+  feeRule: uuid(8, 2),
+  feePolicyAuthor: uuid(8, 3),
 };
+export const DEMO_FEE_POLICY = {
+  id: DEMO_IDS.feePolicy,
+  publicVersion: 2_026_011_500,
+  effectiveFrom: DEMO_DATE,
+  effectiveTo: null,
+  author: {
+    id: DEMO_IDS.feePolicyAuthor,
+    email: 'financial-policy-baseline@demo.litbuy.local',
+  },
+  rule: {
+    id: DEMO_IDS.feeRule,
+    code: 'demo-zero-platform-commission',
+    category: 'PLATFORM_COMMISSION',
+    partyCharged: 'SELLER',
+    formula: 'FIXED',
+    fixedAmountMinor: 0n,
+  },
+} as const;
 export const DEMO_USERS = [
   { id: DEMO_IDS.users.buyer, email: 'comprador@demo.litbuy.local', roles: ['BUYER'] },
   { id: DEMO_IDS.users.seller, email: 'vendedor@demo.litbuy.local', roles: ['BUYER', 'SELLER'] },
@@ -252,4 +273,5 @@ export const DEMO_SUMMARY = {
   products: 8,
   publicProducts: 6,
   images: 8,
+  feePolicies: 1,
 } as const;

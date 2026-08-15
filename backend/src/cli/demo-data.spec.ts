@@ -1,4 +1,4 @@
-import { DEMO_IMAGES, DEMO_PRODUCTS, DEMO_USERS } from './demo-data.fixtures';
+import { DEMO_FEE_POLICY, DEMO_IMAGES, DEMO_PRODUCTS, DEMO_USERS } from './demo-data.fixtures';
 import { runDemoCommand } from './demo-data';
 import { assertDemoEnvironment, DemoDataError, parseDemoCommand } from './demo-data.guard';
 
@@ -66,6 +66,13 @@ describe('local demo data guards and deterministic fixtures', () => {
       DEMO_PRODUCTS.every((x) => x.slug.startsWith('demo-') && x.objectKey.startsWith('demo/')),
     ).toBe(true);
     expect(DEMO_USERS.every((x) => x.email.endsWith('@demo.litbuy.local'))).toBe(true);
+    expect(DEMO_FEE_POLICY.author.email.endsWith('@demo.litbuy.local')).toBe(true);
+    expect(DEMO_FEE_POLICY.rule).toMatchObject({
+      category: 'PLATFORM_COMMISSION',
+      partyCharged: 'SELLER',
+      formula: 'FIXED',
+      fixedAmountMinor: 0n,
+    });
     expect(new Set(DEMO_IMAGES.map((image) => image.sha256)).size).toBe(8);
     expect(
       DEMO_IMAGES.every(

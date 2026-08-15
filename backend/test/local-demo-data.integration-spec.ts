@@ -18,6 +18,7 @@ import type { AppConfig } from '../src/config/app.config';
 import { RedisService } from '../src/redis/redis.service';
 import {
   DEMO_CATEGORIES,
+  DEMO_FEE_POLICY,
   DEMO_IDS,
   DEMO_IMAGES,
   DEMO_PRODUCTS,
@@ -25,6 +26,9 @@ import {
   DEMO_USERS,
 } from '../src/cli/demo-data.fixtures';
 import { runDemoCommand } from '../src/cli/demo-data';
+import { CartsService } from '../src/carts/carts.service';
+import { CheckoutService } from '../src/checkout/checkout.service';
+import { parseIdempotencyKey } from '../src/commerce/idempotency-key';
 
 const prisma = new PrismaClient();
 const env = process.env;
@@ -105,6 +109,56 @@ describe('local demo data with real PostgreSQL and MinIO', () => {
         select: { id: true, updatedAt: true },
       }),
     ).toEqual(before);
+    expect(
+      await prisma.feePolicyVersion.findUnique({
+        where: { id: DEMO_FEE_POLICY.id },
+        include: { rules: true },
+      }),
+    ).toMatchObject({
+      publicVersion: DEMO_FEE_POLICY.publicVersion,
+      status: 'ACTIVE',
+      rules: [
+        {
+          category: 'PLATFORM_COMMISSION',
+          partyCharged: 'SELLER',
+          formula: 'FIXED',
+          fixedAmountMinor: 0n,
+          percentBps: null,
+        },
+      ],
+    });
+  });
+
+  it('lets the real checkout resolver snapshot the explicit zero demo commission', async () => {
+    await runDemoCommand(['seed'], env);
+    const carts = app.get(CartsService);
+    const checkout = app.get(CheckoutService);
+    const product = DEMO_PRODUCTS[0];
+    const preview = await carts.add(DEMO_IDS.users.buyer, 'demo-lit-store', {
+      productId: product.id,
+      productVariantId: product.variants[0].id,
+      quantity: 1,
+      expectedVersion: 0,
+    });
+    const created = await checkout.create(
+      DEMO_IDS.users.buyer,
+      parseIdempotencyKey(crypto.randomUUID()),
+      {
+        sellerSlug: 'demo-lit-store',
+        expectedCartVersion: preview.version,
+        expectedPreviewFingerprint: preview.previewFingerprint,
+      },
+    );
+    const orderCode = (created as { orderCode: string }).orderCode;
+    const order = await prisma.order.findUniqueOrThrow({
+      where: { publicCode: orderCode },
+    });
+    expect(order).toMatchObject({
+      feePolicyVersionId: DEMO_FEE_POLICY.id,
+      platformCommissionRuleId: DEMO_FEE_POLICY.rule.id,
+      platformCommissionAmountMinor: 0n,
+      sellerNetAmountMinor: order.subtotalAmountMinor,
+    });
   });
 
   it('verifies the demo namespace while a publishable external product is interleaved', async () => {
@@ -372,6 +426,12 @@ describe('local demo data with real PostgreSQL and MinIO', () => {
       ok: true,
       action: 'reset',
     });
+    expect(
+      await prisma.feePolicyVersion.findUnique({ where: { id: DEMO_FEE_POLICY.id } }),
+    ).toMatchObject({ status: 'ACTIVE' });
+    expect(
+      await prisma.user.findUnique({ where: { id: DEMO_FEE_POLICY.author.id } }),
+    ).toMatchObject({ email: DEMO_FEE_POLICY.author.email });
     expect(await prisma.catalogCategory.findUnique({ where: { id: sentinel.id } })).not.toBeNull();
     expect(await prisma.securityEvent.count()).toBe(eventsBefore);
     expect(await runDemoCommand(['reset', '--confirm'], env)).toMatchObject({
