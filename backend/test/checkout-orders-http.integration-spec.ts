@@ -9,7 +9,10 @@ import { AuthMailer } from '../src/auth/auth.service';
 import { GlobalExceptionFilter } from '../src/common/filters/global-exception.filter';
 import type { AppConfig } from '../src/config/app.config';
 import { PrismaService } from '../src/database/prisma.service';
-import { SaleFinancialRecognitionService } from '../src/financial/sale-financial-recognition.service';
+import {
+  SaleFinancialRecognitionService,
+  saleRecognitionIdempotencyKey,
+} from '../src/financial/sale-financial-recognition.service';
 import { OrderFulfillmentService } from '../src/orders/order-fulfillment.service';
 import { PaidOrderActivationService } from '../src/orders/paid-order-activation.service';
 import { RedisService } from '../src/redis/redis.service';
@@ -22,6 +25,7 @@ describe('Checkout and orders HTTP with real auth, guards, CSRF and PostgreSQL',
   let recognition: SaleFinancialRecognitionService;
   let fulfillment: OrderFulfillmentService;
   beforeAll(async () => {
+    process.env.PAYMENT_PROVIDER_MODE = 'FAKE_ALPHA';
     const ref = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = ref.createNestApplication();
     const config = app.get(ConfigService).getOrThrow<AppConfig>('app');
@@ -137,6 +141,94 @@ describe('Checkout and orders HTTP with real auth, guards, CSRF and PostgreSQL',
     request(app.getHttpServer())
       .post(`/api/v1/orders/${orderCode}/fulfillment/confirm`)
       .set(authHeaders(owner));
+
+  it('composes the real FAKE_ALPHA path through recognition before seller availability', async () => {
+    const owner = await createActor(app, prisma, mailer);
+    const f = await cart(owner);
+    const created = await checkout(owner, f).expect(201);
+    const orderCode = String(created.body.orderCode);
+    const initiate = await request(app.getHttpServer())
+      .post(`/api/v1/orders/${orderCode}/payment-attempts`)
+      .set(authHeaders(owner))
+      .set('Idempotency-Key', `payment:${crypto.randomUUID()}`)
+      .expect(201);
+    const confirmationKey = `alpha-confirm:${crypto.randomUUID()}`;
+    const alphaConfirm = () =>
+      request(app.getHttpServer())
+        .post(
+          `/api/v1/orders/${orderCode}/payment-attempts/${String(initiate.body.attemptId)}/alpha-confirm`,
+        )
+        .set(authHeaders(owner))
+        .set('Idempotency-Key', confirmationKey);
+
+    await alphaConfirm().expect(200);
+    await alphaConfirm().expect(200);
+
+    const order = await prisma.order.findUniqueOrThrow({ where: { publicCode: orderCode } });
+    const payment = await prisma.payment.findUniqueOrThrow({ where: { orderId: order.id } });
+    const attempt = await prisma.paymentAttempt.findUniqueOrThrow({
+      where: { id: String(initiate.body.attemptId) },
+    });
+    expect(attempt.status).toBe('SUCCEEDED');
+    expect(payment.status).toBe('PAID');
+    expect(order).toMatchObject({
+      status: 'ACTIVE',
+      paymentStatus: 'PAID',
+      fulfillmentStatus: 'AWAITING_SELLER',
+    });
+
+    const recognitions = await prisma.ledgerTransaction.findMany({
+      where: { type: 'SALE_RECOGNIZED', referenceType: 'OrderSale', referenceId: order.id },
+      include: { entries: { include: { account: true } } },
+    });
+    expect(recognitions).toHaveLength(1);
+    expect(recognitions[0].idempotencyKeyHash).toBe(saleRecognitionIdempotencyKey(order.id));
+    const debits = recognitions[0].entries
+      .filter(({ direction }) => direction === 'DEBIT')
+      .reduce((sum, { amountMinor }) => sum + amountMinor, 0n);
+    const credits = recognitions[0].entries
+      .filter(({ direction }) => direction === 'CREDIT')
+      .reduce((sum, { amountMinor }) => sum + amountMinor, 0n);
+    expect(debits).toBe(credits);
+    expect(
+      recognitions[0].entries.find(({ account }) => account.purpose === 'SELLER_PENDING')
+        ?.amountMinor,
+    ).toBe(order.totalAmountMinor - order.platformFeeAmountMinor);
+    expect(
+      recognitions[0].entries.find(({ account }) => account.purpose === 'PLATFORM_COMMISSION')
+        ?.amountMinor,
+    ).toBe(order.platformFeeAmountMinor || undefined);
+    expect(
+      recognitions[0].entries.some(({ account }) =>
+        ['SELLER_HELD', 'SELLER_AVAILABLE'].includes(account.purpose),
+      ),
+    ).toBe(false);
+
+    await fulfillment.recordDelivered({
+      orderCode,
+      actorUserId: f.sellerUser.id,
+      deliveryType: 'MANUAL_REFERENCE',
+      evidenceHash: 'a'.repeat(64),
+    });
+    await confirm(owner, orderCode).expect(200);
+    expect(await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).toMatchObject({
+      status: 'COMPLETED',
+      fulfillmentStatus: 'CONFIRMED',
+    });
+    expect(
+      await prisma.ledgerTransaction.count({
+        where: { type: 'SALE_RECOGNIZED', referenceType: 'OrderSale', referenceId: order.id },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.reconciliationIssue.count({
+        where: {
+          referenceId: order.id,
+          details: { path: ['errorCode'], equals: 'SALE_RECOGNITION_MISSING' },
+        },
+      }),
+    ).toBe(0);
+  });
   it('enforces anonymous access, BUYER RBAC and persisted-session CSRF', async () => {
     const actor = await createActor(app, prisma, mailer),
       other = await createActor(app, prisma, mailer),

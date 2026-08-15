@@ -37,6 +37,7 @@ import {
   PAYMENT_EVENT_PROVIDERS,
   ProviderWebhookEventProcessor,
 } from './provider-webhook-event.processor';
+import { AlphaPostPaymentRehearsalOrchestrator } from './alpha-post-payment-rehearsal.orchestrator';
 @Module({
   imports: [DatabaseModule, AuthModule, OrdersModule, JwtModule.register({})],
   controllers: [ProviderNotificationController, SellerFinanceController, BuyerPaymentController],
@@ -50,6 +51,7 @@ import {
     SellerReleasePolicyService,
     PaymentOrchestrationService,
     BuyerPaymentService,
+    AlphaPostPaymentRehearsalOrchestrator,
     { provide: ALPHA_PAYMENT_CONFIG, useFactory: readAlphaPaymentConfig },
     {
       provide: PAYMENT_PROVIDER_PORT,

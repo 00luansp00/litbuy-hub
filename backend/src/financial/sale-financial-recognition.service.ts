@@ -14,9 +14,17 @@ import { PrismaService } from '../database/prisma.service';
 import { FinancialDomainError } from './financial.errors';
 import { FinancialLedgerService, PostRequest } from './financial-ledger.service';
 
-const LEDGER_TYPE = 'SALE_RECOGNIZED';
-const LEDGER_REFERENCE_TYPE = 'OrderSale';
-const RECONCILIATION_REFERENCE_TYPE = 'SaleFinancialRecognition';
+export const SALE_RECOGNITION_LEDGER_TYPE = 'SALE_RECOGNIZED';
+export const SALE_RECOGNITION_REFERENCE_TYPE = 'OrderSale';
+export const SALE_RECOGNITION_RECONCILIATION_REFERENCE_TYPE = 'SaleFinancialRecognition';
+
+export function saleRecognitionIdempotencyKey(orderId: string): string {
+  return createHash('sha256').update(`sale-recognition:v1:${orderId}`).digest('hex');
+}
+
+const LEDGER_TYPE = SALE_RECOGNITION_LEDGER_TYPE;
+const LEDGER_REFERENCE_TYPE = SALE_RECOGNITION_REFERENCE_TYPE;
+const RECONCILIATION_REFERENCE_TYPE = SALE_RECOGNITION_RECONCILIATION_REFERENCE_TYPE;
 
 type CandidateResult = 'NO_CANDIDATE' | 'ALREADY_HANDLED' | 'PROCESSED';
 type Failure = { type: ReconciliationIssueType; code: string };
@@ -81,7 +89,7 @@ export class SaleFinancialRecognitionService {
   }
 
   private async processOrder(orderId: string): Promise<CandidateResult> {
-    const expectedKey = this.recognitionIdempotencyKey(orderId);
+    const expectedKey = saleRecognitionIdempotencyKey(orderId);
     const existing = await this.findExistingRecognitions(orderId);
     const existingState = this.validateExistingRecognition(orderId, expectedKey, existing);
     if (existingState === 'MISMATCH') {
@@ -318,10 +326,6 @@ export class SaleFinancialRecognitionService {
           : []),
       ],
     };
-  }
-
-  private recognitionIdempotencyKey(orderId: string): string {
-    return createHash('sha256').update(`sale-recognition:v1:${orderId}`).digest('hex');
   }
 
   private async ensureIssue(orderId: string, failure: Failure) {

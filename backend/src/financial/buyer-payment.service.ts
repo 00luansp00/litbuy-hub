@@ -9,7 +9,7 @@ import {
 import { AppError } from '../common/errors/app-error';
 import { type ParsedIdempotencyKey } from '../commerce/idempotency-key';
 import { PrismaService } from '../database/prisma.service';
-import { PaidOrderAvailabilityOrchestrator } from '../orders/paid-order-availability.orchestrator';
+import { AlphaPostPaymentRehearsalOrchestrator } from './alpha-post-payment-rehearsal.orchestrator';
 import { ALPHA_PAYMENT_CONFIG, type AlphaPaymentConfig } from './alpha-payment.config';
 import { FakePaymentProvider } from './fake-payment-provider';
 import { FinancialDomainError } from './financial.errors';
@@ -30,7 +30,7 @@ export class BuyerPaymentService {
     private readonly prisma: PrismaService,
     private readonly orchestration: PaymentOrchestrationService,
     private readonly events: ProviderWebhookEventProcessor,
-    private readonly availability: PaidOrderAvailabilityOrchestrator,
+    private readonly alphaPostPayment: AlphaPostPaymentRehearsalOrchestrator,
     @Inject(PAYMENT_PROVIDER_PORT) private readonly provider: PaymentProviderPort,
     @Inject(ALPHA_PAYMENT_CONFIG) private readonly alpha: AlphaPaymentConfig,
   ) {}
@@ -141,7 +141,7 @@ export class BuyerPaymentService {
       confirmed.payment.status !== PaymentStatus.PAID
     )
       throw new AppError('PAYMENT_RECONCILIATION_REQUIRED', 'PAYMENT_RECONCILIATION_REQUIRED', 422);
-    await this.availability.ensureAvailable(prepared.orderId);
+    await this.alphaPostPayment.progress(prepared.orderId);
     return this.read(buyerUserId, orderCode);
   }
   private async ownedOrder(buyerUserId: string, publicCode: string) {
