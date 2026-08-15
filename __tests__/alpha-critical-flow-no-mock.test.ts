@@ -60,7 +60,7 @@ const criticalFlow: CriticalBoundary[] = [
     file: "src/routes/checkout.tsx",
     requires: ["@/services/cartApiHooks", "@/services/checkoutApiHooks"],
   },
-  { file: "src/routes/pedidos.tsx", requires: ["@/services/orders"] },
+  { file: "src/routes/pedidos.index.tsx", requires: ["@/services/orders"] },
   { file: "src/routes/pedidos.$id.tsx", requires: ["@/services/orders"] },
   {
     file: "src/routes/pagamento.$id.tsx",

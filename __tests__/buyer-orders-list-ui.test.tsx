@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { ApiError } from "@/lib/api/client";
 import { buyerOrdersService } from "@/services/orders";
-import { parseOrderPage, parseOrderStatus, PedidosContent } from "@/routes/pedidos";
+import { parseOrderPage, parseOrderStatus, PedidosContent } from "@/routes/pedidos.index";
 import { makeOrder, pending, QueryWrapper } from "./buyer-orders-ui-fixtures";
 
 const state = vi.hoisted(() => ({

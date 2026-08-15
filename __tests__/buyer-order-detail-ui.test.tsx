@@ -190,7 +190,7 @@ describe("/pedidos/$id real UI", () => {
   });
   it("guards the real buyer order path against the legacy mock service", () => {
     for (const relativePath of [
-      "src/routes/pedidos.tsx",
+      "src/routes/pedidos.index.tsx",
       "src/routes/pedidos.$id.tsx",
       "src/services/orders/buyerOrdersService.ts",
       "src/services/orders/queries.ts",

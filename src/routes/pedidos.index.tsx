@@ -23,7 +23,7 @@ export function parseOrderStatus(value: unknown): OrderStatus | undefined {
     : undefined;
 }
 
-export const Route = createFileRoute("/pedidos")({
+export const Route = createFileRoute("/pedidos/")({
   validateSearch: (raw: Record<string, unknown>): Search => ({
     page: parseOrderPage(raw.page),
     status: parseOrderStatus(raw.status),
@@ -41,7 +41,7 @@ export function PedidosContent() {
   const search = Route.useSearch();
   const page = search.page ?? 1;
   const status = search.status;
-  const navigate = useNavigate({ from: "/pedidos" });
+  const navigate = useNavigate({ from: "/pedidos/" });
   const query = useBuyerOrders(page, 20, status);
   const go = (nextPage: number, nextStatus = status) =>
     navigate({ search: { page: nextPage, status: nextStatus } });
