@@ -78,16 +78,16 @@ describe('BuyerPaymentService Alpha confirmation', () => {
       order: { findFirst: jest.fn().mockResolvedValue(order) },
     };
     const events = { processOne: jest.fn().mockResolvedValue(true) };
-    const availability = { ensureAvailable: jest.fn().mockResolvedValue(undefined) };
+    const alphaPostPayment = { progress: jest.fn().mockResolvedValue(undefined) };
     const service = new BuyerPaymentService(
       prisma as never,
       { initiateBilling: jest.fn() } as never,
       events as never,
-      availability as never,
+      alphaPostPayment as never,
       provider,
       { enabled: true },
     );
-    return { service, provider, simulate, tx, prisma, events, availability };
+    return { service, provider, simulate, tx, prisma, events, alphaPostPayment };
   }
   const key = (hash: string) => ({ hash }) as never;
 
@@ -98,7 +98,10 @@ describe('BuyerPaymentService Alpha confirmation', () => {
       s.simulate.mock.invocationCallOrder[0],
     );
     expect(s.events.processOne).toHaveBeenCalledWith(event.id);
-    expect(s.availability.ensureAvailable).toHaveBeenCalledWith(order.id);
+    expect(s.alphaPostPayment.progress).toHaveBeenCalledWith(order.id);
+    expect(s.prisma.paymentAttempt.findUnique.mock.invocationCallOrder[0]).toBeLessThan(
+      s.alphaPostPayment.progress.mock.invocationCallOrder[0],
+    );
   });
 
   it('does not progress the order when the specific processor leaves payment unconfirmed', async () => {
@@ -106,7 +109,7 @@ describe('BuyerPaymentService Alpha confirmation', () => {
     await expect(
       s.service.confirm('buyer', order.publicCode, attempt.id, key('same')),
     ).rejects.toMatchObject({ code: 'PAYMENT_RECONCILIATION_REQUIRED' });
-    expect(s.availability.ensureAvailable).not.toHaveBeenCalled();
+    expect(s.alphaPostPayment.progress).not.toHaveBeenCalled();
   });
 
   it('rejects incompatible key reuse before mutating fake provider', async () => {
@@ -125,6 +128,20 @@ describe('BuyerPaymentService Alpha confirmation', () => {
     await s.service.confirm('buyer', order.publicCode, attempt.id, key('same'));
     expect(s.simulate).not.toHaveBeenCalled();
     expect(s.events.processOne).not.toHaveBeenCalled();
-    expect(s.availability.ensureAvailable).toHaveBeenCalledTimes(1);
+    expect(s.alphaPostPayment.progress).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not enter the Alpha composition in production', async () => {
+    const previous = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    const s = subject();
+    try {
+      await expect(
+        s.service.confirm('buyer', order.publicCode, attempt.id, key('same')),
+      ).rejects.toMatchObject({ code: 'ALPHA_SIMULATION_UNAVAILABLE' });
+      expect(s.alphaPostPayment.progress).not.toHaveBeenCalled();
+    } finally {
+      process.env.NODE_ENV = previous;
+    }
   });
 });
