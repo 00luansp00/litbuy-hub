@@ -163,9 +163,9 @@ describe('local demo data with real PostgreSQL and MinIO', () => {
     expect(order).toMatchObject({
       feePolicyVersionId: DEMO_FEE_POLICY.id,
       platformCommissionRuleId: DEMO_FEE_POLICY.rule.id,
-      platformCommissionAmountMinor: 0n,
-      sellerNetAmountMinor: order.subtotalAmountMinor,
+      platformFeeAmountMinor: 0n,
     });
+    expect(order.totalAmountMinor - order.platformFeeAmountMinor).toBe(order.subtotalAmountMinor);
   });
 
   it('fails closed for an effective external fee policy without modifying it', async () => {
