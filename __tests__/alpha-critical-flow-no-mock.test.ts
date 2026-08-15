@@ -66,7 +66,7 @@ const criticalFlow: CriticalBoundary[] = [
     file: "src/routes/pagamento.$id.tsx",
     requires: ["@/services/payments", "@/services/orders"],
   },
-  { file: "src/routes/vendedor.vendas.tsx", requires: ["@/services/orders"] },
+  { file: "src/routes/vendedor.vendas.index.tsx", requires: ["@/services/orders"] },
   {
     file: "src/routes/vendedor.vendas.$id.tsx",
     requires: ["@/services/orders", "useMarkSellerSaleDelivered"],
