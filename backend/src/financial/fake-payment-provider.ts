@@ -7,7 +7,6 @@ import type {
 } from './payment-provider.port';
 export class FakePaymentProvider implements PaymentProviderPort, PaymentProviderNotificationPort {
   constructor(readonly providerCode = 'FAKE') {}
-  private sequence = 0;
   private readonly payments = new Map<string, ProviderPayment>();
   private readonly keyed = new Map<string, ProviderPayment>();
   assertAvailable() {}
@@ -19,7 +18,7 @@ export class FakePaymentProvider implements PaymentProviderPort, PaymentProvider
     const prior = this.keyed.get(input.idempotencyHash);
     if (prior) return Promise.resolve(prior);
     const value: ProviderPayment = {
-      id: `fake_payment_${++this.sequence}`,
+      id: `fake_payment_${createHash('sha256').update(input.idempotencyHash).digest('hex')}`,
       status: 'PENDING',
       money: input.money,
     };
