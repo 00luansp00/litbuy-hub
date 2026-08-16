@@ -14,6 +14,7 @@ Regras de autoridade:
 4. Este arquivo não transforma automaticamente um achado de browser em blocker do Alpha, finding de segurança ou trabalho autorizado.
 5. Uma observação só deve ser marcada como corrigida quando houver evidência objetiva de implementação + regressão/validação aplicável.
 6. Requisitos futuros registrados aqui não autorizam implementação durante o feature freeze e não antecipam Phase B/produção.
+7. `FINAL_FUNCTIONAL_AUDIT_REPORT.md` consolida por blocos o que foi efetivamente testado, classificado e encontrado durante a validação funcional final; este ledger continua sendo a lista controlada dos findings individuais.
 
 ## Convenção de estados
 
@@ -104,17 +105,19 @@ O banco confirmou:
 
 ### QA-BROWSER-001 — notificações visíveis sem autenticação
 
-- **Tipo:** UX / security-review
+- **Tipo:** UX / demo boundary
 - **Estado:** `OPEN`
 - **Impacto:** `NON_BLOCKER`
 - **Área:** navbar / notificações
-- **Observado em:** página de login/estado anônimo no rehearsal local
+- **Observado em:** página pública/login/estado anônimo no rehearsal local
 
-**Observação:** um visitante não autenticado conseguiu abrir o sino de notificações e visualizar cartões demonstrativos como “Chat do pedido criado”, “Pagamento aprovado” e outros.
+**Observação:** um visitante não autenticado consegue abrir o sino e visualizar cartões como `Chat do pedido criado`, `Pagamento aprovado`, `Entrega automática liberada` e outros.
 
-**Não concluir ainda:** a observação, sozinha, não prova vazamento de dados privados. A origem precisa ser auditada para distinguir conteúdo mock/demo local de dados autenticados.
+**Causa confirmada em 2026-08-15:** `src/services/notificationService.ts` se declara explicitamente uma camada mockada; nenhuma notificação real é enviada, salva ou persistida. `NotificationProvider` possui comportamento deliberado de carregar notificações mesmo sem autenticação para “não deixar o sino vazio na demo”.
 
-**Critério futuro de correção:** garantir que conteúdo privado/autenticado nunca seja exposto para visitante anônimo; se os cartões forem puramente demonstrativos, definir explicitamente se devem existir no estado anônimo ou removê-los.
+**Classificação de risco atual:** a evidência disponível não sustenta vazamento de notificações privadas reais. O problema confirmado é uma superfície demo enganosa no estado anônimo.
+
+**Critério futuro de correção:** visitante anônimo não deve receber conteúdo que pareça atividade privada de uma conta real. Se notificações demonstrativas forem mantidas em algum ambiente, precisam estar explicitamente identificadas e separadas de dados reais.
 
 ### QA-BROWSER-002 — CTA e cards da Home sem navegação
 
@@ -123,9 +126,11 @@ O banco confirmou:
 - **Impacto:** `NON_BLOCKER`
 - **Área:** Home
 
-**Observação:** o CTA `Explorar produtos` e os cards destacados à direita do Hero não navegaram durante o teste manual.
+**Observação:** o CTA `Explorar produtos` e os quatro cards destacados do Hero (`Steam`, `Valorant`, `FIFA`, `Xbox GP`) não navegam para uma superfície útil durante o teste manual.
 
-**Critério futuro de correção:** cada CTA/card visualmente interativo deve possuir destino real coerente ou deixar de se apresentar como ação clicável.
+**Causa/classificação:** os quatro cards são hardcoded/decorativos, não anúncios do catálogo público real. O CTA também não entrega uma jornada real de exploração.
+
+**Critério futuro de correção:** cada CTA/card visualmente interativo deve possuir destino real coerente ou deixar de se apresentar como ação clicável. Uma alternativa de produto é alimentar a área com anúncios reais/destaques reais; outra é preservá-la como decoração inequívoca.
 
 ### QA-BROWSER-003 — tela de pagamento permanece stale após aprovação Alpha
 
@@ -154,6 +159,80 @@ O banco confirmou:
 **Limitação da evidência:** o cenário foi contaminado por refresh e repetição da ação enquanto a investigação estava em andamento. Portanto ele não deve ser usado como prova de regressão da PR #81 nem como causa já diagnosticada.
 
 **Próximo passo futuro:** reproduzir desde pedido novo, uma ação por vez, capturando request/response, logs e banco antes de classificar causa e severidade.
+
+### QA-BROWSER-005 — termo de busca permanece na Navbar após sair da busca
+
+- **Tipo:** frontend / UX / route state
+- **Estado:** `OPEN`
+- **Impacto:** `NON_BLOCKER`
+- **Área:** Navbar / `/buscar`
+
+**Observação:** após pesquisar, por exemplo, `jogo` e navegar de volta para Home/categoria, o termo continua visível no campo da Navbar mesmo que a rota atual não represente mais aquele resultado.
+
+**Causa confirmada:** a Navbar mantém `searchQuery` como estado local e não o reconcilia/limpa quando a rota deixa `/buscar`.
+
+**Contexto adicional:** a busca global atual é `MOCK-DEMO`; `searchService.ts` se declara camada mockada e usa dados legados, não o catálogo público real.
+
+**Critério futuro de correção:** sincronizar o campo com a rota/query ou limpá-lo ao sair da busca, conforme decisão de UX.
+
+### QA-BROWSER-006 — catálogo real perdeu sinais comerciais/trust presentes no protótipo
+
+- **Tipo:** UX / conversão / public catalog
+- **Estado:** `OPEN`
+- **Impacto:** `NON_BLOCKER`
+- **Área:** cards reais / detalhe público / seller storefront
+
+**Observação:** o catálogo público real está conectado à API e é funcional, mas sua apresentação comercial é significativamente mais pobre que a superfície mockada/legada.
+
+**Ausências confirmadas na superfície pública real atual:**
+
+- favorito real;
+- avaliação média e quantidade de avaliações;
+- quantidade vendida;
+- selo público de seller verificado;
+- reputação/confiança;
+- badge comercial forte de entrega manual/automática;
+- promoção/desconto/preço anterior;
+- compartilhar;
+- denunciar anúncio;
+- produtos relacionados;
+- perguntas ao vendedor;
+- perfil mais completo da loja;
+- link clicável para a loja em `Sobre a loja`.
+
+**Correção de interpretação:** `deliveryMode` e, para serviços, `estimatedDelivery`, existem no contrato real e são exibidos, porém de forma pouco destacada; não são dados ausentes do backend.
+
+**Regra de integridade:** sinais como estrelas, número de vendas, verificação, confiança e desconto não podem ser copiados do mock como números fictícios. Precisam de autoridade real e auditável.
+
+**Critério futuro:** definir quais sinais pertencem ao produto final e, para cada um, a fonte autoritativa, persistência, permissão de alteração e regra de publicação.
+
+### QA-BROWSER-007 — intenção de compra é perdida durante autenticação
+
+- **Tipo:** frontend / auth redirect / buyer conversion
+- **Estado:** `OPEN`
+- **Impacto:** `NON_BLOCKER`
+- **Área:** produto público → login
+
+**Observação:** no fluxo `Produto real → Entrar para comprar → Login`, após autenticar o usuário é enviado para `/`, o produto não é preservado no contexto e não existe continuidade automática para carrinho/revisão.
+
+**Causa confirmada:** `PublicProductPurchasePanel` usa link simples para `/login` sem `returnTo`/intenção; a rota `login.tsx`, ao concluir autenticação, navega diretamente para `/`.
+
+**Decisão necessária antes da correção:** preservar a intenção sem introduzir auto-add silencioso/replay. Opções incluem retornar ao mesmo produto ou conduzir para revisão/carrinho após confirmação explícita.
+
+**Critério futuro de correção:** autenticar não deve apagar a jornada que motivou o login.
+
+### QA-BROWSER-008 — formatos de serviço aparecem como opções, mas não são selecionáveis
+
+- **Tipo:** produto / service variants / UX funcional
+- **Estado:** `DECISION_REQUIRED`
+- **Impacto:** `NON_BLOCKER`
+- **Área:** detalhe público de produto `SERVICE`
+
+**Observação:** a seção `Formatos do serviço` pode exibir cards como `Sessão — R$ 79,90 — Estoque 1`, mas esses cards são apenas `<article>` informativos e não possuem seleção/click.
+
+**Contraste validado:** produto `DYNAMIC` como `Licença digital — Opções demonstrativas` possui variantes `Mensal`/`Anual` realmente selecionáveis e a escolha alimenta `productVariantId` no carrinho.
+
+**Decisão necessária:** definir se serviços podem ter formatos/pacotes realmente compráveis. Se sim, o contrato precisa cobrir criação pelo Seller, preço/estoque, seleção Buyer, cart item e snapshot de checkout; não basta tornar o card visualmente clicável.
 
 ---
 
@@ -197,6 +276,25 @@ Nenhuma dessas lacunas deve ser preenchida silenciosamente durante o feature fre
 
 ---
 
+## Regra de proveniência para dados públicos do anúncio
+
+Durante a auditoria Seller/Admin, para cada dado exibido no anúncio público deve ser verificado:
+
+1. quem fornece o dado;
+2. onde ele é armazenado;
+3. quem possui autorização para alterá-lo;
+4. qual serviço/autoridade o publica;
+5. como ele se mantém consistente após refresh e mudanças de estado.
+
+Exemplos:
+
+- título, descrição, preço, estoque, delivery mode, variantes e prazo de serviço podem ser informados pelo Seller dentro do contrato permitido;
+- avaliações, vendas, verificação e reputação devem ser derivados pelo sistema;
+- favorito, compartilhar, denunciar e perguntas são ações do Buyer/UI;
+- descontos/promos, storefront, relacionados e trust score exigem contrato/regra explícita antes de serem tratados como reais.
+
+---
+
 ## Regra operacional para novas descobertas
 
 Quando durante Browser QA surgir a instrução “anota isso” ou equivalente:
@@ -206,5 +304,6 @@ Quando durante Browser QA surgir a instrução “anota isso” ou equivalente:
 3. classificar impacto como `CURRENT_BLOCKER`, `NON_BLOCKER` ou `FUTURE_SCOPE`;
 4. não interromper o gate atual por um `NON_BLOCKER` sem justificativa objetiva;
 5. alimentar este ledger na próxima atualização documental controlada;
-6. atualizar a checklist operacional quando o estado global de estabilização mudar;
-7. nunca transformar requisito futuro em implementação autorizada sem decisão explícita.
+6. atualizar `FINAL_FUNCTIONAL_AUDIT_REPORT.md` ao encerrar o bloco funcional correspondente;
+7. atualizar a checklist operacional quando o estado global de estabilização mudar;
+8. nunca transformar requisito futuro em implementação autorizada sem decisão explícita.
