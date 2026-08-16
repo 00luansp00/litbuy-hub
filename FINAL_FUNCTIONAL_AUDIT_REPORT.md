@@ -1,5 +1,7 @@
 # LIT Buy — Final Functional Audit Report
 
+> **Atualização 2026-08-16 — Bloco 3 Buyer:** encerrado formalmente sobre `main` remoto `44fa6c57cba4a9d458e5d7086068d6e8ccd8edd9`. O caminho crítico local foi `REAL-TESTED` com browser/HTTP/PostgreSQL, ownership, refresh e replay. `QA-BROWSER-003` foi fechado por revalidação; `QA-BROWSER-007` e `QA-BROWSER-013` permanecem `OPEN / NON_BLOCKER`. Multi-Seller tem cobertura estrutural/automatizada, mas não browser completo porque a seed contém um Seller. Disputa/refund/chat/review e produção ficam fora. Matriz: `FINAL_FUNCTIONAL_AUDIT_BLOCK_3_BUYER_PROGRESS.md`.
+
 ## Finalidade
 
 Este documento consolida, bloco a bloco, a validação funcional manual final do LIT Buy antes do handoff para revisão humana sênior.

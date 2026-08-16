@@ -135,7 +135,7 @@ O banco confirmou:
 ### QA-BROWSER-003 — tela de pagamento permanece stale após aprovação Alpha
 
 - **Tipo:** frontend / cache / mutation state / UX
-- **Estado:** `OPEN`
+- **Estado:** `CLOSED — comportamento atual revalidado`
 - **Impacto:** `NON_BLOCKER`
 - **Área:** `/pagamento/$id`
 - **Pedido observado:** `LIT-SELPYT2KNHNTYH`
@@ -145,6 +145,8 @@ O banco confirmou:
 **Evidência de backend:** o BROWSER-A5 completo passou e o PostgreSQL confirmou os estados autoritativos corretos.
 
 **Critério futuro de correção:** após mutation de aprovação Alpha, revalidar/refetchar as fontes necessárias para que a tela reflita o estado persistido sem exigir navegação manual para outra rota.
+
+**Disposição final do Bloco 3 — Buyer (2026-08-16):** critério atendido. Rodadas limpas exibiram `ACTIVE / PAID / SUCCEEDED (#1)` antes de `F5` e preservaram o estado após refresh. A prova final com replay confirmou efeitos únicos e UI coerente. O histórico permanece, mas não há residual objetivo; a disposição não atribui correção à PR #87, que não alterou frontend/cache.
 
 ### QA-BROWSER-004 — mensagens de erro/replay em primeira tentativa contaminada
 

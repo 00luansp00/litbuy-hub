@@ -1,5 +1,7 @@
 # LIT Buy — Final Functional Audit Remediation Gate
 
+> **Reconciliação Buyer (2026-08-16):** Bloco 3 encerrado sem blocker Alpha. `QA-BROWSER-003` está `CLOSED` por revalidação; `QA-BROWSER-007` e `QA-BROWSER-013` seguem `OPEN / NON_BLOCKER`. Permanecem futuros/produtivos: redirect com intenção, coerência UI/executor de expiração, disputa/refund/reversal, chat/review pós-disputa, PSP/dinheiro real e operação produtiva. A limitação browser multi-Seller é de fixture, não bug demonstrado.
+
 ## Finalidade
 
 Este documento torna explícita a etapa de **triagem e remediação dos achados** da auditoria funcional final.

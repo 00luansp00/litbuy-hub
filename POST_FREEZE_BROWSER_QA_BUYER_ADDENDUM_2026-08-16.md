@@ -17,7 +17,7 @@ Este arquivo não altera escopo Alpha, não autoriza Phase B e não transforma `
 # QA-BROWSER-003 — tela de pagamento stale após aprovação Alpha
 
 - **Tipo:** frontend / cache / mutation state / UX
-- **Estado intermediário:** `NEEDS_REPRODUCTION / NÃO REPRODUZIDO NA RODADA LIMPA MAIS RECENTE`
+- **Estado final:** `CLOSED — comportamento atual revalidado`
 - **Impacto:** `NON_BLOCKER`
 - **Área:** `/pagamento/$id`
 
@@ -47,11 +47,11 @@ A PR #87 **não alterou frontend/cache**. Logo, não atribuir a ela uma correç�
 
 Também houve uma observação transitória em outro pedido em que a tela mostrou `Não criado` ao mesmo tempo em que já existia tentativa `PENDING (#1)`; após `F5`, passou a `PENDING` coerente.
 
-Disposição até fechamento do Buyer:
+## Disposição final no fechamento do Buyer
 
-- não marcar como `CLOSED` por ausência de correção frontend identificada;
-- preservar histórico;
-- considerar nova reprodução/revalidação consolidada antes da disposição final.
+O critério objetivo foi atendido nas rodadas limpas posteriores: estado correto antes de `F5`, persistência depois do refresh e, na prova final `LIT-9WN8RAWU3BZTKB`, replay Alpha sem efeitos duplicados nem estado visual contraditório. `QA-BROWSER-003` fica `CLOSED` pelo comportamento atual revalidado. O histórico permanece; não se atribui a resolução à PR #87.
+
+`QA-BROWSER-007` e `QA-BROWSER-013` continuam `OPEN / NON_BLOCKER`: não há evidência de correção da perda de intenção no login ou da ação visual antes da materialização de expiração.
 
 ---
 
