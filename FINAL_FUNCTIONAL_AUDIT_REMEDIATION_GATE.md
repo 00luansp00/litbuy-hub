@@ -60,15 +60,73 @@ Um achado pode ser corrigido antes da etapa consolidada de remediação somente 
 
 Exemplo: se o login real estiver quebrado a ponto de impedir os testes Buyer, Seller e Admin, o fluxo permitido é:
 
-`auditar → registrar blocker → corrigir em PR mínima → revalidar → continuar a auditoria`.
+`auditar → registrar blocker → diagnosticar → corrigir em PR mínima → revalidar → documentar → retornar ao ponto exato da auditoria interrompida`.
 
-Achados `NON_BLOCKER` que não impedem o próximo bloco permanecem registrados para a etapa consolidada de remediação.
+Achados `NON_BLOCKER` que não impedem o próximo teste permanecem registrados para a etapa consolidada de remediação.
+
+### Regra obrigatória de retorno ao trilho principal
+
+Corrigir um blocker encontrado no meio de um bloco **não inicia uma fase geral de correções**.
+
+Depois que o blocker for corrigido, validado e incorporado conforme a governança:
+
+1. registrar a evidência da correção;
+2. registrar qualquer finding colateral novo sem ampliar escopo automaticamente;
+3. retornar ao **mesmo bloco funcional e ao mesmo ponto lógico** em que a auditoria foi interrompida;
+4. continuar a bateria planejada;
+5. somente entrar na remediação consolidada quando os blocos aplicáveis estiverem concluídos.
+
+O objetivo é impedir que a auditoria se perca em desvios laterais e preservar rastreabilidade do que estava sendo testado antes da correção.
+
+## Regra anti-loop para correções assistidas por IA
+
+O objetivo desta fase é maximizar o que pode ser concluído com segurança antes do handoff para um desenvolvedor profissional, **sem tentar substituir a revisão humana final e sem entrar em ciclos de correção que coloquem em risco funcionalidades já testadas**.
+
+Para qualquer correção assistida por IA:
+
+1. **diagnosticar a causa-raiz antes de alterar código**; não corrigir apenas o sintoma quando a evidência disponível permite identificar a origem;
+2. **definir escopo fechado e mínimo** para a tentativa;
+3. preservar invariantes de domínio, especialmente em Auth, RBAC, pagamentos, pedidos, Ledger, saldo e reconhecimento financeiro;
+4. testar o defeito específico e as áreas imediatamente adjacentes que poderiam regredir;
+5. não sacrificar múltiplos itens `REAL-TESTED` para resolver um único finding;
+6. se a primeira tentativa falhar, **reavaliar a causa-raiz** antes de tentar uma segunda alteração;
+7. não executar sequências cegas do tipo “fix 1 → fix 2 → fix 3” sem nova evidência;
+8. se a próxima tentativa exigir ampliar materialmente o escopo, tocar várias áreas críticas já validadas, refatorar arquitetura ou criar risco desproporcional, **parar**;
+9. quando parar, documentar reprodução, causa conhecida ou hipótese, tentativas feitas, arquivos envolvidos, riscos e recomendação para `HUMAN-SENIOR`/DEV profissional;
+10. uma correção só é considerada encerrada quando houver evidência objetiva de implementação + testes aplicáveis + CI aplicável + validação local/browser quando a superfície for funcionalmente visível;
+11. CI verde é necessário quando aplicável, mas não substitui Browser QA/manual validation para comportamento visível;
+12. qualquer correção que envolva produção, PSP real, dinheiro real, saque/payout, KYC, arquitetura de execução produtiva ou revisão legal continua sob gate humano próprio.
+
+### Classificação operacional recomendada para remediação
+
+Durante a triagem, uma correção pode ser tratada como:
+
+- `AI-SAFE-LOW-RISK` — mudança pequena, causa-raiz clara, escopo fechado e regressão localizável;
+- `AI-CAREFUL-HIGH-RISK` — pode ser assistida por IA, mas toca domínio crítico e exige validação reforçada;
+- `PREPARE-FOR-DEV` — investigar, documentar e preparar evidência, mas não insistir em implementação nesta fase;
+- `HUMAN-SENIOR` — exige julgamento de arquitetura, segurança, produção, jurídico/compliance ou risco que não deve ser resolvido por tentativa iterativa da IA.
+
+Essa classificação é operacional; não substitui severidade formal de finding nem autoridade do `CLAUDE_AUDIT_FINDINGS_LEDGER.md`.
+
+## Exemplo registrado — QA-BROWSER-004 / PR #87
+
+Durante o Bloco 3 — Buyer, `QA-BROWSER-004` foi reproduzido de forma limpa como blocker do pagamento Alpha local.
+
+A causa-raiz foi isolada no `FakePaymentProvider`: IDs externos baseados em contador em memória podiam ser reutilizados após restart do backend, enquanto a constraint única do banco corretamente impedia a colisão e abria reconciliação.
+
+A correção aprovada foi mínima e limitada ao provider fake/local: ID determinístico derivado por SHA-256 da `idempotencyHash`, sem relaxar constraint, sem alterar Ledger, state machines, reconciliação, PSP real ou Phase B.
+
+A PR #87 foi validada por testes, CI, Browser QA, persistência após `F5`, consulta ao PostgreSQL e invariantes do Ledger antes do merge.
+
+Após o merge da PR #87, o fluxo obrigatório é **retornar ao Bloco 3 — Buyer**, não iniciar uma fase geral de remediação.
 
 ## Relação com os documentos atuais
 
 - `FINAL_FUNCTIONAL_VALIDATION_CHECKLIST.md` continua sendo a bateria manual/operacional principal.
 - `FINAL_FUNCTIONAL_AUDIT_REPORT.md` registra o resultado efetivamente observado em cada bloco.
+- `FINAL_FUNCTIONAL_AUDIT_BLOCK_3_BUYER_PROGRESS.md` preserva o estado intermediário do Bloco 3 enquanto ele ainda não está encerrado.
 - `POST_FREEZE_BROWSER_QA_FINDINGS.md` continua sendo o ledger dos achados manuais de Browser QA.
+- `POST_FREEZE_BROWSER_QA_BUYER_ADDENDUM_2026-08-16.md` preserva as atualizações intermediárias de findings do Buyer até a reconciliação final do ledger no fechamento do bloco.
 - `CLAUDE_AUDIT_FINDINGS_LEDGER.md` continua sendo a autoridade dos findings formais da auditoria Claude.
 - `ALPHA_SCOPE_AND_COMPLETION_CHECKLIST.md` continua sendo a autoridade funcional máxima do Alpha.
 
