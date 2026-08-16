@@ -596,3 +596,36 @@ Escopo esperado quando iniciado:
 - classificação de qualquer superfície mockada/legada de conta.
 
 **Regra:** não iniciar o Bloco 2 até este Bloco 1 estar persistido/revisado no repositório conforme governança do projeto.
+
+# Bloco 3 — Buyer — fechamento formal em 2026-08-16
+
+## Estado do bloco
+
+**`ENCERRADO — FLUXO CRÍTICO BUYER REAL-TESTED / PASS`.** A reconstrução foi documental e não repetiu browser, criação de pedido, pagamento, Seller ou Admin. Nenhum blocker novo surgiu na evidência reconciliada.
+
+## Matriz consolidada
+
+| Grupo | Resultado |
+| --- | --- |
+| Carrinho real, persistência e isolamento entre Buyers | `REAL-TESTED / PASS` — Browser + integração |
+| Checkout, reserva de inventário, expiração e consumo exatamente uma vez | `REAL-TESTED / PASS` |
+| Lista/detalhe de pedidos, `F5`, empty state, ownership e boundary segura | `REAL-TESTED / PASS` |
+| Iniciação de pagamento com replay (`LIT-9WN8RAWU3BZTKB`) | `REAL-TESTED / PASS` — 2 POSTs, 1 `PaymentAttempt #1` |
+| Confirmação `FAKE_ALPHA` com replay | `REAL-TESTED / PASS` — 1 sucesso, ativação, consumo, reconhecimento e Ledger balanceado |
+| Confirmação Buyer com replay e `F5` final | `REAL-TESTED / PASS` — `COMPLETED / PAID / CONFIRMED / NONE`, sem efeitos duplicados |
+| Multi-Seller | `COBERTURA AUTOMATIZADA / ESTRUTURAL` + `LIMITAÇÃO DE FIXTURE`; sem alegar Browser e sem classificar a fixture como bug |
+
+O uso pontual do Seller correto somente produziu a pré-condição `AWAITING_BUYER_CONFIRMATION`; não constitui encerramento da auditoria Seller.
+
+## Findings e limites
+
+- `QA-BROWSER-003`: `CLOSED — comportamento atual revalidado`; preservar o histórico stale e não atribuir correção à PR #87.
+- `QA-BROWSER-007`: `OPEN / NON_BLOCKER`, pois login ainda pode perder a intenção/destino.
+- `QA-BROWSER-013`: `OPEN / NON_BLOCKER`, pois o backend falha fechado pelo tempo, mas a UI pode seguir acionável antes do processamento da expiração.
+- Disputa/refund/reversal/chargeback, reposição após Buyer-win, fechamento de chat pós-disputa, bloqueio server-side de review, PSP real, payout, saque, scheduler produtivo pendente e revisão humana sênior continuam `FUTURE-SCOPE`/`HUMAN-SENIOR`.
+
+Portanto, encerra-se **somente o Bloco 3 — Buyer**. Não se declara Seller/Admin encerrados, Phase B iniciada, staging/produção aprovados ou dinheiro real autorizado.
+
+## Governança anti-repetição
+
+Para o próximo item/bloco: consultar a evidência histórica, verificar mudança no código relevante e repetir browser apenas diante de necessidade objetiva. Não repetir arbitrariamente evidências `REAL-TESTED` válidas, especialmente ao avançar para Seller/Admin.

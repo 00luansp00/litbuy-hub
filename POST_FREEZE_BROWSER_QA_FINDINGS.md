@@ -135,12 +135,14 @@ O banco confirmou:
 ### QA-BROWSER-003 — tela de pagamento permanece stale após aprovação Alpha
 
 - **Tipo:** frontend / cache / mutation state / UX
-- **Estado:** `OPEN`
+- **Estado:** `CLOSED — comportamento atual revalidado`
 - **Impacto:** `NON_BLOCKER`
 - **Área:** `/pagamento/$id`
 - **Pedido observado:** `LIT-SELPYT2KNHNTYH`
 
 **Observação:** após a aprovação Alpha ter progredido corretamente no backend, a tela de pagamento chegou a permanecer exibindo combinação visual desatualizada (`PAGAMENTO_PENDENTE` / `Não criado` / tentativa `SUCCEEDED`). Ao abrir `Meus pedidos`, o estado persistido real já estava correto em `ACTIVE / PAID / AWAITING_SELLER`.
+
+**Disposição final em 2026-08-16:** o histórico stale acima permanece preservado, mas a revalidação limpa atual não reproduziu o finding. A PR #87 não alterou frontend/cache e **não** é declarada como sua correção; o fechamento decorre do comportamento atual revalidado.
 
 **Evidência de backend:** o BROWSER-A5 completo passou e o PostgreSQL confirmou os estados autoritativos corretos.
 
@@ -290,6 +292,14 @@ O banco confirmou:
 **Critério futuro de hardening:** considerar seção separada para tentativas/dispositivos aguardando aprovação, com dados seguros de contexto e ação `Não fui eu`/bloqueio quando apropriado, sem expor PII ou sinais de risco desnecessários.
 
 ---
+
+### QA-BROWSER-013 — pedido vencido permanece visualmente acionável antes da materialização de expiração
+
+- **Classificação:** `REAL-BUG` / coerência temporal da UI Buyer
+- **Estado:** `OPEN`
+- **Impacto:** `NON_BLOCKER` no rehearsal local
+
+O backend falha fechado pelo deadline e a rotina real de expiração libera a reserva sem inventar estoque. Ainda assim, a UI pode permanecer acionável até a materialização/processamento da expiração. Não corrigido nesta reconstrução documental; permanece relevante para operação/scheduler produtivo.
 
 ## Requisitos futuros registrados durante o Browser QA
 

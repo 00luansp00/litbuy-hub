@@ -1,8 +1,8 @@
-# LIT Buy — Final Functional Audit — Bloco 3: Buyer — progresso intermediário
+# LIT Buy — Final Functional Audit — Bloco 3: Buyer — progresso e fechamento
 
 ## Finalidade
 
-Este documento preserva de forma detalhada o estado **intermediário** do **Bloco 3 — Buyer** da validação funcional final.
+Este documento preserva de forma detalhada o progresso e o fechamento formal do **Bloco 3 — Buyer** da validação funcional final.
 
 Ele foi criado antes do encerramento do bloco porque, durante a bateria Buyer, surgiu um blocker real de pagamento (`QA-BROWSER-004`) que precisou ser diagnosticado, corrigido, revalidado e mergeado antes de a auditoria poder continuar.
 
@@ -29,7 +29,7 @@ Ele **não**:
 
 # 1. Estado atual e ponto de retomada
 
-**Status do Bloco 3:** `EM ANDAMENTO — PAGAMENTO ALPHA LOCAL DESBLOQUEADO`.
+**Status histórico naquele ponto:** `EM ANDAMENTO — PAGAMENTO ALPHA LOCAL DESBLOQUEADO`. O status final reconciliado está na seção 23.
 
 **Ponto exato de retomada:** continuar a bateria Buyer **depois** de carrinho, checkout, expiração e pagamento Alpha local terem sido exercitados e depois de `QA-BROWSER-004` ter sido corrigido/mergeado.
 
@@ -807,3 +807,45 @@ Quando o Buyer estiver realmente encerrado, executar atualização documental co
 - atualizar checklist/process status se o fechamento do bloco mudar o estado global.
 
 Somente depois dessa documentação/revisão deve começar o próximo bloco funcional.
+
+# 23. Fechamento formal reconstruído — 2026-08-16
+
+**Status final do Bloco 3:** `ENCERRADO — FLUXO CRÍTICO BUYER REAL-TESTED / PASS`.
+
+Esta disposição reconcilia exclusivamente evidências já produzidas; nenhum cenário foi repetido nesta reconstrução documental. A base documental usada foi `44fa6c57cba4a9d458e5d7086068d6e8ccd8edd9`, merge da PR #90, incluindo `FUTURE_REQUIREMENTS_INVENTORY_DISPUTE_LIFECYCLE_2026-08-16.md`.
+
+## 23.1 Matriz final Buyer
+
+| Capacidade | Evidência reconciliada | Disposição |
+| --- | --- | --- |
+| Carrinho real, persistência e CRUD | Browser já executado; backend persistente | `REAL-TESTED / PASS` |
+| Isolamento de carrinho | Buyer B não viu o carrinho do Buyer A; ao retornar, Buyer A voltou a vê-lo; testes de integração cobrem ownership e mutations | `REAL-TESTED / PASS` — Browser + integração |
+| Checkout e inventário | Checkout cria `InventoryReservation`; TTL padrão de 15 minutos; reserva `ACTIVE` reduz disponibilidade sem decrementar imediatamente estoque persistido; expiração libera; pagamento no prazo consome e ativação decrementa uma vez | `REAL-TESTED / PASS` |
+| Pedidos, ownership e persistência | `/pedidos` e detalhe usam dados reais e persistem após `F5`; lista vazia correta; pedido inexistente ou alheio usa boundary segura; Buyer A não lê pedido de Buyer B | `REAL-TESTED / PASS` |
+| Iniciação de pagamento idempotente | Dois `POST` autenticados com a mesma `Idempotency-Key` no pedido `LIT-9WN8RAWU3BZTKB`; banco reteve apenas `PaymentAttempt #1` (`attempt_rows = 1`, um hash) | `REAL-TESTED / PASS` |
+| Confirmação `FAKE_ALPHA` + replay | Duas confirmações HTTP 200; um sucesso, uma ativação, uma reserva consumida, um consumo de inventário, um `SALE_RECOGNIZED`; Ledger `3990 = 3990` | `REAL-TESTED / PASS` |
+| Pré-condição pós-compra | Seller correto marcou entregue uma vez, apenas para produzir `AWAITING_BUYER_CONFIRMATION` | `REAL-TESTED` como pré-condição Buyer; **não** encerra Seller |
+| Confirmação de recebimento + replay | Dois `POST /orders/:orderCode/fulfillment/confirm` HTTP 200; uma entrega, uma confirmação, uma conclusão, um reconhecimento; sem duplicação financeira | `REAL-TESTED / PASS` |
+| Estado final após `F5` | `COMPLETED / PAID / CONFIRMED / NONE`; sem botão de confirmar, sem sucesso e erro simultâneos | `REAL-TESTED / PASS` |
+| Carrinhos de sellers diferentes | Estrutura por `buyerUserId + sellerProfileId`, checkout por Seller e cobertura automatizada existente; seed útil não oferecia segundo Seller para prova Browser | `COBERTURA AUTOMATIZADA / ESTRUTURAL` + `LIMITAÇÃO DE FIXTURE` |
+
+## 23.2 Disposição dos findings Buyer
+
+- `QA-BROWSER-003`: **`CLOSED — comportamento atual revalidado`**. O histórico stale permanece registrado. A PR #87 não é apresentada como correção desse finding; na evidência limpa atual o comportamento não se reproduziu.
+- `QA-BROWSER-007`: **`OPEN / NON_BLOCKER`**. O login ainda pode perder a intenção/destino original de produto ou carrinho.
+- `QA-BROWSER-013`: **`OPEN / NON_BLOCKER`**. O backend falha fechado pelo deadline, mas a UI pode permanecer acionável até a materialização/processamento da expiração.
+- **Blockers reais novos:** nenhum identificado nas evidências reconciliadas.
+
+## 23.3 Residual e future scope — não concluído
+
+O encerramento Buyer não conclui disputa completa, refund/reversal, chargeback, reposição idempotente de estoque após Buyer-win, fechamento de chat pós-disputa, bloqueio server-side de review, PSP real, payout, saque, executor/scheduler produtivo ainda pendente nem revisão humana sênior. Esses itens permanecem `FUTURE-SCOPE`/`HUMAN-SENIOR`, em especial conforme `FUTURE_REQUIREMENTS_INVENTORY_DISPUTE_LIFECYCLE_2026-08-16.md`.
+
+Também não significa Seller encerrado, Admin encerrado, início de Phase B, staging, produção ou dinheiro real.
+
+## 23.4 Regra anti-repetição para os próximos blocos
+
+Antes de qualquer novo bloco funcional:
+
+> ITEM DA CHECKLIST → verificar evidência histórica → verificar se o código relevante mudou → somente repetir browser se houver necessidade objetiva.
+
+Evidência `REAL-TESTED` válida não deve ser refeita arbitrariamente. Esta regra é especialmente aplicável aos próximos blocos Seller e Admin.

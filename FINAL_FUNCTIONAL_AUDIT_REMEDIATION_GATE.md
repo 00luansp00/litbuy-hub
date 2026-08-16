@@ -135,3 +135,13 @@ Após o merge da PR #87, o fluxo obrigatório é **retornar ao Bloco 3 — Buyer
 A `Revalidação final limpa` só começa quando todos os achados conhecidos e aplicáveis tiverem disposição explícita e todas as correções aprovadas para esta fase tiverem sido implementadas, testadas e documentadas.
 
 Isso não exige que todo item futuro ou humano esteja implementado. Exige que nenhum problema conhecido fique sem classificação ou destino rastreável.
+
+## Disposição após o fechamento do Bloco 3 — Buyer
+
+O Bloco 3 foi formalmente encerrado com o fluxo crítico Buyer `REAL-TESTED / PASS`, sem blocker novo. Permanecem `OPEN / NON_BLOCKER` o `QA-BROWSER-007` e o `QA-BROWSER-013`; `QA-BROWSER-003` fica `CLOSED — comportamento atual revalidado`, sem atribuir sua disposição à PR #87. Multi-Seller tem cobertura automatizada/estrutural e limitação de fixture, sem alegação de prova Browser.
+
+Este fechamento não encerra Seller/Admin, não inicia Phase B e não aprova staging, produção ou dinheiro real. Future scope e revisão humana sênior permanecem nos documentos autoritativos.
+
+### Regra anti-repetição entre blocos
+
+Antes de executar um item no próximo bloco: (1) verificar evidência histórica; (2) verificar se o código relevante mudou; (3) repetir browser somente se houver necessidade objetiva. Evidência `REAL-TESTED` válida não deve ser refeita arbitrariamente.
