@@ -234,6 +234,61 @@ O banco confirmou:
 
 **Decisão necessária:** definir se serviços podem ter formatos/pacotes realmente compráveis. Se sim, o contrato precisa cobrir criação pelo Seller, preço/estoque, seleção Buyer, cart item e snapshot de checkout; não basta tornar o card visualmente clicável.
 
+### QA-BROWSER-009 — Navbar exibe estado anônimo durante bootstrap da sessão
+
+- **Tipo:** frontend / Auth / UX
+- **Estado:** `OPEN`
+- **Impacto:** `NON_BLOCKER`
+- **Área:** Navbar / restauração de sessão
+- **Observado em:** Home e `/perfil/seguranca` após `F5`
+
+**Observação:** uma sessão válida é recuperada corretamente após refresh, porém por aproximadamente um segundo a Navbar exibe `Entrar` / `Criar conta` antes de voltar ao usuário autenticado.
+
+**Causa confirmada:** `AuthProvider` inicia com `status="initializing"` e `user=null`, executa `refresh()` e depois `/auth/me`; durante esse intervalo `isAuthenticated` é falso. A Navbar decide o estado visual somente por `isAuthenticated` e não neutraliza o estado `initializing`.
+
+**Classificação de risco:** não houve evidência de perda real da sessão ou autorização. É um flicker/estado visual enganoso de Auth.
+
+**Critério futuro de correção:** durante bootstrap da sessão persistida, renderizar estado neutro/loading apropriado e não afirmar temporariamente que o usuário está deslogado.
+
+### QA-BROWSER-010 — política de senha precisa de hardening central
+
+- **Tipo:** Auth / security-hardening
+- **Estado:** `OPEN`
+- **Impacto:** `NON_BLOCKER`
+- **Área:** cadastro / alteração de senha / reset
+
+**Estado atual confirmado:** a autoridade central aceita senha de 12 a 128 caracteres desde que não seja somente whitespace; hashing usa Argon2id.
+
+**Regra registrada:** a política final deve ser mais forte que o simples mínimo atual e continuar centralizada no backend. A mesma autoridade deve valer para cadastro, alteração de senha e redefinição de senha; o frontend orienta, mas não pode ser a única barreira.
+
+**Direção de hardening:** considerar comprimento/passphrases e bloqueio de senhas comuns/comprometidas. Não congelar uma regra arbitrária diferente por tela nem exigir composição rígida sem revisão de segurança.
+
+**Critério futuro:** definição final revisada no gate de segurança/humano sênior e aplicada de modo consistente a todo fluxo que define uma nova senha.
+
+### QA-BROWSER-011 — Termos/Privacidade interrompem o cadastro e podem perder contexto
+
+- **Tipo:** UX / cadastro / conversão
+- **Estado:** `OPEN`
+- **Impacto:** `NON_BLOCKER`
+- **Área:** `/cadastro` → `/termos` / `/privacidade`
+
+**Observação:** os links legais abrem outra rota na mesma guia. Como o formulário mantém dados em estado local, a navegação pode destruir o que o usuário já preencheu.
+
+**Critério futuro de correção:** permitir leitura sem perder o formulário, preferencialmente via modal/drawer rolável e opção secundária para abrir o documento completo em nova guia. O aceite continua explícito e separado.
+
+### QA-BROWSER-012 — tentativa/dispositivo pendente não é visível ao dono da conta
+
+- **Tipo:** security UX / account protection
+- **Estado:** `OPEN`
+- **Impacto:** `NON_BLOCKER`
+- **Área:** `/perfil/seguranca`
+
+**Observação:** o fluxo de novo dispositivo funcionou e bloqueou o login até aprovação, mas enquanto o device estava `PENDING` ele não apareceu na seção `Dispositivos aprovados` do navegador confiável.
+
+**Classificação:** não é falha comprovada da autorização; reduz visibilidade do titular sobre tentativa pendente.
+
+**Critério futuro de hardening:** considerar seção separada para tentativas/dispositivos aguardando aprovação, com dados seguros de contexto e ação `Não fui eu`/bloqueio quando apropriado, sem expor PII ou sinais de risco desnecessários.
+
 ---
 
 ## Requisitos futuros registrados durante o Browser QA
@@ -273,6 +328,59 @@ A abertura deverá oferecer categorias pré-definidas do problema antes da cria�
 - notificações e trilha de auditoria.
 
 Nenhuma dessas lacunas deve ser preenchida silenciosamente durante o feature freeze.
+
+### FUTURE-AUTH-001 — autenticação federada Google
+
+- **Tipo:** Auth / produto
+- **Estado:** `DECISION_REQUIRED`
+- **Impacto:** `FUTURE_SCOPE`
+- **Domínio:** login federado
+
+**Regra registrada:** não exibir `Continuar com Google` como ação funcional até existir fluxo real de OAuth/backend, vínculo com conta existente, sessão, logout, dispositivos, eventual 2FA e recuperação.
+
+### FUTURE-AUTH-002 — MFA forte adicional para operações privilegiadas
+
+- **Tipo:** security-hardening
+- **Estado:** `DECISION_REQUIRED`
+- **Impacto:** `FUTURE_SCOPE`
+- **Domínio:** Auth / Admin / financeiro
+
+**Direção registrada:** avaliar TOTP/authenticator e/ou passkey/WebAuthn, com prioridade maior para Admin e ações financeiras. E-mail/SMS não devem ser falsamente tratados como única proteção final de contas privilegiadas.
+
+### FUTURE-SECURITY-001 — alteração sensível, hold de 72h e monitoramento de risco
+
+- **Tipo:** security / account protection / financeiro futuro
+- **Estado:** `DECISION_REQUIRED`
+- **Impacto:** `FUTURE_SCOPE`
+- **Domínio:** alteração de e-mail / risco / saque
+
+**Decisão estabelecida:** após **troca concluída de e-mail**, o hold financeiro desejado é de **72 horas**, substituindo o default atual de 48 horas para essa regra de produto/segurança.
+
+**Requisitos registrados:** logging seguro, sem tokens/senhas/cookies/códigos; fila/painel de Segurança/Risco acessível somente a operadores autorizados; step-up adicional quando 2FA estiver ativo; tentativa de saque durante hold deve ser negada pela API e gerar evidência rastreável quando saque existir.
+
+**Ainda exige desenho/revisão:** granularidade de permissões da equipe, regras de alerta, outras mudanças sensíveis abrangidas pelo mesmo período e integração com o futuro domínio financeiro.
+
+### FUTURE-ADMIN-SECURITY-001 — hardening de contas e painel privilegiado
+
+- **Tipo:** security / privileged access
+- **Estado:** `DECISION_REQUIRED`
+- **Impacto:** `FUTURE_SCOPE`
+- **Domínio:** Admin
+
+**Direção registrada:** MFA forte obrigatório, dispositivo aprovado, sessão administrativa mais curta, step-up para ações críticas, permissões granulares/least privilege, logs/alertas e eventual camada adicional de infraestrutura/rede em produção. Conhecer a URL `/admin` nunca deve conceder autoridade.
+
+### FUTURE-WITHDRAWAL-KYC-001 — verificação documental obrigatória antes do saque
+
+- **Tipo:** produto / KYC / financeiro / compliance
+- **Estado:** `DECISION_REQUIRED`
+- **Impacto:** `FUTURE_SCOPE`
+- **Domínio:** Seller / saque
+
+**Regra de produto estabelecida:** o onboarding Seller mínimo atual pode habilitar a conta para vender após os requisitos/análise existentes, mas isso não equivale a KYC financeiro completo. **Saque real deve permanecer bloqueado até verificação documental mínima aprovada manualmente pela equipe LIT Buy**, além dos demais gates de segurança/risco.
+
+**Separação obrigatória:** `habilitado para vender` e `vendedor verificado para saque/selo` são conceitos distintos. O endpoint de saque futuro deve aplicar essa regra server-side; esconder o botão não é suficiente.
+
+**Ainda exige revisão humana:** conjunto final de documentos/dados, PSP, compliance, LGPD, política de retenção e eventual exigência de verificação anterior à venda.
 
 ---
 
