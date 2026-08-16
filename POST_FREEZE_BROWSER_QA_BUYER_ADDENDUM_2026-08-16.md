@@ -17,7 +17,7 @@ Este arquivo não altera escopo Alpha, não autoriza Phase B e não transforma `
 # QA-BROWSER-003 — tela de pagamento stale após aprovação Alpha
 
 - **Tipo:** frontend / cache / mutation state / UX
-- **Estado intermediário:** `NEEDS_REPRODUCTION / NÃO REPRODUZIDO NA RODADA LIMPA MAIS RECENTE`
+- **Estado final:** `CLOSED — comportamento atual revalidado`
 - **Impacto:** `NON_BLOCKER`
 - **Área:** `/pagamento/$id`
 
@@ -47,11 +47,12 @@ A PR #87 **não alterou frontend/cache**. Logo, não atribuir a ela uma correç�
 
 Também houve uma observação transitória em outro pedido em que a tela mostrou `Não criado` ao mesmo tempo em que já existia tentativa `PENDING (#1)`; após `F5`, passou a `PENDING` coerente.
 
-Disposição até fechamento do Buyer:
+Disposição final no fechamento Buyer:
 
-- não marcar como `CLOSED` por ausência de correção frontend identificada;
-- preservar histórico;
-- considerar nova reprodução/revalidação consolidada antes da disposição final.
+- o comportamento limpo atual não reproduziu o finding;
+- o histórico stale permanece preservado;
+- a PR #87 não é apresentada como correção;
+- `CLOSED — comportamento atual revalidado`.
 
 ---
 
@@ -270,3 +271,11 @@ Após seu merge:
 Não iniciar agora correções em massa de findings `NON_BLOCKER`.
 
 A política detalhada anti-loop e de retorno ao trilho principal está em `FINAL_FUNCTIONAL_AUDIT_REMEDIATION_GATE.md`.
+
+# Fechamento do addendum Buyer
+
+O Bloco 3 — Buyer foi formalmente encerrado como `REAL-TESTED / PASS`. `QA-BROWSER-007` e `QA-BROWSER-013` permanecem `OPEN / NON_BLOCKER`; não foram corrigidos nesta reconstrução. Multi-Seller permanece `COBERTURA AUTOMATIZADA / ESTRUTURAL` com `LIMITAÇÃO DE FIXTURE`, sem inventar evidência Browser.
+
+Disputa completa, refund/reversal, chargeback, reposição após Buyer-win, fechamento de chat pós-disputa, bloqueio server-side de review, PSP real, payout, saque, scheduler produtivo ainda pendente e revisão humana sênior não são concluídos por este fechamento. Seller e Admin também não estão encerrados.
+
+Antes de outro bloco: verificar evidência histórica, verificar mudança no código relevante e repetir browser somente por necessidade objetiva; não refazer arbitrariamente prova `REAL-TESTED` válida.
