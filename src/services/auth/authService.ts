@@ -1,4 +1,4 @@
-import { apiFetch } from "@/lib/api/client";
+import { apiFetch, refreshAccessToken } from "@/lib/api/client";
 import type {
   AuthMe,
   AuthSuccess,
@@ -77,8 +77,7 @@ export const authService = {
       body: json({ token, newPassword }),
       auth: false,
     }),
-  refresh: () =>
-    apiFetch<{ accessToken: string }>("/auth/refresh", { method: "POST", skipAuthRefresh: true }),
+  refresh: () => refreshAccessToken().then((accessToken) => ({ accessToken })),
   logout: () =>
     apiFetch<{ message: string }>("/auth/logout", { method: "POST", skipAuthRefresh: true }),
   me: () => apiFetch<AuthMe>("/auth/me").then(parseAuthMe),
