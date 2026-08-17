@@ -489,6 +489,10 @@ export type DraftPayload = Partial<{
   requestedPromotionTier: "SILVER" | "GOLD" | "DIAMOND";
   requestedSellerPlan: "STANDARD" | "LIT_MAX";
   autoMessage: string | null;
+  notifyInApp: boolean;
+  notifyBrowser: boolean;
+  notifyEmailFuture: boolean;
+  notifyExternalFuture: boolean;
   wizardStep: number;
   attributes: { key: string; value: string }[];
   variants: {
