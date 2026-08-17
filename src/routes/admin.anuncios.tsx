@@ -80,7 +80,7 @@ function AdminListingsPage() {
         .adminList({
           search,
           status: status === "all" ? undefined : status,
-          category: categoryId === "all" ? undefined : categoryId,
+          categoryId: categoryId === "all" ? undefined : categoryId,
           cursor: more ? (cursor ?? undefined) : undefined,
         })
         .then((page) => {
