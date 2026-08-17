@@ -116,7 +116,7 @@ async function parseBody<T>(response: Response): Promise<T | undefined> {
   }
 }
 
-async function refreshAccessToken(): Promise<string> {
+export async function refreshAccessToken(): Promise<string> {
   if (!refreshPromise) {
     refreshPromise = apiFetch<{ accessToken: unknown }>("/auth/refresh", {
       method: "POST",

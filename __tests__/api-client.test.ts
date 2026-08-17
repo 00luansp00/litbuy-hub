@@ -3,9 +3,11 @@ import {
   ApiError,
   apiFetch,
   getAccessToken,
+  refreshAccessToken,
   setAccessToken,
   setAuthLostHandler,
 } from "@/lib/api/client";
+import { authService } from "@/services/auth";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -187,6 +189,61 @@ describe("apiFetch", () => {
     expect(refresh).toBe(1);
     await expect(apiFetch("/still-401")).rejects.toMatchObject({ status: 401 });
     expect(fetch.mock.calls.filter((c) => String(c[0]).endsWith("/still-401"))).toHaveLength(2);
+  });
+
+  it("single-flights bootstrap and automatic refresh through the same rotation", async () => {
+    let releaseRefresh!: () => void;
+    const refreshPending = new Promise<void>((resolve) => {
+      releaseRefresh = resolve;
+    });
+    let privateCalls = 0;
+    const fetch = vi.fn(async (url: string) => {
+      if (url.endsWith("/auth/refresh")) {
+        await refreshPending;
+        return new Response(JSON.stringify({ accessToken: "rotated" }), { status: 200 });
+      }
+      if (url.endsWith("/private")) {
+        privateCalls += 1;
+        return new Response(JSON.stringify({ ok: privateCalls === 2 }), {
+          status: privateCalls === 1 ? 401 : 200,
+        });
+      }
+      return new Response("{}", { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetch);
+
+    const bootstrap = authService.refresh();
+    const protectedRequest = apiFetch<{ ok: boolean }>("/private");
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    releaseRefresh();
+
+    await expect(Promise.all([bootstrap, protectedRequest])).resolves.toEqual([
+      { accessToken: "rotated" },
+      { ok: true },
+    ]);
+    expect(
+      fetch.mock.calls.filter((call) => String(call[0]).endsWith("/auth/refresh")),
+    ).toHaveLength(1);
+    expect(getAccessToken()).toBe("rotated");
+  });
+
+  it("shares one failed refresh and clears auth for every concurrent caller", async () => {
+    setAccessToken("old");
+    const lost = vi.fn();
+    setAuthLostHandler(lost);
+    const fetch = vi.fn(
+      async () => new Response(JSON.stringify({ code: "INVALID_SESSION" }), { status: 401 }),
+    );
+    vi.stubGlobal("fetch", fetch);
+
+    const first = refreshAccessToken();
+    const second = authService.refresh();
+
+    const results = await Promise.allSettled([first, second]);
+    expect(results.map(({ status }) => status)).toEqual(["rejected", "rejected"]);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(getAccessToken()).toBeNull();
+    expect(lost).toHaveBeenCalledTimes(1);
   });
 
   it.each([
