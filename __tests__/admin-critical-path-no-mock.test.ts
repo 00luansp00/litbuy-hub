@@ -25,4 +25,11 @@ describe("admin critical path operational authorities", () => {
     expect(source).not.toContain("sellerDashboardService");
     expect(source).not.toContain("localStorage");
   });
+
+  it("uses the backend categoryId contract in listing moderation", () => {
+    const source = readFileSync("src/routes/admin.anuncios.tsx", "utf8");
+
+    expect(source).toContain('categoryId: categoryId === "all" ? undefined : categoryId');
+    expect(source).not.toContain('category: categoryId === "all" ? undefined : categoryId');
+  });
 });
