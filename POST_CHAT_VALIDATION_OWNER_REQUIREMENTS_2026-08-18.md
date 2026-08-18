@@ -1,5 +1,8 @@
 # LIT Buy — Requisitos do Owner após validação do Order Chat — 2026-08-18
 
+> **OWNER TARGET RECONCILIATION (2026-08-18):** the freeze supersedes target references below to `COMPLETED`, generic 50%/positive-rating acceleration, and wholly undecided VIP values. Notices now follow authoritative delivery/Seller MAX and VIP baselines are frozen. Historical/current text remains preserved; all replacements are `NOT IMPLEMENTED`.
+
+
 ## Finalidade, contexto e autoridade
 
 Este documento consolida decisões e follow-ups do Owner descobertos durante a validação funcional real do Order Chat em 2026-08-18. É um índice de rastreabilidade: **não substitui** `ALPHA_SCOPE_AND_COMPLETION_CHECKLIST.md`, `ORDER_CHAT_CONTRACT.md`, `POST_FREEZE_BROWSER_QA_FINDINGS.md` nem autoridades específicas de domínio.

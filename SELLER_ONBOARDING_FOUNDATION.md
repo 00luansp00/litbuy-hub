@@ -1,5 +1,8 @@
 # Seller Onboarding Foundation
 
+> **CURRENT vs OWNER TARGET (2026-08-18):** application/Admin approval below remains CURRENT. The `NOT IMPLEMENTED` freeze separates selling enablement from verification: store setup permits selling without waiting for approval, unverified Sellers cannot withdraw, and KYC/provider remains `HUMAN-PROD-REVIEW`.
+
+
 ## Real nesta sprint
 
 - Compradores autenticados salvam e submetem uma solicitação persistida de vendedor.

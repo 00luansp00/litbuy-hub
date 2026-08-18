@@ -1,5 +1,8 @@
 # Seller hold release-policy snapshot
 
+> **CURRENT IMPLEMENTATION / TARGET SUPERSEDED (2026-08-18):** this global hold-creation snapshot remains accurate CURRENT evidence. The freeze target instead resolves at checkout, uses default 7 days and starts at authoritative `deliveredAt`, with Seller MAX-only anticipation. Earlier target prose below about `COMPLETED`/per-rule acceleration is historical and `NOT IMPLEMENTED`.
+
+
 The immutable snapshot is the sole temporal authority used by the PR #53 eligibility phase;
 the current effective policy is never consulted and a retired historical policy remains valid.
 

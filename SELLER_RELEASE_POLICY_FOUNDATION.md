@@ -1,5 +1,8 @@
 # Seller release policy foundation
 
+> **CURRENT vs OWNER TARGET (2026-08-18):** the global foundation below remains CURRENT. The freeze supersedes future per-rule acceleration/undefined fallback with a 7-day default, authoritative `deliveredAt` clock and Seller MAX-only anticipation; `NOT IMPLEMENTED`.
+
+
 This increment defines the versioned policy that a later hold-lifecycle increment may snapshot. It does not release funds. `WithdrawalPolicyVersion` is deliberately not reused: withdrawal speed, approval, SLA, enablement, and fees govern cash-out, whereas this policy governs the delivery-protection interval before held proceeds may become eligible.
 
 ## Version and lifecycle
