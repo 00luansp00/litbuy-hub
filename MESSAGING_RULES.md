@@ -2,6 +2,8 @@
 
 Regras futuras de mensagens. **Documentação de planejamento.** Não implementado.
 
+> **Nota corrente — 2026-08-18:** este arquivo preserva planejamento histórico e superfícies mock mais amplas. O contrato autorizado da primeira implementação real está em [`ORDER_CHAT_CONTRACT.md`](./ORDER_CHAT_CONTRACT.md) e prevalece em qualquer conflito sobre a V1 atual. Supabase/RLS não é a arquitetura corrente do chat: a implementação planejada usa backend NestJS, PostgreSQL e autorização server-side. Isso não é evidência de implementação existente.
+
 ## Tipos de conversa
 
 - **Pré-compra** — comprador em potencial contata vendedor com dúvida sobre produto. Não vinculada a pedido.

@@ -35,7 +35,7 @@ This index answers two questions for an external reviewer: **what should I read 
 | [`PROJECT_RULES.md`](./PROJECT_RULES.md)                                                                         | Repository working rules and implementation constraints.                                    | Current engineering governance, subordinate to explicit task instructions.                                       |
 | [`AGENTS.md`](./AGENTS.md)                                                                                       | Lovable-connected Git-history handling instructions.                                        | Current agent/repository governance.                                                                             |
 
-## B. CURRENT DOMAIN REFERENCE (28)
+## B. CURRENT DOMAIN REFERENCE (29)
 
 These documents provide implemented domain contracts or evidence. “Current” is limited to the named domain and never means production approval.
 
@@ -57,6 +57,7 @@ These documents provide implemented domain contracts or evidence. “Current” 
 | [`PRODUCT_DETAIL_PUBLIC_CATALOG_INTEGRATION.md`](./PRODUCT_DETAIL_PUBLIC_CATALOG_INTEGRATION.md) | Records product-detail integration.                                 | Frontend integration evidence.                                                                 |
 | [`CART_FOUNDATION.md`](./CART_FOUNDATION.md)                                                     | Defines persistent Buyer carts and reconciliation.                  | Implemented commerce foundation; later frontend completion is governed by the Alpha checklist. |
 | [`ORDER_CHECKOUT_FOUNDATION.md`](./ORDER_CHECKOUT_FOUNDATION.md)                                 | Defines server-authoritative checkout and order creation.           | Implemented checkout/order core.                                                               |
+| [`ORDER_CHAT_CONTRACT.md`](./ORDER_CHAT_CONTRACT.md)                                             | Formaliza a V1 autorizada do chat transacional pós-compra.          | **Contrato CURRENT/autoritativo da V1; implementação ainda pendente e sem alegação de produção.** |
 | [`BUYER_ORDER_READ_FRONTEND.md`](./BUYER_ORDER_READ_FRONTEND.md)                                 | Documents Buyer order-list/detail API integration.                  | Buyer read-model frontend contract.                                                            |
 | [`ORDER_LIFECYCLE.md`](./ORDER_LIFECYCLE.md)                                                     | Defines order states and transitions.                               | Domain rules; use implemented increments/Alpha checklist for completion.                       |
 | [`PAYMENT_ORCHESTRATION_SANDBOX.md`](./PAYMENT_ORCHESTRATION_SANDBOX.md)                         | Documents provider-neutral sandbox orchestration.                   | Non-production payment boundary.                                                               |
@@ -90,7 +91,7 @@ Preserved for context/history; **do not use as authority for current status**.
 | [`LOCAL_PUBLIC_FOUNDATION_RUNBOOK.md`](./LOCAL_PUBLIC_FOUNDATION_RUNBOOK.md) | Reproduces the earlier public-foundation milestone.                   | Specialized historical runbook; use the Alpha stabilization runbook now.                                     |
 | [`MOCKS_INVENTORY.md`](./MOCKS_INVENTORY.md)                                 | Incremental record of real versus mock boundaries.                    | Historical/mixed inventory; current critical-path authority is the Alpha checklist and new legacy inventory. |
 
-## D. PLANNING / FUTURE / PRODUCTION (12)
+## D. PLANNING / FUTURE / PRODUCTION (13)
 
 These documents express desired controls, decisions, or future production work. Presence does not prove implementation.
 
@@ -107,6 +108,7 @@ These documents express desired controls, decisions, or future production work. 
 | [`AUTH_STAGING_HOMOLOGATION_RUNBOOK.md`](./AUTH_STAGING_HOMOLOGATION_RUNBOOK.md)           | Describes future hosted-staging auth homologation.       | Operational planning; local rehearsal is not hosted staging.                              |
 | [`DISPUTE_FLOW.md`](./DISPUTE_FLOW.md)                                                     | Describes intended dispute behavior.                     | Future/incomplete domain, outside critical Alpha.                                         |
 | [`DIGITAL_DELIVERY_FLOW.md`](./DIGITAL_DELIVERY_FLOW.md)                                   | Describes expected delivery modes and legacy mock state. | Planning/history; current fulfillment authority is the Alpha checklist/domain foundation. |
+| [`MESSAGING_RULES.md`](./MESSAGING_RULES.md)                                               | Preserva planejamento histórico e superfícies mock amplas de mensagens. | Não é o contrato da V1 real; para o chat transacional corrente, prevalece `ORDER_CHAT_CONTRACT.md`. |
 | [`WITHDRAWAL_POLICY.md`](./WITHDRAWAL_POLICY.md)                                           | Describes withdrawal/payout policy concepts.             | Future production work; withdrawal is not implemented for real money.                     |
 
 ## E. AUXILIARY / SPECIALIZED (12)

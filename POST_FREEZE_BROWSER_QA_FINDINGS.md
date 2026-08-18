@@ -326,6 +326,14 @@ Continuam `DECISION REQUIRED`: REST polling versus realtime/WebSocket, anexos, l
 
 Essa elevação é uma decisão de produto/current commerce gap e não altera automaticamente a linha de chegada formal do Alpha; uma mudança do Alpha exigiria decisão formal separada. **Nenhuma alteração de escopo Alpha é feita nesta reconciliação.**
 
+#### Atualização de decisão do owner — 2026-08-18
+
+O registro histórico `CURRENT COMMERCE GAP / NOT IMPLEMENTED / DECISION REQUIRED` acima permanece preservado. O owner decidiu que o chat mínimo pós-compra entra antes do Production Handoff, com classificação corrente `AUTHORIZED PRE-HANDOFF COMMERCE INCREMENT / IMPLEMENTATION PENDING`. Ele não está `IMPLEMENTED`, `REAL-TESTED` nem `CLOSED`.
+
+Esta decisão é um incremento deliberado pós-freeze/pré-handoff e não muda automaticamente `ALPHA_SCOPE_AND_COMPLETION_CHECKLIST.md`, `PENDENTE DE IMPLEMENTAÇÃO ALPHA = 0` ou a conclusão anterior do Alpha. A V1 é restrita a uma conversa por `Order`, Buyer e Seller autoritativos, texto persistido server-side no PostgreSQL, REST/polling e histórico com escrita após `COMPLETED`. Anexos, WebSocket/realtime, pré-compra, support/Admin e mediação completa ficam fora da V1.
+
+O contrato corrente e seus blockers estão em [`ORDER_CHAT_CONTRACT.md`](./ORDER_CHAT_CONTRACT.md). Esta decisão não declara production readiness nem autoriza dinheiro real.
+
 ### PRODUCT-SELLER-RESUBMISSION-001 — limite de re-submissões do onboarding
 
 - **Classificação:** `NOT IMPLEMENTED / PRODUCT DECISION / NON_BLOCKER`
