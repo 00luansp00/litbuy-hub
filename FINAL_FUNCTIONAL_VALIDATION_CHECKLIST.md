@@ -20,7 +20,7 @@ Antes de qualquer novo teste, responder: **ITEM → JÁ TESTADO? → ONDE ESTÁ 
 - [x] ListingDraft lifecycle, delivery e Seller finance: `REAL-TESTED`; evidência consolidada no relatório funcional.
 - [x] `PASS2-F2`: `FIXED / REAL-TESTED` pela PR #96, CI #348 / run `32064187807`, filtro revalidado no browser.
 - [x] `PASS2-F3`: `FIXED / REAL-TESTED` pela PR #97, CI #350 / run `32079416748`, persistência confirmada após `F5` e no DB.
-- [ ] Chat transacional do pedido: `CURRENT COMMERCE GAP / NOT IMPLEMENTED / DECISION REQUIRED`; não transformar decisão em conclusão.
+- [ ] Chat transacional do pedido: registro histórico `CURRENT COMMERCE GAP / NOT IMPLEMENTED / DECISION REQUIRED`; classificação corrente `AUTHORIZED PRE-HANDOFF COMMERCE INCREMENT / IMPLEMENTATION PENDING`, conforme [`ORDER_CHAT_CONTRACT.md`](./ORDER_CHAT_CONTRACT.md). Não transformar autorização em implementação ou conclusão.
 - [ ] Limite de duas re-submissões Seller após rejeição: `NOT IMPLEMENTED / PRODUCT DECISION / NON_BLOCKER`.
 
 Nenhuma alteração de escopo Alpha é feita nesta reconciliação.
@@ -209,6 +209,22 @@ Para cada superfície que existir visualmente:
 - [ ] Refresh após conclusão mantém o estado correto.
 - [ ] Clique repetido/replay não duplica efeitos financeiros.
 - [ ] Chat/review/mediação que ainda não forem implementados são classificados conforme escopo futuro, sem serem tratados como concluídos.
+
+## 7.1 Chat transacional do Order — validação futura autorizada
+
+Não reexecutar fluxos já `REAL-TESTED` apenas para preparar o chat. Os itens abaixo permanecem abertos até as PRs futuras de backend, frontend e validação:
+
+- [ ] Conversa canônica ligada ao `Order` correto e única por invariante/constraint.
+- [ ] Buyer e Seller participantes são derivados do ownership autoritativo do `Order`.
+- [ ] Buyer A/Buyer B e Seller A/Seller B permanecem isolados; troca de `conversationId`/`orderId` falha fechada contra IDOR.
+- [ ] Mensagens persistem no PostgreSQL e continuam após `F5`/nova sessão.
+- [ ] Buyer e Seller enviam mensagens nos dois sentidos.
+- [ ] Histórico usa paginação/cursor, sem carregamento ilimitado.
+- [ ] Polling contextual funciona sem dependência de WebSocket.
+- [ ] `COMPLETED` mantém histórico e escrita para Buyer e Seller nesta V1.
+- [ ] Replay/idempotência não duplica conversa nem produz efeito indevido.
+- [ ] Nenhuma mutation do chat altera Order, Payment, fulfillment, dispute ou Ledger.
+- [ ] Seeds/mocks não aparecem misturados ao chat real; ausência de conversas exibe empty state real.
 
 # 8. Seller — onboarding e autorização
 
@@ -450,7 +466,7 @@ Antes da rodada final ser considerada concluída:
 - [ ] Novos achados recebem ID e classificação.
 - [ ] `NON_BLOCKER` não vira blocker silenciosamente.
 - [ ] `FUTURE_SCOPE` não vira implementação silenciosamente.
-- [ ] Chat transacional permanece `CURRENT COMMERCE GAP / NOT IMPLEMENTED / DECISION REQUIRED`; mediação e decisões pendentes continuam sem implementação.
+- [ ] Preservar o registro histórico do chat `CURRENT COMMERCE GAP / NOT IMPLEMENTED / DECISION REQUIRED` e acompanhar a classificação corrente `AUTHORIZED PRE-HANDOFF COMMERCE INCREMENT / IMPLEMENTATION PENDING` em [`ORDER_CHAT_CONTRACT.md`](./ORDER_CHAT_CONTRACT.md); mediação e demais capabilities fora da V1 continuam sem implementação.
 
 # 25. Claude Audit Findings Ledger
 

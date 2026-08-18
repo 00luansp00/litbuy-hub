@@ -85,3 +85,11 @@ As listas de fases acima preservam a sequência histórica. O estado corrente é
 - `PASS2-F3` foi concluído pela PR #97, com CI #350 / run `32079416748` e Browser QA/DB.
 
 O passo imediatamente posterior à #97 é esta reconciliação documental. Ela não inicia Phase C nem qualquer próxima fase de implementação, não autoriza feature e não altera o escopo Alpha.
+
+## Decisão controlada pós-PR #98 — chat transacional — 2026-08-18
+
+Após a reconciliação documental das PRs #97/#98, o owner autorizou a implementação mínima do chat pós-compra vinculado ao `Order` antes do Production Handoff. É um incremento deliberado pós-feature-freeze, não um finding Claude novo, não muda silenciosamente o escopo/conclusão do Alpha e permanece `AUTHORIZED PRE-HANDOFF COMMERCE INCREMENT / IMPLEMENTATION PENDING`.
+
+O incremento deve ser resolvido antes de prosseguir para a Phase C histórica deste plano e segue a divisão controlada: PR A de contrato/documentação; PR B de backend persistente REST, ownership/IDOR e testes, sem mudança financeira; PR C de frontend real e substituição do mock no caminho do `Order`; PR D de validação funcional e reconciliação de evidências. A Phase C só continua depois do fechamento ou de nova decisão explícita sobre este incremento.
+
+O contrato autoritativo está em [`ORDER_CHAT_CONTRACT.md`](./ORDER_CHAT_CONTRACT.md). Nenhuma dessas PRs afeta PSP, habilita dinheiro real ou permite que mensagens alterem Payment, Order, fulfillment ou Ledger.
