@@ -21,6 +21,7 @@ describe('Order chat HTTP com autenticação, CSRF e PostgreSQL reais', () => {
   let prisma: PrismaService;
   let mailer: AuthMailer;
   let redis: RedisService;
+  const sellerProfileIds = new Map<string, string>();
 
   beforeAll(async () => {
     const ref = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -40,6 +41,7 @@ describe('Order chat HTTP com autenticação, CSRF e PostgreSQL reais', () => {
   });
 
   beforeEach(async () => {
+    sellerProfileIds.clear();
     await (await redis.getClient()).flushdb();
     mailer.sent.splice(0);
     await prisma.$executeRawUnsafe('TRUNCATE TABLE "User", "CatalogCategory" CASCADE');
@@ -62,15 +64,20 @@ describe('Order chat HTTP com autenticação, CSRF e PostgreSQL reais', () => {
     seller: Actor,
     state: { status?: OrderStatus; paymentStatus?: PaymentStatus } = {},
   ) {
-    const fixture = await commerceFixture(prisma);
-    const profile = await prisma.sellerProfile.update({
-      where: { id: fixture.seller.id },
-      data: { userId: seller.user.id },
-    });
+    let sellerProfileId = sellerProfileIds.get(seller.user.id);
+    if (!sellerProfileId) {
+      const fixture = await commerceFixture(prisma);
+      const profile = await prisma.sellerProfile.update({
+        where: { id: fixture.seller.id },
+        data: { userId: seller.user.id },
+      });
+      sellerProfileId = profile.id;
+      sellerProfileIds.set(seller.user.id, sellerProfileId);
+    }
     const cart = await prisma.cart.create({
       data: {
         buyerUserId: buyer.user.id,
-        sellerProfileId: profile.id,
+        sellerProfileId,
         status: 'CHECKED_OUT',
       },
     });
@@ -80,7 +87,7 @@ describe('Order chat HTTP com autenticação, CSRF e PostgreSQL reais', () => {
         sourceCartId: cart.id,
         sourceCartVersion: 1,
         buyerUserId: buyer.user.id,
-        sellerProfileId: profile.id,
+        sellerProfileId,
         subtotalAmountMinor: 1000n,
         totalAmountMinor: 1000n,
         expiresAt: new Date(Date.now() + 60_000),
@@ -239,6 +246,8 @@ describe('Order chat HTTP com autenticação, CSRF e PostgreSQL reais', () => {
     const seller = await actorWithRole('SELLER');
     const firstOrder = await order(buyer, seller);
     const secondOrder = await order(buyer, seller);
+    expect(firstOrder.id).not.toBe(secondOrder.id);
+    expect(firstOrder.sellerProfileId).toBe(secondOrder.sellerProfileId);
     const ids: string[] = [];
     for (const text of ['um', 'dois', 'três']) {
       const response = await send(buyer, firstOrder.publicCode, {
@@ -264,6 +273,13 @@ describe('Order chat HTTP com autenticação, CSRF e PostgreSQL reais', () => {
         text: 'outra conversa',
       }).expect(200)
     ).body.messageId;
+    const conversations = await prisma.orderChatConversation.findMany({
+      where: { orderId: { in: [firstOrder.id, secondOrder.id] } },
+      select: { orderId: true },
+    });
+    expect(conversations.map(({ orderId }) => orderId).sort()).toEqual(
+      [firstOrder.id, secondOrder.id].sort(),
+    );
     const invalid = await messages(buyer, firstOrder.publicCode, `?cursor=${foreignCursor}`).expect(
       400,
     );
