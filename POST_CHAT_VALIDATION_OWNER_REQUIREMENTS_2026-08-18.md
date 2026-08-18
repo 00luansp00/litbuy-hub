@@ -10,17 +10,21 @@ O `ORDER_CHAT_CONTRACT.md` permanece o contrato V1 corrente. Os requisitos novos
 
 - **Main testada:** `43ee89c94b2e23f2bc1bee0d4e6920a0cc97a385`.
 - **Ambiente:** rehearsal local com `docker-compose.staging.yml`, PostgreSQL/Redis/MinIO reais e `FAKE_ALPHA` apenas como modo local não produtivo.
-- **Order reutilizado:** `LIT-JVFUAQZ4U6CXCG`, em estado `ACTIVE/PAID` no início do recorte.
+- **Order inicial:** `LIT-JVFUAQZ4U6CXCG`, em estado `ACTIVE/PAID` no início do recorte.
 - Buyer autenticado abriu o detalhe real, viu o chat e enviou `teste`.
 - Seller abriu a venda do mesmo Order em outra sessão/navegador, recebeu a mensagem sem `F5` e respondeu `teste ok`.
 - Buyer recebeu a resposta sem `F5`; ambas as sessões permaneceram conectadas simultaneamente.
 - Depois de `F5` nas duas sessões, as duas mensagens continuaram presentes.
 
-O recorte comprova funcionalmente, no ambiente descrito, polling Buyer ↔ Seller e persistência do histórico via backend/PostgreSQL. **Não conclui a CHAT-PR-D inteira**: ainda faltam outras validações planejadas, incluindo ao menos continuidade em `Order COMPLETED`, se aplicável. Não é evidência de produção, WebSocket, push, PSP real ou dinheiro real.
+O recorte inicial comprovou polling Buyer ↔ Seller e persistência via backend/PostgreSQL. A evidência final usou o Order limpo `LIT-TLYEMUVKHVRAGL` (`Conta de jogo demonstrativa`, R$ 49,90): checkout e aprovação `FAKE_ALPHA` levaram de `PENDING_PAYMENT / NOT_CREATED` a `ACTIVE / PAID / AWAITING_SELLER / NONE`, com redirecionamento automático da rota de pagamento para o detalhe do pedido, exatamente uma `LedgerTransaction` `SALE_RECOGNIZED / OrderSale` e zero `ReconciliationIssue`. Após entrega e confirmação, o browser mostrou `COMPLETED / PAID / CONFIRMED / NONE`.
+
+Em `COMPLETED`, o Buyer enviou `teste chat após conclusão buyer`, o Seller recebeu em sessão independente e respondeu `ok`, e o Buyer recebeu a resposta. O chat permaneceu visível e gravável pelos dois participantes. Portanto, a **CHAT-PR-D está `PASSED / FUNCIONALMENTE CONCLUÍDA` no rehearsal local**, inclusive quanto à continuidade V1 após `COMPLETED`. O transporte continua REST/polling; não é evidência de produção, WebSocket, push, PSP real ou dinheiro real.
+
+O Order inicial `LIT-JVFUAQZ4U6CXCG` não serve como prova de conclusão: após entrega e confirmação permaneceu `ACTIVE / PAID / CONFIRMED / NONE`, sem `SALE_RECOGNIZED / OrderSale`, com `ReconciliationIssue OPEN / MISSING_LOCAL` para `OrderFulfillment` e `SALE_RECOGNITION_MISSING`. O backend falhou fechado por proteção financeira. Não é bug corrigido; não se deve fabricar Ledger, apagar a issue ou reutilizar esse Order para validar conclusão. Sua evidência anterior de chat `ACTIVE/PAID` permanece válida.
 
 ## V1 já implementada versus follow-ups
 
-A capability V1 observada e implementada neste corte é o chat textual pós-compra do Order elegível, embutido nos detalhes reais de Buyer e Seller, com troca bidirecional por REST/polling e histórico persistente. Seus limites e critérios continuam definidos pelo `ORDER_CHAT_CONTRACT.md`; a evidência parcial acima não declara todos os critérios de aceitação concluídos.
+A capability V1 observada e implementada neste corte é o chat textual pós-compra do Order elegível, embutido nos detalhes reais de Buyer e Seller, com troca bidirecional por REST/polling, histórico persistente e continuidade validada após `COMPLETED`. Seus limites e critérios continuam definidos pelo `ORDER_CHAT_CONTRACT.md`.
 
 Não estão implementados por esta PR documental: redesign visual, superfície bloqueada pré-pagamento, system notices, notificações reais account-wide, Product Q&A público ou planos adicionais Buyer/VIP. Nenhum schema, API, Admin, backend, frontend, Prisma, migration, teste ou CI foi alterado.
 
@@ -28,11 +32,13 @@ Não estão implementados por esta PR documental: redesign visual, superfície b
 
 | Item | Status | Classificação / relação |
 | --- | --- | --- |
-| Evidência Buyer ↔ Seller em `ACTIVE/PAID`, polling e persistência após `F5` | `REAL-TESTED` no recorte local descrito | Evidência parcial da CHAT-PR-D; demais critérios continuam pendentes |
+| Evidência Buyer ↔ Seller em `ACTIVE/PAID`, polling e persistência após `F5` | `REAL-TESTED` no recorte local descrito | Evidência inicial preservada; complementada pelo fechamento abaixo |
+| CHAT-PR-D, inclusive escrita bidirecional após `COMPLETED` | `PASSED / FUNCIONALMENTE CONCLUÍDA` no rehearsal local | Order limpo `LIT-TLYEMUVKHVRAGL`; REST/polling, não produção |
 | UX visual ampliada do Order Chat | `OWNER REQUIREMENT / NOT IMPLEMENTED` | `PRE-HANDOFF CANDIDATE`; `NON_BLOCKER` da validação atual; QA-BROWSER-014 |
 | Chat visível, porém bloqueado em `PENDING_PAYMENT` | `OWNER REQUIREMENT / NOT IMPLEMENTED` | `PRE-HANDOFF CANDIDATE`; somente UX, sem mensagem pré-elegibilidade; QA-BROWSER-014 |
 | `SYSTEM / LIT BUY SYSTEM NOTICE` persistente e configurável | `OWNER REQUIREMENT / NOT IMPLEMENTED / DECISION REQUIRED` | `PRE-HANDOFF CANDIDATE`; schema/API/Admin a definir; QA-BROWSER-015 |
 | Notificações reais account-wide | `OWNER REQUIREMENT / CURRENT SYSTEM = MOCK / NOT IMPLEMENTED` | `PRE-HANDOFF CANDIDATE`; QA-BROWSER-016 e QA-BROWSER-001 |
+| Gatilho Buyer “Reportar problema” | `OWNER REQUIREMENT / NOT IMPLEMENTED` | `HIGH OWNER PRIORITY / PRE-HANDOFF CANDIDATE`; QA-BROWSER-017; capability separada do Order Chat V1 |
 | Product Q&A público | `OWNER REQUIREMENT / NOT IMPLEMENTED` | `SEPARATE INCREMENT`; relacionado a QA-BROWSER-006; não misturar com Order Chat |
 | Buyer addon/VIP básico-premium | `FUTURE-SCOPE / DECISION REQUIRED / NOT IMPLEMENTED` | Autoridade própria: `FUTURE_REQUIREMENTS_BUYER_CHECKOUT_ADDON_PLANS_2026-08-16.md` |
 
@@ -71,6 +77,12 @@ O clique navega para `/pedidos/<publicCode>` quando o destinatário é Buyer e p
 Order Chat é privado, pós-compra e vinculado a um Order elegível. Product Q&A é pré-compra e público no anúncio/produto: Buyer autenticado pergunta, o Seller proprietário responde e visitantes do produto podem ler perguntas e respostas.
 
 Product Q&A deve possuir backend e persistência reais; o frontend mock existente não é implementação. Quando implementado em incremento separado, deve aparecer abaixo das informações/descrição do produto. A ausência já se relaciona a `QA-BROWSER-006`; não foi criado finding duplicado.
+
+## “Reportar problema” é capability separada do Order Chat V1
+
+O Owner definiu **“Reportar problema”** como label público da ação Buyer que inicia disputa/mediação vinculada ao Order. Não se confunde com denúncia genérica de usuário, comportamento, anúncio ou moderação. A rota Buyer real ainda não oferece essa abertura funcional; mocks históricos não são implementação. O requisito está registrado em `QA-BROWSER-017` como `OPEN — NOT IMPLEMENTED`, `HIGH OWNER PRIORITY` e `PRE-HANDOFF CANDIDATE`, sem se tornar automaticamente blocker do Alpha.
+
+A ação é permitida depois da entrega e pode permanecer elegível após confirmação e `COMPLETED`, durante uma janela de proteção pós-venda. A duração e demais políticas da janela são **`DECISION REQUIRED`**. Elegibilidade deve ser server-side, e a implementação futura precisa de persistência, segurança de ownership/IDOR, auditoria, evidências seguras, desenho financeiro e Admin real. Nada disso integra ou amplia o contrato V1 do Order Chat, e esta PR não implementa a capability.
 
 ## Buyer addon / VIP básico-premium
 

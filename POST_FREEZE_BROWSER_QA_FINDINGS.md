@@ -104,7 +104,7 @@ O banco confirmou:
 
 ## Evidência funcional — Order Chat (2026-08-18)
 
-**Estado desta evidência:** `PASSED — recorte funcional parcial da CHAT-PR-D`
+**Estado desta evidência:** `PASSED / FUNCIONALMENTE CONCLUÍDA — CHAT-PR-D no rehearsal local`
 
 **Main testada:** `43ee89c94b2e23f2bc1bee0d4e6920a0cc97a385`
 
@@ -121,7 +121,21 @@ O banco confirmou:
 - Buyer e Seller permaneceram conectados simultaneamente;
 - após `F5` nas duas sessões, ambas as mensagens continuaram presentes.
 
-**Conclusão limitada:** há evidência funcional, neste rehearsal local, de polling Buyer ↔ Seller e de persistência do histórico via backend/PostgreSQL. Esta evidência **não conclui a CHAT-PR-D inteira**: ainda faltam as demais validações planejadas, incluindo ao menos a continuidade em `Order COMPLETED`, se aplicável, além dos outros critérios do contrato V1.
+### Evidência complementar e fechamento da CHAT-PR-D
+
+O Order limpo `LIT-TLYEMUVKHVRAGL` (`Conta de jogo demonstrativa`, R$ 49,90) foi criado pelo checkout em `PENDING_PAYMENT / NOT_CREATED`. Iniciar o pagamento criou `Payment PENDING` e `Attempt #1 PENDING`; **Simular aprovação Alpha** aprovou e redirecionou automaticamente de `/pagamento/LIT-TLYEMUVKHVRAGL` para `/pedidos/LIT-TLYEMUVKHVRAGL`. O estado passou a `ACTIVE / PAID / AWAITING_SELLER / NONE`. Consulta PostgreSQL read-only comprovou exatamente uma `LedgerTransaction` `SALE_RECOGNIZED / OrderSale` e zero `ReconciliationIssue`.
+
+Após o Seller marcar a entrega, o estado observado foi `ACTIVE / PAID / AWAITING_BUYER_CONFIRMATION / NONE`. Após o Buyer confirmar o recebimento, o browser mostrou `COMPLETED / PAID / CONFIRMED / NONE`.
+
+Já em `COMPLETED`, o Buyer enviou `teste chat após conclusão buyer`; o Seller recebeu em sessão independente, respondeu `ok` e o Buyer recebeu a resposta. Assim, ficaram funcionalmente comprovados no rehearsal local: chat visível após conclusão, escrita pelo Buyer, recebimento e resposta pelo Seller, e recebimento da resposta pelo Buyer. O requisito V1 de continuidade do chat em `COMPLETED` está comprovado e a **CHAT-PR-D está `PASSED / FUNCIONALMENTE CONCLUÍDA`**.
+
+O transporte continua REST/polling. Esta evidência não afirma produção, WebSocket, PSP real ou dinheiro real.
+
+### Registro fail-closed — Order inadequado para prova de conclusão
+
+No Order `LIT-JVFUAQZ4U6CXCG`, após entrega do Seller e confirmação do Buyer, o estado permaneceu `ACTIVE / PAID / CONFIRMED / NONE`. O banco mostrou zero `LedgerTransaction` `SALE_RECOGNIZED / OrderSale` e um `ReconciliationIssue` `OPEN / MISSING_LOCAL`, com `referenceType = OrderFulfillment` e `details.errorCode = SALE_RECOGNITION_MISSING`; o backend não concluiu o Order.
+
+Esse Order é candidato inadequado para validar conclusão: o backend falhou fechado por proteção financeira. Não se trata de bug corrigido; não se deve fabricar Ledger, apagar o `ReconciliationIssue` nem reutilizar esse Order como prova de conclusão. Sua evidência anterior de chat em `ACTIVE/PAID` permanece válida.
 
 Este registro não comprova produção, WebSocket, push, PSP real ou dinheiro real.
 
@@ -374,6 +388,26 @@ Para nova mensagem do Order Chat, quando Buyer envia, `recipientUserId` deve ser
 Requisitos mínimos futuros: persistência real no backend; `recipientUserId` obrigatório; leitura owner-only; estado unread/read persistente; tipo para nova mensagem; vínculo com `orderId`/`orderCode` e `messageId` quando aplicável; idempotência contra retry; polling ou mecanismo equivalente inicial permitido, sem exigir WebSocket; sino representando a conta completa; troca Buyer ↔ Seller sem ocultar notificações da mesma User; nenhum conteúdo privado para visitante anônimo; navegação ao contexto correto; e remoção de dependência da camada mock quando a implementação real entrar.
 
 A navegação contextual desejada é `/pedidos/<publicCode>` para o Buyer destinatário e `/vendedor/vendas/<publicCode>` para o Seller destinatário, mesmo que a interface esteja naquele momento no outro modo.
+
+### QA-BROWSER-017 — Buyer Order: gatilho real “Reportar problema” / disputa ainda não implementado
+
+- **Estado:** `OPEN — NOT IMPLEMENTED`
+- **Tipo:** `OWNER REQUIREMENT / DISPUTE / BUYER PROTECTION`
+- **Prioridade:** `HIGH OWNER PRIORITY`
+- **Relação:** `PRE-HANDOFF CANDIDATE`
+- **Área:** Buyer Order / Dispute / Finance / Admin future
+
+A rota Buyer real não possui gatilho funcional para abrir disputa. A UI/mock histórica com esse texto não conta como implementação real, e esta PR documental não implementa capability alguma.
+
+**Decisão explícita do Owner:** o label público é **“Reportar problema”**, e não “Disputa”. No contexto de um Order, essa ação inicia a disputa/mediação daquele pedido; não é denúncia genérica de usuário, comportamento, anúncio ou moderação. “Disputa” e “Mediação” permanecem conceitos internos/de domínio.
+
+O Buyer pode reportar problema depois de o Seller marcar como entregue. A confirmação de recebimento não extingue imediatamente esse direito: a ação pode permanecer elegível depois de `COMPLETED` enquanto estiver aberta a janela de proteção pós-venda. Início, duração, diferenças por categoria, expiração, refund, chargeback e encerramento da janela permanecem **`DECISION REQUIRED`**; valores históricos/mock de 15/30/45 dias não são regra real.
+
+Elegibilidade e timestamps devem ser autoridade server-side. Uma implementação real exigirá autenticação, ownership/IDOR, persistência, idempotência quando aplicável, auditabilidade, motivo/descrição, evidências em storage seguro, financeiro e Admin reais, sem decisão financeira client-only. Deve preservar as máquinas separadas de Order, Payment, Fulfillment e Dispute, sem inventar rollback automático do `OrderStatus` após disputa pós-`COMPLETED`.
+
+Uma disputa válida pós-`COMPLETED` não pode ser ignorada. A política financeira deverá definir bloqueio/reserva quando proceeds estiverem em `SELLER_PENDING`, `SELLER_HELD`, `SELLER_AVAILABLE` ou `SELLER_RESERVED`, e tratar separadamente valores que já avançaram para saque/payout. O comportamento para dinheiro já pago não está definido: **`DECISION REQUIRED / HUMAN-PROD-REVIEW`**.
+
+O Owner considera esta capability muito importante. A classificação como candidata pré-handoff não a transforma automaticamente em blocker do Alpha.
 
 
 ## Requisitos futuros registrados durante o Browser QA
