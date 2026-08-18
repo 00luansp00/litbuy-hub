@@ -927,3 +927,13 @@ O Bloco Buyer deverá partir do estado real e testar separadamente:
 - e, em blocos posteriores, pagamento Alpha/pós-compra.
 
 **Regra:** findings `NON_BLOCKER` deste Auth block ficam registrados para o gate consolidado de remediação; não ampliar escopo silenciosamente antes de continuar a auditoria.
+
+# Reconciliação pós-PR #97 — refresh single-flight
+
+A PR #95, `fix(auth): unify refresh single-flight`, encerrou o blocker funcional descoberto posteriormente no Browser QA; ela não é artificialmente convertida em finding Claude. Evidência formal: HEAD `6402d6b769ac209617c4d5281df1a38d08d66585`, merge `9df43e6cd8c38ea7e771d92dddf7f05ebacd683f`, CI #346 / run `32035490792` `SUCCESS`.
+
+O sintoma era logout após `F5` em rota protegida, com duas chamadas concorrentes a `/auth/refresh`. A causa eram duas primitives concorrentes (`AuthProvider` → `authService.refresh()` e retry 401 → `refreshAccessToken()`): a primeira rotacionava o token e a segunda reutilizava o predecessor, que o backend corretamente tratava como `REFRESH_TOKEN_REUSE`, revogando a família.
+
+A correção preservou o backend e unificou bootstrap e retry 401 na mesma primitive `refreshAccessToken()` com single-flight; `authService.refresh()` passou a delegar a ela. A revalidação posterior observou um único `/auth/refresh`, HTTP 200, usuário autenticado e Session persistida ativa, sem `revokedAt` ou `revokedReason`. Não repetir sem mudança relevante, regressão objetiva ou revalidação final deliberada.
+
+Residual separado: `QA-BROWSER-009` continua `OPEN / NON_BLOCKER` para o flash visual anônimo durante bootstrap. O requisito desejado de hold de 72h após troca concluída de e-mail também continua não implementado; o runtime/default histórico observado é 48h. Nenhuma alteração de escopo Alpha é feita nesta reconciliação.

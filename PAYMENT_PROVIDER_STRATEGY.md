@@ -1,15 +1,19 @@
 # Payment provider strategy
 
-Efí Bank is the selected primary PSP for the MVP, subject to commercial homologation. The financial domain remains provider-agnostic behind `PaymentProviderPort`; Efí DTOs, authentication, certificates, and errors stay inside its adapter. PagBank, Asaas, and Pagar.me remain future alternatives rather than active integrations.
+## Estado da decisão em 2026-08-17
 
-## Settlement decision
+Não existe PSP produtivo final homologado. A preferência atual do owner para o mercado brasileiro é **Mercado Pago**, especialmente por Pix; isso representa candidato/preferência atual, não integração concluída, seleção contratual final ou aprovação para produção.
 
-Efí native split is **not** the primary seller-settlement design. The planned flow is payment confirmation at Efí, internal allocation and hold in the LIT Buy ledger, release from `HELD` to `AVAILABLE`, a seller's standard withdrawal request, reservation, manual approval, and only then a future Pix Cash-Out operation. This boundary does not enable checkout payments, payouts, Pix Cash-Out, or seller split.
+A arquitetura permanece provider-agnostic atrás de `PaymentProviderPort`. O adapter Efí existente permanece como boundary/foundation real de sandbox já construída e não deve ser apagado ou tratado como inútil. Efí não está homologado para produção. Mercado Pago não está integrado; split, escrow e payout Mercado Pago não estão implementados.
 
-LIT Buy remains authoritative for its ledger, fees/commissions, `PENDING`, `HELD`, `AVAILABLE`, `RESERVED`, `DEFICIT`, release and withdrawal rules, and marketplace risk. Efí is expected to execute external regulated financial operations and report their outcomes; provider events never become a second source of truth.
+A seleção final exige avaliação técnica, comercial, regulatória e contratual, seguida de homologação explícita. Esta reconciliação não muda SDK, configuração ou runtime e não habilita dinheiro real.
 
-## Mandatory commercial gate
+## Autoridade financeira e settlement
 
-Production remains blocked until Efí provides written homologation for both the receipt/repayment model and LIT Buy's real catalog. The catalog includes game accounts, virtual currencies, skins, digital items, boost/powerlevel, keys, software/licenses, gift cards, and digital services. Approval, custody/retention support, refunds, chargebacks, KYC, Pix, boleto, cards, and the future cash-out model must not be assumed.
+Nenhum PSP externo se torna a contabilidade autoritativa da plataforma. O Ledger interno LIT Buy continua autoritativo para taxas/comissões, `PENDING`, `HELD`, `AVAILABLE`, `RESERVED`, `DEFICIT`, regras de liberação e futuras regras de withdrawal. Eventos de provider são entradas externas a reconciliar, não uma segunda fonte de verdade.
 
-The current adapter is a sandbox/boundary foundation only. Billing notifications and Pix webhooks use distinct provider-neutral resolution paths; generic refunds and payouts remain unsupported. Any production enablement requires the explicit configuration gate, written approval, operational runbooks, reconciliation monitoring, and a separately reviewed release.
+A foundation atual não prova checkout produtivo, split real, escrow real, payout, Pix Cash-Out, saque, refunds/chargebacks operacionais ou KYC produtivo. Qualquer modelo de receipt, custody/retention, settlement e catálogo exige aprovação escrita e revisão humana sênior.
+
+## Gate produtivo obrigatório
+
+Antes de qualquer enablement produtivo são necessários provider final homologado para o modelo e catálogo reais, contratos e análise regulatória, configuração explícita, runbooks operacionais, reconciliação/monitoramento e release separadamente revisado. Efí segue como adapter de referência/sandbox; Mercado Pago segue como preferência/candidato Brasil/Pix. Nenhum dos dois é aqui aprovado para produção.
