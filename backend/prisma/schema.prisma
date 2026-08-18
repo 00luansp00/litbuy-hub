@@ -291,6 +291,7 @@ model User {
   publishedSellerReleasePolicies SellerReleasePolicyVersion[] @relation("SellerReleasePolicyPublisher")
   financialEvents                FinancialEvent[]             @relation("FinancialEventActor")
   requestedRefunds               Refund[]                     @relation("RefundRequester")
+  sentOrderChatMessages          OrderChatMessage[]           @relation("OrderChatMessageSender")
 
   @@unique([phoneE164])
   @@index([email])
@@ -943,6 +944,7 @@ model Order {
   refunds                  Refund[]
   feePolicyVersion         FeePolicyVersion?      @relation(fields: [feePolicyVersionId], references: [id], onDelete: Restrict)
   platformCommissionRule   FeeRule?               @relation("OrderPlatformCommissionRule", fields: [platformCommissionRuleId, feePolicyVersionId], references: [id, policyVersionId], onDelete: Restrict)
+  chatConversation         OrderChatConversation?
 
   @@unique([id, sellerProfileId])
   @@index([buyerUserId, createdAt, id])
@@ -950,6 +952,30 @@ model Order {
   @@index([status, expiresAt])
   @@index([feePolicyVersionId])
   @@index([platformCommissionRuleId])
+}
+
+model OrderChatConversation {
+  id            String             @id @default(uuid()) @db.Uuid
+  orderId       String             @unique @db.Uuid
+  createdAt     DateTime           @default(now())
+  lastMessageAt DateTime?
+  order         Order              @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  messages      OrderChatMessage[]
+}
+
+model OrderChatMessage {
+  id              String                @id @default(uuid()) @db.Uuid
+  conversationId  String                @db.Uuid
+  senderUserId    String                @db.Uuid
+  clientMessageId String                @db.Uuid
+  body            String                @db.Text
+  createdAt       DateTime              @default(now())
+  conversation    OrderChatConversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  sender          User                  @relation("OrderChatMessageSender", fields: [senderUserId], references: [id], onDelete: Restrict)
+
+  @@unique([conversationId, senderUserId, clientMessageId])
+  @@index([conversationId, createdAt, id])
+  @@index([senderUserId])
 }
 
 model OrderDelivery {
