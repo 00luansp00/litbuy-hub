@@ -16,6 +16,7 @@ import { CartsModule } from './carts/carts.module';
 import { CheckoutModule } from './checkout/checkout.module';
 import { OrdersModule } from './orders/orders.module';
 import { FinancialModule } from './financial/financial.module';
+import { OrderChatModule } from './order-chat/order-chat.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { FinancialModule } from './financial/financial.module';
     CheckoutModule,
     OrdersModule,
     FinancialModule,
+    OrderChatModule,
   ],
   providers: [AppLogger],
 })
