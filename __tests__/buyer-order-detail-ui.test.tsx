@@ -12,6 +12,11 @@ import { makeOrder, pending, QueryWrapper } from "./buyer-orders-ui-fixtures";
 
 const auth = vi.hoisted(() => ({ initializing: false, isAuthenticated: true }));
 vi.mock("@/providers/AuthContext", () => ({ useAuth: () => auth }));
+vi.mock("@/components/orders/OrderChatCard", () => ({
+  OrderChatCard: (props: { orderCode: string; perspective: string; counterpartLabel: string }) => (
+    <div data-testid="order-chat">{JSON.stringify(props)}</div>
+  ),
+}));
 vi.mock("@tanstack/react-router", async () => {
   const ReactModule = await import("react");
   return {
@@ -210,6 +215,26 @@ describe("/pedidos/$id real UI", () => {
     renderDetail();
     expect(await screen.findByText(/Cancelado em/)).toBeInTheDocument();
     expect(screen.getByText(/Expirado em/)).toBeInTheDocument();
+  });
+  it.each(["ACTIVE", "COMPLETED"] as const)("mostra chat Buyer para %s + PAID", async (status) => {
+    vi.spyOn(buyerOrdersService, "detail").mockResolvedValue(
+      makeOrder({ status, paymentStatus: "PAID" }),
+    );
+    renderDetail();
+    expect(await screen.findByTestId("order-chat")).toHaveTextContent(`"orderCode":"${code}"`);
+    expect(screen.getByTestId("order-chat")).toHaveTextContent('"perspective":"buyer"');
+    expect(screen.getByTestId("order-chat")).toHaveTextContent(
+      '"counterpartLabel":"Seller Histórico"',
+    );
+  });
+  it.each([
+    { status: "PENDING_PAYMENT" as const, paymentStatus: "PENDING" as const },
+    { status: "ACTIVE" as const, paymentStatus: "PROCESSING" as const },
+  ])("não mostra chat Buyer para estado inelegível", async (state) => {
+    vi.spyOn(buyerOrdersService, "detail").mockResolvedValue(makeOrder(state));
+    renderDetail();
+    await screen.findByRole("heading", { name: `Pedido ${code}` });
+    expect(screen.queryByTestId("order-chat")).not.toBeInTheDocument();
   });
   it("uses an IDOR-safe 404 state without retry", async () => {
     vi.spyOn(buyerOrdersService, "detail").mockRejectedValue(
