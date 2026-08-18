@@ -150,9 +150,9 @@ O banco confirmou:
 
 ### QA-BROWSER-004 — mensagens de erro/replay em primeira tentativa contaminada
 
-- **Tipo:** payment UX / replay / erro a reproduzir
-- **Estado:** `NEEDS_REPRODUCTION`
-- **Impacto:** `NON_BLOCKER` até reprodução limpa
+- **Tipo:** payment UX / replay / observação histórica contaminada
+- **Estado:** `CLOSED — cenário local/FAKE_ALPHA revalidado posteriormente`
+- **Impacto:** `NON_BLOCKER`; fechado somente para rehearsal local/`FAKE_ALPHA`
 - **Área:** `/pagamento/$id`
 - **Pedido histórico da rodada:** `LIT-YYZCL5TUACRGMJ`
 
@@ -160,7 +160,7 @@ O banco confirmou:
 
 **Limitação da evidência:** o cenário foi contaminado por refresh e repetição da ação enquanto a investigação estava em andamento. Portanto ele não deve ser usado como prova de regressão da PR #81 nem como causa já diagnosticada.
 
-**Próximo passo futuro:** reproduzir desde pedido novo, uma ação por vez, capturando request/response, logs e banco antes de classificar causa e severidade.
+**Reconciliação em 2026-08-17:** a tentativa histórica contaminada não é promovida a prova limpa. O fechamento decorre das validações limpas posteriores do fluxo local/`FAKE_ALPHA`, com estados e invariantes confirmados no Browser QA e no DB/Ledger. Não criar novo pedido apenas para repetir este finding. Isso não comprova PSP, produção ou dinheiro real.
 
 ### QA-BROWSER-005 — termo de busca permanece na Navbar após sair da busca
 
@@ -313,6 +313,26 @@ O backend falha fechado pelo deadline e a rotina real de expiração libera a re
 **Regra já estabelecida:** concluir o pedido (`COMPLETED`) não deve, por si só, encerrar ou tornar inacessível a conversa vinculada ao pedido. Buyer e Seller devem continuar conseguindo consultar e usar o chat para tratar problemas posteriores.
 
 **Ainda não definido:** retenção, janela temporal, políticas de moderação, anexos, bloqueios, arquivamento e regras de acesso após encerramentos administrativos.
+
+#### Atualização de decisão do owner — 2026-08-17
+
+**Classificação atual:** `CURRENT COMMERCE GAP / NOT IMPLEMENTED / DECISION REQUIRED`. O chat Buyer ↔ Seller vinculado ao pedido deixa de ser tratado apenas como detalhe cosmético futuro, mas **não está implementado**.
+
+Fluxo mínimo desejado: pagamento aprovado → `Order ACTIVE/PAID` → chat do pedido disponível a Buyer e Seller → comunicação/entrega → Seller marca entregue → Buyer confirma → `Order COMPLETED` → chat permanece acessível como histórico.
+
+Requisitos mínimos: persistência server-authoritative; vínculo ao Order/suborder; participantes limitados ao Buyer e Seller daquele pedido; Admin/support somente por política autorizada; proteção contra IDOR; histórico auditável; nenhum mock frontend como autoridade; acesso histórico após `COMPLETED`; e eventual conversa read-only/locked durante disputa sem apagar o histórico.
+
+Continuam `DECISION REQUIRED`: REST polling versus realtime/WebSocket, anexos, limites, moderação, retenção, abuso/bloqueio, mensagens automáticas, entrega de secrets/credenciais, política de exposição, acesso support/admin, export/evidência de disputa, read-only por estado e notificações.
+
+Essa elevação é uma decisão de produto/current commerce gap e não altera automaticamente a linha de chegada formal do Alpha; uma mudança do Alpha exigiria decisão formal separada. **Nenhuma alteração de escopo Alpha é feita nesta reconciliação.**
+
+### PRODUCT-SELLER-RESUBMISSION-001 — limite de re-submissões do onboarding
+
+- **Classificação:** `NOT IMPLEMENTED / PRODUCT DECISION / NON_BLOCKER`
+- **Decisão:** após a análise inicial, permitir no máximo duas re-submissões depois de rejeições; na terceira rejeição, bloquear o reenvio automático e orientar contato com suporte.
+- **Política ainda a materializar:** Admin pode possuir override; rejeição grave pode ser terminal antes do limite.
+
+Este registro não afirma que `SellerApplication` já aplica o limite e não autoriza implementação nesta reconciliação.
 
 ### FUTURE-MEDIATION-001 — abertura de mediação por Buyer ou Seller no contexto do pedido/chat
 

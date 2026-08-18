@@ -629,3 +629,16 @@ Portanto, encerra-se **somente o Bloco 3 — Buyer**. Não se declara Seller/Adm
 ## Governança anti-repetição
 
 Para o próximo item/bloco: consultar a evidência histórica, verificar mudança no código relevante e repetir browser apenas diante de necessidade objetiva. Não repetir arbitrariamente evidências `REAL-TESTED` válidas, especialmente ao avançar para Seller/Admin.
+
+# Reconciliação documental pós-PR #97 — 2026-08-17
+
+- PR #95 encerrou o blocker de refresh concorrente por single-flight, com CI #346 e revalidação real; `QA-BROWSER-009` permanece separado como flash visual `OPEN / NON_BLOCKER`.
+- `PASS2-F2` foi `FIXED + REAL-TESTED` pela PR #96 (CI #348): `categoryId` foi revalidado nos filtros de moderação sem erro de fila.
+- `PASS2-F3` foi `FIXED + REAL-TESTED` pela PR #97 (CI #350): as preferências do ListingDraft persistiram após salvar, `F5` e confirmação no DB.
+- Buyer critical block, Seller onboarding, ListingDraft lifecycle, Seller delivery e Seller finance já possuem evidência `REAL-TESTED`. Não repetir esses fluxos apenas para preencher checklist; repetir somente após mudança relevante, regressão objetiva ou revalidação final deliberada.
+- O chat transacional do pedido é `CURRENT COMMERCE GAP / NOT IMPLEMENTED / DECISION REQUIRED`; não é capability concluída.
+- O máximo de duas re-submissões após rejeição Seller é `NOT IMPLEMENTED / PRODUCT DECISION / NON_BLOCKER`, com bloqueio automático após a terceira rejeição, orientação ao suporte, possível override Admin e terminalidade antecipada para rejeição grave.
+- O hold de 72h após troca concluída de e-mail é requisito desejado, não runtime comprovado; o default histórico observado continua 48h.
+- Nenhum dinheiro real, PSP produtivo ou produção está aprovado. Exercícios parciais de Admin em onboarding/listing não encerram o bloco Admin inteiro.
+
+Antes de qualquer teste: ITEM → JÁ TESTADO? → ONDE ESTÁ A EVIDÊNCIA? → CÓDIGO RELEVANTE MUDOU DEPOIS? → PRECISA REPETIR? Nenhuma alteração de escopo Alpha é feita nesta reconciliação.

@@ -74,3 +74,14 @@ Não criar o handoff nem tag nesta tarefa.
 ## Dinheiro real
 
 O projeto **não está autorizado para dinheiro real**. Este plano não autoriza implementar ou habilitar PSP production, Pix/boleto/cartão reais, payout, withdrawal, cash-out, transfer, settlement operacional, refund/chargeback operacionais, KYC, antifraude, escrow real ou real-money release. Foundations e schema não comprovam capability operacional.
+
+## Reconciliação de execução após PR #97 — 2026-08-17
+
+As listas de fases acima preservam a sequência histórica. O estado corrente é:
+
+- `P3-F1` e o defeito específico de `PASS2-F5` foram concluídos com a evidência formal registrada no Ledger; `P3-F10` e `PASS2-F1` permanecem separados e `OPEN`.
+- o slice local/rehearsal de `P4-F2` foi remediado pela PR #76, mas o finding agregado continua `OPEN` para produção/PSP/dinheiro real;
+- `PASS2-F2` foi concluído pela PR #96, com CI #348 / run `32064187807` e Browser QA;
+- `PASS2-F3` foi concluído pela PR #97, com CI #350 / run `32079416748` e Browser QA/DB.
+
+O passo imediatamente posterior à #97 é esta reconciliação documental. Ela não inicia Phase C nem qualquer próxima fase de implementação, não autoriza feature e não altera o escopo Alpha.

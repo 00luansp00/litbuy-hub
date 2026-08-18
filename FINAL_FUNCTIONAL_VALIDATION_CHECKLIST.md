@@ -10,6 +10,21 @@ A regra desta checklist é simples:
 
 > Tudo que a aplicação atualmente apresenta ao usuário como uma capacidade funcional deve terminar classificado e, quando for realmente implementado, deve ser exercitado de ponta a ponta.
 
+## Reconciliação anti-repetição pós-PR #97 — 2026-08-17
+
+Antes de qualquer novo teste, responder: **ITEM → JÁ TESTADO? → ONDE ESTÁ A EVIDÊNCIA? → CÓDIGO RELEVANTE MUDOU DEPOIS? → PRECISA REPETIR?** Buyer critical flow/pagamento Alpha, Seller onboarding, ListingDraft lifecycle, Seller delivery, Seller finance, `PASS2-F2`, `PASS2-F3` e auth refresh #95 já possuem evidência suficiente e não são tarefas obrigatoriamente inéditas. Só repetir por mudança relevante, regressão objetiva ou revalidação final deliberada.
+
+- [x] Auth refresh #95: blocker concorrente encerrado por single-flight e revalidado; evidência em `FINAL_FUNCTIONAL_AUDIT_BLOCK_2_AUTH.md`. `QA-BROWSER-009` permanece separado e aberto.
+- [x] Buyer critical block/pagamento Alpha: `REAL-TESTED`; evidência consolidada em `FINAL_FUNCTIONAL_AUDIT_REPORT.md` e Browser QA.
+- [x] Seller onboarding: `REAL-TESTED`; o limite de duas re-submissões é decisão de produto **não implementada**, não um `PASS`.
+- [x] ListingDraft lifecycle, delivery e Seller finance: `REAL-TESTED`; evidência consolidada no relatório funcional.
+- [x] `PASS2-F2`: `FIXED / REAL-TESTED` pela PR #96, CI #348 / run `32064187807`, filtro revalidado no browser.
+- [x] `PASS2-F3`: `FIXED / REAL-TESTED` pela PR #97, CI #350 / run `32079416748`, persistência confirmada após `F5` e no DB.
+- [ ] Chat transacional do pedido: `CURRENT COMMERCE GAP / NOT IMPLEMENTED / DECISION REQUIRED`; não transformar decisão em conclusão.
+- [ ] Limite de duas re-submissões Seller após rejeição: `NOT IMPLEMENTED / PRODUCT DECISION / NON_BLOCKER`.
+
+Nenhuma alteração de escopo Alpha é feita nesta reconciliação.
+
 Nenhum botão, formulário, rota, card aparentemente interativo ou operação administrativa relevante deve ficar ambíguo no handoff.
 
 ## Classificação obrigatória por capacidade
@@ -175,7 +190,7 @@ Para cada superfície que existir visualmente:
 - [ ] Nenhuma `ReconciliationIssue` ativa indevida fica associada à venda limpa.
 - [ ] Refresh da página de pagamento reflete o estado persistido.
 - [ ] Revalidar `QA-BROWSER-003` (tela stale).
-- [ ] Reproduzir de forma limpa `QA-BROWSER-004` antes de classificar causa/impacto.
+- [x] `QA-BROWSER-004` fechado para o cenário local/`FAKE_ALPHA` por validações limpas posteriores; preservar a tentativa contaminada e não repetir apenas para recriar evidência. Não prova PSP/produção.
 - [ ] Replay da confirmação Alpha não duplica Payment/Attempt/SALE_RECOGNIZED.
 
 # 7. Buyer — pedidos e pós-compra
@@ -282,7 +297,7 @@ Para cada superfície que existir visualmente:
 
 - [ ] Listar `ListingDraft` reais.
 - [ ] Filtros implementados usam parâmetros corretos do backend.
-- [ ] Revalidar finding `PASS2-F2` (`category` vs `categoryId`) antes de declarar esta tela `REAL-TESTED`.
+- [x] `PASS2-F2` (`category` vs `categoryId`) revalidado e fechado pela PR #96; não repetir sem gatilho objetivo.
 - [ ] Iniciar análise quando a operação existir.
 - [ ] Rejeitar com motivo.
 - [ ] Aprovar.
@@ -430,12 +445,12 @@ Executar matriz cruzada mínima:
 Antes da rodada final ser considerada concluída:
 
 - [ ] Revisar todos os itens `OPEN` em `POST_FREEZE_BROWSER_QA_FINDINGS.md`.
-- [ ] Revisar todos os itens `NEEDS_REPRODUCTION`.
+- [ ] Revisar itens que ainda estejam `NEEDS_REPRODUCTION`; `QA-BROWSER-004` não pertence mais a esse conjunto.
 - [ ] Atualizar achados corrigidos com evidência.
 - [ ] Novos achados recebem ID e classificação.
 - [ ] `NON_BLOCKER` não vira blocker silenciosamente.
 - [ ] `FUTURE_SCOPE` não vira implementação silenciosamente.
-- [ ] Requisitos de chat pós-conclusão e mediação continuam registrados para fase futura até decisão explícita.
+- [ ] Chat transacional permanece `CURRENT COMMERCE GAP / NOT IMPLEMENTED / DECISION REQUIRED`; mediação e decisões pendentes continuam sem implementação.
 
 # 25. Claude Audit Findings Ledger
 
