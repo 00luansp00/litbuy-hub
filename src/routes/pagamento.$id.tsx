@@ -1,5 +1,5 @@
-import { useRef } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useRef } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { Breadcrumb } from "@/components/common/Breadcrumb";
 import { Button } from "@/components/ui/button";
@@ -25,11 +25,22 @@ function PaymentPage() {
   );
 }
 export function PaymentContent({ orderCode }: { orderCode: string }) {
+  const navigate = useNavigate();
   const order = useBuyerOrder(orderCode),
     payment = useBuyerPayment(orderCode),
     actions = usePaymentActions(orderCode);
   const initiateKey = useRef(createInitiationKeyManager(() => key("payment", orderCode)));
   const confirmKeys = useRef(new Map<string, string>());
+  useEffect(() => {
+    const persisted = payment.data;
+    if (
+      persisted?.paymentStatus === "PAID" &&
+      ["ACTIVE", "COMPLETED"].includes(persisted.orderStatus) &&
+      persisted.orderCode
+    ) {
+      void navigate({ to: "/pedidos/$id", params: { id: persisted.orderCode }, replace: true });
+    }
+  }, [navigate, payment.data]);
   if (order.isPending || payment.isPending)
     return (
       <div className="container-lit py-10">

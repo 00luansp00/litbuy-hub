@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   payment: {} as Record<string, unknown>,
   initiate: vi.fn(),
   confirm: vi.fn(),
+  navigate: vi.fn(),
 }));
 vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => (config: object) => ({
@@ -20,6 +21,7 @@ vi.mock("@tanstack/react-router", () => ({
   Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
     <a href={to}>{children}</a>
   ),
+  useNavigate: () => mocks.navigate,
 }));
 vi.mock("@/services/orders", async (original) => ({
   ...(await original<typeof import("@/services/orders")>()),
@@ -60,6 +62,7 @@ describe("/pagamento/$id Alpha behavior", () => {
   beforeEach(() => {
     mocks.initiate.mockReset();
     mocks.confirm.mockReset();
+    mocks.navigate.mockReset();
     mocks.order = query(makeOrder());
     mocks.payment = query(payment());
   });
@@ -115,6 +118,28 @@ describe("/pagamento/$id Alpha behavior", () => {
       screen.queryByRole("button", { name: "Iniciar pagamento Alpha" }),
     ).not.toBeInTheDocument();
   });
+  it.each(["PENDING", "PROCESSING", "REQUIRES_ACTION"])(
+    "não redireciona enquanto tentativa está %s",
+    (status) => {
+      mocks.payment = query(
+        payment({ orderStatus: "PENDING_PAYMENT", paymentStatus: "PENDING", status }),
+      );
+      render(<PaymentContent orderCode={code} />);
+      expect(mocks.navigate).not.toHaveBeenCalled();
+    },
+  );
+  it.each(["ACTIVE", "COMPLETED"])(
+    "redireciona %s + PAID pelo orderCode persistido",
+    (orderStatus) => {
+      mocks.payment = query(payment({ orderCode: code, orderStatus, paymentStatus: "PAID" }));
+      render(<PaymentContent orderCode="ignorado-pela-resposta" />);
+      expect(mocks.navigate).toHaveBeenCalledWith({
+        to: "/pedidos/$id",
+        params: { id: code },
+        replace: true,
+      });
+    },
+  );
 });
 
 describe("initiation intent keys", () => {

@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { SellerDashboardLayout } from "@/components/seller-dashboard/SellerDashboardLayout";
 import { BuyerOrderItems } from "@/components/orders/BuyerOrderItems";
+import { OrderChatCard } from "@/components/orders/OrderChatCard";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/lib/api/client";
@@ -59,6 +60,7 @@ export function Detail({ orderCode }: { orderCode: string }) {
     sale.paymentStatus === "PAID" &&
     sale.fulfillmentStatus === "AWAITING_SELLER" &&
     !(["OPEN", "UNDER_REVIEW"] as string[]).includes(sale.disputeStatus);
+  const canChat = sale.paymentStatus === "PAID" && ["ACTIVE", "COMPLETED"].includes(sale.status);
   const states = [
     ["Pedido", ...orderState[sale.status]],
     ["Pagamento", ...paymentState[sale.paymentStatus]],
@@ -110,6 +112,13 @@ export function Detail({ orderCode }: { orderCode: string }) {
           <h2 className="text-xl font-bold">Valor da venda</h2>
           <p className="mt-2 font-bold">{formatBrlMinor(sale.saleAmountMinor)}</p>
         </section>
+        {canChat && (
+          <OrderChatCard
+            orderCode={sale.orderCode}
+            perspective="seller"
+            counterpartLabel="Comprador"
+          />
+        )}
       </div>
     </SellerDashboardLayout>
   );

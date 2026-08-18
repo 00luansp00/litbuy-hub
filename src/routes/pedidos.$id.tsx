@@ -6,6 +6,7 @@ import { BuyerOrderErrorState } from "@/components/orders/BuyerOrderErrorState";
 import { BuyerOrderItems } from "@/components/orders/BuyerOrderItems";
 import { BuyerOrderStateSummary } from "@/components/orders/BuyerOrderStateSummary";
 import { BuyerOrderStatusBadge } from "@/components/orders/BuyerOrderStatusBadge";
+import { OrderChatCard } from "@/components/orders/OrderChatCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api/client";
@@ -61,6 +62,7 @@ export function OrderDetailContent({ orderCode }: { orderCode: string }) {
     order.paymentStatus === "PAID" &&
     order.fulfillmentStatus === "AWAITING_BUYER_CONFIRMATION" &&
     !["OPEN", "UNDER_REVIEW"].includes(order.disputeStatus);
+  const canChat = order.paymentStatus === "PAID" && ["ACTIVE", "COMPLETED"].includes(order.status);
   const confirmationError = confirmReceipt.isError
     ? confirmReceipt.error instanceof ApiError &&
       [
@@ -150,6 +152,13 @@ export function OrderDetailContent({ orderCode }: { orderCode: string }) {
         </div>
         <BuyerOrderAmounts order={order} />
       </div>
+      {canChat && (
+        <OrderChatCard
+          orderCode={order.orderCode}
+          perspective="buyer"
+          counterpartLabel={order.seller.storeName}
+        />
+      )}
     </main>
   );
 }

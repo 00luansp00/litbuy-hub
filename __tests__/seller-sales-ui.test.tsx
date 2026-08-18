@@ -7,6 +7,12 @@ import { Detail } from "@/routes/vendedor.vendas.$id";
 import { Sales } from "@/routes/vendedor.vendas.index";
 import { sellerSaleKeys, sellerSalesService, type SellerSale } from "@/services/orders";
 
+vi.mock("@/components/orders/OrderChatCard", () => ({
+  OrderChatCard: (props: { orderCode: string; perspective: string; counterpartLabel: string }) => (
+    <div data-testid="order-chat">{JSON.stringify(props)}</div>
+  ),
+}));
+
 const router = vi.hoisted(() => ({ search: { page: 1 } as { page?: number }, navigate: vi.fn() }));
 vi.mock("@tanstack/react-router", async () => {
   const ReactModule = await import("react");
@@ -151,6 +157,22 @@ describe("Seller sale detail and delivery UI", () => {
     expect(screen.getAllByText("R$ 9.007.199.254.740.993.124,45").length).toBeGreaterThan(0);
     for (const label of ["Pedido", "Pagamento", "Entrega", "Disputa"])
       expect(screen.getByText(label)).toBeInTheDocument();
+  });
+  it.each(["ACTIVE", "COMPLETED"] as const)("mostra chat Seller para %s + PAID", async (status) => {
+    vi.spyOn(sellerSalesService, "detail").mockResolvedValue(
+      makeSale({ status, paymentStatus: "PAID" }),
+    );
+    renderWith(<Detail orderCode={code} />);
+    expect(await screen.findByTestId("order-chat")).toHaveTextContent('"perspective":"seller"');
+    expect(screen.getByTestId("order-chat")).toHaveTextContent('"counterpartLabel":"Comprador"');
+  });
+  it("não mostra chat Seller em venda inelegível", async () => {
+    vi.spyOn(sellerSalesService, "detail").mockResolvedValue(
+      makeSale({ paymentStatus: "PENDING" }),
+    );
+    renderWith(<Detail orderCode={code} />);
+    await screen.findByText("Produto snapshot real");
+    expect(screen.queryByTestId("order-chat")).not.toBeInTheDocument();
   });
   it.each([
     { paymentStatus: "PENDING" as const },
