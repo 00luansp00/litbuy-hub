@@ -99,7 +99,31 @@ O banco confirmou:
 
 **Conclusão:** o blocker BROWSER-A5 que motivou a PR #81 foi corrigido e revalidado localmente no fluxo completo. Esta evidência não fecha staging hospedado, produção, PASS2-F1 ou a arquitetura de gatilhos financeiros de produção.
 
+
 ---
+
+## Evidência funcional — Order Chat (2026-08-18)
+
+**Estado desta evidência:** `PASSED — recorte funcional parcial da CHAT-PR-D`
+
+**Main testada:** `43ee89c94b2e23f2bc1bee0d4e6920a0cc97a385`
+
+**Ambiente:** rehearsal local com `docker-compose.staging.yml`, PostgreSQL/Redis/MinIO reais e `FAKE_ALPHA` somente como modo local não produtivo.
+
+**Pedido reutilizado:** `LIT-JVFUAQZ4U6CXCG`
+
+**Evidências confirmadas manualmente pelo Owner:**
+
+- Buyer autenticado abriu o mesmo `Order ACTIVE/PAID` e encontrou o chat embutido no detalhe real do pedido;
+- Buyer enviou a mensagem `teste`;
+- Seller, em outra sessão/navegador, abriu a venda do mesmo Order e recebeu a mensagem do Buyer sem `F5`;
+- Seller respondeu `teste ok`, e o Buyer recebeu a resposta sem `F5`;
+- Buyer e Seller permaneceram conectados simultaneamente;
+- após `F5` nas duas sessões, ambas as mensagens continuaram presentes.
+
+**Conclusão limitada:** há evidência funcional, neste rehearsal local, de polling Buyer ↔ Seller e de persistência do histórico via backend/PostgreSQL. Esta evidência **não conclui a CHAT-PR-D inteira**: ainda faltam as demais validações planejadas, incluindo ao menos a continuidade em `Order COMPLETED`, se aplicável, além dos outros critérios do contrato V1.
+
+Este registro não comprova produção, WebSocket, push, PSP real ou dinheiro real.
 
 ## Achados abertos do Browser QA
 
@@ -300,6 +324,57 @@ O banco confirmou:
 - **Impacto:** `NON_BLOCKER` no rehearsal local
 
 O backend falha fechado pelo deadline e a rotina real de expiração libera a reserva sem inventar estoque. Ainda assim, a UI pode permanecer acionável até a materialização/processamento da expiração. Não corrigido nesta reconstrução documental; permanece relevante para operação/scheduler produtivo.
+
+
+### QA-BROWSER-014 — Order Chat: melhoria visual e estado bloqueado aguardando pagamento
+
+- **Tipo:** UX / requisito do Owner
+- **Estado:** `OPEN — NOT IMPLEMENTED`
+- **Impacto:** `NON_BLOCKER` da validação funcional atual
+- **Classificação:** `OWNER REQUIREMENT / PRE-HANDOFF CANDIDATE`
+- **Área:** Order Chat
+
+A apresentação visual atual é funcional, porém simples demais. O Owner deseja uma experiência conceitualmente próxima à maturidade de outros marketplaces, sem copiar branding, textos, mascotes, assets ou identidade visual de terceiros e mantendo design próprio da LIT Buy.
+
+Direção desejada: área de conversa maior; cabeçalho claro; mensagens melhor separadas; diferenciação visual entre `SELF`, `COUNTERPARTY` e `SYSTEM`; timestamps; separadores de data quando fizer sentido; avisos importantes em área própria; composer fixo ou claramente identificado na parte inferior; e bom comportamento com histórico maior.
+
+A V1 atual simplesmente não renderiza o chat antes da aprovação do pagamento. Como follow-up de UX, o Owner deseja que, em `Order PENDING_PAYMENT`, a superfície possa aparecer bloqueada, por exemplo com `Chat com o vendedor`, orientação `Para iniciar a conversa, aguarde a confirmação do pagamento.` e composer desabilitado.
+
+Esse estado é somente apresentação: não pode existir conversa utilizável nem `POST` de mensagem antes da elegibilidade; o backend continua autoridade; a superfície só pode desbloquear quando o Order se tornar `PAID + ACTIVE`, conforme o contrato; não se deve inventar timeout nem confiar somente no frontend. Nada deste finding altera silenciosamente o contrato V1 vigente.
+
+### QA-BROWSER-015 — Order Chat: system notices automáticos/configuráveis pelo Admin ainda não implementados
+
+- **Tipo:** requisito do Owner / domínio de mensagens
+- **Estado:** `OPEN — NOT IMPLEMENTED`
+- **Impacto:** `NON_BLOCKER` da validação funcional atual
+- **Classificação:** `OWNER REQUIREMENT / PRE-HANDOFF CANDIDATE`
+- **Área:** Order Chat / Admin futuro
+
+Quando o chat se tornar elegível após o pagamento, deve ser possível materializar mensagem(ns) automática(s) da LIT Buy sob um conceito próprio `SYSTEM / LIT BUY SYSTEM NOTICE`, nunca como mensagem falsa do Seller. Exemplos possíveis incluem orientação para manter a negociação na plataforma, confirmação do pagamento, orientação de segurança e prazos/regras do pedido somente quando houver autoridade real.
+
+A mensagem desejada é persistente, imutável no histórico do Order, claramente identificada como sistema/LIT Buy, sem `senderUserId` falso, sem alterar Order/Payment/Fulfillment/Ledger, criada de forma idempotente, sem duplicação em replay e sem depender do frontend para sua criação.
+
+O texto deve ser configurável pelo Admin. A configuração futura precisa de versão/estado suficiente para que uma alteração administrativa não modifique retroativamente mensagens já materializadas em pedidos antigos. O desenho exato de schema, API e Admin permanece `DECISION REQUIRED` antes de implementação. Mensagens automáticas continuam fora da V1 corrente e este finding não a amplia.
+
+### QA-BROWSER-016 — notificações reais account-wide independentes de activeRole ainda não implementadas
+
+- **Tipo:** requisito crítico de produto / notificações
+- **Estado:** `OPEN — CURRENT SYSTEM = MOCK / NOT IMPLEMENTED`
+- **Impacto:** `NON_BLOCKER` da validação funcional atual
+- **Classificação:** `OWNER REQUIREMENT / PRE-HANDOFF CANDIDATE`
+- **Área:** conta / navbar / Order Chat
+- **Relacionado:** `QA-BROWSER-001`
+
+Estado atual confirmado: `src/services/notificationService.ts` é mock, nenhuma notificação real é persistida e o `NotificationProvider` deriva os roles visíveis de `activeRole`. Portanto, o sistema atual não atende ao requisito final e não está corrigido.
+
+**Decisão do Owner:** notificações pertencem à conta/User, não ao modo Buyer/Seller ativo na interface. `activeRole` é somente contexto de apresentação/navegação e não pode determinar quais notificações pertencem à conta. Uma compra da conta deve produzir notificação visível mesmo no modo Seller; uma venda da mesma conta deve produzir notificação visível mesmo no modo Buyer.
+
+Para nova mensagem do Order Chat, quando Buyer envia, `recipientUserId` deve ser o User do Seller daquele Order; quando Seller envia, deve ser o Buyer. O próprio autor não deve ser notificado.
+
+Requisitos mínimos futuros: persistência real no backend; `recipientUserId` obrigatório; leitura owner-only; estado unread/read persistente; tipo para nova mensagem; vínculo com `orderId`/`orderCode` e `messageId` quando aplicável; idempotência contra retry; polling ou mecanismo equivalente inicial permitido, sem exigir WebSocket; sino representando a conta completa; troca Buyer ↔ Seller sem ocultar notificações da mesma User; nenhum conteúdo privado para visitante anônimo; navegação ao contexto correto; e remoção de dependência da camada mock quando a implementação real entrar.
+
+A navegação contextual desejada é `/pedidos/<publicCode>` para o Buyer destinatário e `/vendedor/vendas/<publicCode>` para o Seller destinatário, mesmo que a interface esteja naquele momento no outro modo.
+
 
 ## Requisitos futuros registrados durante o Browser QA
 
