@@ -31,11 +31,28 @@ A possibilidade de reportar é vitalícia; a proteção financeira não é. A pr
 2. senão, override de categoria específico e publicado;
 3. senão, prazo padrão publicado (platform default fallback).
 
-Em forma compacta: **SUBCATEGORY > CATEGORY > DEFAULT**. Um override pode ser menor, igual ou maior que o prazo padrão. Esta PR não define valores comerciais; exemplos numéricos são apenas conceituais e fixtures/testes não são policy.
+Em forma compacta: **SUBCATEGORY > CATEGORY > DEFAULT**. Um override pode ser menor, igual ou maior que o prazo padrão. O baseline comercial inicial definido abaixo é target de configuração futura, não fixture, hardcode ou evidência de backend implementado.
 
 Se nenhuma regra publicada válida puder ser resolvida pela hierarquia, a execução financeira futura deve **FAIL CLOSED** (`POLICY NOT RESOLVABLE`). Nunca inventar duração silenciosamente.
 
 O Admin futuro poderá administrar prazo padrão, overrides, ativação/desativação conforme desenho, vigências, publicação de novas versões e elegibilidade para Liberação Acelerada. Toda policy financeira será server-side, versionada, publicada, auditável, historicamente imutável, com actor/timestamp e sem edição retroativa de vendas. Painel e schema são `NOT IMPLEMENTED`.
+
+### Owner initial commercial baseline — TARGET / NOT IMPLEMENTED
+
+O Owner definiu o seguinte baseline comercial inicial para futuras rules publicadas:
+
+| Grupo/categoria comercial | Prazo base | Liberação Acelerada inicialmente permitida |
+| --- | ---: | :---: |
+| Moedas virtuais, Gold, Ouro e Itens | 4 dias | Sim |
+| Contas com e-mail não verificado | 4 dias | Não |
+| Cursos, Guias, Ebooks | 4 dias | Sim |
+| Vendas de contas, powerlevel e serviços | 7 dias | Não |
+
+Os valores `4/4/4/7` são o **OWNER INITIAL COMMERCIAL BASELINE**, não hardcode definitivo. Os labels descrevem os grupos comerciais atuais, mas não podem virar enum nem autoridade por comparação textual. A implementação futura deve associar rules a IDs/relações estáveis das entidades autoritativas de categoria, subcategoria e policy version/rule. Uma mudança de nome no catálogo não invalida snapshots históricos.
+
+Essas quatro rules não esgotam a hierarquia nem definem o fallback global. **PLATFORM DEFAULT FALLBACK VALUE: `DECISION REQUIRED / TO BE CONFIGURED`.** Nenhuma linha da tabela é promovida implicitamente a `DEFAULT`; se não houver subcategoria, categoria ou default publicado aplicável, permanece o fail-closed.
+
+Admin deverá poder alterar durações e elegibilidade por nova versão publicada. Se um checkout congelar 4 dias e uma versão posterior mudar a rule para 7 dias, o Order anterior conserva 4 dias; somente novos Orders usam a nova versão.
 
 ## 4. Snapshot no checkout; relógio em COMPLETED
 
@@ -75,6 +92,8 @@ effectiveAcceleratedEligibleAt = MAX(acceleratedTargetAt, accelerationQualifiedA
 ```
 
 A futura unidade/duração deve produzir divisão determinística, sem arredondamento manual de dias. Nenhum evento pode liberar dinheiro retroativamente antes de ocorrer.
+
+No baseline inicial, as duas rules elegíveis de 4 dias podem resultar em 2 dias quando qualificadas. Não há rule de 7 dias com aceleração habilitada nesse baseline. Uma versão futura poderia habilitá-la; nesse caso, 7 dias seriam divididos deterministicamente em 3 dias e 12 horas, sem arredondamento manual.
 
 São necessárias **as duas** condições autoritativas:
 

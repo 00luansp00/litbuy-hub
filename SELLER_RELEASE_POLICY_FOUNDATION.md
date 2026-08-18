@@ -12,13 +12,13 @@ The MVP rule is global. Exactly one enabled rule with code `DELIVERY_PROTECTION_
 
 **CURRENT IMPLEMENTATION: GLOBAL ONLY.** The global `DELIVERY_PROTECTION_DEFAULT` rule, immutable version lifecycle, publication windows and historical snapshots remain reusable foundations.
 
-**OWNER TARGET:** evolve resolution to published `SUBCATEGORY > CATEGORY > DEFAULT`, with the current global concept serving as platform default fallback. Category/subcategory overrides may be shorter, equal to, or longer than the default. Each rule may independently enable accelerated release. Checkout must freeze the resolved source, base delay and acceleration eligibility. Missing resolution across the entire hierarchy must fail closed; no commercial duration may be invented. Schema, Admin and resolver evolution are not implemented by this documentation. See `DISPUTE_FINANCIAL_RECOVERY_CONTRACT.md`.
+**OWNER TARGET:** evolve resolution to published `SUBCATEGORY > CATEGORY > DEFAULT`, with the current global concept serving as platform default fallback. Category/subcategory overrides may be shorter, equal to, or longer than the default. Each rule may independently enable accelerated release. Checkout must freeze the resolved source, base delay and acceleration eligibility. Missing resolution across the entire hierarchy must fail closed; no duration may be invented beyond published configuration. The Owner initial commercial baseline is now recorded in `DISPUTE_FINANCIAL_RECOVERY_CONTRACT.md`; its four group rules are target/not implemented, and the numeric platform default remains `DECISION REQUIRED / TO BE CONFIGURED`. Schema, Admin and resolver evolution are not implemented by this documentation.
 
 ## Temporal resolution and safety
 
 PostgreSQL `transaction_timestamp()` is the time authority. The read-only resolver accepts only an ACTIVE version where `effectiveFrom <= transaction_timestamp()` and `effectiveTo` is null or later than that timestamp. No match raises `SELLER_RELEASE_POLICY_NOT_FOUND`; multiple versions or applicable rules raise `SELLER_RELEASE_POLICY_AMBIGUOUS`. It never silently selects a winner. Database checks validate the effective interval and nonnegative delay, triggers enforce lifecycle and immutability, and an advisory transaction lock serializes overlapping SCHEDULED/ACTIVE publication checks.
 
-No real commercial duration has been selected. There is **no production policy seed**; numeric durations in PostgreSQL tests are fixtures only. An empty production database intentionally makes resolution fail closed.
+**CURRENT IMPLEMENTATION:** there is **no production policy seed**; numeric durations in PostgreSQL tests are fixtures only, and an empty production database intentionally makes resolution fail closed. The separately documented Owner initial commercial baseline is a future configuration target and does not mean those durations are implemented or seeded.
 
 ## Explicit boundary
 
