@@ -8,6 +8,12 @@ This increment defines the versioned policy that a later hold-lifecycle incremen
 
 The MVP rule is global. Exactly one enabled rule with code `DELIVERY_PROTECTION_DEFAULT` is required by the resolver. `delayHours` is a non-null integer greater than or equal to zero: it represents the number of hours between an authoritative protection-start event, to be selected by a future increment, and release eligibility. It is stored and resolved only here; no category, plan, product, payment, risk, KYC, or reputation qualifier exists.
 
+## Owner target hierarchy — NOT IMPLEMENTED
+
+**CURRENT IMPLEMENTATION: GLOBAL ONLY.** The global `DELIVERY_PROTECTION_DEFAULT` rule, immutable version lifecycle, publication windows and historical snapshots remain reusable foundations.
+
+**OWNER TARGET:** evolve resolution to published `SUBCATEGORY > CATEGORY > DEFAULT`, with the current global concept serving as platform default fallback. Category/subcategory overrides may be shorter, equal to, or longer than the default. Each rule may independently enable accelerated release. Checkout must freeze the resolved source, base delay and acceleration eligibility. Missing resolution across the entire hierarchy must fail closed; no commercial duration may be invented. Schema, Admin and resolver evolution are not implemented by this documentation. See `DISPUTE_FINANCIAL_RECOVERY_CONTRACT.md`.
+
 ## Temporal resolution and safety
 
 PostgreSQL `transaction_timestamp()` is the time authority. The read-only resolver accepts only an ACTIVE version where `effectiveFrom <= transaction_timestamp()` and `effectiveTo` is null or later than that timestamp. No match raises `SELLER_RELEASE_POLICY_NOT_FOUND`; multiple versions or applicable rules raise `SELLER_RELEASE_POLICY_AMBIGUOUS`. It never silently selects a winner. Database checks validate the effective interval and nonnegative delay, triggers enforce lifecycle and immutability, and an advisory transaction lock serializes overlapping SCHEDULED/ACTIVE publication checks.

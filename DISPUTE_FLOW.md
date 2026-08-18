@@ -2,13 +2,15 @@
 
 Fluxo futuro de disputa. **Documentação de planejamento.** Não implementado.
 
+> **Nova autoridade OWNER TARGET:** `DISPUTE_FINANCIAL_RECOVERY_CONTRACT.md`. As referências históricas deste arquivo a uma janela temporal para abrir disputa estão **SUPERSEDED FOR TARGET**. “Reportar problema” é vitalício; o prazo de proteção financeira é separado.
+
 ## Decisão atual do Owner — label e elegibilidade pública
 
 - O label público da ação é **“Reportar problema”**, não “Disputa”. “Disputa” e “Mediação” permanecem conceitos internos/de domínio.
 - No contexto de um Order, “Reportar problema” inicia a disputa/mediação daquele pedido; não é denúncia genérica de usuário, comportamento, anúncio ou moderação.
 - O Buyer pode usar a ação depois de o Seller marcar a entrega. Confirmar recebimento não extingue imediatamente esse direito.
-- Depois de Seller entregar → Buyer confirmar → Order `COMPLETED`, a ação continua elegível enquanto estiver aberta a janela de proteção pós-venda.
-- Início, duração, diferenças por categoria, expiração, refund, chargeback e encerramento dessa janela são **`DECISION REQUIRED`**. Prazos históricos/mock de 15/30/45 dias não são política real.
+- Depois de Seller entregar → Buyer confirmar → Order `COMPLETED`, depois de `releaseEligibleAt` e mesmo depois de proceeds chegarem a `SELLER_AVAILABLE`, a ação continua elegível. Não existe deadline temporal automático de reporting.
+- `REPORTING WINDOW != FINANCIAL PROTECTION WINDOW`: `releaseEligibleAt` governa a possível saída de `SELLER_HELD` para `SELLER_AVAILABLE`; não é `disputeDeadline`. Prazos históricos/mock de 15/30/45 dias não são política real.
 - A elegibilidade é autoridade server-side; o frontend não decide. A implementação futura exige autenticação, ownership/IDOR, persistência, timestamps server-side, idempotência quando aplicável, auditoria, motivo/descrição, evidências em storage seguro e Admin real.
 - Order, Payment, Fulfillment e Dispute permanecem máquinas separadas. Não há rollback automático presumido de `OrderStatus` ao abrir disputa depois de `COMPLETED`; qualquer transição ainda não definida é **`DECISION REQUIRED`**.
 - A UI/mock histórica com “Reportar problema” não é implementação real. A rota Buyer real ainda não possui o gatilho funcional.
@@ -27,7 +29,7 @@ Uma disputa válida pós-`COMPLETED` não pode ser ignorada apenas porque o Orde
 
 ## Quem pode abrir disputa
 
-- **Comprador**, após pedido estar em `awaiting_seller_delivery`, `delivered_by_seller`, `awaiting_buyer_confirmation` ou dentro de janela pós-`completed` definida pela política.
+- **Comprador**, após pedido estar em `awaiting_seller_delivery`, `delivered_by_seller`, `awaiting_buyer_confirmation` ou `completed`, sem expiração automática posterior por tempo. Regras de múltiplos casos/reabertura permanecem `DECISION REQUIRED`.
 - Não pode ser aberta antes de `paid` (não há valor em escrow).
 
 ## Evidências
@@ -45,12 +47,12 @@ Uma disputa válida pós-`COMPLETED` não pode ser ignorada apenas porque o Orde
 - Admin decide desfecho: `resolved_buyer` ou `resolved_seller`, com valor de reembolso quando parcial.
 - Toda ação do admin em disputa gera **audit log**.
 
-## Efeito no saldo
+## Efeito financeiro — OWNER TARGET / NOT IMPLEMENTED
 
-- Ao abrir disputa: **saldo do pedido bloqueado** na carteira do vendedor (mesmo se já estava "pendente" ou "disponível").
-- `resolved_buyer` → reembolso ao comprador via gateway. Saldo do vendedor **não** é liberado.
-- `resolved_seller` → saldo do vendedor volta ao ciclo normal de liberação.
-- Reembolso parcial: valor devolvido ao comprador, restante liberado ao vendedor.
+- Antes da liberação, uma disputa ativa prevalece sobre a data base/acelerada e mantém proceeds protegidos/reservados. Vitória do Seller antes da data preserva `SELLER_HELD` até a data original; vitória posterior não inicia novo prazo.
+- Depois de `SELLER_HELD -> SELLER_AVAILABLE`, reporting continua possível. Vitória do Buyer dispara recovery legítimo, sem presumir dinheiro ainda retido nem prometer refund instantâneo.
+- Após decisão definitiva favorável ao Buyer, o target registra obrigação e recovery automaticamente; o faltante deriva em `SELLER_DEFICIT` via Ledger append-only. Claims são segregados e FIFO por Seller; parcial é permitido.
+- Valor recuperado só vira futuro saldo sacável do Buyer após autorização humana (`ADMIN` como baseline). Buyer wallet completa, top-up do Seller, engine de recovery e execução PSP são `NOT IMPLEMENTED`.
 
 ## Quando vendedor recebe
 

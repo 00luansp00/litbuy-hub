@@ -370,6 +370,8 @@ A mensagem desejada é persistente, imutável no histórico do Order, claramente
 
 O texto deve ser configurável pelo Admin. A configuração futura precisa de versão/estado suficiente para que uma alteração administrativa não modifique retroativamente mensagens já materializadas em pedidos antigos. O desenho exato de schema, API e Admin permanece `DECISION REQUIRED` antes de implementação. Mensagens automáticas continuam fora da V1 corrente e este finding não a amplia.
 
+**Rastreabilidade DISPUTE-PR-A — OWNER TARGET / NOT IMPLEMENTED:** conforme `DISPUTE_FINANCIAL_RECOVERY_CONTRACT.md`, os notices futuros também devem materializar: (A) após `Payment = PAID`, prazo base congelado, elegibilidade de Liberação Acelerada e suas duas condições; (B) após `COMPLETED`, novo notice com `baseReleaseEligibleAt` exato calculado pelo backend; (C) após qualificação de aceleração, outro notice imutável com a nova data/hora efetiva, sem editar os anteriores; e (D) texto claro de que “Reportar problema” é vitalício e não expira com a proteção financeira. O notice comunica, mas não é autoridade financeira. Este acréscimo não resolve o finding: `QA-BROWSER-015` permanece `OPEN — NOT IMPLEMENTED`.
+
 ### QA-BROWSER-016 — notificações reais account-wide independentes de activeRole ainda não implementadas
 
 - **Tipo:** requisito crítico de produto / notificações
@@ -401,11 +403,13 @@ A rota Buyer real não possui gatilho funcional para abrir disputa. A UI/mock hi
 
 **Decisão explícita do Owner:** o label público é **“Reportar problema”**, e não “Disputa”. No contexto de um Order, essa ação inicia a disputa/mediação daquele pedido; não é denúncia genérica de usuário, comportamento, anúncio ou moderação. “Disputa” e “Mediação” permanecem conceitos internos/de domínio.
 
-O Buyer pode reportar problema depois de o Seller marcar como entregue. A confirmação de recebimento não extingue imediatamente esse direito: a ação pode permanecer elegível depois de `COMPLETED` enquanto estiver aberta a janela de proteção pós-venda. Início, duração, diferenças por categoria, expiração, refund, chargeback e encerramento da janela permanecem **`DECISION REQUIRED`**; valores históricos/mock de 15/30/45 dias não são regra real.
+**Decisão OWNER TARGET:** o Buyer pode “Reportar problema” depois de entrega, confirmação, `COMPLETED`, `releaseEligibleAt` e `SELLER_AVAILABLE`. O direito é vitalício e não existe reporting deadline automático. A formulação histórica de “janela pós-venda para abrir disputa” está **SUPERSEDED FOR TARGET**: reporting é diferente da proteção financeira, e `releaseEligibleAt` nunca é prazo final de reclamação.
+
+A política financeira target resolve `SUBCATEGORY > CATEGORY > DEFAULT`, congela regra/source/base delay/elegibilidade de aceleração no checkout e inicia o relógio somente em `COMPLETED`. Liberação Acelerada, quando habilitada pela regra e qualificada por confirmação autoritativa do recebimento **e** avaliação positiva autoritativa, reduz o delay em 50%; rating adequado está `NOT IMPLEMENTED`. Disputa/bloqueio sempre prevalece sobre release normal ou acelerado.
 
 Elegibilidade e timestamps devem ser autoridade server-side. Uma implementação real exigirá autenticação, ownership/IDOR, persistência, idempotência quando aplicável, auditabilidade, motivo/descrição, evidências em storage seguro, financeiro e Admin reais, sem decisão financeira client-only. Deve preservar as máquinas separadas de Order, Payment, Fulfillment e Dispute, sem inventar rollback automático do `OrderStatus` após disputa pós-`COMPLETED`.
 
-Uma disputa válida pós-`COMPLETED` não pode ser ignorada. A política financeira deverá definir bloqueio/reserva quando proceeds estiverem em `SELLER_PENDING`, `SELLER_HELD`, `SELLER_AVAILABLE` ou `SELLER_RESERVED`, e tratar separadamente valores que já avançaram para saque/payout. O comportamento para dinheiro já pago não está definido: **`DECISION REQUIRED / HUMAN-PROD-REVIEW`**.
+Uma disputa pré-release bloqueia a liberação. Pós-release continua reportável; decisão definitiva favorável ao Buyer aciona recovery automático legítimo e deriva o faltante em `SELLER_DEFICIT`, sem prometer refund instantâneo. Recovery é segregado e FIFO por Seller, aceita parcial e só chega ao futuro saldo sacável do Buyer após autorização humana (`ADMIN` baseline). Buyer financial balance completo, Seller top-up, engine de recovery e rating autoritativo estão `NOT IMPLEMENTED`; PSP, fees, payout e dinheiro já transferido permanecem `DECISION REQUIRED / HUMAN-PROD-REVIEW`. Ver `DISPUTE_FINANCIAL_RECOVERY_CONTRACT.md`.
 
 O Owner considera esta capability muito importante. A classificação como candidata pré-handoff não a transforma automaticamente em blocker do Alpha.
 
