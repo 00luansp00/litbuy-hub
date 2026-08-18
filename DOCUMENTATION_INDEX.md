@@ -91,7 +91,7 @@ Preserved for context/history; **do not use as authority for current status**.
 | [`LOCAL_PUBLIC_FOUNDATION_RUNBOOK.md`](./LOCAL_PUBLIC_FOUNDATION_RUNBOOK.md) | Reproduces the earlier public-foundation milestone.                   | Specialized historical runbook; use the Alpha stabilization runbook now.                                     |
 | [`MOCKS_INVENTORY.md`](./MOCKS_INVENTORY.md)                                 | Incremental record of real versus mock boundaries.                    | Historical/mixed inventory; current critical-path authority is the Alpha checklist and new legacy inventory. |
 
-## D. PLANNING / FUTURE / PRODUCTION (14)
+## D. PLANNING / FUTURE / PRODUCTION (15)
 
 These documents express desired controls, decisions, or future production work. Presence does not prove implementation.
 
@@ -107,6 +107,7 @@ These documents express desired controls, decisions, or future production work. 
 | [`EXTERNAL_SERVICE_DECISION_TEMPLATE.md`](./EXTERNAL_SERVICE_DECISION_TEMPLATE.md)         | Template for evaluating a provider.                      | Future decision template.                                                                 |
 | [`AUTH_STAGING_HOMOLOGATION_RUNBOOK.md`](./AUTH_STAGING_HOMOLOGATION_RUNBOOK.md)           | Describes future hosted-staging auth homologation.       | Operational planning; local rehearsal is not hosted staging.                              |
 | [`DISPUTE_FLOW.md`](./DISPUTE_FLOW.md)                                                     | Describes intended dispute behavior.                     | Future/incomplete domain, outside critical Alpha.                                         |
+| [`DISPUTE_FINANCIAL_RECOVERY_CONTRACT.md`](./DISPUTE_FINANCIAL_RECOVERY_CONTRACT.md)       | Freezes Owner decisions for lifetime reporting, hierarchical release protection, acceleration, recovery and one-SKU Orders. | **Owner-authorized target contract / PRE-HANDOFF TARGET / NOT IMPLEMENTED**; relates `DISPUTE_FLOW.md`, `COMMERCE_ARCHITECTURE.md`, seller-release/snapshot and financial foundations, QA-BROWSER-015 and QA-BROWSER-017. |
 | [`DIGITAL_DELIVERY_FLOW.md`](./DIGITAL_DELIVERY_FLOW.md)                                   | Describes expected delivery modes and legacy mock state. | Planning/history; current fulfillment authority is the Alpha checklist/domain foundation. |
 | [`MESSAGING_RULES.md`](./MESSAGING_RULES.md)                                               | Preserva planejamento histórico e superfícies mock amplas de mensagens. | Não é o contrato da V1 real; para o chat transacional corrente, prevalece `ORDER_CHAT_CONTRACT.md`. |
 | [`POST_CHAT_VALIDATION_OWNER_REQUIREMENTS_2026-08-18.md`](./POST_CHAT_VALIDATION_OWNER_REQUIREMENTS_2026-08-18.md) | Registro de decisões e follow-ups do Owner descobertos durante a validação funcional do Order Chat em 2026-08-18. | Consolidador pós-V1; não substitui autoridades atuais nem prova implementação dos requisitos futuros. |

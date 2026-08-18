@@ -36,9 +36,9 @@ Não estão implementados por esta PR documental: redesign visual, superfície b
 | CHAT-PR-D, inclusive escrita bidirecional após `COMPLETED` | `PASSED / FUNCIONALMENTE CONCLUÍDA` no rehearsal local | Order limpo `LIT-TLYEMUVKHVRAGL`; REST/polling, não produção |
 | UX visual ampliada do Order Chat | `OWNER REQUIREMENT / NOT IMPLEMENTED` | `PRE-HANDOFF CANDIDATE`; `NON_BLOCKER` da validação atual; QA-BROWSER-014 |
 | Chat visível, porém bloqueado em `PENDING_PAYMENT` | `OWNER REQUIREMENT / NOT IMPLEMENTED` | `PRE-HANDOFF CANDIDATE`; somente UX, sem mensagem pré-elegibilidade; QA-BROWSER-014 |
-| `SYSTEM / LIT BUY SYSTEM NOTICE` persistente e configurável | `OWNER REQUIREMENT / NOT IMPLEMENTED / DECISION REQUIRED` | `PRE-HANDOFF CANDIDATE`; schema/API/Admin a definir; QA-BROWSER-015 |
+| `SYSTEM / LIT BUY SYSTEM NOTICE` persistente e configurável | `OWNER REQUIREMENT / NOT IMPLEMENTED / DECISION REQUIRED` | Após PAID, COMPLETED e eventual aceleração; `PRE-HANDOFF CANDIDATE`; QA-BROWSER-015; `DISPUTE_FINANCIAL_RECOVERY_CONTRACT.md` |
 | Notificações reais account-wide | `OWNER REQUIREMENT / CURRENT SYSTEM = MOCK / NOT IMPLEMENTED` | `PRE-HANDOFF CANDIDATE`; QA-BROWSER-016 e QA-BROWSER-001 |
-| Gatilho Buyer “Reportar problema” | `OWNER REQUIREMENT / NOT IMPLEMENTED` | `HIGH OWNER PRIORITY / PRE-HANDOFF CANDIDATE`; QA-BROWSER-017; capability separada do Order Chat V1 |
+| Gatilho Buyer “Reportar problema” | `OWNER REQUIREMENT / NOT IMPLEMENTED` | Vitalício; proteção/recovery separados; `HIGH OWNER PRIORITY / PRE-HANDOFF CANDIDATE`; QA-BROWSER-017; `DISPUTE_FINANCIAL_RECOVERY_CONTRACT.md` |
 | Product Q&A público | `OWNER REQUIREMENT / NOT IMPLEMENTED` | `SEPARATE INCREMENT`; relacionado a QA-BROWSER-006; não misturar com Order Chat |
 | Buyer addon/VIP básico-premium | `FUTURE-SCOPE / DECISION REQUIRED / NOT IMPLEMENTED` | Autoridade própria: `FUTURE_REQUIREMENTS_BUYER_CHECKOUT_ADDON_PLANS_2026-08-16.md` |
 
@@ -57,6 +57,8 @@ Em `PENDING_PAYMENT`, a superfície poderá ficar visível com título como `Cha
 Após o chat se tornar elegível, deve ser possível criar aviso próprio `SYSTEM / LIT BUY SYSTEM NOTICE`, nunca uma mensagem falsa do Seller. O aviso desejado é persistente, imutável naquele histórico, identificado como LIT Buy, sem `senderUserId` falso, sem efeitos em Order/Payment/Fulfillment/Ledger, idempotente, sem duplicação em replay e criado sem depender do frontend.
 
 O texto será configurável pelo Admin. Configuração e materialização precisam de versionamento/estado para que alterações futuras não reescrevam retroativamente avisos de Orders antigos. Schema, API e superfície Admin exatos ainda exigem desenho antes da implementação.
+
+O target financeiro acrescenta três materializações: após `PAID`, comunicar prazo base congelado, elegibilidade e condições de aceleração; após `COMPLETED`, comunicar a data exata calculada pelo backend; e, se a aceleração qualificar, criar novo notice com a data/hora efetiva. Todos devem esclarecer que “Reportar problema” permanece disponível depois do fim da proteção financeira. Isso é `NOT IMPLEMENTED`, mantém QA-BROWSER-015 aberto e não altera a conclusão da V1.
 
 ## Notificações pertencem à conta/User
 
@@ -82,7 +84,7 @@ Product Q&A deve possuir backend e persistência reais; o frontend mock existent
 
 O Owner definiu **“Reportar problema”** como label público da ação Buyer que inicia disputa/mediação vinculada ao Order. Não se confunde com denúncia genérica de usuário, comportamento, anúncio ou moderação. A rota Buyer real ainda não oferece essa abertura funcional; mocks históricos não são implementação. O requisito está registrado em `QA-BROWSER-017` como `OPEN — NOT IMPLEMENTED`, `HIGH OWNER PRIORITY` e `PRE-HANDOFF CANDIDATE`, sem se tornar automaticamente blocker do Alpha.
 
-A ação é permitida depois da entrega e pode permanecer elegível após confirmação e `COMPLETED`, durante uma janela de proteção pós-venda. A duração e demais políticas da janela são **`DECISION REQUIRED`**. Elegibilidade deve ser server-side, e a implementação futura precisa de persistência, segurança de ownership/IDOR, auditoria, evidências seguras, desenho financeiro e Admin real. Nada disso integra ou amplia o contrato V1 do Order Chat, e esta PR não implementa a capability.
+A ação é vitalícia depois da entrega: confirmação, `COMPLETED`, `releaseEligibleAt` ou proceeds já em `SELLER_AVAILABLE` não criam deadline de reporting. **Reporting não é proteção financeira.** O contrato autoritativo target `DISPUTE_FINANCIAL_RECOVERY_CONTRACT.md` define policy `SUBCATEGORY > CATEGORY > DEFAULT`, snapshot no checkout, relógio em `COMPLETED`, aceleração configurável de 50% condicionada a recebimento + rating positivo autoritativos, precedência da disputa, recovery/`SELLER_DEFICIT`, FIFO por Seller, parcial, autorização humana e futuro saldo Buyer. As capabilities permanecem separadas da V1 concluída e `NOT IMPLEMENTED`; QA-BROWSER-017 continua `OPEN — NOT IMPLEMENTED`, `HIGH OWNER PRIORITY` e `PRE-HANDOFF CANDIDATE`.
 
 ## Buyer addon / VIP básico-premium
 

@@ -45,6 +45,8 @@ Completed, paid, confirmed, undisputed orders with a valid sale recognition now 
 
 `SellerReleasePolicyVersion` is a separate, immutable policy domain for resolving a global delivery-protection delay. It deliberately does not reuse withdrawal policy, seed a production duration, modify a hold, or post ledger entries. See `SELLER_RELEASE_POLICY_FOUNDATION.md`.
 
+**Current versus target:** global-only resolution is the implemented foundation. The Owner-authorized hierarchical policy, accelerated release and dispute recovery are future/not implemented and are governed by `DISPUTE_FINANCIAL_RECOVERY_CONTRACT.md`. `SELLER_DEFICIT` remains Ledger-derived; this foundation does not imply an implemented recovery engine or Buyer withdrawable wallet.
+
 ## Delivery-hold release snapshot (PR #52)
 
 Positive-proceeds delivery holds now freeze the effective release-policy version, rule, delay, PostgreSQL application timestamp, and calculated eligibility timestamp without moving held funds. Legacy unscheduled holds are upgraded conservatively from the time of policy application. See `SELLER_HOLD_RELEASE_SNAPSHOT.md`.

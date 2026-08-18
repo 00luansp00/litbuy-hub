@@ -8,9 +8,11 @@ Implementação: ainda não iniciada
 
 Este documento é a fonte de verdade do domínio comercial. Ele congela contratos futuros, não implementa carrinho, pedido, pagamento, ledger ou integração financeira. O sistema não está pronto para dinheiro real.
 
-## Carrinho por vendedor
+## Carrinho por vendedor e uma única linha — OWNER TARGET
 
-Cada carrinho ativo pertence a um comprador e a um único vendedor. Há no máximo um carrinho ativo por combinação `buyerUserId + sellerProfileId`; produtos de vendedores diferentes nunca ficam no mesmo carrinho. Um comprador pode manter carrinhos separados, finalizados separadamente. Não haverá checkout multivendedor na primeira implementação. Isso evita um pagamento com vários vendedores, múltiplas retenções, rateio, cancelamentos parciais e chargebacks distribuídos.
+Cada carrinho ativo pertence a um comprador e a um único vendedor. Há no máximo um carrinho ativo por combinação `buyerUserId + sellerProfileId`. **OWNER TARGET / NOT IMPLEMENTED:** cada carrinho ativo possui no máximo uma linha comprável e cada Order preserva exatamente um SKU/variante. Produtos ou variantes diferentes exigem compras/Orders separados. Isso evita mistura de categorias, múltiplos `releaseEligibleAt`, divisão de retenção e resolução parcial entre itens distintos.
+
+**CURRENT IMPLEMENTATION / SUPERSEDED FOR TARGET:** a implementação e o contrato anterior permitem múltiplos `CartItem` do mesmo Seller. O backend futuro deve impor a nova cardinalidade; validação somente no frontend não basta.
 
 Adicionar ao carrinho **não reserva estoque** nem reduz disponibilidade. Preço, publicação, seller, variante e estoque são revalidados no servidor no checkout. Carrinho não é fonte de verdade; item pausado, removido ou alterado será reconciliado antes do checkout.
 
@@ -28,6 +30,8 @@ Adicionar ao carrinho **não reserva estoque** nem reduz disponibilidade. Preço
 
 `CartItem`: `id`, `cartId`, `productId`, `productVariantId` quando aplicável, `quantity`, `createdAt`, `updatedAt`. Preço, taxa, comissão, desconto e total definitivos não são autoridade persistida no carrinho. Uma visualização do último preço observado pode existir se marcada como não autoritativa.
 
+A identidade conceitual da única linha é `productId + productVariantId` quando aplicável. `quantity` pode ser maior que 1 na mesma linha quando o modelo permitir e houver estoque; serviço `FIXED` continua limitado a 1 e `QUOTE` continua fora do checkout direto.
+
 ## Checkout server-side
 
 O cliente envia somente identificadores e intenção. O backend: (1) autentica o comprador; (2) carrega o carrinho persistente; (3) confirma um seller; (4) busca produtos/variantes atuais; (5) valida publicação/disponibilidade; (6) recalcula preços; (7) cria snapshots imutáveis; (8) reserva estoque aplicável; (9) cria pedido `PENDING_PAYMENT`; (10) grava evento; (11) devolve resultado idempotente.
@@ -44,7 +48,7 @@ Moeda inicial `BRL`; toda operação explicita moeda. Valores persistentes usam 
 
 ## Pedido e snapshot imutável
 
-`Order`: UUID interno, código público não sequencial, comprador, vendedor, moeda, subtotal, desconto aprovado, taxa da plataforma, total, status geral, status de pagamento, entrega e disputa, versão, expiração de pagamento e timestamps. Pertence exatamente a um comprador, um vendedor e uma moeda.
+`Order`: UUID interno, código público não sequencial, comprador, vendedor, moeda, subtotal, desconto aprovado, taxa da plataforma, total, status geral, status de pagamento, entrega e disputa, versão, expiração de pagamento e timestamps. Pertence exatamente a um comprador, um vendedor, uma moeda e, no OWNER TARGET, uma linha comprável/SKU-variante.
 
 `OrderItem` preserva snapshot imutável: ID/versão do produto, ID de variante, seller ID, nome público da loja, slug, título, título de variante, tipo, modelo, entrega, preço unitário em centavos, quantidade, total da linha, moeda, dados públicos necessários ao cumprimento e versão da política comercial. Alterações do anúncio não alteram pedidos. Excluem-se conta privada, object keys de storage, recuperação, notas internas e dados pessoais desnecessários.
 
@@ -93,7 +97,7 @@ Cada mudança é comandada por operação backend autorizada, nunca por um desti
 | Fulfillment | DELIVERED → AWAITING_BUYER_CONFIRMATION | sistema                    | entrega exige aceite                           | nenhum                   | mantém pendente                 | `fulfillment.awaiting_buyer` | idem               | disputa                          |
 | Fulfillment | DELIVERED → CONFIRMED                   | sistema                    | entrega automática/política                    | nenhum                   | elegível à liberação            | `fulfillment.confirmed`      | idem               | disputa/refund                   |
 | Fulfillment | AWAITING_BUYER_CONFIRMATION → CONFIRMED | comprador/job              | aceite ou prazo                                | nenhum                   | elegível à liberação            | `fulfillment.confirmed`      | idem               | disputa/refund                   |
-| Dispute     | NONE → OPEN                             | comprador/operação         | janela aberta                                  | nenhum                   | seller pending→held             | `dispute.opened`             | chave/caso         | resolução                        |
+| Dispute     | NONE → OPEN                             | comprador/operação         | elegibilidade vitalícia; regras de casos a definir | nenhum                | bloquear/recovery conforme estágio | `dispute.opened`          | chave/caso         | resolução                        |
 | Dispute     | OPEN → UNDER_REVIEW                     | admin/sistema              | caso íntegro                                   | nenhum                   | mantém held                     | `dispute.reviewing`          | idem               | não                              |
 | Dispute     | UNDER_REVIEW → RESOLVED_BUYER           | admin                      | decisão e evidências                           | regra de reposição       | refund/compensação              | `dispute.buyer_resolved`     | decisão única      | recurso auditado                 |
 | Dispute     | UNDER_REVIEW → RESOLVED_SELLER          | admin                      | decisão e evidências                           | nenhum                   | held→pending/available          | `dispute.seller_resolved`    | decisão única      | recurso auditado                 |

@@ -1,5 +1,7 @@
 # Withdrawal policy
 
+> **Boundary:** this policy governs the process after Seller funds are already `SELLER_AVAILABLE` and a withdrawal is requested. It is separate from `SELLER RELEASE POLICY`, which governs protection from `COMPLETED` through `SELLER_HELD` to `SELLER_AVAILABLE`. The default/category/subcategory hierarchy and Liberação Acelerada in `DISPUTE_FINANCIAL_RECOVERY_CONTRACT.md` do not change this withdrawal SLA.
+
 ## MVP baseline
 
 Only STANDARD is enabled, with an SLA communicated as up to 48 hours, MANUAL ADMIN approval, and zero additional withdrawal fee. Request creation reserves AVAILABLE into RESERVED; only approval can begin external execution. INSTANT is represented for future compatibility but disabled and must not appear in frontend.
