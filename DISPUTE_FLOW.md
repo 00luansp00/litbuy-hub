@@ -2,6 +2,19 @@
 
 Fluxo futuro de disputa. **Documentação de planejamento.** Não implementado.
 
+## Decisão atual do Owner — label e elegibilidade pública
+
+- O label público da ação é **“Reportar problema”**, não “Disputa”. “Disputa” e “Mediação” permanecem conceitos internos/de domínio.
+- No contexto de um Order, “Reportar problema” inicia a disputa/mediação daquele pedido; não é denúncia genérica de usuário, comportamento, anúncio ou moderação.
+- O Buyer pode usar a ação depois de o Seller marcar a entrega. Confirmar recebimento não extingue imediatamente esse direito.
+- Depois de Seller entregar → Buyer confirmar → Order `COMPLETED`, a ação continua elegível enquanto estiver aberta a janela de proteção pós-venda.
+- Início, duração, diferenças por categoria, expiração, refund, chargeback e encerramento dessa janela são **`DECISION REQUIRED`**. Prazos históricos/mock de 15/30/45 dias não são política real.
+- A elegibilidade é autoridade server-side; o frontend não decide. A implementação futura exige autenticação, ownership/IDOR, persistência, timestamps server-side, idempotência quando aplicável, auditoria, motivo/descrição, evidências em storage seguro e Admin real.
+- Order, Payment, Fulfillment e Dispute permanecem máquinas separadas. Não há rollback automático presumido de `OrderStatus` ao abrir disputa depois de `COMPLETED`; qualquer transição ainda não definida é **`DECISION REQUIRED`**.
+- A UI/mock histórica com “Reportar problema” não é implementação real. A rota Buyer real ainda não possui o gatilho funcional.
+
+Uma disputa válida pós-`COMPLETED` não pode ser ignorada apenas porque o Order concluiu. Deve-se preservar o conceito de bloqueio/reserva, mas a política precisa definir o tratamento de proceeds em `SELLER_PENDING`, `SELLER_HELD`, `SELLER_AVAILABLE` e `SELLER_RESERVED`, além do caso em que o valor já avançou para saque/payout. Não se presume solução para dinheiro já pago: **`DECISION REQUIRED / HUMAN-PROD-REVIEW`**. Nenhuma decisão financeira pode ser client-only.
+
 ## Status
 
 - **`open`** — comprador acabou de abrir a disputa. Saldo do pedido bloqueado.
