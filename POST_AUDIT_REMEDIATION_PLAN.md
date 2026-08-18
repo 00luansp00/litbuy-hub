@@ -69,7 +69,7 @@ Não criar o handoff nem tag nesta tarefa.
 
 ## Backlog humano/infra
 
-`PASS2-F1`, `PASS2-F4`, `P3-F1`/`P3-F10`, `P3-F2`/`P3-F3`/`P3-F4`/`P3-F7`/`P3-F8`, `P4-F1`/`P4-F4`/`P4-F6`/`P4-F7`/`P4-F8`/`P4-F9`/`P4-F10`/`P4-F11`/`P4-F15`, `P5-F1` e `P5-F3` não devem ser “resolvidos por IA automaticamente”. O mesmo vale para hosting, deploy, secrets, observability, backup/restore, DR, KYC, antifraud, payout, PSP production, compliance e pentest.
+`PASS2-F1`, `PASS2-F4`, `P3-F10`, `P3-F2`/`P3-F3`/`P3-F4`/`P3-F7`/`P3-F8`, `P4-F1`/`P4-F4`/`P4-F6`/`P4-F7`/`P4-F8`/`P4-F9`/`P4-F10`/`P4-F11`/`P4-F15`, `P5-F1` e `P5-F3` não devem ser “resolvidos por IA automaticamente”. O mesmo vale para hosting, deploy, secrets, observability, backup/restore, DR, KYC, antifraud, payout, PSP production, compliance e pentest.
 
 ## Dinheiro real
 
