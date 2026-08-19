@@ -5,7 +5,6 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/database/prisma.service';
 import {
   SELLER_RELEASE_POLICY_RULE_CODE,
-  SellerReleasePolicyError,
   SellerReleasePolicyService,
 } from '../src/financial/seller-release-policy.service';
 
@@ -16,6 +15,8 @@ describe('SellerReleasePolicy with real PostgreSQL', () => {
   let cleanup: PrismaClient;
   let service: SellerReleasePolicyService;
   let actorId: string;
+  let categoryId: string;
+  let subcategoryId: string;
   let version = 70_000;
 
   beforeAll(async () => {
@@ -37,6 +38,19 @@ describe('SellerReleasePolicy with real PostgreSQL', () => {
       },
     });
     actorId = actor.id;
+    const category = await prisma.catalogCategory.create({
+      data: { slug: `category-${randomUUID()}`, name: 'Original category name' },
+    });
+    categoryId = category.id;
+    subcategoryId = (
+      await prisma.catalogSubcategory.create({
+        data: {
+          categoryId,
+          slug: `subcategory-${randomUUID()}`,
+          name: 'Original subcategory name',
+        },
+      })
+    ).id;
   });
   afterAll(async () => {
     await app.close();
@@ -141,10 +155,13 @@ describe('SellerReleasePolicy with real PostgreSQL', () => {
       ruleId: policy.rules[0].id,
       ruleCode: SELLER_RELEASE_POLICY_RULE_CODE,
       delayHours: 72,
+      source: 'DEFAULT',
+      categoryId: null,
+      subcategoryId: null,
     });
   });
 
-  it('fails closed for a disabled or ambiguous effective rule set', async () => {
+  it('fails closed for a disabled default rule', async () => {
     const disabled = await draft();
     await prisma.sellerReleasePolicyRule.update({
       where: { id: disabled.rules[0].id },
@@ -152,17 +169,267 @@ describe('SellerReleasePolicy with real PostgreSQL', () => {
     });
     await publish(disabled.id);
     await expectCode(service.resolveEffectivePolicy(), 'SELLER_RELEASE_POLICY_NOT_FOUND');
+  });
+
+  it('fails closed when an effective policy has no applicable override or DEFAULT', async () => {
+    const policy = await draft();
+    await prisma.sellerReleasePolicyRule.delete({ where: { id: policy.rules[0].id } });
+    await prisma.sellerReleasePolicyRule.create({
+      data: {
+        policyVersionId: policy.id,
+        code: 'OTHER_CATEGORY_ONLY',
+        delayHours: 24,
+        scope: 'CATEGORY',
+        categoryId,
+      },
+    });
+    await publish(policy.id);
+    await expectCode(service.resolveEffectivePolicy(), 'SELLER_RELEASE_POLICY_NOT_FOUND');
+  });
+
+  it('resolves CATEGORY before DEFAULT, permits shorter and longer overrides, and ignores disabled overrides', async () => {
+    const policy = await draft(168);
+    const longerCategory = await prisma.catalogCategory.create({
+      data: { slug: `longer-${randomUUID()}`, name: 'Longer' },
+    });
+    const shorter = await prisma.sellerReleasePolicyRule.create({
+      data: {
+        policyVersionId: policy.id,
+        code: 'CATEGORY_SHORTER',
+        delayHours: 96,
+        scope: 'CATEGORY',
+        categoryId,
+      },
+    });
+    await prisma.sellerReleasePolicyRule.create({
+      data: {
+        policyVersionId: policy.id,
+        code: 'CATEGORY_LONGER',
+        delayHours: 240,
+        scope: 'CATEGORY',
+        categoryId: longerCategory.id,
+      },
+    });
+    await publish(policy.id);
+
+    await expect(service.resolveEffectivePolicy(undefined, { categoryId })).resolves.toMatchObject({
+      ruleId: shorter.id,
+      delayHours: 96,
+      source: 'CATEGORY',
+      categoryId,
+      subcategoryId: null,
+    });
+    await expect(
+      service.resolveEffectivePolicy(undefined, { categoryId: longerCategory.id }),
+    ).resolves.toMatchObject({ delayHours: 240, source: 'CATEGORY' });
+    await expect(service.resolveEffectivePolicy()).resolves.toMatchObject({
+      delayHours: 168,
+      source: 'DEFAULT',
+    });
+
     await prisma.sellerReleasePolicyVersion.update({
-      where: { id: disabled.id },
+      where: { id: policy.id },
       data: { status: 'RETIRED' },
     });
-    const ambiguous = await draft();
+    const fallback = await draft(168);
     await prisma.sellerReleasePolicyRule.create({
-      data: { policyVersionId: ambiguous.id, code: 'ANOTHER_GLOBAL_RULE', delayHours: 24 },
+      data: {
+        policyVersionId: fallback.id,
+        code: 'CATEGORY_DISABLED',
+        delayHours: 24,
+        enabled: false,
+        scope: 'CATEGORY',
+        categoryId,
+      },
     });
-    await publish(ambiguous.id);
-    await expect(service.resolveEffectivePolicy()).rejects.toBeInstanceOf(SellerReleasePolicyError);
-    await expectCode(service.resolveEffectivePolicy(), 'SELLER_RELEASE_POLICY_AMBIGUOUS');
+    await publish(fallback.id);
+    await expect(service.resolveEffectivePolicy(undefined, { categoryId })).resolves.toMatchObject({
+      source: 'DEFAULT',
+      delayHours: 168,
+    });
+  });
+
+  it('resolves SUBCATEGORY before CATEGORY and DEFAULT with explicit disabled fallback', async () => {
+    const policy = await draft(168);
+    const category = await prisma.sellerReleasePolicyRule.create({
+      data: {
+        policyVersionId: policy.id,
+        code: 'CATEGORY',
+        delayHours: 120,
+        scope: 'CATEGORY',
+        categoryId,
+      },
+    });
+    const subcategory = await prisma.sellerReleasePolicyRule.create({
+      data: {
+        policyVersionId: policy.id,
+        code: 'SUBCATEGORY',
+        delayHours: 48,
+        scope: 'SUBCATEGORY',
+        subcategoryId,
+      },
+    });
+    await publish(policy.id);
+    await expect(
+      service.resolveEffectivePolicy(undefined, { categoryId, subcategoryId }),
+    ).resolves.toMatchObject({
+      ruleId: subcategory.id,
+      source: 'SUBCATEGORY',
+      subcategoryId,
+      categoryId: null,
+    });
+
+    await prisma.sellerReleasePolicyVersion.update({
+      where: { id: policy.id },
+      data: { status: 'RETIRED' },
+    });
+    const categoryFallback = await draft(168);
+    await prisma.sellerReleasePolicyRule.createMany({
+      data: [
+        {
+          policyVersionId: categoryFallback.id,
+          code: 'CATEGORY',
+          delayHours: 120,
+          scope: 'CATEGORY',
+          categoryId,
+        },
+        {
+          policyVersionId: categoryFallback.id,
+          code: 'SUBCATEGORY_DISABLED',
+          delayHours: 48,
+          enabled: false,
+          scope: 'SUBCATEGORY',
+          subcategoryId,
+        },
+      ],
+    });
+    await publish(categoryFallback.id);
+    await expect(
+      service.resolveEffectivePolicy(undefined, { categoryId, subcategoryId }),
+    ).resolves.toMatchObject({ source: 'CATEGORY', delayHours: 120 });
+
+    await prisma.sellerReleasePolicyVersion.update({
+      where: { id: categoryFallback.id },
+      data: { status: 'RETIRED' },
+    });
+    const defaultFallback = await draft(168);
+    await prisma.sellerReleasePolicyRule.createMany({
+      data: [
+        {
+          policyVersionId: defaultFallback.id,
+          code: 'CATEGORY_DISABLED',
+          delayHours: 120,
+          enabled: false,
+          scope: 'CATEGORY',
+          categoryId,
+        },
+        {
+          policyVersionId: defaultFallback.id,
+          code: 'SUBCATEGORY_DISABLED',
+          delayHours: 48,
+          enabled: false,
+          scope: 'SUBCATEGORY',
+          subcategoryId,
+        },
+      ],
+    });
+    await publish(defaultFallback.id);
+    await expect(
+      service.resolveEffectivePolicy(undefined, { categoryId, subcategoryId }),
+    ).resolves.toMatchObject({ source: 'DEFAULT', delayHours: 168 });
+    expect(category.id).toBeDefined();
+  });
+
+  it('uses stable catalog IDs after category and subcategory labels change', async () => {
+    const policy = await draft(168);
+    await prisma.sellerReleasePolicyRule.create({
+      data: {
+        policyVersionId: policy.id,
+        code: 'STABLE_SUBCATEGORY',
+        delayHours: 96,
+        scope: 'SUBCATEGORY',
+        subcategoryId,
+      },
+    });
+    await publish(policy.id);
+    await prisma.catalogCategory.update({
+      where: { id: categoryId },
+      data: { name: 'Renamed', slug: `renamed-${randomUUID()}` },
+    });
+    await prisma.catalogSubcategory.update({
+      where: { id: subcategoryId },
+      data: { name: 'Renamed too', slug: `renamed-sub-${randomUUID()}` },
+    });
+    await expect(
+      service.resolveEffectivePolicy(undefined, { categoryId, subcategoryId }),
+    ).resolves.toMatchObject({
+      source: 'SUBCATEGORY',
+      subcategoryId,
+      delayHours: 96,
+    });
+  });
+
+  it('enforces scope shapes, one qualifier per version, and catalog foreign keys in PostgreSQL', async () => {
+    const policy = await draft();
+    await expect(
+      prisma.sellerReleasePolicyRule.create({
+        data: { policyVersionId: policy.id, code: 'SECOND_DEFAULT', delayHours: 1 },
+      }),
+    ).rejects.toBeDefined();
+    await prisma.sellerReleasePolicyRule.create({
+      data: {
+        policyVersionId: policy.id,
+        code: 'CATEGORY',
+        delayHours: 1,
+        scope: 'CATEGORY',
+        categoryId,
+      },
+    });
+    await expect(
+      prisma.sellerReleasePolicyRule.create({
+        data: {
+          policyVersionId: policy.id,
+          code: 'CATEGORY_2',
+          delayHours: 2,
+          scope: 'CATEGORY',
+          categoryId,
+        },
+      }),
+    ).rejects.toBeDefined();
+    await prisma.sellerReleasePolicyRule.create({
+      data: {
+        policyVersionId: policy.id,
+        code: 'SUBCATEGORY',
+        delayHours: 1,
+        scope: 'SUBCATEGORY',
+        subcategoryId,
+      },
+    });
+    await expect(
+      prisma.sellerReleasePolicyRule.create({
+        data: {
+          policyVersionId: policy.id,
+          code: 'SUBCATEGORY_2',
+          delayHours: 2,
+          scope: 'SUBCATEGORY',
+          subcategoryId,
+        },
+      }),
+    ).rejects.toBeDefined();
+    await expect(
+      prisma.$executeRaw`INSERT INTO "SellerReleasePolicyRule" ("id", "policyVersionId", "code", "delayHours", "enabled", "scope", "categoryId", "updatedAt") VALUES (${randomUUID()}::uuid, ${policy.id}::uuid, 'INVALID_SHAPE', 1, true, 'DEFAULT', ${categoryId}::uuid, now())`,
+    ).rejects.toBeDefined();
+    await expect(
+      prisma.sellerReleasePolicyRule.create({
+        data: {
+          policyVersionId: policy.id,
+          code: 'MISSING_FK',
+          delayHours: 1,
+          scope: 'CATEGORY',
+          categoryId: randomUUID(),
+        },
+      }),
+    ).rejects.toBeDefined();
   });
 
   it('requires publication audit metadata and enforces lifecycle transitions', async () => {

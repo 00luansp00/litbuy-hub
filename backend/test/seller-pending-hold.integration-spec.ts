@@ -237,24 +237,21 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
     ]);
   });
 
-  it('fails closed for an ambiguous enabled rule set without partial artifacts', async () => {
+  it('rejects an ambiguous DEFAULT rule set in PostgreSQL without partial artifacts', async () => {
     const { order, actorUserId } = await completedOrder(1000n);
-    await publishSellerReleasePolicy(actorUserId, 72, {
-      code: 'UNEXPECTED_ENABLED',
-      delayHours: 1,
-    });
-    expect(await service.processOne(order.id)).toBe('PROCESSED');
+    await expect(
+      publishSellerReleasePolicy(actorUserId, 72, {
+        code: 'UNEXPECTED_ENABLED',
+        delayHours: 1,
+      }),
+    ).rejects.toBeDefined();
     expect(
       await prisma.ledgerTransaction.count({
         where: { type: 'SELLER_FUNDS_HELD', referenceId: order.id },
       }),
     ).toBe(0);
     expect(await prisma.financialHold.count({ where: { orderId: order.id } })).toBe(0);
-    expect(
-      await prisma.reconciliationIssue.findFirst({
-        where: { referenceType: 'SellerPendingHold', referenceId: order.id, status: 'OPEN' },
-      }),
-    ).toMatchObject({ details: { errorCode: 'SELLER_RELEASE_POLICY_AMBIGUOUS' } });
+    expect(await prisma.reconciliationIssue.count({ where: { referenceId: order.id } })).toBe(0);
   });
 
   it('keeps delay zero scheduled and ACTIVE without releasing funds', async () => {

@@ -5,7 +5,6 @@ import { acquireAdvisoryTransactionLock } from '../database/advisory-lock';
 import { PrismaService } from '../database/prisma.service';
 
 const ISSUE_REFERENCE_TYPE = 'SellerHoldEligibility';
-const RULE_CODE = 'DELIVERY_PROTECTION_DEFAULT';
 
 export type SellerHoldEligibilityResult =
   | 'NO_CANDIDATE'
@@ -133,9 +132,9 @@ export class SellerHoldEligibilityService {
           policyVersionId: hold.sellerReleasePolicyVersionId!,
         },
       },
-      select: { code: true, delayHours: true },
+      select: { scope: true, delayHours: true },
     });
-    if (rule?.code !== RULE_CODE || rule.delayHours !== hold.releaseDelayHours)
+    if (rule?.scope !== 'DEFAULT' || rule.delayHours !== hold.releaseDelayHours)
       return this.fail(tx, holdId, { type: 'OTHER', code: 'HISTORICAL_RELEASE_RULE_INVALID' });
 
     const order = await tx.order.findUnique({ where: { id: hold.orderId } });
