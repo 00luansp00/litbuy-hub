@@ -142,6 +142,16 @@ describe("CheckoutContent real cart states", () => {
     expect(mocks.mutate).not.toHaveBeenCalled();
   });
 
+  it("fails closed for a defensive multi-line cart", () => {
+    setCart(
+      readyCart({ items: [readyCart().items[0], { ...readyCart().items[0], id: "item-b" }] }),
+    );
+    render(<CheckoutContent sellerSlug="loja-a" />);
+    expect(screen.getByRole("alert").textContent).toContain("somente um produto ou variante");
+    expect(screen.queryByRole("button", { name: /criar pedido/i })).toBeNull();
+    expect(mocks.mutate).not.toHaveBeenCalled();
+  });
+
   it("renders the authoritative seller, item, issue, variant, quantity, and minor-unit money", () => {
     setCart(
       readyCart({

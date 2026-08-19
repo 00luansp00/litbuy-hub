@@ -27,4 +27,9 @@ describe('checkout fingerprint', () => {
       checkoutFingerprint({ ...base, items: [{ ...base.items[0], productVersion: 2 }] }),
     );
   });
+  it('rejects multiple selections', () => {
+    expect(() =>
+      checkoutFingerprint({ ...base, items: [base.items[0], { ...base.items[0], id: 'other' }] }),
+    ).toThrow('CHECKOUT_SELECTION_CARDINALITY_INVALID');
+  });
 });

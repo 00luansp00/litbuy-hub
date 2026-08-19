@@ -35,6 +35,7 @@ export function BuyerCartSellerSection({ cart: listedCart }: { cart: BuyerCart }
   const removeItem = useRemoveBuyerCartItem();
   const [feedback, setFeedback] = useState<string>();
   const pending = updateItem.isPending || removeItem.isPending;
+  const hasSingleLine = cart.items.length === 1;
 
   const handleError = async (error: unknown) => {
     if (error instanceof ApiError && error.code === "CART_VERSION_CONFLICT") {
@@ -100,7 +101,7 @@ export function BuyerCartSellerSection({ cart: listedCart }: { cart: BuyerCart }
           </Link>
         </div>
         <p className="text-sm font-medium">
-          {cart.checkoutReady ? "Pronto para checkout" : "Precisa de ajustes"}
+          {cart.checkoutReady && hasSingleLine ? "Pronto para checkout" : "Precisa de ajustes"}
         </p>
       </header>
 
@@ -130,7 +131,7 @@ export function BuyerCartSellerSection({ cart: listedCart }: { cart: BuyerCart }
 
       <footer className="flex flex-col justify-between gap-3 border-t pt-4 sm:flex-row sm:items-end">
         <div>
-          {cart.items.length > 0 && cart.checkoutReady ? (
+          {hasSingleLine && cart.checkoutReady ? (
             <Link
               to="/checkout"
               search={{ sellerSlug: cart.seller.slug }}
@@ -140,7 +141,9 @@ export function BuyerCartSellerSection({ cart: listedCart }: { cart: BuyerCart }
             </Link>
           ) : (
             <p className="text-sm text-muted-foreground">
-              Ajuste os itens deste carrinho para continuar.
+              {cart.items.length > 1
+                ? "Este carrinho possui uma seleção inválida. Remova os itens excedentes para continuar."
+                : "Ajuste os itens deste carrinho para continuar."}
             </p>
           )}
         </div>

@@ -11,6 +11,8 @@ import { useAddBuyerCartItem, useBuyerSellerCart } from "@/services/cartApiHooks
 
 const cartErrorMessages: Record<string, string> = {
   CART_ITEM_ALREADY_EXISTS: "Este item já está no carrinho.",
+  CART_SINGLE_SKU_REQUIRED:
+    "Conclua ou remova o produto atual antes de comprar outro produto ou variante desta loja.",
   PRODUCT_NOT_PURCHASABLE: "Este produto não está disponível para compra.",
   SELF_PURCHASE_NOT_ALLOWED: "Você não pode comprar um produto da sua própria loja.",
   PRODUCT_VARIANT_REQUIRED: "Selecione uma variante antes de adicionar.",
@@ -46,12 +48,14 @@ export function PublicProductPurchasePanel({ product }: { product: PublicCatalog
       item.product.id === product.id &&
       (product.model !== "DYNAMIC" || item.variant?.id === selectedVariantId),
   );
+  const occupiedByAnotherSelection = Boolean(cartQuery.data?.items.length) && !duplicate;
 
   const addToCart = () => {
     if (
       status !== "authenticated" ||
       !cartKnown ||
       duplicate ||
+      occupiedByAnotherSelection ||
       (product.model === "DYNAMIC" && !selectedVariant)
     )
       return;
@@ -159,6 +163,11 @@ export function PublicProductPurchasePanel({ product }: { product: PublicCatalog
             Tentar sincronizar novamente
           </Button>
         </div>
+      ) : occupiedByAnotherSelection ? (
+        <p className="rounded-lg bg-muted p-3 text-sm" role="status">
+          Cada compra usa um produto ou variante por vez. Conclua ou remova o item atual desta loja
+          antes de comprar outro.
+        </p>
       ) : (
         <Button
           type="button"
@@ -166,6 +175,7 @@ export function PublicProductPurchasePanel({ product }: { product: PublicCatalog
           disabled={
             addItem.isPending ||
             duplicate ||
+            occupiedByAnotherSelection ||
             !cartKnown ||
             (product.model === "DYNAMIC" && !selectedVariant)
           }

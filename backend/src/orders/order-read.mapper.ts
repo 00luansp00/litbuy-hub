@@ -9,8 +9,8 @@ export type OrderReadPayload = Prisma.OrderGetPayload<{ include: typeof orderRea
 export type OrderReadResponse = ReturnType<typeof mapOrder>;
 
 export function mapOrder(order: OrderReadPayload) {
+  if (order.items.length !== 1) throw invalidSnapshot();
   const firstItem = order.items[0];
-  if (!firstItem) throw invalidSnapshot();
   const inconsistentSellerSnapshot = order.items.some(
     (item) =>
       item.sellerProfileId !== firstItem.sellerProfileId ||

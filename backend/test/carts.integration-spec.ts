@@ -440,36 +440,34 @@ describe('Cart database constraints with real PostgreSQL', () => {
       }),
     ).toBe(1);
   });
-  it('rejects the 51st line without changing version, items, events or stock', async () => {
+  it('rejects a second product without changing version, items, events or stock', async () => {
     const f = await fixture();
-    const products = await Promise.all(
-      Array.from({ length: 51 }, (_, index) =>
-        createNormalProduct(f.seller.id, f.product.categoryId, `limit-${index}`),
-      ),
-    );
-    for (const [index, product] of products.slice(0, 50).entries())
-      await service.add(f.buyer.id, f.seller.slug, {
-        productId: product.id,
-        quantity: 1,
-        expectedVersion: index + 1,
-      });
+    const [first, second] = await Promise.all([
+      createNormalProduct(f.seller.id, f.product.categoryId, 'single-sku-first'),
+      createNormalProduct(f.seller.id, f.product.categoryId, 'single-sku-second'),
+    ]);
+    await service.add(f.buyer.id, f.seller.slug, {
+      productId: first.id,
+      quantity: 1,
+      expectedVersion: 1,
+    });
     const versionBefore = (await prisma.cart.findUniqueOrThrow({ where: { id: f.cart.id } }))
       .version;
     const eventsBefore = await prisma.securityEvent.count({ where: { userId: f.buyer.id } });
-    const stockBefore = await prisma.product.findUniqueOrThrow({ where: { id: products[50].id } });
+    const stockBefore = await prisma.product.findUniqueOrThrow({ where: { id: second.id } });
     await expect(
       service.add(f.buyer.id, f.seller.slug, {
-        productId: products[50].id,
+        productId: second.id,
         quantity: 1,
         expectedVersion: versionBefore,
       }),
-    ).rejects.toMatchObject({ code: 'CART_ITEM_LIMIT_REACHED' });
-    expect(await prisma.cartItem.count({ where: { cartId: f.cart.id } })).toBe(50);
+    ).rejects.toMatchObject({ code: 'CART_SINGLE_SKU_REQUIRED' });
+    expect(await prisma.cartItem.count({ where: { cartId: f.cart.id } })).toBe(1);
     expect(await prisma.cart.findUniqueOrThrow({ where: { id: f.cart.id } })).toMatchObject({
       version: versionBefore,
     });
     expect(await prisma.securityEvent.count({ where: { userId: f.buyer.id } })).toBe(eventsBefore);
-    expect((await prisma.product.findUniqueOrThrow({ where: { id: products[50].id } })).stock).toBe(
+    expect((await prisma.product.findUniqueOrThrow({ where: { id: second.id } })).stock).toBe(
       stockBefore.stock,
     );
   });
@@ -521,6 +519,18 @@ describe('Cart database constraints with real PostgreSQL', () => {
       expectedVersion: 1,
     });
     const itemId = added.items[0].id;
+    await expect(
+      service.add(f.buyer.id, f.seller.slug, {
+        productId: dynamic.id,
+        productVariantId: dynamic.variants[1].id,
+        quantity: 1,
+        expectedVersion: 2,
+      }),
+    ).rejects.toMatchObject({ code: 'CART_SINGLE_SKU_REQUIRED' });
+    expect(await prisma.cartItem.count({ where: { cartId: added.id } })).toBe(1);
+    expect(await prisma.cart.findUniqueOrThrow({ where: { id: added.id } })).toMatchObject({
+      version: 2,
+    });
     await service.update(f.buyer.id, f.seller.slug, itemId, {
       quantity: 3,
       expectedVersion: 2,
@@ -651,20 +661,8 @@ describe('Cart database constraints with real PostgreSQL', () => {
       }
     },
   );
-  it('rolls back CART_ITEM_ADDED for an existing cart without disturbing prior state', async () => {
+  it('rolls back CART_ITEM_ADDED for an existing empty cart without disturbing prior state', async () => {
     const f = await fixture();
-    const existing = await prisma.cartItem.create({
-      data: { cartId: f.cart.id, productId: f.product.id, quantity: 1 },
-    });
-    const other = await createNormalProduct(f.seller.id, f.product.categoryId, 'audit-add');
-    await prisma.securityEvent.create({
-      data: {
-        userId: f.buyer.id,
-        eventType: 'CART_ITEM_ADDED',
-        outcome: 'SUCCESS',
-        metadata: { cartId: f.cart.id, cartItemId: existing.id, action: 'BASELINE' },
-      },
-    });
     const before = await prisma.cart.findUniqueOrThrow({
       where: { id: f.cart.id },
       include: { items: true },
@@ -674,7 +672,7 @@ describe('Cart database constraints with real PostgreSQL', () => {
     try {
       await expect(
         service.add(f.buyer.id, f.seller.slug, {
-          productId: other.id,
+          productId: f.product.id,
           quantity: 1,
           expectedVersion: before.version,
         }),
