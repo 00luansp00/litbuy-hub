@@ -1,5 +1,8 @@
 # Versioned financial fee policy
 
+> **OWNER TARGET / NOT IMPLEMENTED (2026-08-18):** the freeze defines configurable initial baselines for tiers, MAX, VIP and proportional reversal of LIT Buy fees. The foundation/no-production-seed statements below remain CURRENT; values are not runtime hardcode.
+
+
 > **Integração de checkout (PR #47):** a comissão geral `PLATFORM_COMMISSION`, cobrada do `SELLER`, agora é resolvida e congelada transacionalmente no pedido. Ausência de política efetiva ou regra aplicável falha fechada; zero exige regra explícita. Consulte `CHECKOUT_PLATFORM_COMMISSION_SNAPSHOT.md`. O reconhecimento no ledger permanece fora deste incremento.
 
 `FeePolicyVersion` and typed `FeeRule` make future administration code-independent without allowing executable JSON/scripts. Drafts alone are editable. Scheduled/active/retired versions and their rules are database-protected from mutation; overlapping scheduled/active effective intervals are rejected. Resolution at a transaction instant must return exactly one version, whose calculated values are snapshotted on the future operation. Old Orders, Payments, ledger postings, commissions, and Withdrawals are never recalculated.

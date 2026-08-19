@@ -1,5 +1,8 @@
 # LIT Buy — Post-freeze Browser QA Findings
 
+> **HISTORICAL FINDINGS / TARGET RECONCILIATION (2026-08-18):** browser evidence remains unchanged. Target references to `COMPLETED`, generic 50%/rating acceleration and related notices are superseded by the decision freeze. No finding is closed and no implementation is claimed.
+
+
 ## Finalidade e autoridade
 
 Este arquivo é o ledger persistente dos achados manuais de Browser QA, observações de UX e decisões/requisitos futuros descobertos durante a estabilização pós-feature-freeze.

@@ -1,5 +1,8 @@
 # LIT Buy — Requisito futuro: planos adicionais no checkout do Buyer
 
+> **OWNER TARGET SUPERSEDED IN PART (2026-08-18):** `Sem Plano`, VIP Básico 2,99% and VIP Premium 4,99%, with benefits/SLAs, are frozen in `OWNER_COMMERCIAL_FINANCIAL_DECISION_FREEZE_2026-08-18.md`. This file remains historical future scope; enforcement, legal and technical design remain pending.
+
+
 ## Finalidade
 
 Este documento registra uma decisão/requisito de produto levantado pelo owner durante a validação funcional de 2026-08-16.
