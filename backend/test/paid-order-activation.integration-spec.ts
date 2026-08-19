@@ -585,36 +585,18 @@ describe('Paid order activation with real PostgreSQL', () => {
     },
   );
 
-  it('rolls back all stock and reservations when one of multiple reservations fails', async () => {
+  it('rejects a second OrderItem before activation under COMMERCE-1SKU', async () => {
     const { fixture, order } = await paidOrder('NORMAL', 1);
     const original = await prisma.orderItem.findFirstOrThrow({ where: { orderId: order.id } });
-    const rows = await prisma.$queryRaw<Array<{ id: string }>>`
-      INSERT INTO "OrderItem" ("id", "orderId", "sourceProductId", "sourceProductVersion",
-        "sellerProfileId", "sellerStoreName", "sellerSlug", "productSlug", "productTitle",
-        "productType", "productModel", "deliveryMode", "unitAmountMinor", "quantity",
-        "lineTotalAmountMinor", "currency", "pricingPolicyVersion")
-      SELECT gen_random_uuid(), "orderId", "sourceProductId", "sourceProductVersion",
-        "sellerProfileId", "sellerStoreName", "sellerSlug", "productSlug", "productTitle",
-        "productType", "productModel", "deliveryMode", "unitAmountMinor", "quantity",
-        "lineTotalAmountMinor", "currency", "pricingPolicyVersion"
-      FROM "OrderItem" WHERE "id" = ${original.id}::uuid RETURNING "id"
-    `;
-    await prisma.inventoryReservation.create({
-      data: {
-        orderId: order.id,
-        orderItemId: rows[0].id,
-        productId: fixture.product.id,
-        quantity: 1,
-        expiresAt: order.expiresAt,
-      },
-    });
-    await activation.processOne(order.id);
+    await expect(
+      prisma.orderItem.create({ data: { ...original, id: undefined, createdAt: undefined } }),
+    ).rejects.toMatchObject({ code: 'P2002' });
     expect(
       await prisma.product.findUniqueOrThrow({ where: { id: fixture.product.id } }),
     ).toMatchObject({ stock: 1 });
     expect(
       await prisma.inventoryReservation.count({ where: { orderId: order.id, status: 'ACTIVE' } }),
-    ).toBe(2);
+    ).toBe(1);
     expect(await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).toMatchObject({
       status: 'PENDING_PAYMENT',
     });
