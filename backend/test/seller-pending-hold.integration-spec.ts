@@ -106,14 +106,12 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
     releaseDelayHours = 72,
     releaseScope: 'DEFAULT' | 'CATEGORY' | 'SUBCATEGORY' = 'DEFAULT',
     confirmBuyer = true,
-    publishCommission = true,
   ) {
     const fixture = await commerceFixture(prisma, 'NORMAL', undefined, 20, false, false);
-    if (publishCommission)
-      await publishPlatformCommissionPolicy(prisma, fixture.sellerUser.id, {
-        publicVersion: version++,
-        fixedAmountMinor: fee,
-      });
+    await publishPlatformCommissionPolicy(prisma, fixture.sellerUser.id, {
+      publicVersion: version++,
+      fixedAmountMinor: fee,
+    });
     const subcategory =
       releaseScope === 'SUBCATEGORY'
         ? await prisma.catalogSubcategory.create({
@@ -296,7 +294,7 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
     },
   );
 
-  it('uses the original clock for seller resolution before and after its due date', async () => {
+  it('keeps the original deadline when seller resolution happens before due', async () => {
     const future = await completedOrder(1000n, 72, 'DEFAULT', false);
     expect(await service.processOne(future.order.id)).toBe('PROCESSED');
     const futureHold = await prisma.financialHold.findFirstOrThrow({
@@ -307,8 +305,22 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
       data: { disputeStatus: 'RESOLVED_SELLER' },
     });
     expect(await eligibility.processOne(futureHold.id)).toBe('NOT_DUE');
+    expect(
+      await prisma.financialHold.findUniqueOrThrow({ where: { id: futureHold.id } }),
+    ).toMatchObject({
+      status: 'ACTIVE',
+      releasePolicyAppliedAt: future.delivery.createdAt,
+      releaseEligibleAt: new Date(future.delivery.createdAt.getTime() + 72 * 3_600_000),
+    });
+    expect(
+      await prisma.ledgerTransaction.count({
+        where: { type: 'SELLER_FUNDS_RELEASED', referenceId: futureHold.id },
+      }),
+    ).toBe(0);
+  });
 
-    const due = await completedOrder(1000n, 0, 'DEFAULT', false, false);
+  it('makes seller resolution immediately eligible after the original deadline', async () => {
+    const due = await completedOrder(1000n, 0, 'DEFAULT', false);
     expect(await service.processOne(due.order.id)).toBe('PROCESSED');
     const dueHold = await prisma.financialHold.findFirstOrThrow({
       where: { orderId: due.order.id },
