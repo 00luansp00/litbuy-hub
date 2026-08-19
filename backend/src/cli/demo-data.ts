@@ -19,6 +19,7 @@ import {
   DEMO_IDS,
   DEMO_IMAGES,
   DEMO_PRODUCTS,
+  DEMO_SELLER_RELEASE_POLICY,
   DEMO_SUMMARY,
   DEMO_USERS,
 } from './demo-data.fixtures';
@@ -81,9 +82,42 @@ function isExpectedFeePolicy(policy: FeePolicyWithRules) {
     rule.enabled
   );
 }
+type SellerReleasePolicyWithRules = Prisma.SellerReleasePolicyVersionGetPayload<{
+  include: { rules: true };
+}>;
+function isExpectedSellerReleasePolicy(policy: SellerReleasePolicyWithRules) {
+  const rule = policy.rules[0];
+  return (
+    policy.id === DEMO_SELLER_RELEASE_POLICY.id &&
+    policy.publicVersion === DEMO_SELLER_RELEASE_POLICY.publicVersion &&
+    policy.status === 'ACTIVE' &&
+    policy.effectiveFrom.getTime() === DEMO_SELLER_RELEASE_POLICY.effectiveFrom.getTime() &&
+    policy.effectiveTo === null &&
+    policy.createdByUserId === DEMO_SELLER_RELEASE_POLICY.author.id &&
+    policy.publishedByUserId === DEMO_SELLER_RELEASE_POLICY.author.id &&
+    policy.publishedAt?.getTime() === DEMO_DATE.getTime() &&
+    policy.rules.length === 1 &&
+    rule.id === DEMO_SELLER_RELEASE_POLICY.rule.id &&
+    rule.code === DEMO_SELLER_RELEASE_POLICY.rule.code &&
+    rule.delayHours === DEMO_SELLER_RELEASE_POLICY.rule.delayHours &&
+    rule.scope === DEMO_SELLER_RELEASE_POLICY.rule.scope &&
+    rule.categoryId === null &&
+    rule.subcategoryId === null &&
+    rule.enabled
+  );
+}
 
 async function assertNoNamespaceConflicts({ prisma }: Runtime) {
-  const [authorByEmail, authorById, policyById, policyByVersion, ruleById] = await Promise.all([
+  const [
+    authorByEmail,
+    authorById,
+    policyById,
+    policyByVersion,
+    ruleById,
+    releasePolicyById,
+    releasePolicyByVersion,
+    releaseRuleById,
+  ] = await Promise.all([
     prisma.user.findUnique({
       where: { email: DEMO_FEE_POLICY.author.email },
       select: { id: true },
@@ -98,13 +132,28 @@ async function assertNoNamespaceConflicts({ prisma }: Runtime) {
       where: { id: DEMO_FEE_POLICY.rule.id },
       select: { policyVersionId: true },
     }),
+    prisma.sellerReleasePolicyVersion.findUnique({
+      where: { id: DEMO_SELLER_RELEASE_POLICY.id },
+    }),
+    prisma.sellerReleasePolicyVersion.findUnique({
+      where: { publicVersion: DEMO_SELLER_RELEASE_POLICY.publicVersion },
+      select: { id: true },
+    }),
+    prisma.sellerReleasePolicyRule.findUnique({
+      where: { id: DEMO_SELLER_RELEASE_POLICY.rule.id },
+      select: { policyVersionId: true },
+    }),
   ]);
   if (
     (authorByEmail && authorByEmail.id !== DEMO_FEE_POLICY.author.id) ||
     (authorById && authorById.email !== DEMO_FEE_POLICY.author.email) ||
     (policyByVersion && policyByVersion.id !== DEMO_FEE_POLICY.id) ||
     (ruleById && ruleById.policyVersionId !== DEMO_FEE_POLICY.id) ||
-    (policyById && policyById.publicVersion !== DEMO_FEE_POLICY.publicVersion)
+    (policyById && policyById.publicVersion !== DEMO_FEE_POLICY.publicVersion) ||
+    (releasePolicyByVersion && releasePolicyByVersion.id !== DEMO_SELLER_RELEASE_POLICY.id) ||
+    (releaseRuleById && releaseRuleById.policyVersionId !== DEMO_SELLER_RELEASE_POLICY.id) ||
+    (releasePolicyById &&
+      releasePolicyById.publicVersion !== DEMO_SELLER_RELEASE_POLICY.publicVersion)
   )
     throw new DemoDataError('DEMO_DATA_NAMESPACE_CONFLICT');
   for (const user of DEMO_USERS) {
@@ -278,7 +327,18 @@ async function seed(context: Runtime) {
       where: { id: DEMO_FEE_POLICY.id },
       include: { rules: true },
     });
+    const existingReleasePolicy = await tx.sellerReleasePolicyVersion.findUnique({
+      where: { id: DEMO_SELLER_RELEASE_POLICY.id },
+      include: { rules: true },
+    });
     const effectivePolicies = await tx.feePolicyVersion.count({
+      where: {
+        status: 'ACTIVE',
+        effectiveFrom: { lte: new Date() },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gt: new Date() } }],
+      },
+    });
+    const effectiveReleasePolicies = await tx.sellerReleasePolicyVersion.count({
       where: {
         status: 'ACTIVE',
         effectiveFrom: { lte: new Date() },
@@ -287,7 +347,9 @@ async function seed(context: Runtime) {
     });
     if (
       (existingPolicy && !isExpectedFeePolicy(existingPolicy)) ||
-      effectivePolicies > (existingPolicy ? 1 : 0)
+      effectivePolicies > (existingPolicy ? 1 : 0) ||
+      (existingReleasePolicy && !isExpectedSellerReleasePolicy(existingReleasePolicy)) ||
+      effectiveReleasePolicies > (existingReleasePolicy ? 1 : 0)
     )
       throw new DemoDataError('DEMO_DATA_NAMESPACE_CONFLICT');
     await tx.user.upsert({
@@ -337,6 +399,37 @@ async function seed(context: Runtime) {
         data: {
           status: 'ACTIVE',
           publishedByUserId: DEMO_FEE_POLICY.author.id,
+          publishedAt: DEMO_DATE,
+          updatedAt: DEMO_DATE,
+        },
+      });
+    }
+    if (!existingReleasePolicy) {
+      await tx.sellerReleasePolicyVersion.create({
+        data: {
+          id: DEMO_SELLER_RELEASE_POLICY.id,
+          publicVersion: DEMO_SELLER_RELEASE_POLICY.publicVersion,
+          status: 'DRAFT',
+          effectiveFrom: DEMO_SELLER_RELEASE_POLICY.effectiveFrom,
+          effectiveTo: null,
+          createdByUserId: DEMO_SELLER_RELEASE_POLICY.author.id,
+          createdAt: DEMO_DATE,
+          updatedAt: DEMO_DATE,
+          rules: {
+            create: {
+              ...DEMO_SELLER_RELEASE_POLICY.rule,
+              enabled: true,
+              createdAt: DEMO_DATE,
+              updatedAt: DEMO_DATE,
+            },
+          },
+        },
+      });
+      await tx.sellerReleasePolicyVersion.update({
+        where: { id: DEMO_SELLER_RELEASE_POLICY.id },
+        data: {
+          status: 'ACTIVE',
+          publishedByUserId: DEMO_SELLER_RELEASE_POLICY.author.id,
           publishedAt: DEMO_DATE,
           updatedAt: DEMO_DATE,
         },
@@ -759,7 +852,13 @@ async function verify(context: Runtime) {
     error.cause = stage;
     throw error;
   };
-  const [feePolicy, feePolicyAuthor, effectiveFeePolicies] = await Promise.all([
+  const [
+    feePolicy,
+    feePolicyAuthor,
+    effectiveFeePolicies,
+    sellerReleasePolicy,
+    effectiveSellerReleasePolicies,
+  ] = await Promise.all([
     prisma.feePolicyVersion.findUnique({
       where: { id: DEMO_FEE_POLICY.id },
       include: { rules: true },
@@ -772,12 +871,26 @@ async function verify(context: Runtime) {
         OR: [{ effectiveTo: null }, { effectiveTo: { gt: new Date() } }],
       },
     }),
+    prisma.sellerReleasePolicyVersion.findUnique({
+      where: { id: DEMO_SELLER_RELEASE_POLICY.id },
+      include: { rules: true },
+    }),
+    prisma.sellerReleasePolicyVersion.count({
+      where: {
+        status: 'ACTIVE',
+        effectiveFrom: { lte: new Date() },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gt: new Date() } }],
+      },
+    }),
   ]);
   if (
     !feePolicy ||
     !isExpectedFeePolicy(feePolicy) ||
     feePolicyAuthor?.email !== DEMO_FEE_POLICY.author.email ||
-    effectiveFeePolicies !== 1
+    effectiveFeePolicies !== 1 ||
+    !sellerReleasePolicy ||
+    !isExpectedSellerReleasePolicy(sellerReleasePolicy) ||
+    effectiveSellerReleasePolicies !== 1
   )
     fail('financial policy');
   const users = await prisma.user.findMany({

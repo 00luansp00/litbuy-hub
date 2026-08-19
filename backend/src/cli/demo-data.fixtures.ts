@@ -14,6 +14,8 @@ export const DEMO_IDS = {
   feePolicy: uuid(8, 1),
   feeRule: uuid(8, 2),
   feePolicyAuthor: uuid(8, 3),
+  sellerReleasePolicy: uuid(8, 4),
+  sellerReleaseRule: uuid(8, 5),
 };
 export const DEMO_FEE_POLICY = {
   id: DEMO_IDS.feePolicy,
@@ -31,6 +33,20 @@ export const DEMO_FEE_POLICY = {
     partyCharged: 'SELLER',
     formula: 'FIXED',
     fixedAmountMinor: 0n,
+  },
+} as const;
+// LOCAL DEMO CONFIG ONLY. This is not a production seed or runtime fallback.
+export const DEMO_SELLER_RELEASE_POLICY = {
+  id: DEMO_IDS.sellerReleasePolicy,
+  publicVersion: 2_026_011_501,
+  effectiveFrom: DEMO_DATE,
+  effectiveTo: null,
+  author: DEMO_FEE_POLICY.author,
+  rule: {
+    id: DEMO_IDS.sellerReleaseRule,
+    code: 'demo-default-seller-release',
+    delayHours: 168,
+    scope: 'DEFAULT',
   },
 } as const;
 export const DEMO_USERS = [
