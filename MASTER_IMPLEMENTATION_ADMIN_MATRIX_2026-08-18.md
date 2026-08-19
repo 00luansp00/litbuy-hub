@@ -73,7 +73,7 @@ Esta matriz serve para planejar PRs, não para afirmar production readiness. Div
 | ACCOUNT-CLOSURE-FINANCIAL-RETENTION | Preservar obrigações | Recovery | Auth/account flows existem; regra financeira/LGPD final não provada | não apagar ledger/orders/cases/claims | Retention policy e legal basis | all finance/dispute | LEGAL_REVIEW | AF2 | 9 | DESIGN_REQUIRED | HUMAN_PROD_REVIEW |
 | REFUND-DELIVERY-GUARANTEE-CONTRACT | Contrato anterior ao engine | Freeze; Recovery; `REFUND_DELIVERY_GUARANTEE_CONTRACT.md` | Phase 0-B documental satisfeita após merge; contrato concreto presente; engine continua `NOT IMPLEMENTED` | Semântica total/partial, fees próprias, PSP/provider boundaries, VIP/LP gaps, deficit, recovery e chargeback documentados | Implementar somente após gates e decisões abertas do contrato | — | HYBRID_REVIEW_REQUIRED | B | 0 | DOCS_ONLY | DOCS_ONLY |
 | ORDER-CHAT-SYSTEM-NOTICES | Notices financeiros | Freeze | Chat Buyer/Seller persistente/idempotente existe; sender obrigatório é User; notices system não | PAID/delivery/base/MAX/qualification/expiration; system actor; immutable/idempotent | Event contracts, templates, schema | release/MAX; chat core | AI_CANDIDATE | AK | 8 | NOT_IMPLEMENTED | IMPLEMENTED |
-| CHAT-VISUAL-UX | QA-BROWSER-014 | Browser QA | Core chat real testado; finding visual permanece | Corrigir somente delta visual autorizado | Finding scope | AI_CANDIDATE | AK3 | 9 | PARTIAL | IMPLEMENTED |
+| CHAT-VISUAL-UX | QA-BROWSER-014 | Browser QA | Core chat real testado; finding visual permanece | Corrigir somente delta visual autorizado | Finding scope | ORDER-CHAT-SYSTEM-NOTICES; SELLER-MAX-AUTOMATED-MESSAGES | AI_CANDIDATE | AK3 | 9 | PARTIAL | IMPLEMENTED |
 | ACCOUNT-WIDE-NOTIFICATIONS | Independente de activeRole | Post-chat; QA-BROWSER-016 | notification service/UI predominantemente mock/role-coupled; backend authority não provada | Conta inteira, eventos permitidos | Notification backend/preferences | auth/RBAC; events | HYBRID_REVIEW_REQUIRED | AL | 8 | NOT_IMPLEMENTED | IMPLEMENTED |
 | CATALOG-TRUST-SIGNALS | Sinais de confiança | Post-chat | Catálogo real expõe alguns dados; target completo não provado | PRE-HANDOFF CANDIDATE conforme Owner requirements | Contrato de fields/copy | verification/catalog | AI_CANDIDATE | FOLLOWUP-1 | 9 | PARTIAL | IMPLEMENTED |
 | PRODUCT-QA | Perguntas de produto | Post-chat | UI/service legado não prova backend persistente | PRE-HANDOFF CANDIDATE | Contract/moderação/auth | catalog | HYBRID_REVIEW_REQUIRED | FOLLOWUP-2 | 9 | NOT_IMPLEMENTED | IMPLEMENTED |
@@ -81,7 +81,7 @@ Esta matriz serve para planejar PRs, não para afirmar production readiness. Div
 
 ### Contagem controlada
 
-Há **57 capabilities** nesta versão: `IMPLEMENTED 1`, `PARTIAL 19`, `NOT_IMPLEMENTED 25`, `DOCS_ONLY 1`, `DESIGN_REQUIRED 9`, `HUMAN_PROD_REVIEW 1`, `DEFERRED 1`, `SUPERSEDED 0`. A contagem usa **Current status**; target humano não altera a evidência CURRENT.
+Há **58 capabilities** nesta versão: `IMPLEMENTED 4`, `PARTIAL 17`, `NOT_IMPLEMENTED 25`, `DOCS_ONLY 1`, `DESIGN_REQUIRED 9`, `HUMAN_PROD_REVIEW 1`, `DEFERRED 1`, `SUPERSEDED 0`. A contagem usa **Current status**; target humano não altera a evidência CURRENT.
 
 ## 3. Implementation layers matrix
 

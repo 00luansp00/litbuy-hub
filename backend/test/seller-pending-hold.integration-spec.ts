@@ -251,9 +251,7 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
       releasePolicyAppliedAt: expect.any(Date),
       releaseEligibleAt: expect.any(Date),
     });
-    expect(hold.releaseEligibleAt!.getTime()).toBe(
-      delivery.createdAt.getTime() + 72 * 3_600_000,
-    );
+    expect(hold.releaseEligibleAt!.getTime()).toBe(delivery.createdAt.getTime() + 72 * 3_600_000);
     expect(hold.releasePolicyAppliedAt).toEqual(delivery.createdAt);
     expect(await prisma.settlement.count()).toBe(0);
     expect(await prisma.withdrawal.count()).toBe(0);
@@ -412,11 +410,7 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
   it.each(['CATEGORY', 'SUBCATEGORY'] as const)(
     'bridges a retired %s checkout snapshot through hold, eligibility, and release',
     async (scope) => {
-      const { order, actorUserId, releasePolicy, delivery } = await completedOrder(
-        1000n,
-        0,
-        scope,
-      );
+      const { order, actorUserId, releasePolicy, delivery } = await completedOrder(1000n, 0, scope);
       const selectedRule = releasePolicy.rules.find((rule) => rule.scope === scope)!;
       expect(order).toMatchObject({
         sellerReleasePolicyVersionId: releasePolicy.id,
@@ -734,6 +728,45 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
         },
       }),
     ).rejects.toBeDefined();
+  });
+
+  it('database rejects delivery-protection clocks that differ from the authoritative delivery', async () => {
+    const { order, payment, delivery } = await completedOrder(1000n, 72);
+    const recognition = await prisma.ledgerTransaction.findFirstOrThrow({
+      where: { type: 'SALE_RECOGNIZED', referenceId: order.id },
+    });
+    const delayHours = order.frozenBaseReleaseDelayHours!;
+    const base = {
+      orderId: order.id,
+      paymentId: payment.id,
+      sellerProfileId: order.sellerProfileId,
+      ledgerTransactionId: recognition.id,
+      amountMinor: 9000n,
+      reason: 'DELIVERY_PROTECTION' as const,
+      sellerReleasePolicyVersionId: order.sellerReleasePolicyVersionId,
+      sellerReleasePolicyRuleId: order.sellerReleasePolicyRuleId,
+      releaseDelayHours: delayHours,
+    };
+    const wrongAppliedAt = new Date(delivery.createdAt.getTime() + 1);
+
+    await expect(
+      prisma.financialHold.create({
+        data: {
+          ...base,
+          releasePolicyAppliedAt: wrongAppliedAt,
+          releaseEligibleAt: new Date(wrongAppliedAt.getTime() + delayHours * 3_600_000),
+        },
+      }),
+    ).rejects.toThrow(/FINANCIAL_HOLD_DELIVERY_CLOCK_INVALID/);
+    await expect(
+      prisma.financialHold.create({
+        data: {
+          ...base,
+          releasePolicyAppliedAt: delivery.createdAt,
+          releaseEligibleAt: new Date(delivery.createdAt.getTime() + delayHours * 3_600_000 + 1),
+        },
+      }),
+    ).rejects.toThrow(/FINANCIAL_HOLD_DELIVERY_CLOCK_INVALID/);
   });
 
   it('database keeps every applied snapshot field immutable', async () => {

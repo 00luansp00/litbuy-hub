@@ -425,11 +425,7 @@ export class SellerPendingHoldService {
     return deliveries[0];
   }
 
-  private async resolveSnapshot(
-    tx: Prisma.TransactionClient,
-    order: Snapshot,
-    deliveredAt: Date,
-  ) {
+  private async resolveSnapshot(tx: Prisma.TransactionClient, order: Snapshot, deliveredAt: Date) {
     const policy = this.hasCompleteOrderSnapshot(order)
       ? {
           policyVersionId: order.sellerReleasePolicyVersionId!,
