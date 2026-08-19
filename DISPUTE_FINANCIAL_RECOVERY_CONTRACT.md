@@ -2,6 +2,8 @@
 
 > **OWNER TARGET SUPERSEDED IN PART (2026-08-18):** `OWNER_COMMERCIAL_FINANCIAL_DECISION_FREEZE_2026-08-18.md` supersedes the target clock at `COMPLETED`, undefined default, generic 50%/rating acceleration, unresolved dispute multiplicity, top-up surplus and fee-refund points. Compatible decisions and CURRENT implementation evidence below remain preserved; the replacement is `NOT IMPLEMENTED`.
 
+> **REFUND RECONCILIATION:** Refund / Delivery Guarantee semantics are now governed by `REFUND_DELIVERY_GUARANTEE_CONTRACT.md`. Older refund open-decision text below remains historical where superseded. Provider, chargeback and legal decisions that remain open continue open. This reconciliation does not change CURRENT findings or implementation evidence.
+
 
 **Classificação:** `OWNER-AUTHORIZED TARGET CONTRACT` · `PRE-HANDOFF TARGET`
 **Implementação:** `NOT IMPLEMENTED` onde indicado; este documento não prova implementação nem torna o sistema production-ready.
