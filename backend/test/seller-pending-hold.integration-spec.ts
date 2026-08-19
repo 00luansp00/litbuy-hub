@@ -533,8 +533,7 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
   it.each(['OPEN', 'UNDER_REVIEW'] as const)(
     'business-blocks eligibility for a %s dispute without reconciliation',
     async (disputeStatus) => {
-      const { order, actorUserId } = await completedOrder(1000n);
-      await publishSellerReleasePolicy(actorUserId, 0);
+      const { order } = await completedOrder(1000n, 0);
       await service.processOne(order.id);
       const hold = await prisma.financialHold.findFirstOrThrow({ where: { orderId: order.id } });
       await prisma.order.update({ where: { id: order.id }, data: { disputeStatus } });
