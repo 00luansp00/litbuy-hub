@@ -231,6 +231,14 @@ export class SellerHeldFundsReleaseService {
     }
     if (order.disputeStatus === 'OPEN' || order.disputeStatus === 'UNDER_REVIEW')
       return 'BUSINESS_BLOCKED' as const;
+    // TRANSITIONAL G1→G2 COMPATIBILITY: eligibility may now precede buyer confirmation.
+    // G2 will replace this business guard with the target release execution.
+    if (
+      order.status === 'ACTIVE' &&
+      order.paymentStatus === 'PAID' &&
+      order.fulfillmentStatus === 'AWAITING_BUYER_CONFIRMATION'
+    )
+      return 'BUSINESS_BLOCKED' as const;
     if (
       order.status !== 'COMPLETED' ||
       order.paymentStatus !== 'PAID' ||
