@@ -280,6 +280,19 @@ describe('OrderFulfillmentService with real PostgreSQL', () => {
       evidenceHash: 'a'.repeat(64),
     };
     await Promise.all(Array.from({ length: 6 }, () => fulfillment.recordDelivered(input)));
+    const delivered = await prisma.orderDelivery.findUniqueOrThrow({
+      where: { orderId: order.id },
+    });
+    await fulfillment.recordDelivered(input);
+    expect(
+      (await prisma.orderDelivery.findUniqueOrThrow({ where: { orderId: order.id } })).createdAt,
+    ).toEqual(delivered.createdAt);
+    await expect(
+      prisma.orderDelivery.update({
+        where: { id: delivered.id },
+        data: { createdAt: new Date(0) },
+      }),
+    ).rejects.toBeDefined();
     await Promise.all(
       Array.from({ length: 6 }, () =>
         fulfillment.confirmReceipt(order.publicCode, fixture.buyer.id),
@@ -293,6 +306,23 @@ describe('OrderFulfillmentService with real PostgreSQL', () => {
     expect(
       await prisma.orderEvent.count({ where: { orderId: order.id, type: 'ORDER_COMPLETED' } }),
     ).toBe(1);
+  });
+
+  it('overrides an explicitly supplied delivery timestamp at the database boundary', async () => {
+    const { order, fixture } = await makeAwaiting();
+    const clientTimestamp = new Date('2000-01-01T00:00:00.000Z');
+    await prisma.orderDelivery.create({
+      data: {
+        orderId: order.id,
+        sellerProfileId: fixture.seller.id,
+        deliveryType: 'MANUAL_REFERENCE',
+        evidenceHash: '9'.repeat(64),
+        createdAt: clientTimestamp,
+      },
+    });
+    const delivery = await prisma.orderDelivery.findUniqueOrThrow({ where: { orderId: order.id } });
+    expect(delivery.createdAt).not.toEqual(clientTimestamp);
+    expect(delivery.createdAt.getTime()).toBeGreaterThan(clientTimestamp.getTime());
   });
 
   it('is IDOR-safe and blocks active disputes', async () => {

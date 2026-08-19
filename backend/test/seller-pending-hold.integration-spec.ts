@@ -191,6 +191,9 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
       deliveryType: 'MANUAL_REFERENCE',
       evidenceHash: 'a'.repeat(64),
     });
+    const delivery = await prisma.orderDelivery.findUniqueOrThrow({
+      where: { orderId: order.id },
+    });
     await fulfillment.confirmReceipt(order.publicCode, fixture.buyer.id);
     return {
       order: await prisma.order.findUniqueOrThrow({ where: { id: order.id } }),
@@ -198,11 +201,12 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
       actorUserId: fixture.sellerUser.id,
       releasePolicy,
       subcategory,
+      delivery,
     };
   }
 
   it('moves the snapshot proceeds from pending to held without available or reserved entries', async () => {
-    const { order, payment, actorUserId } = await completedOrder(1000n);
+    const { order, payment, actorUserId, delivery } = await completedOrder(1000n);
     const policy = await publishSellerReleasePolicy(actorUserId, 72);
     const rule = policy.rules[0];
     expect(await service.processOne(order.id)).toBe('PROCESSED');
@@ -248,8 +252,9 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
       releaseEligibleAt: expect.any(Date),
     });
     expect(hold.releaseEligibleAt!.getTime()).toBe(
-      hold.releasePolicyAppliedAt!.getTime() + 72 * 3_600_000,
+      delivery.createdAt.getTime() + 72 * 3_600_000,
     );
+    expect(hold.releasePolicyAppliedAt).toEqual(delivery.createdAt);
     expect(await prisma.settlement.count()).toBe(0);
     expect(await prisma.withdrawal.count()).toBe(0);
   });
@@ -272,6 +277,24 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
     expect(
       await prisma.financialOutboxEvent.count({ where: { eventType: 'SELLER_FUNDS_HELD' } }),
     ).toBe(1);
+  });
+
+  it('fails closed without an authoritative delivery and creates no hold posting', async () => {
+    const { order } = await completedOrder(1000n);
+    await prisma.orderDelivery.delete({ where: { orderId: order.id } });
+
+    expect(await service.processOne(order.id)).toBe('PROCESSED');
+    expect(
+      await prisma.ledgerTransaction.count({
+        where: { type: 'SELLER_FUNDS_HELD', referenceId: order.id },
+      }),
+    ).toBe(0);
+    expect(await prisma.financialHold.count({ where: { orderId: order.id } })).toBe(0);
+    expect(
+      await prisma.reconciliationIssue.findFirstOrThrow({
+        where: { referenceType: 'SellerPendingHold', referenceId: order.id },
+      }),
+    ).toMatchObject({ details: { errorCode: 'DELIVERY_RECORD_MISSING' } });
   });
 
   it('fails closed without an effective policy and does not move pending funds', async () => {
@@ -389,7 +412,11 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
   it.each(['CATEGORY', 'SUBCATEGORY'] as const)(
     'bridges a retired %s checkout snapshot through hold, eligibility, and release',
     async (scope) => {
-      const { order, actorUserId, releasePolicy } = await completedOrder(1000n, 0, scope);
+      const { order, actorUserId, releasePolicy, delivery } = await completedOrder(
+        1000n,
+        0,
+        scope,
+      );
       const selectedRule = releasePolicy.rules.find((rule) => rule.scope === scope)!;
       expect(order).toMatchObject({
         sellerReleasePolicyVersionId: releasePolicy.id,
@@ -409,6 +436,8 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
         sellerReleasePolicyVersionId: releasePolicy.id,
         sellerReleasePolicyRuleId: selectedRule.id,
         releaseDelayHours: 0,
+        releasePolicyAppliedAt: delivery.createdAt,
+        releaseEligibleAt: delivery.createdAt,
       });
       expect(hold.sellerReleasePolicyVersionId).not.toBe(replacement.id);
       expect(await eligibility.processOne(hold.id)).toBe('RELEASE_ELIGIBLE');

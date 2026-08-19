@@ -1,6 +1,6 @@
 # Seller release policy foundation
 
-> **CURRENT IMPLEMENTATION (PR D):** policy resolution is configuration-backed and hierarchical: `SUBCATEGORY > CATEGORY > DEFAULT`. Checkout snapshot and the `deliveredAt` financial clock remain `NOT IMPLEMENTED`. The legacy hold consumer intentionally requests only `DEFAULT`.
+> **CURRENT IMPLEMENTATION (PR F):** policy resolution is hierarchical (`SUBCATEGORY > CATEGORY > DEFAULT`), new Orders freeze it at checkout, and new holds start at immutable `OrderDelivery.createdAt`. Legacy all-NULL Orders intentionally resolve DEFAULT while using the same authoritative delivery clock.
 
 ## Version and lifecycle
 
@@ -39,6 +39,6 @@ e delay no `Order`. A classificação congelada é a do produto, não os qualifi
 nulos da rule DEFAULT. Novas publicações não alteram Orders existentes.
 
 Orders legados permanecem com todos os campos de snapshot NULL e seguem o resolver DEFAULT
-histórico no processamento do hold. Não existe backfill. O relógio CURRENT do hold permanece
-`releasePolicyAppliedAt = transaction_timestamp()` e `releaseEligibleAt = appliedAt + delay`;
-o relógio autoritativo em `deliveredAt` continua NOT IMPLEMENTED.
+histórico no processamento do hold. Não existe backfill. Após PR F, o relógio de novo hold usa
+`releasePolicyAppliedAt = OrderDelivery.createdAt` e `releaseEligibleAt = deliveredAt + delay`.
+Confirmação Buyer posterior não reinicia o relógio; gates completos de eligibility/execution permanecem G1/G2.

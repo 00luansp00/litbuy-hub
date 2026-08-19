@@ -38,7 +38,9 @@ type Snapshot = {
   sellerReleasePolicyCategoryId: string | null;
   sellerReleasePolicySubcategoryId: string | null;
   frozenBaseReleaseDelayHours: number | null;
+  createdAt: Date;
 };
+type DeliveryClock = { createdAt: Date; sellerProfileId: string };
 type PaymentSnapshot = {
   id: string;
   status: PaymentStatus;
@@ -157,7 +159,8 @@ export class SellerPendingHoldService {
       SELECT "id", "sellerProfileId", "status", "paymentStatus", "fulfillmentStatus",
              "disputeStatus", "currency", "totalAmountMinor", "platformFeeAmountMinor",
              "sellerReleasePolicyVersionId", "sellerReleasePolicyRuleId", "sellerReleasePolicySource"::text,
-             "sellerReleasePolicyCategoryId", "sellerReleasePolicySubcategoryId", "frozenBaseReleaseDelayHours"
+             "sellerReleasePolicyCategoryId", "sellerReleasePolicySubcategoryId", "frozenBaseReleaseDelayHours",
+             "createdAt"
       FROM "Order" WHERE "id" = ${orderId}::uuid FOR UPDATE
     `;
     const order = rows[0];
@@ -252,11 +255,15 @@ export class SellerPendingHoldService {
             };
       if (!this.hasEmptySnapshot(hold))
         return { failure: { type: 'OTHER', code: 'SELLER_HOLD_ARTIFACT_MISMATCH' } };
-      const snapshot = await this.resolveSnapshot(tx, order);
+      const deliveryClock = await this.deliveryClock(tx, order, payment);
+      if ('failure' in deliveryClock) return deliveryClock;
+      const snapshot = await this.resolveSnapshot(tx, order, deliveryClock.createdAt);
       await tx.financialHold.update({ where: { id: hold.id }, data: snapshot });
       return 'PROCESSED';
     }
-    const snapshot = await this.resolveSnapshot(tx, order);
+    const deliveryClock = await this.deliveryClock(tx, order, payment);
+    if ('failure' in deliveryClock) return deliveryClock;
+    const snapshot = await this.resolveSnapshot(tx, order, deliveryClock.createdAt);
     if (posting) {
       await this.createHold(tx, order, payment, proceeds, posting.id, snapshot);
       return 'PROCESSED';
@@ -389,7 +396,40 @@ export class SellerPendingHoldService {
     );
   }
 
-  private async resolveSnapshot(tx: Prisma.TransactionClient, order: Snapshot) {
+  private async deliveryClock(
+    tx: Prisma.TransactionClient,
+    order: Snapshot,
+    payment: PaymentSnapshot,
+  ): Promise<DeliveryClock | { failure: Failure }> {
+    const deliveries = await tx.$queryRaw<DeliveryClock[]>`
+      SELECT "createdAt", "sellerProfileId"
+      FROM "OrderDelivery" WHERE "orderId" = ${order.id}::uuid FOR SHARE
+    `;
+    if (deliveries.length === 0)
+      return { failure: { type: 'MISSING_LOCAL', code: 'DELIVERY_RECORD_MISSING' } };
+    if (deliveries.length !== 1 || deliveries[0].sellerProfileId !== order.sellerProfileId)
+      return { failure: { type: 'STATUS_MISMATCH', code: 'DELIVERY_RECORD_INVALID' } };
+    const deliveredAt = deliveries[0].createdAt;
+    if (
+      !(deliveredAt instanceof Date) ||
+      Number.isNaN(deliveredAt.getTime()) ||
+      deliveredAt.getTime() < order.createdAt.getTime() ||
+      deliveredAt.getTime() < payment.paidAt!.getTime()
+    )
+      return { failure: { type: 'STATUS_MISMATCH', code: 'DELIVERY_CLOCK_INVALID' } };
+    const [databaseClock] = await tx.$queryRaw<Array<{ now: Date }>>`
+      SELECT transaction_timestamp()::timestamp(3) AS "now"
+    `;
+    if (deliveredAt.getTime() > databaseClock.now.getTime())
+      return { failure: { type: 'STATUS_MISMATCH', code: 'DELIVERY_CLOCK_INVALID' } };
+    return deliveries[0];
+  }
+
+  private async resolveSnapshot(
+    tx: Prisma.TransactionClient,
+    order: Snapshot,
+    deliveredAt: Date,
+  ) {
     const policy = this.hasCompleteOrderSnapshot(order)
       ? {
           policyVersionId: order.sellerReleasePolicyVersionId!,
@@ -397,15 +437,14 @@ export class SellerPendingHoldService {
           delayHours: order.frozenBaseReleaseDelayHours!,
         }
       : await this.releasePolicy.resolveEffectivePolicy(tx);
-    const [clock] = await tx.$queryRaw<Array<{ appliedAt: Date; eligibleAt: Date }>>`
-      SELECT transaction_timestamp()::timestamp(3) AS "appliedAt",
-        (transaction_timestamp() + make_interval(hours => ${policy.delayHours}::integer))::timestamp(3) AS "eligibleAt"
+    const [clock] = await tx.$queryRaw<Array<{ eligibleAt: Date }>>`
+      SELECT (${deliveredAt}::timestamp + make_interval(hours => ${policy.delayHours}::integer))::timestamp(3) AS "eligibleAt"
     `;
     return {
       sellerReleasePolicyVersionId: policy.policyVersionId,
       sellerReleasePolicyRuleId: policy.ruleId,
       releaseDelayHours: policy.delayHours,
-      releasePolicyAppliedAt: clock.appliedAt,
+      releasePolicyAppliedAt: deliveredAt,
       releaseEligibleAt: clock.eligibleAt,
     };
   }
