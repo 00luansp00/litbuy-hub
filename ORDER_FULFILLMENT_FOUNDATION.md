@@ -12,6 +12,8 @@ Availability, the move to buyer confirmation, and completion are system actions.
 
 `OrderDelivery` is an auditable boundary, not a secret vault. It stores one delivery row per order, the authoritative seller profile, a neutral reference type, and a mandatory SHA-256 evidence digest. `secureReference` is reserved for a future trusted internal subsystem and is not accepted by the public API. Delivery content, credentials, passwords, activation codes, license keys, tokens, arbitrary URLs, PSP data, and unnecessary PII must never be stored in this row or event metadata.
 
+`OrderDelivery.createdAt` is semantically the authoritative `deliveredAt`. PostgreSQL replaces any insert value with its transaction timestamp and rejects later timestamp changes; the delivery DTO exposes no timestamp. Exact replay returns the existing row and therefore preserves the clock. Fulfillment remains financially side-effect free: the separate pending-hold orchestration consumes this persisted timestamp.
+
 `AUTOMATED_REFERENCE` does not perform or simulate automatic delivery. There is no production-ready credential/key delivery channel in this increment; both delivery types require real evidence from a supported mechanism.
 
 ## Completion contract
