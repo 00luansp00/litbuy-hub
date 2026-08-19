@@ -9,7 +9,6 @@ import { FinancialLedgerService } from './financial-ledger.service';
 const LEDGER_TYPE = 'SELLER_FUNDS_RELEASED';
 const LEDGER_REFERENCE_TYPE = 'FinancialHoldRelease';
 const ISSUE_REFERENCE_TYPE = 'SellerHeldFundsRelease';
-const RULE_CODE = 'DELIVERY_PROTECTION_DEFAULT';
 
 export type SellerHeldFundsReleaseResult =
   'NO_CANDIDATE' | 'BUSINESS_BLOCKED' | 'RELEASED' | 'ALREADY_RELEASED' | 'RECONCILIATION_REQUIRED';
@@ -140,9 +139,9 @@ export class SellerHeldFundsReleaseService {
           policyVersionId: hold.sellerReleasePolicyVersionId!,
         },
       },
-      select: { code: true, delayHours: true },
+      select: { scope: true, delayHours: true },
     });
-    if (rule?.code !== RULE_CODE || rule.delayHours !== hold.releaseDelayHours)
+    if (rule?.scope !== 'DEFAULT' || rule.delayHours !== hold.releaseDelayHours)
       return this.fail(tx, holdId, 'OTHER', 'HISTORICAL_RELEASE_RULE_INVALID');
 
     await tx.$queryRaw`SELECT "id" FROM "Order" WHERE "id" = ${hold.orderId}::uuid FOR UPDATE`;

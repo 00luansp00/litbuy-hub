@@ -346,11 +346,9 @@ export class SellerPendingHoldService {
           policyVersionId: hold.sellerReleasePolicyVersionId!,
         },
       },
-      select: { code: true, delayHours: true },
+      select: { scope: true, delayHours: true },
     });
-    return (
-      rule?.code === 'DELIVERY_PROTECTION_DEFAULT' && rule.delayHours === hold.releaseDelayHours
-    );
+    return rule?.scope === 'DEFAULT' && rule.delayHours === hold.releaseDelayHours;
   }
 
   private async resolveSnapshot(tx: Prisma.TransactionClient) {
