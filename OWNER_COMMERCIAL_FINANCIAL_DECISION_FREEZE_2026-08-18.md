@@ -7,6 +7,14 @@
 
 Este contrato congela decisões do Owner. Não altera silenciosamente `ALPHA_SCOPE_AND_COMPLETION_CHECKLIST.md`, que continua a maior autoridade de escopo Alpha. Código, migrations, testes e documentos de implementação continuam determinando `CURRENT IMPLEMENTATION`. Em conflito com planning/target anterior, este freeze prevalece apenas nas decisões explicitamente substituídas aqui. PSP/split/escrow real, chargeback/PSP fee, KYC/biometria/retenção, antifraude, infraestrutura/providers, backups/RPO/RTO, observabilidade, filas, analytics, jurídico/LGPD, Buyer KYC/withdrawal, buckets finais, permissões granulares e schemas finais seguem `DESIGN REQUIRED`/`HUMAN-PROD-REVIEW`.
 
+Documentos da auditoria Claude, ledgers de findings, evidências de remediação, relatórios de auditoria funcional, evidências de Browser QA e checkpoints datados preservam fatos, status e evidências do respectivo corte temporal. Eles continuam autoridades dentro desse escopo de auditoria/evidência, mas não são autoridade para um target de produto posterior quando um Owner Decision Freeze explícito e mais recente substitui aquele target. Nunca reescrever evidência histórica para fazer um target posterior parecer existente no baseline auditado.
+
+Ao implementar capabilities futuras, aplicar esta separação:
+
+- `CURRENT IMPLEMENTATION` → código, migrations, testes e documentação corrente de implementação;
+- `CURRENT OWNER TARGET` → contrato target autorizado pelo Owner/Decision Freeze aplicável mais recente;
+- `HISTORICAL/AUDIT EVIDENCE` → documentos de auditoria, findings e evidências, limitados ao corte temporal documentado.
+
 Valores administráveis são **BASELINE INICIAL**, não hardcode. Nova configuração versionada não recalcula retroativamente snapshots comerciais/financeiros congelados.
 
 ## Seller release — OWNER TARGET / NOT IMPLEMENTED
@@ -28,7 +36,7 @@ Baseline: Moedas virtuais/Gold/Ouro/Itens 4 dias; contas com e-mail não verific
 
 Add-on opcional do Seller por anúncio; não é Buyer plan, assinatura nem saque acelerado. Custa **2,99%** do produto somente se vender, descontado do Seller (nunca do Buyer), coexiste com tier, dá +50% Seller LP, e inclui targets de estoque automático, templates/mensagens permitidos e proteção operacional ampliada sem retirar proteção básica.
 
-Só antecipa se Buyer confirmar em **48 horas corridas** desde `deliveredAt`; confirmação tardia não reativa o benefício.
+Só antecipa se `buyerConfirmedAt <= deliveredAt + 48 horas corridas`. Se `buyerConfirmedAt > deliveredAt + 48 horas corridas`, o benefício MAX daquela venda expirou, confirmação tardia não o reativa e `effectiveReleaseAt = baseReleaseEligibleAt`.
 
 ```text
 blocks = floor(frozenBaseDelayDays / 7)

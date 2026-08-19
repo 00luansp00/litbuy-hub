@@ -10,6 +10,7 @@ This index answers two questions for an external reviewer: **what should I read 
 4. [`POST_AUDIT_REMEDIATION_PLAN.md`](./POST_AUDIT_REMEDIATION_PLAN.md) é a autoridade para ordem, workflow, gates, divisão Codex/humano e fechamento pós-auditoria.
 5. [`CHECKPOINT_MESTRE_POS_AUDITORIA_CLAUDE_2026-08-13.md`](./CHECKPOINT_MESTRE_POS_AUDITORIA_CLAUDE_2026-08-13.md) é o snapshot de transferência/contexto do corte e não substitui estado GitHub posterior.
 6. Referências de domínio definem contratos/evidências mais estreitos; documentos históricos não prevalecem sobre as autoridades atuais. Planejamento não prova implementação.
+7. **AUDIT / FINDINGS / EVIDENCE AUTHORITY:** [`CLAUDE_AUDIT_FINDINGS_LEDGER.md`](./CLAUDE_AUDIT_FINDINGS_LEDGER.md) continua sendo a autoridade para findings, status e evidências Claude. Relatórios de auditoria, addenda, Browser QA, checkpoints e demais evidências datadas são autoritativos somente para o escopo de evidence/finding e o corte temporal que documentam; não substituem um contrato target explícito e posterior do Owner sobre comportamento futuro desejado. Inversamente, um Owner target posterior não reescreve evidência histórica, altera IDs/status/evidências de findings nem fecha falsamente um finding.
 
 ## A. AUTHORITATIVE / CURRENT (19)
 
