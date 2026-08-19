@@ -62,6 +62,8 @@ type MutableCartItem = Pick<
 >;
 type MutationAction = (tx: Tx, cart: MutableCart, item: MutableCartItem) => Promise<void>;
 const ITEM_UNIQUE_TARGETS = [
+  'CartItem_cartId_key',
+  'cartId',
   'CartItem_product_without_variant_key',
   'CartItem_product_with_variant_key',
   'cartId,productId',
@@ -123,8 +125,8 @@ export class CartsService {
             select: { id: true },
           });
           if (duplicate) this.fail('CART_ITEM_ALREADY_EXISTS', 409);
-          if ((await tx.cartItem.count({ where: { cartId: cart.id } })) >= 50)
-            this.fail('CART_ITEM_LIMIT_REACHED', 409);
+          if (await tx.cartItem.findFirst({ where: { cartId: cart.id }, select: { id: true } }))
+            this.fail('CART_SINGLE_SKU_REQUIRED', 409);
           await this.bumpVersion(tx, cart, dto.expectedVersion);
         }
         const item = await tx.cartItem.create({
@@ -281,7 +283,7 @@ export class CartsService {
   }
   private response(cart: CartResponsePayload) {
     let subtotal = 0n;
-    let ready = cart.items.length > 0;
+    let ready = cart.items.length === 1;
     const items = cart.items.map((item) => {
       const issues: string[] = [];
       let unit: bigint | null = null;

@@ -86,6 +86,15 @@ describe("BuyerCartSellerSection", () => {
     expect(screen.queryByRole("link", { name: "Ir para checkout" })).toBeNull();
     expect(screen.getByText("Ajuste os itens deste carrinho para continuar.")).toBeTruthy();
   });
+  it("fails closed instead of exposing checkout for a defensive multi-line response", () => {
+    render(
+      <BuyerCartSellerSection
+        cart={cart({ items: [cart().items[0], { ...cart().items[0], id: "item-b" }] })}
+      />,
+    );
+    expect(screen.queryByRole("link", { name: "Ir para checkout" })).toBeNull();
+    expect(screen.getByText(/seleção inválida/)).toBeTruthy();
+  });
   it("keeps a newer listed cart instead of stale seller cache data", () => {
     const listed = cart({ version: 20, items: [{ ...cart().items[0], quantity: 4 }] });
     mocks.synchronizedData = cart({ version: 18, items: [{ ...cart().items[0], quantity: 2 }] });

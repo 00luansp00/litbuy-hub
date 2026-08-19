@@ -57,6 +57,7 @@ const errorMessages: Record<string, string> = {
     "O preço ou a seleção mudou. Revise o carrinho atualizado e confirme novamente.",
   CART_NOT_CHECKOUT_READY: "Este carrinho necessita de ajustes antes do checkout.",
   CART_EMPTY: "Este carrinho está vazio.",
+  CART_SINGLE_SKU_REQUIRED: "Cada pedido aceita somente um produto ou variante. Revise o carrinho.",
   INSUFFICIENT_STOCK: "O estoque mudou. Revise as quantidades antes de tentar novamente.",
   PRODUCT_REQUIRES_QUOTE: "Um item requer orçamento e não pode seguir pelo checkout.",
   CHECKOUT_CONFLICT:
@@ -69,6 +70,7 @@ const refetchCodes = new Set([
   "CHECKOUT_PREVIEW_CHANGED",
   "CART_NOT_CHECKOUT_READY",
   "CART_EMPTY",
+  "CART_SINGLE_SKU_REQUIRED",
   "INSUFFICIENT_STOCK",
   "PRODUCT_REQUIRES_QUOTE",
 ]);
@@ -84,7 +86,7 @@ export function CheckoutContent({ sellerSlug }: { sellerSlug: string }) {
   const cart = cartQuery.data;
 
   const confirm = () => {
-    if (!cart || !cart.checkoutReady || cart.items.length === 0 || create.isPending) return;
+    if (!cart || !cart.checkoutReady || cart.items.length !== 1 || create.isPending) return;
     setFeedback(undefined);
     create.mutate(
       {
@@ -133,6 +135,18 @@ export function CheckoutContent({ sellerSlug }: { sellerSlug: string }) {
       <CheckoutLayout step="review">
         <div>
           Este carrinho está vazio.{" "}
+          <Link to="/carrinho" className="underline">
+            Editar carrinho
+          </Link>
+        </div>
+      </CheckoutLayout>
+    );
+  if (cart.items.length !== 1)
+    return (
+      <CheckoutLayout step="review">
+        <div role="alert">
+          Cada pedido aceita somente um produto ou variante. Remova os itens excedentes antes de
+          continuar.{" "}
           <Link to="/carrinho" className="underline">
             Editar carrinho
           </Link>
@@ -201,7 +215,7 @@ export function CheckoutContent({ sellerSlug }: { sellerSlug: string }) {
           )}
           <Button
             className="mt-5 w-full"
-            disabled={!cart.checkoutReady || create.isPending}
+            disabled={!cart.checkoutReady || cart.items.length !== 1 || create.isPending}
             onClick={confirm}
           >
             {create.isPending ? "Criando pedido…" : "Confirmar e criar pedido"}

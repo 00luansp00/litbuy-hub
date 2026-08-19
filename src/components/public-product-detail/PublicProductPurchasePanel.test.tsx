@@ -250,6 +250,29 @@ describe("PublicProductPurchasePanel", () => {
     expect(mocks.mutate).not.toHaveBeenCalled();
   });
 
+  it("blocks a different product while this seller cart already has one line", () => {
+    mocks.cartQuery = loadedCart(
+      cart(4, [
+        {
+          id: "item",
+          quantity: 1,
+          product: { id: "other", slug: "outro", title: "Outro", model: "NORMAL" },
+          variant: null,
+          currentUnitAmountMinor: "1000",
+          currentLineAmountMinor: "1000",
+          purchasable: true,
+          issues: [],
+        },
+      ]),
+    );
+    render(<PublicProductPurchasePanel product={product()} />);
+    expect(screen.getByRole("status").textContent).toContain(
+      "Cada compra usa um produto ou variante por vez",
+    );
+    expect(screen.queryByRole("button", { name: "Adicionar ao carrinho" })).toBeNull();
+    expect(mocks.mutate).not.toHaveBeenCalled();
+  });
+
   it("shows authoritative success only after the mutation callback", () => {
     mocks.mutate.mockImplementation((_variables, callbacks) => callbacks.onSuccess());
     render(<PublicProductPurchasePanel product={product()} />);

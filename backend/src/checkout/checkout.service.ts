@@ -66,6 +66,7 @@ export class CheckoutService {
       if (!cart) this.fail('CART_NOT_CHECKOUT_READY', 422);
       if (cart.version !== dto.expectedCartVersion) this.fail('CART_VERSION_CONFLICT', 409);
       if (!cart.items.length) this.fail('CART_EMPTY', 422);
+      if (cart.items.length !== 1) this.fail('CART_SINGLE_SKU_REQUIRED', 422);
       const selections = cart.items.map((item) => {
         const selection = assertCartSelection(item.product, {
           sellerProfileId: seller.id,

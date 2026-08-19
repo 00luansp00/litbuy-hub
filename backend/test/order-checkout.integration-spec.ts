@@ -283,7 +283,7 @@ describe('Order checkout domain with real PostgreSQL', () => {
     ])
       expect(serialized).not.toContain(field);
   });
-  it('fails closed for missing or inconsistent seller snapshots', async () => {
+  it('fails closed for missing snapshots and prevents a second persisted OrderItem', async () => {
     const missing = await ready('SERVICE', 'FIXED');
     const missingOrder = checkoutResponse(
       await checkout.create(missing.buyer.id, key(), missing.dto),
@@ -299,39 +299,35 @@ describe('Order checkout domain with real PostgreSQL', () => {
       details: [],
     });
 
-    await prisma.$executeRawUnsafe('TRUNCATE TABLE "User", "CatalogCategory" CASCADE');
-    const inconsistent = await ready('SERVICE', 'FIXED');
-    const inconsistentOrder = checkoutResponse(
-      await checkout.create(inconsistent.buyer.id, key(), inconsistent.dto),
-    );
-    const persistedInconsistent = await prisma.order.findUniqueOrThrow({
-      where: { publicCode: inconsistentOrder.orderCode },
+    const second = await ready('SERVICE', 'FIXED');
+    const secondOrder = checkoutResponse(await checkout.create(second.buyer.id, key(), second.dto));
+    const persisted = await prisma.order.findUniqueOrThrow({
+      where: { publicCode: secondOrder.orderCode },
       include: { items: true },
     });
-    const original = persistedInconsistent.items[0];
-    await prisma.orderItem.create({
-      data: {
-        orderId: persistedInconsistent.id,
-        sourceProductId: original.sourceProductId,
-        sourceProductVersion: original.sourceProductVersion,
-        sellerProfileId: original.sellerProfileId,
-        sellerStoreName: 'Corrupted Store',
-        sellerSlug: original.sellerSlug,
-        productSlug: original.productSlug,
-        productTitle: original.productTitle,
-        productType: original.productType,
-        productModel: original.productModel,
-        deliveryMode: original.deliveryMode,
-        unitAmountMinor: original.unitAmountMinor,
-        quantity: original.quantity,
-        lineTotalAmountMinor: original.lineTotalAmountMinor,
-        currency: original.currency,
-        pricingPolicyVersion: original.pricingPolicyVersion,
-      },
-    });
+    const original = persisted.items[0];
     await expect(
-      orders.get(inconsistent.buyer.id, inconsistentOrder.orderCode),
-    ).rejects.toMatchObject({ code: 'ORDER_SNAPSHOT_INVALID', statusCode: 500, details: [] });
+      prisma.orderItem.create({
+        data: {
+          orderId: persisted.id,
+          sourceProductId: original.sourceProductId,
+          sourceProductVersion: original.sourceProductVersion,
+          sellerProfileId: original.sellerProfileId,
+          sellerStoreName: original.sellerStoreName,
+          sellerSlug: original.sellerSlug,
+          productSlug: original.productSlug,
+          productTitle: original.productTitle,
+          productType: original.productType,
+          productModel: original.productModel,
+          deliveryMode: original.deliveryMode,
+          unitAmountMinor: original.unitAmountMinor,
+          quantity: original.quantity,
+          lineTotalAmountMinor: original.lineTotalAmountMinor,
+          currency: original.currency,
+          pricingPolicyVersion: original.pricingPolicyVersion,
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'P2002' });
   });
   it('cancels and expires idempotently while releasing reservations and preserving carts and stock', async () => {
     const f = await ready();

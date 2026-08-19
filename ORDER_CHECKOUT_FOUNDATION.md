@@ -31,3 +31,7 @@ The real-infrastructure suites `checkout-orders-http.integration-spec.ts` and `o
 # Estado da fundação
 
 A PR #37 foi validada pelo CI #169 e incorporada no commit `676dcaea5d3c8856b9df56dcb1ea91517edb13fd`. A integração frontend subsequente é somente de leitura e não altera a fundação de checkout do backend.
+
+## COMMERCE-1SKU extension
+
+PR #37 historically allowed checkout to materialize multiple cart lines. The current checkout rejects any cart whose cardinality is not exactly one before Order, reservation, event, outbox, idempotency-success, cart transition, or successful audit effects. A valid checkout creates exactly one `OrderItem` and at most one applicable reservation. A unique `orderId` index prevents a second persisted `OrderItem`; the migration fails closed on incompatible legacy Orders and never rewrites their snapshots.

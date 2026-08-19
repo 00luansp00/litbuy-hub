@@ -210,36 +210,33 @@ describe('Carts HTTP with real guards, sessions, CSRF and PostgreSQL', () => {
       .post(endpoint)
       .set(headers(a))
       .send({ productId: c.products[1].id, quantity: 1, expectedVersion: 1 })
-      .expect(201);
-    expect(second.body.version).toBe(2);
+      .expect(409);
+    expect(second.body.code).toBe('CART_SINGLE_SKU_REQUIRED');
     const storedItems = await prisma.cartItem.findMany({
       where: { cart: { buyerUserId: a.user.id } },
       select: { id: true, productId: true },
     });
     const firstItem = storedItems.find(({ productId }) => productId === c.products[0].id);
-    const secondItem = storedItems.find(({ productId }) => productId === c.products[1].id);
-    if (!firstItem || !secondItem) throw new Error('expected persisted cart items');
-    const firstId = firstItem.id,
-      secondId = secondItem.id;
+    if (!firstItem) throw new Error('expected persisted cart item');
+    const firstId = firstItem.id;
     await request(app.getHttpServer())
       .patch(`${endpoint}/${firstId}`)
       .set(headers(a))
-      .send({ quantity: 2, expectedVersion: 2 })
+      .send({ quantity: 2, expectedVersion: 1 })
       .expect(200)
-      .expect(({ body }) => expect(body.version).toBe(3));
+      .expect(({ body }) => expect(body.version).toBe(2));
     await request(app.getHttpServer())
       .delete(`${endpoint}/${firstId}`)
       .set(headers(a))
-      .send({ expectedVersion: 3 })
+      .send({ expectedVersion: 2 })
       .expect(200);
     const empty = await request(app.getHttpServer())
-      .delete(`${endpoint}/${secondId}`)
+      .get(`/api/v1/carts/${c.seller.slug}`)
       .set(headers(a))
-      .send({ expectedVersion: 4 })
       .expect(200);
     expect(empty.body).toMatchObject({
       status: 'ACTIVE',
-      version: 5,
+      version: 3,
       items: [],
       previewSubtotalMinor: null,
       checkoutReady: false,

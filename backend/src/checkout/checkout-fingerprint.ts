@@ -17,6 +17,7 @@ export function checkoutFingerprint(input: {
   currency: string;
   items: FingerprintItem[];
 }) {
+  if (input.items.length > 1) throw new Error('CHECKOUT_SELECTION_CARDINALITY_INVALID');
   const canonical = JSON.stringify({
     ...input,
     items: [...input.items]

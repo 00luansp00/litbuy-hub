@@ -10,9 +10,9 @@ Este documento é a fonte de verdade do domínio comercial. Ele congela contrato
 
 ## Carrinho por vendedor e uma única linha — OWNER TARGET
 
-Cada carrinho ativo pertence a um comprador e a um único vendedor. Há no máximo um carrinho ativo por combinação `buyerUserId + sellerProfileId`. **OWNER TARGET / NOT IMPLEMENTED:** cada carrinho ativo possui no máximo uma linha comprável e cada Order preserva exatamente um SKU/variante. Produtos ou variantes diferentes exigem compras/Orders separados. Isso evita mistura de categorias, múltiplos `releaseEligibleAt`, divisão de retenção e resolução parcial entre itens distintos.
+Cada carrinho ativo pertence a um comprador e a um único vendedor. Há no máximo um carrinho ativo por combinação `buyerUserId + sellerProfileId`. **OWNER TARGET / IMPLEMENTED BY COMMERCE-1SKU:** cada carrinho ativo possui no máximo uma linha comprável e cada Order preserva exatamente um SKU/variante. Produtos ou variantes diferentes exigem compras/Orders separados. Isso evita mistura de categorias, múltiplos `releaseEligibleAt`, divisão de retenção e resolução parcial entre itens distintos.
 
-**CURRENT IMPLEMENTATION / SUPERSEDED FOR TARGET:** a implementação e o contrato anterior permitem múltiplos `CartItem` do mesmo Seller. O backend futuro deve impor a nova cardinalidade; validação somente no frontend não basta.
+**HISTORICAL IMPLEMENTATION / SUPERSEDED:** a implementação e o contrato anteriores permitiam múltiplos `CartItem` do mesmo Seller. `COMMERCE-1SKU` substituiu essa cardinalidade no backend e no banco; validação somente no frontend continua insuficiente.
 
 Adicionar ao carrinho **não reserva estoque** nem reduz disponibilidade. Preço, publicação, seller, variante e estoque são revalidados no servidor no checkout. Carrinho não é fonte de verdade; item pausado, removido ou alterado será reconciliado antes do checkout.
 
@@ -175,3 +175,6 @@ The provider-neutral financial/ledger and versioned policy foundation is specifi
 ## Fulfillment foundation (PR #49)
 
 The authoritative post-payment fulfillment lifecycle is implemented in `OrderFulfillmentService` and specified in `ORDER_FULFILLMENT_FOUNDATION.md`. Delivery requires hashed evidence, buyer confirmation is explicit, disputes fail closed, and completion requires the valid PR #48 `SALE_RECOGNIZED` transaction. This phase does not transport secrets, auto-confirm, simulate automatic delivery, or release seller funds; proceeds remain `SELLER_PENDING` for the next financial-release phase.
+## COMMERCE-1SKU implementation checkpoint
+
+The current runtime enforces one `CartItem` per cart and at most one persisted `OrderItem` per Order. Checkout requires exactly one line before creating any commercial effect, and the fingerprint helper rejects multiple selections. Quantity remains on that single line: NORMAL and DYNAMIC retain their stock-bound quantity rules, FIXED remains quantity one, and QUOTE remains outside direct checkout. The migration refuses incompatible legacy multi-line data instead of deleting or selecting records.

@@ -35,3 +35,7 @@ Remaining risks include catalog changes between cart and future checkout and ope
 ## PR #37 — checkout and order core
 
 The backend now contains the server-side checkout and persistent pending-order foundation described in `ORDER_CHECKOUT_FOUNDATION.md`. It uses cart preview fingerprints, immutable snapshots, BIGINT minor units, transactional inventory reservations, idempotency, order events/outbox, buyer-only reads, pre-payment cancellation, and controlled expiration. This does **not** implement payments, a gateway, a financial ledger, webhooks, fulfillment, or a connected frontend. PR #38 remains responsible for real frontend order reading after CI validates this foundation.
+
+## COMMERCE-1SKU extension
+
+PR #36 historically implemented carts with up to 50 lines. That cardinality is superseded: the current backend accepts at most one `CartItem` per cart, rejects a different product or variant without bumping the cart version or writing a successful mutation audit, and keeps quantity changes on the existing line through PATCH. A unique `cartId` index is the persistent invariant. Its migration fails closed when legacy multi-line carts exist and performs no automatic deletion or reconciliation.

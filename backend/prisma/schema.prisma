@@ -1022,7 +1022,7 @@ model OrderItem {
   sourceProductVariant     ProductVariant?          @relation(fields: [sourceProductVariantId, sourceProductId], references: [id, productId], onDelete: Restrict)
   reservation              InventoryReservation?
 
-  @@index([orderId])
+  @@unique([orderId], map: "OrderItem_orderId_key")
 }
 
 model InventoryReservation {
@@ -1112,7 +1112,7 @@ model CartItem {
   product Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
   variant ProductVariant? @relation(fields: [productVariantId, productId], references: [id, productId], onDelete: Restrict)
 
-  @@index([cartId])
+  @@unique([cartId], map: "CartItem_cartId_key")
   @@index([productId])
   @@index([productVariantId, productId])
 }
