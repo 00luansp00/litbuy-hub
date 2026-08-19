@@ -16,3 +16,13 @@ This increment only schedules eligibility. A hold remains `ACTIVE`, including wh
 ## Owner target snapshot evolution — NOT IMPLEMENTED
 
 The current snapshot above truthfully records a global policy applied during hold creation. The Owner target in `DISPUTE_FINANCIAL_RECOVERY_CONTRACT.md` instead resolves and freezes the applicable hierarchical rule at checkout, including authoritative category/subcategory, policy version, selected source (`SUBCATEGORY`, `CATEGORY`, or `DEFAULT`) and base delay. The hierarchy is now implemented in the resolver, but this checkout snapshot is not. The current Owner target starts its financial clock at authoritative `deliveredAt`; only a future Seller MAX capability may anticipate release. Later Admin changes never rewrite an earlier Order. These semantics require future design/implementation and are not claims about current code.
+# Checkout policy authority — CURRENT
+
+Para Orders novos, o `FinancialHold` herda version, rule e delay do snapshot imutável do Order,
+inclusive quando a policy foi aposentada depois do checkout. Eligibility e release validam a
+identidade do hold contra o Order e aceitam scopes CATEGORY/SUBCATEGORY. Para Order legado com
+snapshot totalmente NULL, permanece a validação DEFAULT/effective-at-hold-time anterior.
+
+Esta evolução não muda os gates COMPLETED/PAID/CONFIRMED, blockers, cálculo de due, transições
+do ledger ou o relógio CURRENT baseado no momento de criação do hold. `deliveredAt` permanece
+fora desta capability.

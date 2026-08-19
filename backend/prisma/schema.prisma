@@ -589,10 +589,11 @@ model CatalogCategory {
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt
 
-  subcategories            CatalogSubcategory[]
-  listingDrafts            ListingDraft[]
-  products                 Product[]
-  sellerReleasePolicyRules SellerReleasePolicyRule[]
+  subcategories             CatalogSubcategory[]
+  listingDrafts             ListingDraft[]
+  products                  Product[]
+  sellerReleasePolicyRules  SellerReleasePolicyRule[]
+  sellerReleasePolicyOrders Order[]                   @relation("OrderSellerReleasePolicyCategory")
 
   @@index([status, sortOrder])
   @@index([featured, status, sortOrder])
@@ -608,11 +609,12 @@ model CatalogSubcategory {
   createdAt  DateTime            @default(now())
   updatedAt  DateTime            @updatedAt
 
-  category                 CatalogCategory           @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  attributes               CatalogAttribute[]
-  listingDrafts            ListingDraft[]
-  products                 Product[]
-  sellerReleasePolicyRules SellerReleasePolicyRule[]
+  category                  CatalogCategory           @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  attributes                CatalogAttribute[]
+  listingDrafts             ListingDraft[]
+  products                  Product[]
+  sellerReleasePolicyRules  SellerReleasePolicyRule[]
+  sellerReleasePolicyOrders Order[]                   @relation("OrderSellerReleasePolicySubcategory")
 
   @@unique([categoryId, slug])
   @@index([categoryId, status, sortOrder])
@@ -909,44 +911,54 @@ model Cart {
 }
 
 model Order {
-  id                       String                 @id @default(uuid()) @db.Uuid
-  publicCode               String                 @unique
-  sourceCartId             String                 @unique @db.Uuid
-  sourceCartVersion        Int
-  buyerUserId              String                 @db.Uuid
-  sellerProfileId          String                 @db.Uuid
-  currency                 String                 @default("BRL")
-  subtotalAmountMinor      BigInt
-  discountAmountMinor      BigInt                 @default(0)
-  platformFeeAmountMinor   BigInt                 @default(0)
-  totalAmountMinor         BigInt
-  status                   OrderStatus            @default(PENDING_PAYMENT)
-  paymentStatus            PaymentStatus          @default(NOT_CREATED)
-  fulfillmentStatus        FulfillmentStatus      @default(NOT_AVAILABLE)
-  disputeStatus            DisputeStatus          @default(NONE)
-  version                  Int                    @default(1)
-  pricingPolicyVersion     Int                    @default(1)
-  feePolicyVersionId       String?                @db.Uuid
-  platformCommissionRuleId String?                @db.Uuid
-  expiresAt                DateTime
-  cancelledAt              DateTime?
-  expiredAt                DateTime?
-  createdAt                DateTime               @default(now())
-  updatedAt                DateTime               @updatedAt
-  sourceCart               Cart                   @relation(fields: [sourceCartId], references: [id], onDelete: Restrict)
-  buyer                    User                   @relation("OrderBuyer", fields: [buyerUserId], references: [id], onDelete: Restrict)
-  sellerProfile            SellerProfile          @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
-  items                    OrderItem[]
-  reservations             InventoryReservation[]
-  events                   OrderEvent[]
-  payment                  Payment?
-  delivery                 OrderDelivery?
-  financialHolds           FinancialHold[]
-  sellerPendingHoldZero    SellerPendingHoldZero?
-  refunds                  Refund[]
-  feePolicyVersion         FeePolicyVersion?      @relation(fields: [feePolicyVersionId], references: [id], onDelete: Restrict)
-  platformCommissionRule   FeeRule?               @relation("OrderPlatformCommissionRule", fields: [platformCommissionRuleId, feePolicyVersionId], references: [id, policyVersionId], onDelete: Restrict)
-  chatConversation         OrderChatConversation?
+  id                               String                      @id @default(uuid()) @db.Uuid
+  publicCode                       String                      @unique
+  sourceCartId                     String                      @unique @db.Uuid
+  sourceCartVersion                Int
+  buyerUserId                      String                      @db.Uuid
+  sellerProfileId                  String                      @db.Uuid
+  currency                         String                      @default("BRL")
+  subtotalAmountMinor              BigInt
+  discountAmountMinor              BigInt                      @default(0)
+  platformFeeAmountMinor           BigInt                      @default(0)
+  totalAmountMinor                 BigInt
+  status                           OrderStatus                 @default(PENDING_PAYMENT)
+  paymentStatus                    PaymentStatus               @default(NOT_CREATED)
+  fulfillmentStatus                FulfillmentStatus           @default(NOT_AVAILABLE)
+  disputeStatus                    DisputeStatus               @default(NONE)
+  version                          Int                         @default(1)
+  pricingPolicyVersion             Int                         @default(1)
+  feePolicyVersionId               String?                     @db.Uuid
+  platformCommissionRuleId         String?                     @db.Uuid
+  sellerReleasePolicyVersionId     String?                     @db.Uuid
+  sellerReleasePolicyRuleId        String?                     @db.Uuid
+  sellerReleasePolicySource        SellerReleasePolicyScope?
+  sellerReleasePolicyCategoryId    String?                     @db.Uuid
+  sellerReleasePolicySubcategoryId String?                     @db.Uuid
+  frozenBaseReleaseDelayHours      Int?
+  expiresAt                        DateTime
+  cancelledAt                      DateTime?
+  expiredAt                        DateTime?
+  createdAt                        DateTime                    @default(now())
+  updatedAt                        DateTime                    @updatedAt
+  sourceCart                       Cart                        @relation(fields: [sourceCartId], references: [id], onDelete: Restrict)
+  buyer                            User                        @relation("OrderBuyer", fields: [buyerUserId], references: [id], onDelete: Restrict)
+  sellerProfile                    SellerProfile               @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
+  items                            OrderItem[]
+  reservations                     InventoryReservation[]
+  events                           OrderEvent[]
+  payment                          Payment?
+  delivery                         OrderDelivery?
+  financialHolds                   FinancialHold[]
+  sellerPendingHoldZero            SellerPendingHoldZero?
+  refunds                          Refund[]
+  feePolicyVersion                 FeePolicyVersion?           @relation(fields: [feePolicyVersionId], references: [id], onDelete: Restrict)
+  platformCommissionRule           FeeRule?                    @relation("OrderPlatformCommissionRule", fields: [platformCommissionRuleId, feePolicyVersionId], references: [id, policyVersionId], onDelete: Restrict)
+  sellerReleasePolicyVersion       SellerReleasePolicyVersion? @relation(fields: [sellerReleasePolicyVersionId], references: [id], onDelete: Restrict)
+  sellerReleasePolicyRule          SellerReleasePolicyRule?    @relation(fields: [sellerReleasePolicyRuleId, sellerReleasePolicyVersionId], references: [id, policyVersionId], onDelete: Restrict)
+  sellerReleasePolicyCategory      CatalogCategory?            @relation("OrderSellerReleasePolicyCategory", fields: [sellerReleasePolicyCategoryId], references: [id], onDelete: Restrict)
+  sellerReleasePolicySubcategory   CatalogSubcategory?         @relation("OrderSellerReleasePolicySubcategory", fields: [sellerReleasePolicySubcategoryId], references: [id], onDelete: Restrict)
+  chatConversation                 OrderChatConversation?
 
   @@unique([id, sellerProfileId])
   @@index([buyerUserId, createdAt, id])
@@ -954,6 +966,10 @@ model Order {
   @@index([status, expiresAt])
   @@index([feePolicyVersionId])
   @@index([platformCommissionRuleId])
+  @@index([sellerReleasePolicyVersionId])
+  @@index([sellerReleasePolicyRuleId])
+  @@index([sellerReleasePolicyCategoryId])
+  @@index([sellerReleasePolicySubcategoryId])
 }
 
 model OrderChatConversation {
@@ -1847,6 +1863,7 @@ model SellerReleasePolicyVersion {
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
   rules             SellerReleasePolicyRule[]
+  orders            Order[]
   createdBy         User                      @relation("SellerReleasePolicyCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
   publishedBy       User?                     @relation("SellerReleasePolicyPublisher", fields: [publishedByUserId], references: [id], onDelete: Restrict)
 }
@@ -1866,6 +1883,7 @@ model SellerReleasePolicyRule {
   category        CatalogCategory?           @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   subcategory     CatalogSubcategory?        @relation(fields: [subcategoryId], references: [id], onDelete: Restrict)
   financialHolds  FinancialHold[]
+  orders          Order[]
 
   @@unique([id, policyVersionId])
   @@unique([policyVersionId, code])

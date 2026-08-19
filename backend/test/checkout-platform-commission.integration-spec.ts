@@ -6,7 +6,11 @@ import { PrismaService } from '../src/database/prisma.service';
 import { CartsService } from '../src/carts/carts.service';
 import { CheckoutService } from '../src/checkout/checkout.service';
 import { parseIdempotencyKey } from '../src/commerce/idempotency-key';
-import { commerceFixture, publishPlatformCommissionPolicy } from './order-checkout-test.helpers';
+import {
+  commerceFixture,
+  publishPlatformCommissionPolicy,
+  publishSellerReleasePolicy,
+} from './order-checkout-test.helpers';
 
 describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
   jest.setTimeout(120_000);
@@ -208,6 +212,9 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
     const first = await ready({ fixedAmountMinor: 100n });
     const replayKey = key();
     const firstResponse = await checkout.create(first.buyer.id, replayKey, first.dto);
+    const firstReleasePolicy = await prisma.sellerReleasePolicyVersion.findFirstOrThrow({
+      where: { status: 'ACTIVE' },
+    });
     await prisma.feePolicyVersion.update({
       where: { id: first.policy.id },
       data: { status: 'RETIRED' },
@@ -217,6 +224,11 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
       formula: 'FIXED',
       fixedAmountMinor: 200n,
     });
+    await prisma.sellerReleasePolicyVersion.update({
+      where: { id: firstReleasePolicy.id },
+      data: { status: 'RETIRED' },
+    });
+    const secondReleasePolicy = await publishSellerReleasePolicy(prisma, first.sellerUser.id, 24);
     expect(await checkout.create(first.buyer.id, replayKey, first.dto)).toEqual(firstResponse);
     const second = await commerceFixture(prisma);
     const preview = await carts.add(second.buyer.id, second.seller.slug, {
@@ -233,10 +245,13 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
     expect(orders[0]).toMatchObject({
       feePolicyVersionId: first.policy.id,
       platformFeeAmountMinor: 100n,
+      sellerReleasePolicyVersionId: firstReleasePolicy.id,
     });
     expect(orders[1]).toMatchObject({
       feePolicyVersionId: secondPolicy.id,
       platformFeeAmountMinor: 200n,
+      sellerReleasePolicyVersionId: secondReleasePolicy.id,
+      frozenBaseReleaseDelayHours: 24,
     });
     expect((secondResponse as { platformFeeAmountMinor: string }).platformFeeAmountMinor).toBe(
       '200',

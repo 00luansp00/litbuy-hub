@@ -141,12 +141,32 @@ export class SellerHeldFundsReleaseService {
       },
       select: { scope: true, delayHours: true },
     });
-    if (rule?.scope !== 'DEFAULT' || rule.delayHours !== hold.releaseDelayHours)
-      return this.fail(tx, holdId, 'OTHER', 'HISTORICAL_RELEASE_RULE_INVALID');
-
     await tx.$queryRaw`SELECT "id" FROM "Order" WHERE "id" = ${hold.orderId}::uuid FOR UPDATE`;
     const order = await tx.order.findUnique({ where: { id: hold.orderId } });
     if (!order) return this.fail(tx, holdId, 'MISSING_LOCAL', 'ORDER_INVALID');
+    const orderSnapshotComplete =
+      order.sellerReleasePolicyVersionId !== null &&
+      order.sellerReleasePolicyRuleId !== null &&
+      order.sellerReleasePolicySource !== null &&
+      order.sellerReleasePolicyCategoryId !== null &&
+      order.frozenBaseReleaseDelayHours !== null;
+    const orderSnapshotEmpty =
+      order.sellerReleasePolicyVersionId === null &&
+      order.sellerReleasePolicyRuleId === null &&
+      order.sellerReleasePolicySource === null &&
+      order.sellerReleasePolicyCategoryId === null &&
+      order.sellerReleasePolicySubcategoryId === null &&
+      order.frozenBaseReleaseDelayHours === null;
+    if (
+      rule?.delayHours !== hold.releaseDelayHours ||
+      (orderSnapshotComplete
+        ? rule.scope !== order.sellerReleasePolicySource ||
+          hold.sellerReleasePolicyVersionId !== order.sellerReleasePolicyVersionId ||
+          hold.sellerReleasePolicyRuleId !== order.sellerReleasePolicyRuleId ||
+          hold.releaseDelayHours !== order.frozenBaseReleaseDelayHours
+        : !orderSnapshotEmpty || rule.scope !== 'DEFAULT')
+    )
+      return this.fail(tx, holdId, 'OTHER', 'HISTORICAL_RELEASE_RULE_INVALID');
     const proceeds = order.totalAmountMinor - order.platformFeeAmountMinor;
     if (
       order.currency !== 'BRL' ||

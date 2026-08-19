@@ -20,7 +20,11 @@ import { SellerHoldEligibilityService } from '../src/financial/seller-hold-eligi
 import { SellerPendingHoldService } from '../src/financial/seller-pending-hold.service';
 import { OrderFulfillmentService } from '../src/orders/order-fulfillment.service';
 import { PaidOrderActivationService } from '../src/orders/paid-order-activation.service';
-import { commerceFixture, publishPlatformCommissionPolicy } from './order-checkout-test.helpers';
+import {
+  commerceFixture,
+  publishPlatformCommissionPolicy,
+  publishSellerReleasePolicy,
+} from './order-checkout-test.helpers';
 
 const password = 'seller finance integration password 123';
 type Actor = { userId: string; authorization: string };
@@ -248,7 +252,7 @@ describe('Seller finance read HTTP with real auth and PostgreSQL', () => {
 
   it('exposes pending, held, and available checkpoints from the real commerce chain', async () => {
     const sellerActor = await actor(true, 'NONE');
-    const fixture = await commerceFixture(prisma, 'NORMAL', undefined, 20, false);
+    const fixture = await commerceFixture(prisma, 'NORMAL', undefined, 20, false, false);
     await prisma.sellerProfile.update({
       where: { id: fixture.seller.id },
       data: { userId: sellerActor.userId },
@@ -257,6 +261,7 @@ describe('Seller finance read HTTP with real auth and PostgreSQL', () => {
       publicVersion: policyVersion++,
       fixedAmountMinor: 1000n,
     });
+    await publishSellerReleasePolicy(prisma, sellerActor.userId, 0);
 
     const carts = app.get(CartsService);
     const checkout = app.get(CheckoutService);
@@ -323,22 +328,6 @@ describe('Seller finance read HTTP with real auth and PostgreSQL', () => {
       evidenceHash: 'a'.repeat(64),
     });
     await fulfillment.confirmReceipt(order.publicCode, fixture.buyer.id);
-    const draftPolicy = await prisma.sellerReleasePolicyVersion.create({
-      data: {
-        publicVersion: policyVersion++,
-        effectiveFrom: new Date(Date.now() - 60_000),
-        createdByUserId: sellerActor.userId,
-        rules: { create: { code: 'DELIVERY_PROTECTION_DEFAULT', delayHours: 0, enabled: true } },
-      },
-    });
-    await prisma.sellerReleasePolicyVersion.update({
-      where: { id: draftPolicy.id },
-      data: {
-        status: 'ACTIVE',
-        publishedByUserId: sellerActor.userId,
-        publishedAt: new Date(),
-      },
-    });
     expect(await pendingHold.processOne(order.id)).toBe('PROCESSED');
     expect((await summary()).body.balances).toEqual(balances('0', '9000', '0'));
     const hold = await prisma.financialHold.findFirstOrThrow({ where: { orderId: order.id } });

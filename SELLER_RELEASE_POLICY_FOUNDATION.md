@@ -31,3 +31,14 @@ Existing `DELIVERY_PROTECTION_DEFAULT` rules are deterministically backfilled as
 ## Explicit boundary
 
 `SellerPendingHoldService` still consumes DEFAULT inside its existing SERIALIZABLE hold-creation transaction and stores the legacy hold snapshot described by `SELLER_HOLD_RELEASE_SNAPSHOT.md`. This increment does not resolve policy at checkout, add fields to Order, change the COMPLETED/PAID/CONFIRMED lifecycle, move the clock to `deliveredAt`, update `FinancialHold`, release funds, or implement Seller MAX, dispute, recovery, withdrawal, settlement, or Admin UI. Those are separately reviewed capabilities.
+# RELEASE-CHECKOUT-SNAPSHOT — CURRENT IMPLEMENTATION
+
+Além da hierarquia já implementada, o checkout resolve a policy com `Product.categoryId` e
+`Product.subcategoryId` dentro da mesma transação e congela version, rule, source, classificação
+e delay no `Order`. A classificação congelada é a do produto, não os qualifiers possivelmente
+nulos da rule DEFAULT. Novas publicações não alteram Orders existentes.
+
+Orders legados permanecem com todos os campos de snapshot NULL e seguem o resolver DEFAULT
+histórico no processamento do hold. Não existe backfill. O relógio CURRENT do hold permanece
+`releasePolicyAppliedAt = transaction_timestamp()` e `releaseEligibleAt = appliedAt + delay`;
+o relógio autoritativo em `deliveredAt` continua NOT IMPLEMENTED.

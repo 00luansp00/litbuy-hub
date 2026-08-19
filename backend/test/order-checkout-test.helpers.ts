@@ -109,12 +109,47 @@ export async function publishPlatformCommissionPolicy(
   });
 }
 
+export async function publishSellerReleasePolicy(
+  prisma: PrismaService,
+  createdByUserId: string,
+  delayHours = 168,
+) {
+  const publicVersion =
+    (await prisma.sellerReleasePolicyVersion.aggregate({ _max: { publicVersion: true } }))._max
+      .publicVersion ?? 0;
+  return prisma.$transaction(async (tx) => {
+    const policy = await tx.sellerReleasePolicyVersion.create({
+      data: {
+        publicVersion: publicVersion + 1,
+        status: 'DRAFT',
+        effectiveFrom: new Date(Date.now() - 60_000),
+        createdByUserId,
+        publishedByUserId: createdByUserId,
+        publishedAt: new Date(),
+        rules: {
+          create: {
+            code: `checkout-default-${crypto.randomUUID()}`,
+            delayHours,
+            scope: 'DEFAULT',
+          },
+        },
+      },
+    });
+    return tx.sellerReleasePolicyVersion.update({
+      where: { id: policy.id },
+      data: { status: 'ACTIVE' },
+      include: { rules: true },
+    });
+  });
+}
+
 export async function commerceFixture(
   prisma: PrismaService,
   model: 'NORMAL' | 'DYNAMIC' | 'SERVICE' = 'NORMAL',
   pricingType?: 'FIXED' | 'QUOTE',
   stock = 5,
   withZeroCommissionPolicy = true,
+  withDefaultReleasePolicy = true,
 ) {
   const suffix = crypto.randomUUID();
   const buyer = await prisma.user.create({
@@ -148,6 +183,11 @@ export async function commerceFixture(
     (await prisma.feePolicyVersion.count({ where: { status: 'ACTIVE' } })) === 0
   )
     await publishPlatformCommissionPolicy(prisma, sellerUser.id);
+  if (
+    withDefaultReleasePolicy &&
+    (await prisma.sellerReleasePolicyVersion.count({ where: { status: 'ACTIVE' } })) === 0
+  )
+    await publishSellerReleasePolicy(prisma, sellerUser.id);
   const category = await prisma.catalogCategory.create({
     data: { name: 'Games', slug: `games-${suffix}` },
   });

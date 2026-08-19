@@ -83,6 +83,14 @@ describe('Order checkout domain with real PostgreSQL', () => {
         include: { items: true, reservations: true, events: { include: { outbox: true } } },
       });
       expect(order.items).toHaveLength(1);
+      expect(order).toMatchObject({
+        sellerReleasePolicyVersionId: expect.any(String),
+        sellerReleasePolicyRuleId: expect.any(String),
+        sellerReleasePolicySource: 'DEFAULT',
+        sellerReleasePolicyCategoryId: f.product.categoryId,
+        sellerReleasePolicySubcategoryId: f.product.subcategoryId,
+        frozenBaseReleaseDelayHours: 168,
+      });
       expect(order.reservations).toHaveLength(model === 'SERVICE' ? 0 : 1);
       if (model === 'DYNAMIC')
         expect(order.reservations[0].productVariantId).toBe(f.product.variants[0].id);
@@ -123,6 +131,35 @@ describe('Order checkout domain with real PostgreSQL', () => {
     expect(await prisma.cart.findUniqueOrThrow({ where: { id: cart.id } })).toMatchObject({
       status: 'ACTIVE',
       version: 1,
+    });
+  });
+  it('fails closed before every checkout success effect when release policy is missing', async () => {
+    const f = await commerceFixture(prisma, 'NORMAL', undefined, 5, true, false);
+    const preview = await carts.add(f.buyer.id, f.seller.slug, {
+      productId: f.product.id,
+      quantity: 1,
+      expectedVersion: 0,
+    });
+    const idempotencyKey = key();
+    await expect(
+      checkout.create(f.buyer.id, idempotencyKey, {
+        sellerSlug: f.seller.slug,
+        expectedCartVersion: preview.version,
+        expectedPreviewFingerprint: preview.previewFingerprint,
+      }),
+    ).rejects.toMatchObject({ code: 'SELLER_RELEASE_POLICY_NOT_FOUND', statusCode: 422 });
+    expect(await prisma.order.count()).toBe(0);
+    expect(await prisma.orderItem.count()).toBe(0);
+    expect(await prisma.inventoryReservation.count()).toBe(0);
+    expect(await prisma.orderEvent.count({ where: { type: 'ORDER_CREATED' } })).toBe(0);
+    expect(await prisma.outboxEvent.count()).toBe(0);
+    expect(
+      await prisma.securityEvent.count({ where: { eventType: 'CHECKOUT_ORDER_CREATED' } }),
+    ).toBe(0);
+    expect(await prisma.commerceIdempotencyRecord.count()).toBe(0);
+    expect(await prisma.cart.findUniqueOrThrow({ where: { id: preview.id } })).toMatchObject({
+      status: 'ACTIVE',
+      version: preview.version,
     });
   });
   it('rejects self-purchase and products that become unavailable without partial writes', async () => {

@@ -1,4 +1,10 @@
-import { DEMO_FEE_POLICY, DEMO_IMAGES, DEMO_PRODUCTS, DEMO_USERS } from './demo-data.fixtures';
+import {
+  DEMO_FEE_POLICY,
+  DEMO_IMAGES,
+  DEMO_PRODUCTS,
+  DEMO_SELLER_RELEASE_POLICY,
+  DEMO_USERS,
+} from './demo-data.fixtures';
 import { runDemoCommand } from './demo-data';
 import { assertDemoEnvironment, DemoDataError, parseDemoCommand } from './demo-data.guard';
 
@@ -72,6 +78,10 @@ describe('local demo data guards and deterministic fixtures', () => {
       partyCharged: 'SELLER',
       formula: 'FIXED',
       fixedAmountMinor: 0n,
+    });
+    expect(DEMO_SELLER_RELEASE_POLICY).toMatchObject({
+      author: DEMO_FEE_POLICY.author,
+      rule: { delayHours: 168, scope: 'DEFAULT' },
     });
     expect(new Set(DEMO_IMAGES.map((image) => image.sha256)).size).toBe(8);
     expect(

@@ -26,6 +26,10 @@ import { generateOrderCode } from '../orders/order-code';
 import type { CreateCheckoutDto } from './checkout.dto';
 import { calculateFee, resolveFeeRule } from '../financial/fee-engine';
 import { FinancialDomainError } from '../financial/financial.errors';
+import {
+  SellerReleasePolicyError,
+  SellerReleasePolicyService,
+} from '../financial/seller-release-policy.service';
 
 type Tx = Prisma.TransactionClient;
 type CheckoutCartItem = CartResponsePayload['items'][number];
@@ -34,7 +38,10 @@ type PublicSeller = Pick<CartResponsePayload['sellerProfile'], 'id' | 'slug' | '
 export type CheckoutResponse = ReturnType<CheckoutService['response']>;
 @Injectable()
 export class CheckoutService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly sellerReleasePolicy: SellerReleasePolicyService,
+  ) {}
   async create(userId: string, key: ParsedIdempotencyKey, dto: CreateCheckoutDto) {
     const keyHash = key.hash,
       requestHash = canonicalRequestHash(dto);
@@ -146,6 +153,17 @@ export class CheckoutService {
         0n,
       );
       const commission = await this.resolvePlatformCommission(tx, subtotal);
+      const product = selections[0].item.product;
+      let releasePolicy: Awaited<ReturnType<SellerReleasePolicyService['resolveEffectivePolicy']>>;
+      try {
+        releasePolicy = await this.sellerReleasePolicy.resolveEffectivePolicy(tx, {
+          categoryId: product.categoryId,
+          subcategoryId: product.subcategoryId ?? undefined,
+        });
+      } catch (error) {
+        if (error instanceof SellerReleasePolicyError) this.fail(error.code, 422);
+        throw error;
+      }
       const expiresAt = new Date(Date.now() + this.ttlMinutes() * 60_000);
       let order: Order | undefined;
       for (let attempt = 0; attempt < 5; attempt++) {
@@ -164,6 +182,12 @@ export class CheckoutService {
               feePolicyVersionId: commission.policy.id,
               platformCommissionRuleId: commission.rule.id,
               pricingPolicyVersion: commission.policy.publicVersion,
+              sellerReleasePolicyVersionId: releasePolicy.policyVersionId,
+              sellerReleasePolicyRuleId: releasePolicy.ruleId,
+              sellerReleasePolicySource: releasePolicy.source,
+              sellerReleasePolicyCategoryId: product.categoryId,
+              sellerReleasePolicySubcategoryId: product.subcategoryId,
+              frozenBaseReleaseDelayHours: releasePolicy.delayHours,
               expiresAt,
             },
           });

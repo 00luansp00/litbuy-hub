@@ -22,6 +22,7 @@ import {
   DEMO_IDS,
   DEMO_IMAGES,
   DEMO_PRODUCTS,
+  DEMO_SELLER_RELEASE_POLICY,
   DEMO_SUMMARY,
   DEMO_USERS,
 } from '../src/cli/demo-data.fixtures';
@@ -164,6 +165,12 @@ describe('local demo data with real PostgreSQL and MinIO', () => {
       feePolicyVersionId: DEMO_FEE_POLICY.id,
       platformCommissionRuleId: DEMO_FEE_POLICY.rule.id,
       platformFeeAmountMinor: 0n,
+      sellerReleasePolicyVersionId: DEMO_SELLER_RELEASE_POLICY.id,
+      sellerReleasePolicyRuleId: DEMO_SELLER_RELEASE_POLICY.rule.id,
+      sellerReleasePolicySource: 'DEFAULT',
+      sellerReleasePolicyCategoryId: product.categoryId,
+      sellerReleasePolicySubcategoryId: product.subcategoryId,
+      frozenBaseReleaseDelayHours: 168,
     });
     expect(order.totalAmountMinor - order.platformFeeAmountMinor).toBe(order.subtotalAmountMinor);
   });

@@ -56,8 +56,26 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
   async function publishSellerReleasePolicy(
     actorUserId: string,
     delayHours: number,
-    extraRule?: { code: string; delayHours: number },
+    extraRule?: {
+      code: string;
+      delayHours: number;
+      scope?: 'DEFAULT' | 'CATEGORY' | 'SUBCATEGORY';
+      categoryId?: string;
+      subcategoryId?: string;
+    },
   ) {
+    const active = await prisma.sellerReleasePolicyVersion.findFirst({
+      where: { status: 'ACTIVE' },
+      include: { rules: true },
+    });
+    if (
+      active &&
+      !extraRule &&
+      active.rules.length === 1 &&
+      active.rules[0].scope === 'DEFAULT' &&
+      active.rules[0].delayHours === delayHours
+    )
+      return active;
     const draft = await prisma.sellerReleasePolicyVersion.create({
       data: {
         publicVersion: version++,
@@ -83,12 +101,49 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
     });
   }
 
-  async function completedOrder(fee: bigint) {
-    const fixture = await commerceFixture(prisma, 'NORMAL', undefined, 20, false);
+  async function completedOrder(
+    fee: bigint,
+    releaseDelayHours = 72,
+    releaseScope: 'DEFAULT' | 'CATEGORY' | 'SUBCATEGORY' = 'DEFAULT',
+  ) {
+    const fixture = await commerceFixture(prisma, 'NORMAL', undefined, 20, false, false);
     await publishPlatformCommissionPolicy(prisma, fixture.sellerUser.id, {
       publicVersion: version++,
       fixedAmountMinor: fee,
     });
+    const subcategory =
+      releaseScope === 'SUBCATEGORY'
+        ? await prisma.catalogSubcategory.create({
+            data: {
+              categoryId: fixture.category.id,
+              slug: `seller-hold-${randomUUID()}`,
+              name: 'Seller hold test',
+            },
+          })
+        : null;
+    if (subcategory) {
+      await prisma.listingDraft.update({
+        where: { id: fixture.draft.id },
+        data: { subcategoryId: subcategory.id },
+      });
+      await prisma.product.update({
+        where: { id: fixture.product.id },
+        data: { subcategoryId: subcategory.id },
+      });
+    }
+    const releasePolicy = await publishSellerReleasePolicy(
+      fixture.sellerUser.id,
+      releaseScope === 'DEFAULT' ? releaseDelayHours : 72,
+      releaseScope === 'DEFAULT'
+        ? undefined
+        : {
+            code: `DELIVERY_PROTECTION_${releaseScope}`,
+            delayHours: releaseDelayHours,
+            scope: releaseScope,
+            categoryId: releaseScope === 'CATEGORY' ? fixture.category.id : undefined,
+            subcategoryId: releaseScope === 'SUBCATEGORY' ? subcategory!.id : undefined,
+          },
+    );
     const cart = await carts.add(fixture.buyer.id, fixture.seller.slug, {
       productId: fixture.product.id,
       quantity: 10,
@@ -141,6 +196,8 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
       order: await prisma.order.findUniqueOrThrow({ where: { id: order.id } }),
       payment,
       actorUserId: fixture.sellerUser.id,
+      releasePolicy,
+      subcategory,
     };
   }
 
@@ -218,7 +275,32 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
   });
 
   it('fails closed without an effective policy and does not move pending funds', async () => {
-    const { order } = await completedOrder(1000n);
+    const { order, releasePolicy } = await completedOrder(1000n);
+    // Represents an Order persisted before the checkout snapshot migration.
+    await prisma.$executeRawUnsafe(
+      'ALTER TABLE "Order" DISABLE TRIGGER "Order_release_policy_snapshot_guard"',
+    );
+    try {
+      await prisma.order.update({
+        where: { id: order.id },
+        data: {
+          sellerReleasePolicyVersionId: null,
+          sellerReleasePolicyRuleId: null,
+          sellerReleasePolicySource: null,
+          sellerReleasePolicyCategoryId: null,
+          sellerReleasePolicySubcategoryId: null,
+          frozenBaseReleaseDelayHours: null,
+        },
+      });
+    } finally {
+      await prisma.$executeRawUnsafe(
+        'ALTER TABLE "Order" ENABLE TRIGGER "Order_release_policy_snapshot_guard"',
+      );
+    }
+    await prisma.sellerReleasePolicyVersion.update({
+      where: { id: releasePolicy.id },
+      data: { status: 'RETIRED' },
+    });
     await Promise.all(Array.from({ length: 6 }, () => service.processOne(order.id)));
     expect(
       await prisma.ledgerTransaction.count({
@@ -255,7 +337,7 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
   });
 
   it('keeps delay zero scheduled and ACTIVE without releasing funds', async () => {
-    const { order, payment, actorUserId } = await completedOrder(1000n);
+    const { order, payment, actorUserId } = await completedOrder(1000n, 0);
     await publishSellerReleasePolicy(actorUserId, 0);
     expect(await service.processOne(order.id)).toBe('PROCESSED');
     const hold = await prisma.financialHold.findFirstOrThrow({ where: { orderId: order.id } });
@@ -303,6 +385,36 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
       before.delivery,
     );
   });
+
+  it.each(['CATEGORY', 'SUBCATEGORY'] as const)(
+    'bridges a retired %s checkout snapshot through hold, eligibility, and release',
+    async (scope) => {
+      const { order, actorUserId, releasePolicy } = await completedOrder(1000n, 0, scope);
+      const selectedRule = releasePolicy.rules.find((rule) => rule.scope === scope)!;
+      expect(order).toMatchObject({
+        sellerReleasePolicyVersionId: releasePolicy.id,
+        sellerReleasePolicyRuleId: selectedRule.id,
+        sellerReleasePolicySource: scope,
+        frozenBaseReleaseDelayHours: 0,
+      });
+      await prisma.sellerReleasePolicyVersion.update({
+        where: { id: releasePolicy.id },
+        data: { status: 'RETIRED' },
+      });
+      const replacement = await publishSellerReleasePolicy(actorUserId, 168);
+
+      expect(await service.processOne(order.id)).toBe('PROCESSED');
+      const hold = await prisma.financialHold.findFirstOrThrow({ where: { orderId: order.id } });
+      expect(hold).toMatchObject({
+        sellerReleasePolicyVersionId: releasePolicy.id,
+        sellerReleasePolicyRuleId: selectedRule.id,
+        releaseDelayHours: 0,
+      });
+      expect(hold.sellerReleasePolicyVersionId).not.toBe(replacement.id);
+      expect(await eligibility.processOne(hold.id)).toBe('RELEASE_ELIGIBLE');
+      expect(await release.processOne(hold.id)).toBe('RELEASED');
+    },
+  );
 
   it('uses the frozen PostgreSQL deadline and leaves a future hold ACTIVE', async () => {
     const { order, actorUserId } = await completedOrder(1000n);
@@ -378,7 +490,7 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
   });
 
   it('honors a retired historical policy under six concurrent workers', async () => {
-    const { order, actorUserId } = await completedOrder(1000n);
+    const { order, actorUserId } = await completedOrder(1000n, 0);
     const policy = await publishSellerReleasePolicy(actorUserId, 0);
     await service.processOne(order.id);
     await prisma.sellerReleasePolicyVersion.update({
@@ -396,7 +508,7 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
   });
 
   it('keeps policy A frozen when policy B becomes effective', async () => {
-    const { order, actorUserId } = await completedOrder(1000n);
+    const { order, actorUserId } = await completedOrder(1000n, 0);
     const policyA = await publishSellerReleasePolicy(actorUserId, 0);
     await service.processOne(order.id);
     const before = await prisma.financialHold.findFirstOrThrow({ where: { orderId: order.id } });
@@ -421,8 +533,7 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
   it.each(['OPEN', 'UNDER_REVIEW'] as const)(
     'business-blocks eligibility for a %s dispute without reconciliation',
     async (disputeStatus) => {
-      const { order, actorUserId } = await completedOrder(1000n);
-      await publishSellerReleasePolicy(actorUserId, 0);
+      const { order } = await completedOrder(1000n, 0);
       await service.processOne(order.id);
       const hold = await prisma.financialHold.findFirstOrThrow({ where: { orderId: order.id } });
       await prisma.order.update({ where: { id: order.id }, data: { disputeStatus } });
@@ -439,7 +550,7 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
   );
 
   it('validates a RELEASE_ELIGIBLE replay before accepting it', async () => {
-    const { order, payment, actorUserId } = await completedOrder(1000n);
+    const { order, payment, actorUserId } = await completedOrder(1000n, 0);
     await publishSellerReleasePolicy(actorUserId, 0);
     await service.processOne(order.id);
     const hold = await prisma.financialHold.findFirstOrThrow({ where: { orderId: order.id } });
@@ -454,7 +565,7 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
   });
 
   it('enforces the delivery-protection lifecycle and releasedAt invariants in PostgreSQL', async () => {
-    const { order, actorUserId } = await completedOrder(1000n);
+    const { order, actorUserId } = await completedOrder(1000n, 0);
     await publishSellerReleasePolicy(actorUserId, 0);
     await service.processOne(order.id);
     const hold = await prisma.financialHold.findFirstOrThrow({ where: { orderId: order.id } });
@@ -478,7 +589,7 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
   });
 
   it('allows a valid ACTIVE insert but rejects a direct RELEASE_ELIGIBLE insert', async () => {
-    const { order, actorUserId } = await completedOrder(1000n);
+    const { order, actorUserId } = await completedOrder(1000n, 0);
     await publishSellerReleasePolicy(actorUserId, 0);
     await service.processOne(order.id);
     const hold = await prisma.financialHold.findFirstOrThrow({ where: { orderId: order.id } });
@@ -552,20 +663,20 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
   });
 
   it('keeps policy A snapshot after retirement and publication of policy B', async () => {
-    const { order, actorUserId } = await completedOrder(1000n);
-    const policyA = await publishSellerReleasePolicy(actorUserId, 24);
-    expect(await service.processOne(order.id)).toBe('PROCESSED');
-    const original = await prisma.financialHold.findFirstOrThrow({ where: { orderId: order.id } });
+    const { order, actorUserId, releasePolicy: policyA } = await completedOrder(1000n, 24);
     await prisma.sellerReleasePolicyVersion.update({
       where: { id: policyA.id },
       data: { status: 'RETIRED' },
     });
-    await publishSellerReleasePolicy(actorUserId, 168);
+    const policyB = await publishSellerReleasePolicy(actorUserId, 168);
+    expect(await service.processOne(order.id)).toBe('PROCESSED');
+    const original = await prisma.financialHold.findFirstOrThrow({ where: { orderId: order.id } });
     expect(await service.processOne(order.id)).toBe('ALREADY_HANDLED');
     expect(await prisma.financialHold.findFirstOrThrow({ where: { orderId: order.id } })).toEqual(
       original,
     );
     expect(original.sellerReleasePolicyVersionId).toBe(policyA.id);
+    expect(original.sellerReleasePolicyVersionId).not.toBe(policyB.id);
     expect(original.releaseDelayHours).toBe(24);
   });
 
@@ -777,7 +888,7 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
   });
 
   async function eligibleHold() {
-    const { order, actorUserId } = await completedOrder(1000n);
+    const { order, actorUserId } = await completedOrder(1000n, 0);
     await publishSellerReleasePolicy(actorUserId, 0);
     expect(await service.processOne(order.id)).toBe('PROCESSED');
     const hold = await prisma.financialHold.findFirstOrThrow({ where: { orderId: order.id } });
