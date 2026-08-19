@@ -56,7 +56,7 @@ Essas fees pertencem economicamente à LIT Buy e não continuam cobradas do Sell
 
 ### 5.2 `PLATFORM_COMMISSION` CURRENT versus tiers target
 
-CURRENT possui `PLATFORM_COMMISSION` snapshotado; o target futuro possui Prata/Ouro/Diamante. Cada componente original deve conservar identidade e snapshot, cada fee pode ser revertida **uma única vez**, e o engine trabalha sobre componentes efetivamente snapshotados no Order, não sobre a policy vigente no dia do refund. O mapping/migração entre `PLATFORM_COMMISSION` e os tiers é `IMPLEMENTATION DESIGN / RECONCILIATION REQUIRED`; nunca somar ou reverter ambos silenciosamente em duplicidade.
+CURRENT possui `PLATFORM_COMMISSION`, com valor/regra snapshotados no Order; o target futuro possui Prata/Ouro/Diamante. Esse fato de implementação não autoriza presumir que `PLATFORM_COMMISSION` deva ser revertida segundo a policy dos tiers, nem autoriza presumir que ela não deva ser revertida. Sua identidade econômica e semântica precisa primeiro ser reconciliada com o modelo target: o mapping/migração é `IMPLEMENTATION DESIGN / RECONCILIATION REQUIRED`. O engine trabalha sobre os componentes efetivamente snapshotados no Order, não recalcula Order histórico pela policy vigente no dia do refund e nunca cobra ou reverte `PLATFORM_COMMISSION` + tier em duplicidade. Se a reconciliação futura provar que o componente corresponde a uma fee própria reversível, ele só poderá ser revertido uma vez; essa possibilidade não é uma decisão Owner já fechada.
 
 ### 5.3 PSP fee externo
 
@@ -102,7 +102,7 @@ Reporting continua possível após `deliveredAt`, confirmação Buyer, `COMPLETE
 
 ## 10. `SELLER_DEFICIT` não é gross
 
-`SELLER_DEFICIT` não é, por definição, Order gross nem refund gross. Antes de criar déficit, o engine deve decompor: principal decidido; reversão de fees próprias seller-side; recursos protegidos/recuperáveis do Seller; amounts já recuperados e pagos; outras responsabilidades explicitamente contratadas; PSP fee apenas quando provider/policy decidir; e componentes Buyer-side separadamente. O déficit é exclusivamente a obrigação remanescente legitimamente atribuível ao Seller. Sellers nunca são cruzados.
+`SELLER_DEFICIT` não é, por definição, Order gross nem refund gross. Antes de criar déficit, o engine deve decompor: principal decidido; reversão das fees próprias seller-side cuja policy esteja autorizada — Prata/Ouro/Diamante/MAX seguem a regra Owner fechada, enquanto a CURRENT `PLATFORM_COMMISSION` depende primeiro da reconciliação da seção 5.2 —; recursos protegidos/recuperáveis do Seller; amounts já recuperados e pagos; e outras responsabilidades explicitamente contratadas. PSP fee permanece separada e depende de provider/revisão; VIP permanece `OWNER DECISION REQUIRED` e deve ser tratado como componente Buyer-side separado. O déficit é exclusivamente a obrigação remanescente legitimamente atribuível ao Seller. Sellers nunca são cruzados, e nenhuma equivalência financeira pode ser inferida sem autoridade.
 
 ## 11. Buyer financial balance e payout
 
@@ -127,7 +127,7 @@ O Ledger double-entry append-only é autoridade: somente compensating entries, s
 | Component | Original charged party | Economic owner | Refund total | Refund partial | Funding source | Seller liability? | Buyer treatment | Current status | Authority | Implementation gate |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Product principal | Buyer/tender | Seller proceeds, sujeito à decomposição | Principal decidido, não gross automático | Somente parcela decidida | Protected funds ou recovery | Só obrigação remanescente atribuível | Money segue provider; LP volta como LP | Engine `NOT IMPLEMENTED` | Freeze + este contrato | Decision linkage, snapshot, ledger, idempotência |
-| Current `PLATFORM_COMMISSION` | Seller | LIT Buy | Reverter componente próprio snapshotado aplicável uma vez | Proporcional, uma vez | Reversal da LIT Buy | Não | Não é payout Buyer isolado | Snapshot CURRENT; refund não provado | Current snapshot + este contrato | `IMPLEMENTATION DESIGN / RECONCILIATION REQUIRED` com tiers |
+| Current `PLATFORM_COMMISSION` | Seller | Identidade econômica requer reconciliação | `IMPLEMENTATION DESIGN / RECONCILIATION REQUIRED` | `IMPLEMENTATION DESIGN / RECONCILIATION REQUIRED` | Não inferir até reconciliação | Não inferir | Não inferir refund nem non-refund | Valor/regra snapshotados CURRENT; refund semantics não decidida | CURRENT snapshot + Refund contract boundary | Reconciliar economic identity/mapping com tiers antes do refund engine; nunca duplicar cobrança/reversão |
 | Prata | Seller | LIT Buy | Reversão integral aplicável | Proporcional | Reversal da LIT Buy | Não | Indireto na decomposição | Target `NOT IMPLEMENTED` | Freeze | Snapshot + engine |
 | Ouro | Seller | LIT Buy | Reversão integral aplicável | Proporcional | Reversal da LIT Buy | Não | Indireto na decomposição | Target `NOT IMPLEMENTED` | Freeze | Snapshot + engine |
 | Diamante | Seller | LIT Buy | Reversão integral aplicável | Proporcional | Reversal da LIT Buy | Não | Indireto na decomposição | Target `NOT IMPLEMENTED` | Freeze | Snapshot + engine |
