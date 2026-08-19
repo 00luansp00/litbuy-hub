@@ -134,11 +134,31 @@ export class SellerHoldEligibilityService {
       },
       select: { scope: true, delayHours: true },
     });
-    if (rule?.scope !== 'DEFAULT' || rule.delayHours !== hold.releaseDelayHours)
-      return this.fail(tx, holdId, { type: 'OTHER', code: 'HISTORICAL_RELEASE_RULE_INVALID' });
-
     const order = await tx.order.findUnique({ where: { id: hold.orderId } });
     if (!order) return this.fail(tx, holdId, { type: 'MISSING_LOCAL', code: 'ORDER_MISSING' });
+    const orderSnapshotComplete =
+      order.sellerReleasePolicyVersionId !== null &&
+      order.sellerReleasePolicyRuleId !== null &&
+      order.sellerReleasePolicySource !== null &&
+      order.sellerReleasePolicyCategoryId !== null &&
+      order.frozenBaseReleaseDelayHours !== null;
+    const orderSnapshotEmpty =
+      order.sellerReleasePolicyVersionId === null &&
+      order.sellerReleasePolicyRuleId === null &&
+      order.sellerReleasePolicySource === null &&
+      order.sellerReleasePolicyCategoryId === null &&
+      order.sellerReleasePolicySubcategoryId === null &&
+      order.frozenBaseReleaseDelayHours === null;
+    if (
+      rule?.delayHours !== hold.releaseDelayHours ||
+      (orderSnapshotComplete
+        ? rule.scope !== order.sellerReleasePolicySource ||
+          hold.sellerReleasePolicyVersionId !== order.sellerReleasePolicyVersionId ||
+          hold.sellerReleasePolicyRuleId !== order.sellerReleasePolicyRuleId ||
+          hold.releaseDelayHours !== order.frozenBaseReleaseDelayHours
+        : !orderSnapshotEmpty || rule.scope !== 'DEFAULT')
+    )
+      return this.fail(tx, holdId, { type: 'OTHER', code: 'HISTORICAL_RELEASE_RULE_INVALID' });
     const proceeds = order.totalAmountMinor - order.platformFeeAmountMinor;
     if (
       proceeds <= 0n ||

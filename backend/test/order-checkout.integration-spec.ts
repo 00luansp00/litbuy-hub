@@ -83,6 +83,14 @@ describe('Order checkout domain with real PostgreSQL', () => {
         include: { items: true, reservations: true, events: { include: { outbox: true } } },
       });
       expect(order.items).toHaveLength(1);
+      expect(order).toMatchObject({
+        sellerReleasePolicyVersionId: expect.any(String),
+        sellerReleasePolicyRuleId: expect.any(String),
+        sellerReleasePolicySource: 'DEFAULT',
+        sellerReleasePolicyCategoryId: f.product.categoryId,
+        sellerReleasePolicySubcategoryId: f.product.subcategoryId,
+        frozenBaseReleaseDelayHours: 168,
+      });
       expect(order.reservations).toHaveLength(model === 'SERVICE' ? 0 : 1);
       if (model === 'DYNAMIC')
         expect(order.reservations[0].productVariantId).toBe(f.product.variants[0].id);

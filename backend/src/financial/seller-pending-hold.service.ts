@@ -32,6 +32,12 @@ type Snapshot = {
   currency: string;
   totalAmountMinor: bigint;
   platformFeeAmountMinor: bigint;
+  sellerReleasePolicyVersionId: string | null;
+  sellerReleasePolicyRuleId: string | null;
+  sellerReleasePolicySource: string | null;
+  sellerReleasePolicyCategoryId: string | null;
+  sellerReleasePolicySubcategoryId: string | null;
+  frozenBaseReleaseDelayHours: number | null;
 };
 type PaymentSnapshot = {
   id: string;
@@ -149,7 +155,9 @@ export class SellerPendingHoldService {
   ): Promise<SellerPendingHoldCandidateResult | { failure: Failure }> {
     const rows = await tx.$queryRaw<Snapshot[]>`
       SELECT "id", "sellerProfileId", "status", "paymentStatus", "fulfillmentStatus",
-             "disputeStatus", "currency", "totalAmountMinor", "platformFeeAmountMinor"
+             "disputeStatus", "currency", "totalAmountMinor", "platformFeeAmountMinor",
+             "sellerReleasePolicyVersionId", "sellerReleasePolicyRuleId", "sellerReleasePolicySource"::text,
+             "sellerReleasePolicyCategoryId", "sellerReleasePolicySubcategoryId", "frozenBaseReleaseDelayHours"
       FROM "Order" WHERE "id" = ${orderId}::uuid FOR UPDATE
     `;
     const order = rows[0];
@@ -167,6 +175,8 @@ export class SellerPendingHoldService {
       return 'ALREADY_HANDLED';
     if (order.currency !== 'BRL')
       return { failure: { type: 'OTHER', code: 'PAYMENT_CURRENCY_MISMATCH' } };
+    if (!this.hasCompleteOrderSnapshot(order) && !this.hasEmptyOrderSnapshot(order))
+      return { failure: { type: 'OTHER', code: 'ORDER_RELEASE_POLICY_SNAPSHOT_INVALID' } };
 
     const proceeds = order.totalAmountMinor - order.platformFeeAmountMinor;
     if (proceeds < 0n)
@@ -235,18 +245,18 @@ export class SellerPendingHoldService {
       return { failure: { type: 'OTHER', code: 'SELLER_HOLD_ARTIFACT_MISMATCH' } };
     if (hold && posting) {
       if (this.hasCompleteSnapshot(hold))
-        return (await this.validSnapshot(tx, hold))
+        return (await this.validSnapshot(tx, hold, order))
           ? 'ALREADY_HANDLED'
           : {
               failure: { type: 'OTHER', code: 'SELLER_HOLD_ARTIFACT_MISMATCH' },
             };
       if (!this.hasEmptySnapshot(hold))
         return { failure: { type: 'OTHER', code: 'SELLER_HOLD_ARTIFACT_MISMATCH' } };
-      const snapshot = await this.resolveSnapshot(tx);
+      const snapshot = await this.resolveSnapshot(tx, order);
       await tx.financialHold.update({ where: { id: hold.id }, data: snapshot });
       return 'PROCESSED';
     }
-    const snapshot = await this.resolveSnapshot(tx);
+    const snapshot = await this.resolveSnapshot(tx, order);
     if (posting) {
       await this.createHold(tx, order, payment, proceeds, posting.id, snapshot);
       return 'PROCESSED';
@@ -331,6 +341,7 @@ export class SellerPendingHoldService {
   private async validSnapshot(
     tx: Prisma.TransactionClient,
     hold: Prisma.FinancialHoldGetPayload<Record<string, never>>,
+    order: Snapshot,
   ) {
     if (
       !this.hasCompleteSnapshot(hold) ||
@@ -348,11 +359,44 @@ export class SellerPendingHoldService {
       },
       select: { scope: true, delayHours: true },
     });
-    return rule?.scope === 'DEFAULT' && rule.delayHours === hold.releaseDelayHours;
+    if (rule?.delayHours !== hold.releaseDelayHours) return false;
+    return this.hasCompleteOrderSnapshot(order)
+      ? hold.sellerReleasePolicyVersionId === order.sellerReleasePolicyVersionId &&
+          hold.sellerReleasePolicyRuleId === order.sellerReleasePolicyRuleId &&
+          hold.releaseDelayHours === order.frozenBaseReleaseDelayHours &&
+          rule.scope === order.sellerReleasePolicySource
+      : this.hasEmptyOrderSnapshot(order) && rule.scope === 'DEFAULT';
   }
 
-  private async resolveSnapshot(tx: Prisma.TransactionClient) {
-    const policy = await this.releasePolicy.resolveEffectivePolicy(tx);
+  private hasEmptyOrderSnapshot(order: Snapshot) {
+    return [
+      order.sellerReleasePolicyVersionId,
+      order.sellerReleasePolicyRuleId,
+      order.sellerReleasePolicySource,
+      order.sellerReleasePolicyCategoryId,
+      order.sellerReleasePolicySubcategoryId,
+      order.frozenBaseReleaseDelayHours,
+    ].every((value) => value === null);
+  }
+
+  private hasCompleteOrderSnapshot(order: Snapshot) {
+    return (
+      order.sellerReleasePolicyVersionId !== null &&
+      order.sellerReleasePolicyRuleId !== null &&
+      order.sellerReleasePolicySource !== null &&
+      order.sellerReleasePolicyCategoryId !== null &&
+      order.frozenBaseReleaseDelayHours !== null
+    );
+  }
+
+  private async resolveSnapshot(tx: Prisma.TransactionClient, order: Snapshot) {
+    const policy = this.hasCompleteOrderSnapshot(order)
+      ? {
+          policyVersionId: order.sellerReleasePolicyVersionId!,
+          ruleId: order.sellerReleasePolicyRuleId!,
+          delayHours: order.frozenBaseReleaseDelayHours!,
+        }
+      : await this.releasePolicy.resolveEffectivePolicy(tx);
     const [clock] = await tx.$queryRaw<Array<{ appliedAt: Date; eligibleAt: Date }>>`
       SELECT transaction_timestamp()::timestamp(3) AS "appliedAt",
         (transaction_timestamp() + make_interval(hours => ${policy.delayHours}::integer))::timestamp(3) AS "eligibleAt"

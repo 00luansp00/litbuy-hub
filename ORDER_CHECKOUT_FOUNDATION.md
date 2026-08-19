@@ -35,3 +35,11 @@ A PR #37 foi validada pelo CI #169 e incorporada no commit `676dcaea5d3c8856b9df
 ## COMMERCE-1SKU extension
 
 PR #37 historically allowed checkout to materialize multiple cart lines. The current checkout rejects any cart whose cardinality is not exactly one before Order, reservation, event, outbox, idempotency-success, cart transition, or successful audit effects. A valid checkout creates exactly one `OrderItem` and at most one applicable reservation. A unique `orderId` index prevents a second persisted `OrderItem`; the migration fails closed on incompatible legacy Orders and never rewrites their snapshots.
+# Seller release policy snapshot — CURRENT
+
+Após as validações comerciais e a resolução da comissão, e antes da criação do Order, o checkout
+resolve `SUBCATEGORY > CATEGORY > DEFAULT` usando exclusivamente a classificação do Product
+validado pelo backend. O snapshot completo nasce atomicamente com Order/OrderItem/reservation e
+falha fechado sem policy; replay idempotente concluído continua retornando a resposta persistida
+antes de qualquer nova resolução. Pricing/commission e seller release policy são snapshots
+financeiros distintos.
