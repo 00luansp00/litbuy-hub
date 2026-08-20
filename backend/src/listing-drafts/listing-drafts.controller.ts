@@ -26,6 +26,9 @@ export class SellerListingDraftsController {
   @Post() create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateDraftDto) {
     return this.service.create(user.userId, dto);
   }
+  @Get('tier-options') tierOptions() {
+    return this.service.tierOptions();
+  }
   @Get(':id') get(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
     return this.service.get(user.userId, id);
   }

@@ -40,8 +40,13 @@ type ProductFull = Prisma.ProductGetPayload<{ include: typeof productInclude }>;
 export class ProductMaterializationService {
   constructor(private readonly prisma: PrismaService) {}
 
-  productReference(product: Pick<ProductFull, 'id' | 'slug' | 'status'>) {
-    return { id: product.id, slug: product.slug, status: product.status };
+  productReference(product: Pick<ProductFull, 'id' | 'slug' | 'status' | 'listingTier'>) {
+    return {
+      id: product.id,
+      slug: product.slug,
+      status: product.status,
+      listingTier: product.listingTier,
+    };
   }
 
   map(product: ProductFull) {
@@ -57,6 +62,7 @@ export class ProductMaterializationService {
       price: product.price?.toFixed(2) ?? null,
       stock: product.stock,
       deliveryMode: product.deliveryMode,
+      listingTier: product.listingTier,
       autoMessage: product.autoMessage,
       version: product.version,
       createdAt: product.createdAt.toISOString(),
@@ -263,6 +269,7 @@ export class ProductMaterializationService {
             : (draft.serviceDetails?.basePrice ?? null),
         stock: draft.model === ListingDraftModel.NORMAL ? draft.stock : null,
         deliveryMode: draft.deliveryMode,
+        listingTier: draft.requestedPromotionTier!,
         autoMessage: draft.autoMessage,
         variants: { create: this.variantData(draft) },
         attributes: { create: draft.attributes.map((a) => ({ key: a.key, value: a.value })) },
@@ -324,6 +331,8 @@ export class ProductMaterializationService {
   }
 
   private assertMaterializable(d: Draft) {
+    if (!d.requestedPromotionTier)
+      throw new AppError('LISTING_TIER_REQUIRED', 'LISTING_TIER_REQUIRED', 409, []);
     if (!d.sellerProfile || d.sellerProfile.status !== SellerProfileStatus.ACTIVE)
       throw new AppError(
         'SELLER_PROFILE_ACTIVE_REQUIRED',

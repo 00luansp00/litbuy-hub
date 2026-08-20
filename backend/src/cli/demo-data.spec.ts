@@ -76,9 +76,17 @@ describe('local demo data guards and deterministic fixtures', () => {
     expect(DEMO_FEE_POLICY.rule).toMatchObject({
       category: 'PLATFORM_COMMISSION',
       partyCharged: 'SELLER',
-      formula: 'FIXED',
-      fixedAmountMinor: 0n,
+      formula: 'PERCENT_BPS',
+      percentBps: 999,
+      fixedAmountMinor: null,
     });
+    expect(
+      DEMO_FEE_POLICY.rules.map(({ promotionTier, percentBps }) => ({ promotionTier, percentBps })),
+    ).toEqual([
+      { promotionTier: 'SILVER', percentBps: 999 },
+      { promotionTier: 'GOLD', percentBps: 1199 },
+      { promotionTier: 'DIAMOND', percentBps: 1299 },
+    ]);
     expect(DEMO_SELLER_RELEASE_POLICY).toMatchObject({
       author: DEMO_FEE_POLICY.author,
       rule: { delayHours: 168, scope: 'DEFAULT' },

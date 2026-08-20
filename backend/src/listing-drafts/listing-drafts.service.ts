@@ -19,6 +19,7 @@ import { AppError } from '../common/errors/app-error';
 import { PrismaService } from '../database/prisma.service';
 import { API_PRODUCT_TYPE, PRODUCT_TYPE_API } from '../catalog/catalog.constants';
 import { ProductMaterializationService } from '../products/product-materialization.service';
+import { ListingTierPolicyService } from '../financial/listing-tier-policy.service';
 import type {
   AdminDraftQueryDto,
   CreateDraftDto,
@@ -51,7 +52,7 @@ type DraftUpdateData = {
   price?: Prisma.Decimal | null;
   stock?: number | null;
   deliveryMode?: ListingDraftDeliveryMode;
-  requestedPromotionTier?: ListingDraftPromotionPreference;
+  requestedPromotionTier?: ListingDraftPromotionPreference | null;
   requestedSellerPlan?: ListingDraftSellerPlanPreference;
   autoMessage?: string | null;
   notifyInApp?: boolean;
@@ -88,7 +89,13 @@ export class ListingDraftsService {
     private readonly productMaterialization: ProductMaterializationService = new ProductMaterializationService(
       prisma,
     ),
+    private readonly listingTierPolicy: ListingTierPolicyService = new ListingTierPolicyService(
+      prisma,
+    ),
   ) {}
+  tierOptions() {
+    return this.listingTierPolicy.options();
+  }
   private err(code: string, status = HttpStatus.BAD_REQUEST, details?: unknown) {
     return new AppError(code, code, status, Array.isArray(details) ? details : []);
   }
@@ -418,6 +425,7 @@ export class ListingDraftsService {
     }
   }
   private validateSubmit(d: DraftWithRelations) {
+    if (!d.requestedPromotionTier) throw this.err('LISTING_TIER_REQUIRED');
     this.assertModelConsistency(d);
     if (d.deliveryMode === ListingDraftDeliveryMode.AUTOMATIC)
       throw this.err('LISTING_AUTOMATIC_DELIVERY_UNAVAILABLE', 409);

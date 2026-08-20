@@ -13,6 +13,8 @@ export const DEMO_IDS = {
   sellerProfile: uuid(2, 2),
   feePolicy: uuid(8, 1),
   feeRule: uuid(8, 2),
+  feeRuleGold: uuid(8, 6),
+  feeRuleDiamond: uuid(8, 7),
   feePolicyAuthor: uuid(8, 3),
   sellerReleasePolicy: uuid(8, 4),
   sellerReleaseRule: uuid(8, 5),
@@ -28,12 +30,33 @@ export const DEMO_FEE_POLICY = {
   },
   rule: {
     id: DEMO_IDS.feeRule,
-    code: 'demo-zero-platform-commission',
+    code: 'demo-silver-listing-tier',
     category: 'PLATFORM_COMMISSION',
     partyCharged: 'SELLER',
-    formula: 'FIXED',
-    fixedAmountMinor: 0n,
+    formula: 'PERCENT_BPS',
+    percentBps: 999,
+    fixedAmountMinor: null,
   },
+  rules: [
+    {
+      id: DEMO_IDS.feeRule,
+      code: 'demo-silver-listing-tier',
+      promotionTier: 'SILVER',
+      percentBps: 999,
+    },
+    {
+      id: DEMO_IDS.feeRuleGold,
+      code: 'demo-gold-listing-tier',
+      promotionTier: 'GOLD',
+      percentBps: 1199,
+    },
+    {
+      id: DEMO_IDS.feeRuleDiamond,
+      code: 'demo-diamond-listing-tier',
+      promotionTier: 'DIAMOND',
+      percentBps: 1299,
+    },
+  ],
 } as const;
 // LOCAL DEMO CONFIG ONLY. This is not a production seed or runtime fallback.
 export const DEMO_SELLER_RELEASE_POLICY = {

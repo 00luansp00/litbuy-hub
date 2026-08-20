@@ -52,10 +52,12 @@ describe('Cart database constraints with real PostgreSQL', () => {
         productType: 'GAME',
         model: 'NORMAL',
         status: 'APPROVED',
+        requestedPromotionTier: 'SILVER',
       },
     });
     const product = await prisma.product.create({
       data: {
+        listingTier: 'SILVER',
         sourceListingDraftId: draft.id,
         sellerProfileId: seller.id,
         categoryId: category.id,
@@ -117,10 +119,12 @@ describe('Cart database constraints with real PostgreSQL', () => {
         productType: 'GAME',
         model: 'NORMAL',
         status: 'APPROVED',
+        requestedPromotionTier: 'SILVER',
       },
     });
     return prisma.product.create({
       data: {
+        listingTier: 'SILVER',
         sourceListingDraftId: draft.id,
         sellerProfileId,
         categoryId,
@@ -162,11 +166,13 @@ describe('Cart database constraints with real PostgreSQL', () => {
         productType: model === 'SERVICE' ? 'SERVICE' : 'GAME',
         model,
         status: 'APPROVED',
+        requestedPromotionTier: 'SILVER',
       },
     });
     const fixed = model === 'SERVICE' && pricingType === 'FIXED';
     return prisma.product.create({
       data: {
+        listingTier: 'SILVER',
         sourceListingDraftId: draft.id,
         sellerProfileId,
         categoryId,
@@ -269,10 +275,12 @@ describe('Cart database constraints with real PostgreSQL', () => {
         productType: 'GAME',
         model: 'DYNAMIC',
         status: 'APPROVED',
+        requestedPromotionTier: 'SILVER',
       },
     });
     const other = await prisma.product.create({
       data: {
+        listingTier: 'SILVER',
         sourceListingDraftId: draft.id,
         sellerProfileId: f.seller.id,
         categoryId: f.product.categoryId,

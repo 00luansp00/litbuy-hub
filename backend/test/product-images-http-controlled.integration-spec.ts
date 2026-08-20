@@ -141,6 +141,7 @@ describe('Product images HTTP with controlled storage', () => {
     });
     const item = await prisma.product.create({
       data: {
+        listingTier: 'SILVER',
         sourceListingDraftId: draft.id,
         sellerProfileId: actor.profile.id,
         categoryId: category.id,

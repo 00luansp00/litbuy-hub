@@ -56,7 +56,7 @@ describe('OrderFulfillmentService with real PostgreSQL', () => {
     if (!activePolicy)
       await publishPlatformCommissionPolicy(prisma, fixture.sellerUser.id, {
         publicVersion: policyVersion++,
-        fixedAmountMinor: 100n,
+        percentBps: 1000,
       });
     const cart = await carts.add(fixture.buyer.id, fixture.seller.slug, {
       productId: fixture.product.id,

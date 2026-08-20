@@ -95,6 +95,7 @@ export async function createCatalogFixture(
       productType: options.draftProductType ?? productType,
       model,
       status: options.draftStatus ?? 'APPROVED',
+      requestedPromotionTier: 'SILVER',
       title: options.title ?? `Product ${suffix}`,
       description: '  Real catalog   description  ',
       price: model === 'NORMAL' ? new Prisma.Decimal('19.90') : null,
@@ -104,6 +105,7 @@ export async function createCatalogFixture(
   const product = await prisma.product.create({
     data: {
       ...(options.productId ? { id: options.productId } : {}),
+      listingTier: 'SILVER',
       sourceListingDraftId: draft.id,
       sellerProfileId: seller.id,
       categoryId: category.id,

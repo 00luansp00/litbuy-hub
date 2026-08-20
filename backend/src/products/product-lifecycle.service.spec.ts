@@ -28,11 +28,13 @@ const product = (status: ProductStatus = ProductStatus.UNPUBLISHED) => ({
   description: 'Descrição real',
   price: '10',
   stock: 0,
+  listingTier: 'SILVER' as const,
   version: 1,
   updatedAt: new Date('2026-07-28T12:00:00.000Z'),
   sellerProfile: { id: sellerId, status: SellerProfileStatus.ACTIVE },
   sourceListingDraft: {
     status: ListingDraftStatus.APPROVED,
+    requestedPromotionTier: 'SILVER' as const,
     categoryId: '00000000-0000-4000-8000-000000000005',
     subcategoryId: null,
     productType: 'ACCOUNT' as const,

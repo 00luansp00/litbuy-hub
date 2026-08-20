@@ -52,7 +52,7 @@ const steps: { id: StepId; title: string; description: string }[] = [
   { id: 2, title: "Informações", description: "Dados e atributos" },
   { id: 3, title: "Entrega", description: "Manual agora, automática futura" },
   { id: 4, title: "Imagens", description: "Previews locais" },
-  { id: 5, title: "Preferências", description: "Sem cobrança real" },
+  { id: 5, title: "Preferências", description: "Tier comercial do anúncio" },
   { id: 6, title: "Revisão", description: "Resumo antes da análise" },
 ];
 
@@ -72,31 +72,6 @@ const moderationStatusLabel: Record<ListingDraftRecord["status"], string> = {
   UNDER_REVIEW: "Em análise — somente leitura",
   APPROVED: "Aprovado pela moderação — o produto materializado possui lifecycle próprio",
 };
-
-const promotionTiers: PromotionTierInfo[] = [
-  {
-    tier: "silver",
-    name: "Prata",
-    tagline: "Preferência demonstrativa básica.",
-    benefits: ["Não concede destaque real", "Não altera taxa", "Persistido apenas para retomar"],
-    demoFeePct: 0,
-  },
-  {
-    tier: "gold",
-    name: "Ouro",
-    tagline: "Preferência visual intermediária.",
-    benefits: ["Sem cobrança", "Sem prioridade real", "Sem entitlement comercial"],
-    demoFeePct: 0,
-    recommended: true,
-  },
-  {
-    tier: "diamond",
-    name: "Diamante",
-    tagline: "Preferência futura de destaque.",
-    benefits: ["Não publica", "Não cobra", "Não muda busca pública"],
-    demoFeePct: 0,
-  },
-];
 
 const sellerPlans: SellerPlanInfo[] = [
   {
@@ -145,6 +120,7 @@ export function ListingDraftWizard({ initialDraft }: { initialDraft?: ListingDra
   const [gallery, setGallery] = useState<ImageUploaderItem[]>([]);
   const [taxonomyLoading, setTaxonomyLoading] = useState(false);
   const [submitPending, setSubmitPending] = useState(false);
+  const [promotionTiers, setPromotionTiers] = useState<PromotionTierInfo[]>([]);
   const subcategorySequence = useRef(0);
   const attributesSequence = useRef(0);
 
@@ -172,6 +148,22 @@ export function ListingDraftWizard({ initialDraft }: { initialDraft?: ListingDra
         setProductTypes(nextProductTypes);
       })
       .catch(() => toast.error("Falha ao carregar taxonomia"));
+  }, []);
+  useEffect(() => {
+    listingDraftApiService
+      .tierOptions()
+      .then(({ items }) =>
+        setPromotionTiers(
+          items.map((item) => ({
+            tier: item.tier.toLowerCase() as PromotionTierInfo["tier"],
+            name: item.label,
+            tagline: "Taxa aplicada somente quando ocorre uma venda.",
+            benefits: ["Descontada do Seller", "Não é adicionada ao Buyer"],
+            percentBps: item.percentBps,
+          })),
+        ),
+      )
+      .catch(() => toast.error("Configuração dos tiers indisponível"));
   }, []);
 
   useEffect(() => {
@@ -304,6 +296,10 @@ export function ListingDraftWizard({ initialDraft }: { initialDraft?: ListingDra
 
   async function submit() {
     if (!editable || submitPending) return;
+    if (!form.promotionTier) {
+      toast.error("Selecione Prata, Ouro ou Diamante antes de enviar para análise.");
+      return;
+    }
     if (form.deliveryMode === "automatic") {
       toast.error("Entrega automática indisponível", {
         description: "Somente entrega manual pode ser enviada para análise nesta sprint.",
@@ -568,14 +564,14 @@ export function ListingDraftWizard({ initialDraft }: { initialDraft?: ListingDra
                 Etapa 5 — Preferências
               </h2>
               <p className="text-sm text-muted-foreground">
-                Preferências persistidas para retomar o wizard; não há cobrança, taxa, prioridade,
-                assinatura ou benefício real.
+                A taxa do tier incide sobre o produto quando a venda ocorre, é descontada do Seller
+                e não é adicionada ao Buyer. As demais preferências continuam separadas.
               </p>
             </div>
             <fieldset disabled={!editable} className="space-y-5">
               <PromotionCards
                 tiers={promotionTiers}
-                value={form.promotionTier}
+                value={form.promotionTier ?? undefined}
                 onChange={(promotionTier) => patchForm({ promotionTier })}
               />
               <LitMaxPlanCard
@@ -643,7 +639,17 @@ export function ListingDraftWizard({ initialDraft }: { initialDraft?: ListingDra
               <ReviewCard
                 title="Preferências"
                 rows={[
-                  ["Destaque solicitado", form.promotionTier],
+                  [
+                    "Tier",
+                    promotionTiers.find((tier) => tier.tier === form.promotionTier)?.name ??
+                      "Não selecionado",
+                  ],
+                  [
+                    "Taxa",
+                    promotionTiers.find((tier) => tier.tier === form.promotionTier)
+                      ? `${(promotionTiers.find((tier) => tier.tier === form.promotionTier)!.percentBps / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}%`
+                      : "—",
+                  ],
                   ["Plano solicitado", form.sellerPlan],
                   ["Mensagem automática", form.autoMessage ? "Preenchida (não enviada)" : "—"],
                   [

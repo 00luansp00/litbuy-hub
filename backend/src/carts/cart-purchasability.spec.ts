@@ -36,8 +36,10 @@ const product = (overrides: Partial<CartProductCandidate> = {}): CartProductCand
     userId: '40000000-0000-4000-8000-000000000001',
     status: SellerProfileStatus.ACTIVE,
   },
+  listingTier: 'SILVER',
   sourceListingDraft: {
     status: ListingDraftStatus.APPROVED,
+    requestedPromotionTier: 'SILVER',
     categoryId: 'cat',
     subcategoryId: null,
     productType: CatalogProductType.GAME,
@@ -118,6 +120,7 @@ describe('cart purchasability', () => {
     [
       'origin invalid',
       {
+        listingTier: 'SILVER',
         sourceListingDraft: {
           ...product().sourceListingDraft!,
           status: ListingDraftStatus.REJECTED,

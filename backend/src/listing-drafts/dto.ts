@@ -76,7 +76,7 @@ export class DraftPatchDto {
   @IsOptional() @IsEnum(ListingDraftDeliveryMode) deliveryMode?: ListingDraftDeliveryMode;
   @IsOptional()
   @IsEnum(ListingDraftPromotionPreference)
-  requestedPromotionTier?: ListingDraftPromotionPreference;
+  requestedPromotionTier?: ListingDraftPromotionPreference | null;
   @IsOptional()
   @IsEnum(ListingDraftSellerPlanPreference)
   requestedSellerPlan?: ListingDraftSellerPlanPreference;

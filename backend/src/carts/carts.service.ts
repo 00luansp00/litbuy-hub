@@ -22,7 +22,13 @@ import { checkoutFingerprint } from '../checkout/checkout-fingerprint';
 export const cartProductInclude = {
   sellerProfile: { select: { userId: true, status: true } },
   sourceListingDraft: {
-    select: { status: true, categoryId: true, subcategoryId: true, productType: true },
+    select: {
+      status: true,
+      categoryId: true,
+      subcategoryId: true,
+      productType: true,
+      requestedPromotionTier: true,
+    },
   },
   category: { select: { status: true } },
   subcategory: { select: { status: true, categoryId: true } },

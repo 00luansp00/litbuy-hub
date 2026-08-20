@@ -5,7 +5,7 @@ import { ListingDraftWizard } from "@/components/seller-dashboard/listing-wizard
 
 const { navigate, api, catalog, toast } = vi.hoisted(() => ({
   navigate: vi.fn(),
-  api: { create: vi.fn(), update: vi.fn(), submit: vi.fn() },
+  api: { create: vi.fn(), update: vi.fn(), submit: vi.fn(), tierOptions: vi.fn() },
   catalog: {
     getCategories: vi.fn(),
     getProductTypes: vi.fn(),
@@ -86,9 +86,42 @@ beforeEach(() => {
   api.create.mockResolvedValue(saved);
   api.update.mockResolvedValue({ ...saved, version: 2 });
   api.submit.mockResolvedValue({ ...saved, status: "PENDING_REVIEW", version: 2 });
+  api.tierOptions.mockResolvedValue({
+    policyVersion: { id: "22222222-2222-4222-8222-222222222222", publicVersion: 1 },
+    items: [
+      { tier: "SILVER", label: "Prata", percentBps: 999 },
+      { tier: "GOLD", label: "Ouro", percentBps: 1199 },
+      { tier: "DIAMOND", label: "Diamante", percentBps: 1299 },
+    ],
+  });
 });
 
 describe("ListingDraftWizard", () => {
+  it("loads policy-backed tiers without preselection or recommendation", async () => {
+    render(<ListingDraftWizard />);
+    fireEvent.click(screen.getByRole("button", { name: /5\. Preferências/i }));
+    await waitFor(() => expect(api.tierOptions).toHaveBeenCalledOnce());
+    for (const [label, rate] of [
+      ["Prata", "9,99%"],
+      ["Ouro", "11,99%"],
+      ["Diamante", "12,99%"],
+    ]) {
+      const card = screen.getByRole("button", { name: new RegExp(label) });
+      expect(card).toHaveTextContent(rate);
+      expect(card).not.toHaveClass("border-primary");
+    }
+    expect(screen.queryByText("Recomendado")).not.toBeInTheDocument();
+  });
+
+  it("does not submit without an explicitly selected tier", async () => {
+    render(<ListingDraftWizard />);
+    await waitFor(() => expect(api.tierOptions).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole("button", { name: /6\. Revisão/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Enviar para análise/i }));
+    expect(api.submit).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("Selecione Prata"));
+  });
+
   it("renders six real steps and saves with create before patching", async () => {
     render(<ListingDraftWizard />);
     expect(screen.getByText(/Etapa 1 — Classificação/i)).toBeInTheDocument();

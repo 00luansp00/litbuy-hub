@@ -714,7 +714,7 @@ model ListingDraft {
   price                  Decimal?                         @db.Decimal(12, 2)
   stock                  Int?
   deliveryMode           ListingDraftDeliveryMode         @default(MANUAL)
-  requestedPromotionTier ListingDraftPromotionPreference  @default(SILVER)
+  requestedPromotionTier ListingDraftPromotionPreference?
   requestedSellerPlan    ListingDraftSellerPlanPreference @default(STANDARD)
   autoMessage            String?
   notifyInApp            Boolean                          @default(true)
@@ -814,24 +814,25 @@ enum ProductImageStatus {
 }
 
 model Product {
-  id                   String                   @id @default(uuid()) @db.Uuid
-  sourceListingDraftId String                   @unique @db.Uuid
-  sellerProfileId      String                   @db.Uuid
-  categoryId           String                   @db.Uuid
-  subcategoryId        String?                  @db.Uuid
+  id                   String                          @id @default(uuid()) @db.Uuid
+  sourceListingDraftId String                          @unique @db.Uuid
+  sellerProfileId      String                          @db.Uuid
+  categoryId           String                          @db.Uuid
+  subcategoryId        String?                         @db.Uuid
   productType          CatalogProductType
   model                ListingDraftModel
-  status               ProductStatus            @default(UNPUBLISHED)
-  slug                 String                   @unique
+  status               ProductStatus                   @default(UNPUBLISHED)
+  slug                 String                          @unique
   title                String
   description          String
-  price                Decimal?                 @db.Decimal(12, 2)
+  price                Decimal?                        @db.Decimal(12, 2)
   stock                Int?
-  deliveryMode         ListingDraftDeliveryMode @default(MANUAL)
+  deliveryMode         ListingDraftDeliveryMode        @default(MANUAL)
+  listingTier          ListingDraftPromotionPreference
   autoMessage          String?
-  version              Int                      @default(1)
-  createdAt            DateTime                 @default(now())
-  updatedAt            DateTime                 @updatedAt
+  version              Int                             @default(1)
+  createdAt            DateTime                        @default(now())
+  updatedAt            DateTime                        @updatedAt
 
   sourceListingDraft    ListingDraft            @relation(fields: [sourceListingDraftId], references: [id], onDelete: Restrict)
   sellerProfile         SellerProfile           @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)

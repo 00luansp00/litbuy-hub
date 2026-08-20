@@ -907,6 +907,7 @@ describe('App foundation with real PostgreSQL and Redis (integration)', () => {
       id: expect.any(String),
       status: 'DRAFT',
       title: 'Rascunho inicial',
+      requestedPromotionTier: null,
       wizardStep: 2,
       version: 1,
     });
@@ -3502,6 +3503,7 @@ describe('Persistent listing drafts with real PostgreSQL (integration)', () => {
         productType: model === 'SERVICE' ? 'SERVICE' : 'ACCOUNT',
         model,
         status: 'UNDER_REVIEW',
+        requestedPromotionTier: 'SILVER',
         title: model === 'SERVICE' ? null : title,
         description: model === 'SERVICE' ? null : 'Descrição completa aprovada',
         price: model === 'NORMAL' ? '25.50' : null,
@@ -3683,6 +3685,7 @@ describe('Persistent listing drafts with real PostgreSQL (integration)', () => {
     await expect(
       prisma.product.create({
         data: {
+          listingTier: 'SILVER',
           sourceListingDraftId: draft.id,
           sellerProfileId: (
             await prisma.product.findFirstOrThrow({ where: { sourceListingDraftId: draft.id } })

@@ -24,8 +24,7 @@ import type { ParsedIdempotencyKey } from '../commerce/idempotency-key';
 import { orderItemSnapshot } from './order-snapshot';
 import { generateOrderCode } from '../orders/order-code';
 import type { CreateCheckoutDto } from './checkout.dto';
-import { calculateFee, resolveFeeRule } from '../financial/fee-engine';
-import { FinancialDomainError } from '../financial/financial.errors';
+import { ListingTierPolicyService } from '../financial/listing-tier-policy.service';
 import {
   SellerReleasePolicyError,
   SellerReleasePolicyService,
@@ -41,6 +40,7 @@ export class CheckoutService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly sellerReleasePolicy: SellerReleasePolicyService,
+    private readonly listingTierPolicy: ListingTierPolicyService,
   ) {}
   async create(userId: string, key: ParsedIdempotencyKey, dto: CreateCheckoutDto) {
     const keyHash = key.hash,
@@ -152,8 +152,8 @@ export class CheckoutService {
         (sum, x) => sum + x.selection.unitMinor * BigInt(x.item.quantity),
         0n,
       );
-      const commission = await this.resolvePlatformCommission(tx, subtotal);
       const product = selections[0].item.product;
+      const commission = await this.listingTierPolicy.resolve(tx, product.listingTier, subtotal);
       let releasePolicy: Awaited<ReturnType<SellerReleasePolicyService['resolveEffectivePolicy']>>;
       try {
         releasePolicy = await this.sellerReleasePolicy.resolveEffectivePolicy(tx, {
@@ -333,55 +333,6 @@ export class CheckoutService {
   private ttlMinutes() {
     const value = Number(process.env.CHECKOUT_RESERVATION_TTL_MINUTES ?? '15');
     return Number.isInteger(value) && value > 0 ? value : 15;
-  }
-  private async resolvePlatformCommission(tx: Tx, subtotal: bigint) {
-    const [{ pricingAt }] = await tx.$queryRaw<Array<{ pricingAt: Date }>>`
-      SELECT transaction_timestamp() AS "pricingAt"
-    `;
-    const policies = await tx.feePolicyVersion.findMany({
-      where: {
-        status: 'ACTIVE',
-        effectiveFrom: { lte: pricingAt },
-        OR: [{ effectiveTo: null }, { effectiveTo: { gt: pricingAt } }],
-      },
-      select: { id: true },
-    });
-    if (policies.length === 0) this.fail('FEE_POLICY_NOT_FOUND', 422);
-    if (policies.length !== 1) this.fail('FEE_POLICY_AMBIGUOUS', 422);
-    const locked = await tx.$queryRaw<
-      Array<{
-        id: string;
-        publicVersion: number;
-        status: string;
-        effectiveFrom: Date;
-        effectiveTo: Date | null;
-      }>
-    >`
-      SELECT "id", "publicVersion", "status", "effectiveFrom", "effectiveTo"
-      FROM "FeePolicyVersion"
-      WHERE "id" = ${policies[0].id}::uuid
-      FOR SHARE
-    `;
-    const policy = locked[0];
-    if (
-      !policy ||
-      policy.status !== 'ACTIVE' ||
-      policy.effectiveFrom > pricingAt ||
-      (policy.effectiveTo !== null && pricingAt >= policy.effectiveTo)
-    )
-      this.fail('FEE_POLICY_NOT_FOUND', 422);
-    const rules = await tx.feeRule.findMany({ where: { policyVersionId: policy.id } });
-    try {
-      const rule = resolveFeeRule(rules, 'PLATFORM_COMMISSION', { partyCharged: 'SELLER' });
-      if (!rule) this.fail('PLATFORM_COMMISSION_RULE_NOT_FOUND', 422);
-      const amountMinor = calculateFee(subtotal, rule);
-      if (amountMinor < 0n || amountMinor > subtotal)
-        this.fail('PLATFORM_COMMISSION_EXCEEDS_ORDER_TOTAL', 422);
-      return { policy, rule, amountMinor };
-    } catch (error) {
-      if (error instanceof FinancialDomainError) this.fail(error.code, 422);
-      throw error;
-    }
   }
   private isUniqueViolation(error: unknown): error is Prisma.PrismaClientKnownRequestError {
     return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';

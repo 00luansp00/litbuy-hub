@@ -112,7 +112,7 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
     if (publishCommission) {
       await publishPlatformCommissionPolicy(prisma, fixture.sellerUser.id, {
         publicVersion: version++,
-        fixedAmountMinor: fee,
+        percentBps: Number(fee),
       });
     }
     const subcategory =

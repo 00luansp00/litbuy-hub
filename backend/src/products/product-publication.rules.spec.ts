@@ -26,8 +26,10 @@ const candidate = (): PublicationCandidate => ({
   stock: 0,
   model: ListingDraftModel.NORMAL,
   sellerProfile: { status: SellerProfileStatus.ACTIVE },
+  listingTier: 'SILVER',
   sourceListingDraft: {
     status: ListingDraftStatus.APPROVED,
+    requestedPromotionTier: 'SILVER',
     categoryId: 'category',
     subcategoryId: null,
     productType: 'ACCOUNT',

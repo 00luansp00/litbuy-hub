@@ -118,27 +118,54 @@ describe('local demo data with real PostgreSQL and MinIO', () => {
         select: { id: true, updatedAt: true },
       }),
     ).toEqual(before);
-    expect(
-      await prisma.feePolicyVersion.findUnique({
-        where: { id: DEMO_FEE_POLICY.id },
-        include: { rules: true },
-      }),
-    ).toMatchObject({
+    const feePolicy = await prisma.feePolicyVersion.findUniqueOrThrow({
+      where: { id: DEMO_FEE_POLICY.id },
+      include: { rules: { orderBy: { promotionTier: 'asc' } } },
+    });
+    expect(feePolicy).toMatchObject({
       publicVersion: DEMO_FEE_POLICY.publicVersion,
       status: 'ACTIVE',
-      rules: [
-        {
-          category: 'PLATFORM_COMMISSION',
-          partyCharged: 'SELLER',
-          formula: 'FIXED',
-          fixedAmountMinor: 0n,
-          percentBps: null,
-        },
-      ],
     });
+    expect(
+      feePolicy.rules.map(
+        ({ promotionTier, category, partyCharged, formula, percentBps, fixedAmountMinor }) => ({
+          promotionTier,
+          category,
+          partyCharged,
+          formula,
+          percentBps,
+          fixedAmountMinor,
+        }),
+      ),
+    ).toEqual([
+      {
+        promotionTier: 'DIAMOND',
+        category: 'PLATFORM_COMMISSION',
+        partyCharged: 'SELLER',
+        formula: 'PERCENT_BPS',
+        percentBps: 1299,
+        fixedAmountMinor: null,
+      },
+      {
+        promotionTier: 'GOLD',
+        category: 'PLATFORM_COMMISSION',
+        partyCharged: 'SELLER',
+        formula: 'PERCENT_BPS',
+        percentBps: 1199,
+        fixedAmountMinor: null,
+      },
+      {
+        promotionTier: 'SILVER',
+        category: 'PLATFORM_COMMISSION',
+        partyCharged: 'SELLER',
+        formula: 'PERCENT_BPS',
+        percentBps: 999,
+        fixedAmountMinor: null,
+      },
+    ]);
   });
 
-  it('lets the real checkout resolver snapshot the explicit zero demo commission', async () => {
+  it('lets the real checkout resolver snapshot the SILVER listing-tier demo commission', async () => {
     await runDemoCommand(['seed'], env);
     const carts = app.get(CartsService);
     const checkout = app.get(CheckoutService);
@@ -164,7 +191,7 @@ describe('local demo data with real PostgreSQL and MinIO', () => {
     expect(order).toMatchObject({
       feePolicyVersionId: DEMO_FEE_POLICY.id,
       platformCommissionRuleId: DEMO_FEE_POLICY.rule.id,
-      platformFeeAmountMinor: 0n,
+      platformFeeAmountMinor: 498n,
       sellerReleasePolicyVersionId: DEMO_SELLER_RELEASE_POLICY.id,
       sellerReleasePolicyRuleId: DEMO_SELLER_RELEASE_POLICY.rule.id,
       sellerReleasePolicySource: 'DEFAULT',
@@ -172,7 +199,7 @@ describe('local demo data with real PostgreSQL and MinIO', () => {
       sellerReleasePolicySubcategoryId: product.subcategoryId,
       frozenBaseReleaseDelayHours: 168,
     });
-    expect(order.totalAmountMinor - order.platformFeeAmountMinor).toBe(order.subtotalAmountMinor);
+    expect(order.totalAmountMinor).toBe(order.subtotalAmountMinor);
   });
 
   it('fails closed for an effective external fee policy without modifying it', async () => {
@@ -249,10 +276,12 @@ describe('local demo data with real PostgreSQL and MinIO', () => {
         productType: 'GAME',
         model: 'NORMAL',
         status: 'APPROVED',
+        requestedPromotionTier: 'SILVER',
       },
     });
     const product = await prisma.product.create({
       data: {
+        listingTier: 'SILVER',
         sourceListingDraftId: draft.id,
         sellerProfileId: seller.id,
         categoryId: category.id,
@@ -793,6 +822,7 @@ describe('local demo data with real PostgreSQL and MinIO', () => {
     await prisma.product.delete({ where: { id: expected.id } });
     const external = await prisma.product.create({
       data: {
+        listingTier: 'SILVER',
         sourceListingDraftId: expected.draftId,
         sellerProfileId: DEMO_IDS.sellerProfile,
         categoryId: expected.categoryId,

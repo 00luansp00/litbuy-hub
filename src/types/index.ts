@@ -953,8 +953,7 @@ export interface PromotionTierInfo {
   name: string;
   tagline: string;
   benefits: string[];
-  demoFeePct: number;
-  recommended?: boolean;
+  percentBps: number;
 }
 
 export interface SellerPlanInfo {
