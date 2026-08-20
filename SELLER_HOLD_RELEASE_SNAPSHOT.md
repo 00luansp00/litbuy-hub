@@ -1,13 +1,13 @@
 # Seller hold release-policy snapshot
 
-> **CURRENT IMPLEMENTATION (G1):** policy is frozen at checkout for new Orders and the normal clock of every new positive-proceeds delivery-protection hold starts at authoritative `OrderDelivery.createdAt`. Holds can be materialized and become eligible after delivery without Buyer confirmation. Legacy all-NULL Order snapshots retain DEFAULT policy resolution with the same delivery clock. Seller MAX and G2 remain not implemented.
+> **CURRENT IMPLEMENTATION (G1):** policy is frozen at checkout for new Orders and the normal clock of every new positive-proceeds delivery-protection hold starts at authoritative `OrderDelivery.createdAt`. Holds can be materialized and become eligible after delivery without Buyer confirmation. Legacy all-NULL Order snapshots retain DEFAULT policy resolution with the same delivery clock. Seller MAX remains not implemented; G2 release execution is implemented separately.
 
 The immutable snapshot is the sole temporal authority used by the PR #53 eligibility phase;
 the current effective policy is never consulted and a retired historical policy remains valid.
 
 `SellerPendingHoldService` validates exactly one seller-coherent delivery inside the same SERIALIZABLE transaction that validates the order and payment, posts `SELLER_PENDING -> SELLER_HELD`, and creates a new delivery-protection hold. It materializes `releasePolicyAppliedAt = OrderDelivery.createdAt` and `releaseEligibleAt = OrderDelivery.createdAt + frozen delayHours` at `TIMESTAMP(3)` precision. Missing, inconsistent, or structurally invalid delivery clocks fail closed without a partial hold posting. Buyer confirmation does not recalculate this schedule.
 
-The migration does not update historical `FinancialHold` rows. Existing complete snapshots remain immutable and idempotent. Zero proceeds retain `SellerPendingHoldZero` without inventing a monetary hold. Operational candidates include `ACTIVE`/PAID/`AWAITING_BUYER_CONFIRMATION` and the later `COMPLETED`/PAID/`CONFIRMED` state; G2 release execution remains separate.
+The migration does not update historical `FinancialHold` rows. Existing complete snapshots remain immutable and idempotent. Zero proceeds retain `SellerPendingHoldZero` without inventing a monetary hold. Operational candidates include `ACTIVE`/PAID/`AWAITING_BUYER_CONFIRMATION` and the later `COMPLETED`/PAID/`CONFIRMED` state; G2 release execution remains separate and accepts both states once G1 has marked the hold `RELEASE_ELIGIBLE`.
 
 A valid PR #50 hold whose five snapshot fields are all null is a supported legacy artifact. Its first successful processing locks and validates the existing order, payment, posting, hold, and authoritative delivery, then resolves the currently effective DEFAULT policy and schedules the hold from `OrderDelivery.createdAt`. It creates no additional ledger transaction, entry, financial event, or outbox event. After the all-null-to-complete transition, a PostgreSQL trigger makes the snapshot immutable; later policies never rewrite historical holds.
 
@@ -31,4 +31,4 @@ PR F implementa `OrderDelivery.createdAt` como o `deliveredAt` semântico e auto
 `releasePolicyAppliedAt = OrderDelivery.createdAt` e
 `releaseEligibleAt = OrderDelivery.createdAt + frozen delay`. Confirmação Buyer não reinicia o
 clock. Existing complete `FinancialHold` rows não são recalculadas. G1 aceita o estado pós-entrega
-`ACTIVE`/PAID/`AWAITING_BUYER_CONFIRMATION` e o posterior `COMPLETED`/PAID/`CONFIRMED`; blockers de disputa prevalecem e G2 continua responsável pela execução monetária.
+`ACTIVE`/PAID/`AWAITING_BUYER_CONFIRMATION` e o posterior `COMPLETED`/PAID/`CONFIRMED`; blockers de disputa prevalecem e G2 executa separadamente a transição monetária para holds `RELEASE_ELIGIBLE`, sem exigir confirmação Buyer.
