@@ -605,11 +605,20 @@ describe('SaleFinancialRecognitionService with real PostgreSQL', () => {
     ).toEqual({ pricingPolicyVersion: order.pricingPolicyVersion });
   });
 
-  it('fails closed and deduplicates reconciliation when a marked H2 component is missing', async () => {
+  it('fails closed and deduplicates reconciliation when a marked H2 component is corrupt', async () => {
     const { order } = await activePaidOrder({ fee: 100n });
     await prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe("SET LOCAL session_replication_role = 'replica'");
-      await tx.$executeRaw`DELETE FROM "OrderFeeComponentSnapshot" WHERE "orderId" = ${order.id}::uuid`;
+      await tx.$executeRaw`UPDATE "OrderFeeComponentSnapshot" SET "percentBps" = "percentBps" + 1 WHERE "orderId" = ${order.id}::uuid`;
+    });
+    await expectSingleIssue(order.id, 'H2_FEE_SNAPSHOT_INVALID');
+  });
+
+  it('fails closed when the historical H2 rule no longer has the canonical H1 shape', async () => {
+    const { order } = await activePaidOrder({ fee: 100n });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe("SET LOCAL session_replication_role = 'replica'");
+      await tx.$executeRaw`UPDATE "FeeRule" SET "paymentMethod" = 'PIX' WHERE "id" = ${order.platformCommissionRuleId}::uuid`;
     });
     await expectSingleIssue(order.id, 'H2_FEE_SNAPSHOT_INVALID');
   });

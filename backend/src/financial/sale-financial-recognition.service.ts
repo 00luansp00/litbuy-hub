@@ -320,9 +320,17 @@ export class SaleFinancialRecognitionService {
         (rule.formula !== 'PERCENT_BPS' ||
           rule.percentBps !== component.percentBps ||
           rule.promotionTier !== component.listingTier ||
+          !rule.enabled ||
           rule.fixedAmountMinor !== null ||
           rule.minimumAmountMinor !== null ||
-          rule.maximumAmountMinor !== null)
+          rule.maximumAmountMinor !== null ||
+          rule.paymentMethod !== null ||
+          rule.installmentsFrom !== null ||
+          rule.installmentsTo !== null ||
+          rule.sellerLevel !== null ||
+          rule.sellerPlan !== null ||
+          rule.withdrawalSpeed !== null ||
+          rule.productType !== null)
       )
         return { failure: { type: 'OTHER', code: 'H2_FEE_SNAPSHOT_INVALID' } };
       return { order, payment };

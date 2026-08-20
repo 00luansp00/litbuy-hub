@@ -39,7 +39,11 @@ BEGIN
  OR rule."category" IS DISTINCT FROM NEW."category" OR rule."partyCharged" IS DISTINCT FROM NEW."partyCharged"
  OR rule."formula" IS DISTINCT FROM NEW."formula" OR rule."percentBps" IS DISTINCT FROM NEW."percentBps"
  OR rule."promotionTier" IS DISTINCT FROM NEW."listingTier"::text
+ OR rule."enabled" IS DISTINCT FROM TRUE
  OR rule."fixedAmountMinor" IS NOT NULL OR rule."minimumAmountMinor" IS NOT NULL OR rule."maximumAmountMinor" IS NOT NULL
+ OR rule."paymentMethod" IS NOT NULL OR rule."installmentsFrom" IS NOT NULL OR rule."installmentsTo" IS NOT NULL
+ OR rule."sellerLevel" IS NOT NULL OR rule."sellerPlan" IS NOT NULL
+ OR rule."withdrawalSpeed" IS NOT NULL OR rule."productType" IS NOT NULL
  OR NEW."feeAmountMinor" IS DISTINCT FROM ((NEW."baseAmountMinor" * NEW."percentBps") / 10000)
  THEN RAISE EXCEPTION 'ORDER_FEE_COMPONENT_SNAPSHOT_INCONSISTENT' USING ERRCODE = '23514'; END IF;
  RETURN NEW;

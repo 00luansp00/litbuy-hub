@@ -479,6 +479,76 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
     });
   });
 
+  it('rejects an H2 component when its historical rule is not canonical for H1', async () => {
+    const f = await ready({ percentBps: 1250 });
+    const result = await checkout.create(f.buyer.id, key(), f.dto);
+    const order = await prisma.order.findUniqueOrThrow({
+      where: { publicCode: (result as { orderCode: string }).orderCode },
+      include: { feeComponentSnapshots: true },
+    });
+    const component = order.feeComponentSnapshots[0];
+
+    await expect(
+      prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe("SET LOCAL session_replication_role = 'replica'");
+        await tx.orderFeeComponentSnapshot.delete({ where: { id: component.id } });
+        await tx.feeRule.update({
+          where: { id: component.feeRuleId },
+          data: { sellerPlan: 'NON_CANONICAL_TEST' },
+        });
+        await tx.$executeRawUnsafe("SET LOCAL session_replication_role = 'origin'");
+        await tx.orderFeeComponentSnapshot.create({
+          data: {
+            orderId: component.orderId,
+            componentKind: component.componentKind,
+            feePolicyVersionId: component.feePolicyVersionId,
+            feeRuleId: component.feeRuleId,
+            pricingPolicyVersion: component.pricingPolicyVersion,
+            listingTier: component.listingTier,
+            category: component.category,
+            partyCharged: component.partyCharged,
+            formula: component.formula,
+            percentBps: component.percentBps,
+            baseAmountMinor: component.baseAmountMinor,
+            feeAmountMinor: component.feeAmountMinor,
+            currency: component.currency,
+          },
+        });
+      }),
+    ).rejects.toThrow(/ORDER_FEE_COMPONENT_SNAPSHOT_INCONSISTENT/);
+  });
+
+  it('rejects an H2 Order without a LISTING_TIER component at deferred commit', async () => {
+    const fixture = await commerceFixture(prisma, 'NORMAL', undefined, 5, false);
+    const policy = await publishPlatformCommissionPolicy(prisma, fixture.sellerUser.id, {
+      percentBps: 1250,
+    });
+    const cart = await createCartShell(fixture);
+
+    await expect(
+      prisma.$transaction((tx) =>
+        tx.order.create({
+          data: {
+            publicCode: `incomplete-h2-${crypto.randomUUID()}`,
+            sourceCartId: cart.id,
+            sourceCartVersion: cart.version,
+            buyerUserId: fixture.buyer.id,
+            sellerProfileId: fixture.seller.id,
+            subtotalAmountMinor: 1000n,
+            platformFeeAmountMinor: 125n,
+            totalAmountMinor: 1000n,
+            pricingPolicyVersion: policy.publicVersion,
+            feePolicyVersionId: policy.id,
+            platformCommissionRuleId: policy.rules[0].id,
+            feeSnapshotVersion: 1,
+            expiresAt: new Date(Date.now() + 900_000),
+          },
+        }),
+      ),
+    ).rejects.toThrow(/H2_LISTING_TIER_COMPONENT_REQUIRED/);
+    expect(await prisma.order.count({ where: { sourceCartId: cart.id } })).toBe(0);
+  });
+
   it('enforces policy/rule snapshot coherence while preserving true legacy null snapshots', async () => {
     const fixture = await commerceFixture(prisma, 'NORMAL', undefined, 5, false);
     const policyA = await publishPlatformCommissionPolicy(prisma, fixture.sellerUser.id, {

@@ -8,7 +8,7 @@ Version 1 currently permits and materializes only `LISTING_TIER`. Its typed row 
 
 ## Database authority and immutability
 
-PostgreSQL foreign keys retain historical policy/rule identity with `ON DELETE RESTRICT`, including a composite rule-to-policy key. Checks and insertion validation require the Listing Tier shape (`PLATFORM_COMMISSION`, `SELLER`, `PERCENT_BPS`), nonnegative rate/base/amount, exact rule tier/rate/configuration, exact policy public version, deterministic basis-point result, and equality with the parent compatibility snapshot. One component per Order/kind is unique.
+PostgreSQL foreign keys retain historical policy/rule identity with `ON DELETE RESTRICT`, including a composite rule-to-policy key. Checks and insertion validation require exactly the same canonical Listing Tier rule shape as H1: enabled `PLATFORM_COMMISSION`, charged to `SELLER`, `PERCENT_BPS`, exact tier, and no fixed/minimum/maximum or payment/installment/seller/withdrawal/product qualifiers. They also require nonnegative rate/base/amount, exact rule rate, exact policy public version, deterministic basis-point result, and equality with the parent compatibility snapshot. One component per Order/kind is unique.
 
 The marker and every component field are immutable. A deferred constraint trigger requires exactly one Listing Tier component at transaction commit for a version-1 Order, allowing Order and component creation in the same transaction while rejecting partial commits. A legacy Order cannot be upgraded by UPDATE.
 

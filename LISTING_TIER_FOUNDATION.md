@@ -16,4 +16,4 @@ O baseline inicial é Prata 999 bps, Ouro 1199 bps e Diamante 1299 bps. Esses va
 
 ## H2 SEPARATE CAPABILITY
 
-H1 não cria snapshot composto, componentes MAX/VIP, refund/reversal por componente, Admin mutation/API/UI, ranking ou benefícios de exposição. H1 did not create that composite snapshot. H2 was implemented later as a separate prospective capability that materializes only LISTING_TIER; Seller MAX and Buyer VIP remain future capabilities.
+Historicamente, H1 não criou snapshot composto, componentes MAX/VIP, refund/reversal por componente, Admin mutation/API/UI, ranking ou benefícios de exposição. H2 foi implementada posteriormente como capability prospectiva separada e materializa somente `LISTING_TIER`; Seller MAX e Buyer VIP permanecem capabilities futuras.
