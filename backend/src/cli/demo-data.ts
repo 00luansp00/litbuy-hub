@@ -211,7 +211,12 @@ async function assertNoNamespaceConflicts({ prisma }: Runtime) {
       }),
       prisma.product.findUnique({
         where: { id: product.id },
-        select: { slug: true, sourceListingDraftId: true, sellerProfileId: true },
+        select: {
+          slug: true,
+          listingTier: true,
+          sourceListingDraftId: true,
+          sellerProfileId: true,
+        },
       }),
       prisma.listingDraft.findUnique({
         where: { id: product.draftId },
@@ -678,6 +683,7 @@ async function seed(context: Runtime) {
         where: { id: item.id },
         create: {
           id: item.id,
+          listingTier: 'SILVER',
           sourceListingDraftId: item.draftId,
           sellerProfileId: DEMO_IDS.sellerProfile,
           categoryId: item.categoryId,
@@ -697,6 +703,7 @@ async function seed(context: Runtime) {
           updatedAt: item.createdAt,
         },
         update: {
+          listingTier: 'SILVER',
           sourceListingDraftId: item.draftId,
           sellerProfileId: DEMO_IDS.sellerProfile,
           categoryId: item.categoryId,

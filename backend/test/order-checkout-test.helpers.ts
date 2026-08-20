@@ -65,7 +65,7 @@ export async function publishPlatformCommissionPolicy(
     additionalRules?: Array<Partial<Prisma.FeeRuleUncheckedCreateInput>>;
   } = {},
 ) {
-  const formula = options.formula ?? 'FIXED';
+  const formula = options.formula ?? 'PERCENT_BPS';
   return prisma.$transaction(async (tx) => {
     const policy = await tx.feePolicyVersion.create({
       data: {
@@ -83,10 +83,11 @@ export async function publishPlatformCommissionPolicy(
               category: 'PLATFORM_COMMISSION',
               partyCharged: 'SELLER',
               formula,
-              percentBps: options.percentBps ?? (formula === 'FIXED' ? null : 0),
+              percentBps: options.percentBps ?? (formula === 'FIXED' ? null : 999),
               fixedAmountMinor: options.fixedAmountMinor ?? (formula === 'PERCENT_BPS' ? null : 0n),
               minimumAmountMinor: options.minimumAmountMinor,
               maximumAmountMinor: options.maximumAmountMinor,
+              promotionTier: 'SILVER',
               ...options.rule,
             },
             ...(options.additionalRules ?? []).map((rule) => ({
@@ -198,11 +199,13 @@ export async function commerceFixture(
       productType: model === 'SERVICE' ? 'SERVICE' : 'GAME',
       model,
       status: 'APPROVED',
+      requestedPromotionTier: 'SILVER',
     },
   });
   const fixed = model === 'SERVICE' && pricingType === 'FIXED';
   const product = await prisma.product.create({
     data: {
+      listingTier: 'SILVER',
       sourceListingDraftId: draft.id,
       sellerProfileId: seller.id,
       categoryId: category.id,

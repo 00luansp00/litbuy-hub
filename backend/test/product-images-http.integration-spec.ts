@@ -123,6 +123,7 @@ describe('Product images HTTP with real auth, PostgreSQL and MinIO', () => {
     });
     const item = await prisma.product.create({
       data: {
+        listingTier: 'SILVER',
         sourceListingDraftId: draft.id,
         sellerProfileId: actor.profile.id,
         categoryId: category.id,

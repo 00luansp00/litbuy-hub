@@ -26,7 +26,7 @@ export type ListingDraftRecord = {
   price: string | null;
   stock: number | null;
   deliveryMode: Uppercase<ListingDeliveryMode>;
-  requestedPromotionTier: "SILVER" | "GOLD" | "DIAMOND";
+  requestedPromotionTier: "SILVER" | "GOLD" | "DIAMOND" | null;
   requestedSellerPlan: "STANDARD" | "LIT_MAX";
   autoMessage: string | null;
   notifications: {
@@ -397,7 +397,7 @@ export function parseSellerListingDraftDetail(raw: unknown): SellerListingDraftD
     invalid();
   if (
     !isEnum(deliveries, raw.deliveryMode) ||
-    !isEnum(promotions, raw.requestedPromotionTier) ||
+    (raw.requestedPromotionTier !== null && !isEnum(promotions, raw.requestedPromotionTier)) ||
     !isEnum(plans, raw.requestedSellerPlan)
   )
     invalid();
@@ -486,7 +486,7 @@ export type DraftPayload = Partial<{
   price: string | null;
   stock: number | null;
   deliveryMode: "MANUAL" | "AUTOMATIC";
-  requestedPromotionTier: "SILVER" | "GOLD" | "DIAMOND";
+  requestedPromotionTier: "SILVER" | "GOLD" | "DIAMOND" | null;
   requestedSellerPlan: "STANDARD" | "LIT_MAX";
   autoMessage: string | null;
   notifyInApp: boolean;
@@ -524,6 +524,11 @@ export type DraftPayload = Partial<{
   };
 }>;
 export const listingDraftApiService = {
+  tierOptions: () =>
+    apiFetch<{
+      items: { tier: "SILVER" | "GOLD" | "DIAMOND"; label: string; percentBps: number }[];
+      policyVersion: { id: string; publicVersion: number };
+    }>("/seller/listing-drafts/tier-options"),
   list: (q: Record<string, string | number | undefined> = {}) =>
     pageFetch("/seller/listing-drafts", q, parseSellerListingDraftPage),
   adminList: (q: Record<string, string | number | undefined> = {}) =>

@@ -40,7 +40,7 @@ export type ListingDraftFormState = {
   price: string;
   stock: string;
   deliveryMode: ListingDeliveryMode;
-  promotionTier: FormPromotionTier;
+  promotionTier: FormPromotionTier | null;
   sellerPlan: SellerPlanType;
   autoMessage: string;
   notifications: ListingNotificationPreferences;
@@ -73,12 +73,14 @@ const deliveryFormToApi: Record<ListingDeliveryMode, DraftPayload["deliveryMode"
   manual: "MANUAL",
   automatic: "AUTOMATIC",
 };
-const promotionApiToForm: Record<ListingDraftRecord["requestedPromotionTier"], FormPromotionTier> =
-  {
-    SILVER: "silver",
-    GOLD: "gold",
-    DIAMOND: "diamond",
-  };
+const promotionApiToForm: Record<
+  NonNullable<ListingDraftRecord["requestedPromotionTier"]>,
+  FormPromotionTier
+> = {
+  SILVER: "silver",
+  GOLD: "gold",
+  DIAMOND: "diamond",
+};
 const promotionFormToApi: Record<FormPromotionTier, DraftPayload["requestedPromotionTier"]> = {
   silver: "SILVER",
   gold: "GOLD",
@@ -250,7 +252,7 @@ export function emptyListingDraftFormState(): ListingDraftFormState {
     price: "",
     stock: "",
     deliveryMode: "manual",
-    promotionTier: "silver",
+    promotionTier: null,
     sellerPlan: "standard",
     autoMessage: "",
     notifications: {
@@ -289,7 +291,9 @@ export function sellerDraftDetailToFormState(draft: ListingDraftRecord): Listing
     price: draft.price ?? "",
     stock: draft.stock == null ? "" : String(draft.stock),
     deliveryMode: deliveryApiToForm[draft.deliveryMode],
-    promotionTier: promotionApiToForm[draft.requestedPromotionTier],
+    promotionTier: draft.requestedPromotionTier
+      ? promotionApiToForm[draft.requestedPromotionTier]
+      : null,
     sellerPlan: planApiToForm[draft.requestedSellerPlan],
     autoMessage: draft.autoMessage ?? "",
     notifications: draft.notifications,
@@ -329,7 +333,7 @@ export function formStateToDraftPayload(form: ListingDraftFormState): DraftPaylo
     price: form.model === "normal" ? price : null,
     stock: form.model === "normal" ? stock : null,
     deliveryMode: deliveryFormToApi[form.deliveryMode],
-    requestedPromotionTier: promotionFormToApi[form.promotionTier],
+    requestedPromotionTier: form.promotionTier ? promotionFormToApi[form.promotionTier] : null,
     requestedSellerPlan: planFormToApi[form.sellerPlan],
     autoMessage: form.autoMessage || null,
     notifyInApp: form.notifications.inApp,

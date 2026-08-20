@@ -104,6 +104,7 @@ export async function createCatalogFixture(
   const product = await prisma.product.create({
     data: {
       ...(options.productId ? { id: options.productId } : {}),
+      listingTier: 'SILVER',
       sourceListingDraftId: draft.id,
       sellerProfileId: seller.id,
       categoryId: category.id,

@@ -62,7 +62,7 @@ const PROMOTION_TIERS: PromotionTierInfo[] = [
       "Taxa demonstrativa reduzida",
       "Ideal para começar",
     ],
-    demoFeePct: 10,
+    percentBps: 10,
   },
   {
     tier: "gold",
@@ -73,8 +73,7 @@ const PROMOTION_TIERS: PromotionTierInfo[] = [
       "Melhor exposição nas categorias",
       "Selo Ouro no anúncio",
     ],
-    demoFeePct: 12,
-    recommended: true,
+    percentBps: 12,
   },
   {
     tier: "diamond",
@@ -85,7 +84,7 @@ const PROMOTION_TIERS: PromotionTierInfo[] = [
       "Selo premium Diamante",
       "Destaque na Home e busca (futuro)",
     ],
-    demoFeePct: 15,
+    percentBps: 15,
   },
 ];
 

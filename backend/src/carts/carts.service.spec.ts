@@ -35,8 +35,10 @@ const product = (sellerUserId = 'seller-user') => ({
   createdAt: now,
   updatedAt: now,
   sellerProfile: { userId: sellerUserId, status: SellerProfileStatus.ACTIVE },
+  listingTier: 'SILVER' as const,
   sourceListingDraft: {
     status: ListingDraftStatus.APPROVED,
+    requestedPromotionTier: 'SILVER' as const,
     categoryId: 'cat',
     subcategoryId: null,
     productType: CatalogProductType.GAME,

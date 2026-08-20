@@ -1,5 +1,4 @@
-import { Check, Sparkles } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ListingPromotionTier, PromotionTierInfo } from "@/types";
 
@@ -26,16 +25,9 @@ export function PromotionCards({ tiers, value, onChange }: Props) {
                 : "border-border bg-card hover:border-primary/40",
             )}
           >
-            {t.recommended && (
-              <Badge className="absolute -top-2 right-3 gap-1 bg-primary text-primary-foreground">
-                <Sparkles className="h-3 w-3" /> Recomendado
-              </Badge>
-            )}
             <div className="mb-2 flex items-center justify-between">
               <div className="text-lg font-bold text-foreground">{t.name}</div>
-              {active && (
-                <Check className="h-4 w-4 text-primary" />
-              )}
+              {active && <Check className="h-4 w-4 text-primary" />}
             </div>
             <p className="text-xs text-muted-foreground">{t.tagline}</p>
             <ul className="mt-3 space-y-1.5 text-xs">
@@ -47,7 +39,10 @@ export function PromotionCards({ tiers, value, onChange }: Props) {
               ))}
             </ul>
             <div className="mt-3 border-t border-border pt-2 text-[11px] text-muted-foreground">
-              Taxa demonstrativa: <span className="font-semibold">{t.demoFeePct}%</span>
+              <span className="font-semibold">
+                {(t.percentBps / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}% da
+                venda
+              </span>
             </div>
           </button>
         );

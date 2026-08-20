@@ -3683,6 +3683,7 @@ describe('Persistent listing drafts with real PostgreSQL (integration)', () => {
     await expect(
       prisma.product.create({
         data: {
+          listingTier: 'SILVER',
           sourceListingDraftId: draft.id,
           sellerProfileId: (
             await prisma.product.findFirstOrThrow({ where: { sourceListingDraftId: draft.id } })

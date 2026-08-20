@@ -253,6 +253,7 @@ describe('local demo data with real PostgreSQL and MinIO', () => {
     });
     const product = await prisma.product.create({
       data: {
+        listingTier: 'SILVER',
         sourceListingDraftId: draft.id,
         sellerProfileId: seller.id,
         categoryId: category.id,
@@ -793,6 +794,7 @@ describe('local demo data with real PostgreSQL and MinIO', () => {
     await prisma.product.delete({ where: { id: expected.id } });
     const external = await prisma.product.create({
       data: {
+        listingTier: 'SILVER',
         sourceListingDraftId: expected.draftId,
         sellerProfileId: DEMO_IDS.sellerProfile,
         categoryId: expected.categoryId,

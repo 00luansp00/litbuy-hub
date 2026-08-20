@@ -111,6 +111,7 @@ describe('Product lifecycle HTTP with real auth and PostgreSQL', () => {
     });
     const product = await prisma.product.create({
       data: {
+        listingTier: 'SILVER',
         sourceListingDraftId: draft.id,
         sellerProfileId: owner.profile!.id,
         categoryId: category.id,

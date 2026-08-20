@@ -8,10 +8,11 @@ import {
   AdminListingDraftsController,
   SellerListingDraftsController,
 } from './listing-drafts.controller';
+import { ListingTierPolicyService } from '../financial/listing-tier-policy.service';
 @Module({
   imports: [DatabaseModule, AuthModule, JwtModule.register({}), ProductsModule],
   controllers: [SellerListingDraftsController, AdminListingDraftsController],
-  providers: [ListingDraftsService],
+  providers: [ListingDraftsService, ListingTierPolicyService],
   exports: [ListingDraftsService],
 })
 export class ListingDraftsModule {}

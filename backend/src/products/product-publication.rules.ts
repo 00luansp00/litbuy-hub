@@ -3,6 +3,7 @@ import {
   ListingDraftModel,
   ListingDraftServicePricingType,
   ListingDraftStatus,
+  ListingDraftPromotionPreference,
   ProductImageStatus,
   ProductStatus,
   ProductVariantStatus,
@@ -21,12 +22,14 @@ export type PublicationCandidate = {
   price: Decimalish;
   stock: number | null;
   model: ListingDraftModel;
+  listingTier: ListingDraftPromotionPreference;
   sellerProfile: { status: SellerProfileStatus };
   sourceListingDraft: {
     status: ListingDraftStatus;
     categoryId: string | null;
     subcategoryId: string | null;
     productType: CatalogProductType | null;
+    requestedPromotionTier: ListingDraftPromotionPreference | null;
   } | null;
   category: { status: CatalogEntityStatus } | null;
   subcategory: { status: CatalogEntityStatus; categoryId: string } | null;
@@ -69,6 +72,11 @@ export function publicationEligibilityCode(p: PublicationCandidate): string | nu
     return 'SELLER_PROFILE_ACTIVE_REQUIRED';
   if (!p.sourceListingDraft || p.sourceListingDraft.status !== ListingDraftStatus.APPROVED)
     return 'PRODUCT_SOURCE_NOT_APPROVED';
+  if (
+    !p.sourceListingDraft.requestedPromotionTier ||
+    p.listingTier !== p.sourceListingDraft.requestedPromotionTier
+  )
+    return 'PRODUCT_LISTING_TIER_MISMATCH';
   if (
     p.categoryId !== p.sourceListingDraft.categoryId ||
     p.subcategoryId !== p.sourceListingDraft.subcategoryId ||

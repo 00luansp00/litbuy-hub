@@ -55,6 +55,7 @@ describe('Product lifecycle with real PostgreSQL transactions', () => {
     });
     const product = await prisma.product.create({
       data: {
+        listingTier: 'SILVER',
         sourceListingDraftId: draft.id,
         sellerProfileId: seller.id,
         categoryId: category.id,

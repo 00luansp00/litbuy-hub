@@ -56,6 +56,7 @@ describe('Cart database constraints with real PostgreSQL', () => {
     });
     const product = await prisma.product.create({
       data: {
+        listingTier: 'SILVER',
         sourceListingDraftId: draft.id,
         sellerProfileId: seller.id,
         categoryId: category.id,
@@ -121,6 +122,7 @@ describe('Cart database constraints with real PostgreSQL', () => {
     });
     return prisma.product.create({
       data: {
+        listingTier: 'SILVER',
         sourceListingDraftId: draft.id,
         sellerProfileId,
         categoryId,
@@ -167,6 +169,7 @@ describe('Cart database constraints with real PostgreSQL', () => {
     const fixed = model === 'SERVICE' && pricingType === 'FIXED';
     return prisma.product.create({
       data: {
+        listingTier: 'SILVER',
         sourceListingDraftId: draft.id,
         sellerProfileId,
         categoryId,
@@ -273,6 +276,7 @@ describe('Cart database constraints with real PostgreSQL', () => {
     });
     const other = await prisma.product.create({
       data: {
+        listingTier: 'SILVER',
         sourceListingDraftId: draft.id,
         sellerProfileId: f.seller.id,
         categoryId: f.product.categoryId,

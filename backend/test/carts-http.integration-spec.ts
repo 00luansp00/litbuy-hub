@@ -109,6 +109,7 @@ describe('Carts HTTP with real guards, sessions, CSRF and PostgreSQL', () => {
       products.push(
         await prisma.product.create({
           data: {
+            listingTier: 'SILVER',
             sourceListingDraftId: draft.id,
             sellerProfileId: seller.id,
             categoryId: category.id,

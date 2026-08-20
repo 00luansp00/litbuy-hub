@@ -32,7 +32,7 @@ Esta matriz serve para planejar PRs, não para afirmar production readiness. Div
 | SELLER-MAX-RELEASE-CALC | Redução por blocos completos | Freeze | Aceleração target não implementada | `floor(days/7)*2`; `MIN(base, MAX(target, confirmation))`; nunca atrasar | Deterministic calculator e invariants | qualification; release eligibility | AI_CANDIDATE | K | 2 | NOT_IMPLEMENTED | IMPLEMENTED |
 | SELLER-MAX-STOCK-AUTOMATION | Target/consumo/pausa/restock | Freeze | Inventário e reserva existem; automação MAX não provada | target de estoque, consumir por venda, pausar zero, restock válido | State machine e concorrência | MAX listing; inventory | AI_CANDIDATE | I3 | 5 | NOT_IMPLEMENTED | IMPLEMENTED |
 | SELLER-MAX-AUTOMATED-MESSAGES | Templates/eventos seguros | Freeze | UI/service mock não é authority; chat não tem system actor | Backend templates/event allowlist; sem HTML/script | Schema, versionamento e dispatcher | MAX snapshot; notices | AI_CANDIDATE | AK2 | 5 | NOT_IMPLEMENTED | IMPLEMENTED |
-| LISTING-TIER | Prata/Ouro/Diamante obrigatório | Freeze | Draft expõe SILVER/GOLD/DIAMOND e fee dimension genérica; obrigação/rates target não provadas | Exatamente um: 9,99/11,99/12,99%; Seller side; distinto de reputação | Renomear/reconciliar, validar publicação e checkout | 1SKU | AI_CANDIDATE | H1 | 2 | PARTIAL | IMPLEMENTED |
+| LISTING-TIER | Prata/Ouro/Diamante obrigatório | Freeze | Escolha explícita no Draft; Product e checkout autoritativos; FeeRule exata Seller-side | Exatamente um: 9,99/11,99/12,99%; Seller side; distinto de reputação | — | 1SKU | AI_CANDIDATE | H1 | 2 | IMPLEMENTED | IMPLEMENTED |
 | FEE-SNAPSHOT | Snapshot de rates/rules | Freeze; commission snapshot docs | Commission snapshot e policies versionadas existem, não cobrem todos os componentes target | Congelar versão/regra/rates; histórico não recalculável | Snapshot composto tier/MAX/VIP | listing tier; MAX; VIP | HYBRID_REVIEW_REQUIRED | H2 | 2 | PARTIAL | IMPLEMENTED |
 | FEE-REFUND-REVERSAL | Reversão total/proporcional | Freeze; Refund contract | UNKNOWN/NOT_PROVEN para engine final; contrato documental em `REFUND_DELIVERY_GUARANTEE_CONTRACT.md` | Reverter somente fee própria proporcional; PSP separado | Dependência documental satisfeita após merge; engine e reconciliação de snapshots pendentes | fee snapshot; refund engine | HUMAN_PROD_REVIEW | W2 | 0 | NOT_IMPLEMENTED | HUMAN_PROD_REVIEW |
 | BUYER-VIP-SELECTION | Sem Plano/Básico/Premium | Freeze | UI futura/add-on docs; backend authority não provada | escolha explícita sem preselection paga | Checkout model/validation/snapshot | 1SKU | AI_CANDIDATE | Q1 | 4 | NOT_IMPLEMENTED | IMPLEMENTED |
@@ -81,7 +81,7 @@ Esta matriz serve para planejar PRs, não para afirmar production readiness. Div
 
 ### Contagem controlada
 
-Há **58 capabilities** nesta versão: `IMPLEMENTED 6`, `PARTIAL 15`, `NOT_IMPLEMENTED 25`, `DOCS_ONLY 1`, `DESIGN_REQUIRED 9`, `HUMAN_PROD_REVIEW 1`, `DEFERRED 1`, `SUPERSEDED 0`. A contagem usa **Current status**; target humano não altera a evidência CURRENT.
+Há **58 capabilities** nesta versão: `IMPLEMENTED 7`, `PARTIAL 14`, `NOT_IMPLEMENTED 25`, `DOCS_ONLY 1`, `DESIGN_REQUIRED 9`, `HUMAN_PROD_REVIEW 1`, `DEFERRED 1`, `SUPERSEDED 0`. A contagem usa **Current status**; target humano não altera a evidência CURRENT.
 
 ## 3. Implementation layers matrix
 
