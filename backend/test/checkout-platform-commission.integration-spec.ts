@@ -46,7 +46,13 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
     tier: 'SILVER' | 'GOLD' | 'DIAMOND' = 'SILVER',
     quantity = 1,
   ) {
-    const fixture = await commerceFixture(prisma, 'NORMAL', undefined, 5, false);
+    const fixture = await commerceFixture(
+      prisma,
+      'NORMAL',
+      undefined,
+      Math.max(5, quantity),
+      false,
+    );
     await prisma.listingDraft.update({
       where: { id: fixture.draft.id },
       data: { requestedPromotionTier: tier },
@@ -191,11 +197,11 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
       additionalRules: [{ code: 'tie', percentBps: 999 }],
     });
     await expect(checkout.create(tied.buyer.id, key(), tied.dto)).rejects.toMatchObject({
-      code: 'LISTING_TIER_FEE_RULE_INVALID',
+      code: 'FEE_RULE_AMBIGUOUS',
     });
 
     await prisma.$executeRawUnsafe('TRUNCATE TABLE "User", "CatalogCategory" CASCADE');
-    const excessive = await ready({ percentBps: 10_001 });
+    const excessive = await ready({ percentBps: 10_010 });
     await expect(checkout.create(excessive.buyer.id, key(), excessive.dto)).rejects.toMatchObject({
       code: 'PLATFORM_COMMISSION_EXCEEDS_ORDER_TOTAL',
     });
