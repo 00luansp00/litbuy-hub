@@ -33,6 +33,7 @@ type HoldRow = {
   snapshotValid: boolean;
   due: boolean;
 };
+type DeliveryRow = { id: string; sellerProfileId: string; createdAt: Date };
 type Posting = Prisma.LedgerTransactionGetPayload<{
   include: { entries: { include: { account: true } } };
 }>;
@@ -71,6 +72,11 @@ export class SellerHeldFundsReleaseService {
       SELECT h."id" FROM "FinancialHold" h
       WHERE h."reason" = 'DELIVERY_PROTECTION' AND h."status" = 'RELEASE_ELIGIBLE'
         AND NOT EXISTS (
+          SELECT 1 FROM "Order" o
+          WHERE o."id" = h."orderId"
+            AND o."disputeStatus" IN ('OPEN', 'UNDER_REVIEW', 'RESOLVED_BUYER', 'CLOSED')
+        )
+        AND NOT EXISTS (
           SELECT 1 FROM "ReconciliationIssue" r
           WHERE r."referenceType" = ${ISSUE_REFERENCE_TYPE}
             AND r."referenceId" = h."id"::text
@@ -87,6 +93,11 @@ export class SellerHeldFundsReleaseService {
     const rows = await this.prisma.$queryRaw<Array<{ id: string }>>`
       SELECT h."id" FROM "FinancialHold" h
       WHERE h."reason" = 'DELIVERY_PROTECTION' AND h."status" = 'RELEASE_ELIGIBLE'
+        AND NOT EXISTS (
+          SELECT 1 FROM "Order" o
+          WHERE o."id" = h."orderId"
+            AND o."disputeStatus" IN ('OPEN', 'UNDER_REVIEW', 'RESOLVED_BUYER', 'CLOSED')
+        )
         AND NOT EXISTS (
           SELECT 1 FROM "ReconciliationIssue" r
           WHERE r."referenceType" = ${ISSUE_REFERENCE_TYPE}
@@ -176,6 +187,22 @@ export class SellerHeldFundsReleaseService {
     )
       return this.fail(tx, holdId, 'STATUS_MISMATCH', 'ORDER_INVALID');
 
+    const deliveries = await tx.$queryRaw<DeliveryRow[]>`
+      SELECT "id", "sellerProfileId", "createdAt"
+      FROM "OrderDelivery"
+      WHERE "orderId" = ${order.id}::uuid
+      FOR SHARE
+    `;
+    const delivery = deliveries[0];
+    if (
+      deliveries.length !== 1 ||
+      !delivery ||
+      delivery.sellerProfileId !== order.sellerProfileId ||
+      delivery.sellerProfileId !== hold.sellerProfileId ||
+      delivery.createdAt.getTime() !== hold.releasePolicyAppliedAt!.getTime()
+    )
+      return this.fail(tx, holdId, 'OTHER', 'DELIVERY_AUTHORITY_INVALID');
+
     await tx.$queryRaw`SELECT "id" FROM "Payment" WHERE "orderId" = ${order.id}::uuid FOR UPDATE`;
     const payments = await tx.payment.findMany({ where: { orderId: order.id } });
     const payment = payments[0];
@@ -229,21 +256,23 @@ export class SellerHeldFundsReleaseService {
         return this.fail(tx, holdId, 'STATUS_MISMATCH', 'SELLER_HELD_FUNDS_RELEASE_TIMING_INVALID');
       return 'ALREADY_RELEASED' as const;
     }
-    if (order.disputeStatus === 'OPEN' || order.disputeStatus === 'UNDER_REVIEW')
-      return 'BUSINESS_BLOCKED' as const;
-    // TRANSITIONAL G1→G2 COMPATIBILITY: eligibility may now precede buyer confirmation.
-    // G2 will replace this business guard with the target release execution.
     if (
-      order.status === 'ACTIVE' &&
-      order.paymentStatus === 'PAID' &&
-      order.fulfillmentStatus === 'AWAITING_BUYER_CONFIRMATION'
+      order.disputeStatus === 'OPEN' ||
+      order.disputeStatus === 'UNDER_REVIEW' ||
+      order.disputeStatus === 'RESOLVED_BUYER' ||
+      order.disputeStatus === 'CLOSED'
     )
       return 'BUSINESS_BLOCKED' as const;
+    const validPostDeliveryState =
+      (order.status === 'ACTIVE' &&
+        order.paymentStatus === 'PAID' &&
+        order.fulfillmentStatus === 'AWAITING_BUYER_CONFIRMATION') ||
+      (order.status === 'COMPLETED' &&
+        order.paymentStatus === 'PAID' &&
+        order.fulfillmentStatus === 'CONFIRMED');
     if (
-      order.status !== 'COMPLETED' ||
-      order.paymentStatus !== 'PAID' ||
-      order.fulfillmentStatus !== 'CONFIRMED' ||
-      order.disputeStatus !== 'NONE'
+      !validPostDeliveryState ||
+      (order.disputeStatus !== 'NONE' && order.disputeStatus !== 'RESOLVED_SELLER')
     )
       return this.fail(tx, holdId, 'STATUS_MISMATCH', 'ORDER_INVALID');
     if (payment.status !== 'PAID') return this.fail(tx, holdId, 'OTHER', 'PAYMENT_INVALID');
