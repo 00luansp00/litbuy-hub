@@ -14,6 +14,6 @@ O endpoint autenticado de Seller fornece identidade, label pt-BR, `percentBps` e
 
 O baseline inicial é Prata 999 bps, Ouro 1199 bps e Diamante 1299 bps. Esses valores pertencem a FeePolicy/FeeRule versionadas (e a fixtures/configuração demo local), nunca ao algoritmo de checkout. Não há seed automático de policy de produção.
 
-## H2 FUTURE BOUNDARY
+## H2 SEPARATE CAPABILITY
 
-H1 não cria snapshot composto, componentes MAX/VIP, refund/reversal por componente, Admin mutation/API/UI, ranking ou benefícios de exposição. Seller MAX, Buyer VIP e H2 continuam capabilities separadas.
+Historicamente, H1 não criou snapshot composto, componentes MAX/VIP, refund/reversal por componente, Admin mutation/API/UI, ranking ou benefícios de exposição. H2 foi implementada posteriormente como capability prospectiva separada e materializa somente `LISTING_TIER`; Seller MAX e Buyer VIP permanecem capabilities futuras.

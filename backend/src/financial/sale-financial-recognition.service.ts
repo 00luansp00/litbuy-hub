@@ -36,10 +36,26 @@ type OrderSnapshot = {
   paymentStatus: PaymentStatus;
   currency: string;
   totalAmountMinor: bigint;
+  subtotalAmountMinor: bigint;
   platformFeeAmountMinor: bigint;
   pricingPolicyVersion: number;
   feePolicyVersionId: string | null;
   platformCommissionRuleId: string | null;
+  feeSnapshotVersion: number | null;
+};
+
+type FeeComponentSnapshot = {
+  feePolicyVersionId: string;
+  feeRuleId: string;
+  pricingPolicyVersion: number;
+  listingTier: string;
+  category: string;
+  partyCharged: string;
+  formula: string;
+  percentBps: number;
+  baseAmountMinor: bigint;
+  feeAmountMinor: bigint;
+  currency: string;
 };
 
 type PaymentSnapshot = {
@@ -191,8 +207,8 @@ export class SaleFinancialRecognitionService {
   ): Promise<{ order: OrderSnapshot; payment: PaymentSnapshot } | { failure: Failure }> {
     return this.prisma.$transaction(async (tx) => {
       const orders = await tx.$queryRaw<OrderSnapshot[]>`
-        SELECT "id", "sellerProfileId", "status", "paymentStatus", "currency", "totalAmountMinor",
-               "platformFeeAmountMinor", "pricingPolicyVersion", "feePolicyVersionId", "platformCommissionRuleId"
+        SELECT "id", "sellerProfileId", "status", "paymentStatus", "currency", "subtotalAmountMinor", "totalAmountMinor",
+               "platformFeeAmountMinor", "pricingPolicyVersion", "feePolicyVersionId", "platformCommissionRuleId", "feeSnapshotVersion"
         FROM "Order" WHERE "id" = ${orderId}::uuid FOR UPDATE
       `;
       const order = orders[0];
@@ -211,6 +227,39 @@ export class SaleFinancialRecognitionService {
         return { failure: { type: 'AMOUNT_MISMATCH', code: 'INVALID_COMMISSION_SNAPSHOT' } };
       if (!order.feePolicyVersionId || !order.platformCommissionRuleId)
         return { failure: { type: 'MISSING_LOCAL', code: 'ORDER_PRICING_SNAPSHOT_MISSING' } };
+
+      let component: FeeComponentSnapshot | undefined;
+      if (order.feeSnapshotVersion === 1) {
+        const components = await tx.$queryRaw<FeeComponentSnapshot[]>`
+          SELECT "feePolicyVersionId", "feeRuleId", "pricingPolicyVersion", "listingTier",
+                 "category", "partyCharged", "formula", "percentBps", "baseAmountMinor",
+                 "feeAmountMinor", "currency"
+          FROM "OrderFeeComponentSnapshot"
+          WHERE "orderId" = ${orderId}::uuid AND "componentKind" = 'LISTING_TIER'
+          FOR SHARE
+        `;
+        if (components.length !== 1)
+          return { failure: { type: 'MISSING_LOCAL', code: 'H2_FEE_SNAPSHOT_INVALID' } };
+        component = components[0];
+        if (
+          component.feePolicyVersionId !== order.feePolicyVersionId ||
+          component.feeRuleId !== order.platformCommissionRuleId ||
+          component.pricingPolicyVersion !== order.pricingPolicyVersion ||
+          component.category !== 'PLATFORM_COMMISSION' ||
+          component.partyCharged !== 'SELLER' ||
+          component.formula !== 'PERCENT_BPS' ||
+          component.percentBps < 0 ||
+          !['SILVER', 'GOLD', 'DIAMOND'].includes(component.listingTier) ||
+          component.baseAmountMinor !== order.subtotalAmountMinor ||
+          component.feeAmountMinor !== order.platformFeeAmountMinor ||
+          component.currency !== order.currency ||
+          (component.baseAmountMinor * BigInt(component.percentBps)) / 10_000n !==
+            component.feeAmountMinor
+        )
+          return { failure: { type: 'AMOUNT_MISMATCH', code: 'H2_FEE_SNAPSHOT_INVALID' } };
+      } else if (order.feeSnapshotVersion !== null) {
+        return { failure: { type: 'OTHER', code: 'H2_FEE_SNAPSHOT_VERSION_UNSUPPORTED' } };
+      }
 
       const payments = await tx.$queryRaw<PaymentSnapshot[]>`
         SELECT "id", "orderId", "status", "paidAt", "amountMinor", "currency"
@@ -266,6 +315,24 @@ export class SaleFinancialRecognitionService {
         return { failure: { type: 'OTHER', code: 'COMMISSION_RULE_MISMATCH' } };
       if (rule.partyCharged !== FeeParty.SELLER)
         return { failure: { type: 'OTHER', code: 'COMMISSION_RULE_MISMATCH' } };
+      if (
+        component &&
+        (rule.formula !== 'PERCENT_BPS' ||
+          rule.percentBps !== component.percentBps ||
+          rule.promotionTier !== component.listingTier ||
+          !rule.enabled ||
+          rule.fixedAmountMinor !== null ||
+          rule.minimumAmountMinor !== null ||
+          rule.maximumAmountMinor !== null ||
+          rule.paymentMethod !== null ||
+          rule.installmentsFrom !== null ||
+          rule.installmentsTo !== null ||
+          rule.sellerLevel !== null ||
+          rule.sellerPlan !== null ||
+          rule.withdrawalSpeed !== null ||
+          rule.productType !== null)
+      )
+        return { failure: { type: 'OTHER', code: 'H2_FEE_SNAPSHOT_INVALID' } };
       return { order, payment };
     });
   }
