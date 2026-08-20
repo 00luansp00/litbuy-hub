@@ -106,12 +106,15 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
     releaseDelayHours = 72,
     releaseScope: 'DEFAULT' | 'CATEGORY' | 'SUBCATEGORY' = 'DEFAULT',
     confirmBuyer = true,
+    publishCommission = true,
   ) {
     const fixture = await commerceFixture(prisma, 'NORMAL', undefined, 20, false, false);
-    await publishPlatformCommissionPolicy(prisma, fixture.sellerUser.id, {
-      publicVersion: version++,
-      fixedAmountMinor: fee,
-    });
+    if (publishCommission) {
+      await publishPlatformCommissionPolicy(prisma, fixture.sellerUser.id, {
+        publicVersion: version++,
+        fixedAmountMinor: fee,
+      });
+    }
     const subcategory =
       releaseScope === 'SUBCATEGORY'
         ? await prisma.catalogSubcategory.create({
@@ -1113,8 +1116,14 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
     ).toBe(0);
   });
 
-  async function eligibleHold() {
-    const { order, actorUserId } = await completedOrder(1000n, 0);
+  async function eligibleHold(publishCommission = true) {
+    const { order, actorUserId } = await completedOrder(
+      1000n,
+      0,
+      'DEFAULT',
+      true,
+      publishCommission,
+    );
     await publishSellerReleasePolicy(actorUserId, 0);
     expect(await service.processOne(order.id)).toBe('PROCESSED');
     const hold = await prisma.financialHold.findFirstOrThrow({ where: { orderId: order.id } });
@@ -1259,7 +1268,7 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
       where: { id: blocked.order.id },
       data: { disputeStatus: 'OPEN' },
     });
-    const releasable = await eligibleHold();
+    const releasable = await eligibleHold(false);
 
     expect(await release.processOne()).toBe('RELEASED');
     expect(
