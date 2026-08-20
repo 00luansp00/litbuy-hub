@@ -50,7 +50,6 @@ function runtime(config: DemoRuntimeConfig) {
 
 type FeePolicyWithRules = Prisma.FeePolicyVersionGetPayload<{ include: { rules: true } }>;
 function isExpectedFeePolicy(policy: FeePolicyWithRules) {
-  const rule = policy.rules[0];
   return (
     policy.id === DEMO_FEE_POLICY.id &&
     policy.publicVersion === DEMO_FEE_POLICY.publicVersion &&
@@ -60,26 +59,30 @@ function isExpectedFeePolicy(policy: FeePolicyWithRules) {
     policy.createdByUserId === DEMO_FEE_POLICY.author.id &&
     policy.publishedByUserId === DEMO_FEE_POLICY.author.id &&
     policy.publishedAt?.getTime() === DEMO_DATE.getTime() &&
-    policy.rules.length === 1 &&
-    rule.id === DEMO_FEE_POLICY.rule.id &&
-    rule.code === DEMO_FEE_POLICY.rule.code &&
-    rule.category === DEMO_FEE_POLICY.rule.category &&
-    rule.partyCharged === DEMO_FEE_POLICY.rule.partyCharged &&
-    rule.formula === DEMO_FEE_POLICY.rule.formula &&
-    rule.fixedAmountMinor === DEMO_FEE_POLICY.rule.fixedAmountMinor &&
-    rule.percentBps === null &&
-    rule.minimumAmountMinor === null &&
-    rule.maximumAmountMinor === null &&
-    rule.paymentMethod === null &&
-    rule.installmentsFrom === null &&
-    rule.installmentsTo === null &&
-    rule.sellerLevel === null &&
-    rule.sellerPlan === null &&
-    rule.promotionTier === null &&
-    rule.withdrawalSpeed === null &&
-    rule.productType === null &&
-    rule.priority === 0 &&
-    rule.enabled
+    policy.rules.length === DEMO_FEE_POLICY.rules.length &&
+    DEMO_FEE_POLICY.rules.every((expected) => {
+      const rule = policy.rules.find(({ id }) => id === expected.id);
+      return (
+        rule?.code === expected.code &&
+        rule.category === 'PLATFORM_COMMISSION' &&
+        rule.partyCharged === 'SELLER' &&
+        rule.formula === 'PERCENT_BPS' &&
+        rule.percentBps === expected.percentBps &&
+        rule.fixedAmountMinor === null &&
+        rule.minimumAmountMinor === null &&
+        rule.maximumAmountMinor === null &&
+        rule.paymentMethod === null &&
+        rule.installmentsFrom === null &&
+        rule.installmentsTo === null &&
+        rule.sellerLevel === null &&
+        rule.sellerPlan === null &&
+        rule.promotionTier === expected.promotionTier &&
+        rule.withdrawalSpeed === null &&
+        rule.productType === null &&
+        rule.priority === 0 &&
+        rule.enabled
+      );
+    })
   );
 }
 type SellerReleasePolicyWithRules = Prisma.SellerReleasePolicyVersionGetPayload<{
@@ -386,16 +389,19 @@ async function seed(context: Runtime) {
           createdAt: DEMO_DATE,
           updatedAt: DEMO_DATE,
           rules: {
-            create: {
-              ...DEMO_FEE_POLICY.rule,
-              percentBps: null,
+            create: DEMO_FEE_POLICY.rules.map((rule) => ({
+              ...rule,
+              category: 'PLATFORM_COMMISSION' as const,
+              partyCharged: 'SELLER' as const,
+              formula: 'PERCENT_BPS' as const,
+              fixedAmountMinor: null,
               minimumAmountMinor: null,
               maximumAmountMinor: null,
               priority: 0,
               enabled: true,
               createdAt: DEMO_DATE,
               updatedAt: DEMO_DATE,
-            },
+            })),
           },
         },
       });

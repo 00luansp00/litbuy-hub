@@ -65,7 +65,10 @@ export async function publishPlatformCommissionPolicy(
     additionalRules?: Array<Partial<Prisma.FeeRuleUncheckedCreateInput>>;
   } = {},
 ) {
-  const formula = options.formula ?? 'PERCENT_BPS';
+  const formula =
+    options.formula ?? (options.fixedAmountMinor !== undefined ? 'FIXED' : 'PERCENT_BPS');
+  const percentBps = options.percentBps ?? (formula === 'FIXED' ? null : 999);
+  const fixedAmountMinor = options.fixedAmountMinor ?? (formula === 'PERCENT_BPS' ? null : 0n);
   return prisma.$transaction(async (tx) => {
     const policy = await tx.feePolicyVersion.create({
       data: {
@@ -83,8 +86,8 @@ export async function publishPlatformCommissionPolicy(
               category: 'PLATFORM_COMMISSION',
               partyCharged: 'SELLER',
               formula,
-              percentBps: options.percentBps ?? (formula === 'FIXED' ? null : 999),
-              fixedAmountMinor: options.fixedAmountMinor ?? (formula === 'PERCENT_BPS' ? null : 0n),
+              percentBps,
+              fixedAmountMinor,
               minimumAmountMinor: options.minimumAmountMinor,
               maximumAmountMinor: options.maximumAmountMinor,
               promotionTier: 'SILVER',
@@ -94,8 +97,10 @@ export async function publishPlatformCommissionPolicy(
               code: `platform-commission-${crypto.randomUUID()}`,
               category: 'PLATFORM_COMMISSION' as const,
               partyCharged: 'SELLER' as const,
-              formula: 'FIXED' as const,
-              fixedAmountMinor: 0n,
+              formula: 'PERCENT_BPS' as const,
+              percentBps: 999,
+              fixedAmountMinor: null,
+              promotionTier: 'SILVER',
               ...rule,
             })),
           ],

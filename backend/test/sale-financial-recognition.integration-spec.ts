@@ -70,8 +70,8 @@ describe('SaleFinancialRecognitionService with real PostgreSQL', () => {
               some: {
                 category: 'PLATFORM_COMMISSION',
                 partyCharged: 'SELLER',
-                formula: 'FIXED',
-                fixedAmountMinor: fee,
+                formula: 'PERCENT_BPS',
+                percentBps: Number((fee * 10_000n) / (BigInt(quantity) * 1000n)),
               },
             },
           },
@@ -79,15 +79,15 @@ describe('SaleFinancialRecognitionService with real PostgreSQL', () => {
         })
       : await publishPlatformCommissionPolicy(prisma, fixture.sellerUser.id, {
           publicVersion: publicVersion++,
-          fixedAmountMinor: fee,
+          percentBps: Number((fee * 10_000n) / (BigInt(quantity) * 1000n)),
         });
     expect(policy.rules).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           category: 'PLATFORM_COMMISSION',
           partyCharged: 'SELLER',
-          formula: 'FIXED',
-          fixedAmountMinor: fee,
+          formula: 'PERCENT_BPS',
+          percentBps: Number((fee * 10_000n) / (BigInt(quantity) * 1000n)),
         }),
       ]),
     );
@@ -655,7 +655,7 @@ describe('SaleFinancialRecognitionService with real PostgreSQL', () => {
     await prisma.feePolicyVersion.update({ where: { id: policy.id }, data: { status: 'RETIRED' } });
     await publishPlatformCommissionPolicy(prisma, order.buyerUserId, {
       publicVersion: 999,
-      fixedAmountMinor: 9000n,
+      percentBps: 9000,
     });
     await recognition.processOne(order.id);
     const tx = await prisma.ledgerTransaction.findFirstOrThrow({

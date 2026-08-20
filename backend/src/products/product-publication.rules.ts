@@ -3,13 +3,12 @@ import {
   ListingDraftModel,
   ListingDraftServicePricingType,
   ListingDraftStatus,
-  ListingDraftPromotionPreference,
   ProductImageStatus,
   ProductStatus,
   ProductVariantStatus,
   SellerProfileStatus,
 } from '@prisma/client';
-import type { CatalogProductType } from '@prisma/client';
+import type { CatalogProductType, ListingDraftPromotionPreference } from '@prisma/client';
 import { AppError } from '../common/errors/app-error';
 import { ProductLifecycleAction } from './dto';
 

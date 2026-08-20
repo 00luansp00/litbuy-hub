@@ -20,7 +20,7 @@ export class ListingTierPolicyService {
     throw new AppError(code, code, HttpStatus.UNPROCESSABLE_ENTITY, []);
   }
 
-  private async policy(client: Client) {
+  private async policy(client: Client, lock = false) {
     const [{ pricingAt }] = await client.$queryRaw<Array<{ pricingAt: Date }>>`
       SELECT transaction_timestamp() AS "pricingAt"
     `;
@@ -30,11 +30,38 @@ export class ListingTierPolicyService {
         effectiveFrom: { lte: pricingAt },
         OR: [{ effectiveTo: null }, { effectiveTo: { gt: pricingAt } }],
       },
-      include: { rules: true },
+      select: { id: true },
     });
     if (policies.length === 0) this.fail('FEE_POLICY_NOT_FOUND');
     if (policies.length !== 1) this.fail('FEE_POLICY_AMBIGUOUS');
-    return policies[0];
+    if (lock) {
+      const rows = await client.$queryRaw<
+        Array<{
+          id: string;
+          publicVersion: number;
+          status: string;
+          effectiveFrom: Date;
+          effectiveTo: Date | null;
+        }>
+      >`
+        SELECT "id", "publicVersion", "status", "effectiveFrom", "effectiveTo"
+        FROM "FeePolicyVersion"
+        WHERE "id" = ${policies[0].id}::uuid
+        FOR SHARE
+      `;
+      const locked = rows[0];
+      if (
+        !locked ||
+        locked.status !== 'ACTIVE' ||
+        locked.effectiveFrom > pricingAt ||
+        (locked.effectiveTo !== null && pricingAt >= locked.effectiveTo)
+      )
+        this.fail('FEE_POLICY_NOT_FOUND');
+    }
+    return client.feePolicyVersion.findUniqueOrThrow({
+      where: { id: policies[0].id },
+      include: { rules: true },
+    });
   }
 
   private exactRule(
@@ -77,7 +104,7 @@ export class ListingTierPolicyService {
   }
 
   async resolve(client: Client, tier: ListingDraftPromotionPreference, amountMinor: bigint) {
-    const policy = await this.policy(client);
+    const policy = await this.policy(client, true);
     const rule = this.exactRule(policy, tier);
     const amount = calculateFee(amountMinor, rule);
     if (amount < 0n || amount > amountMinor) this.fail('PLATFORM_COMMISSION_EXCEEDS_ORDER_TOTAL');

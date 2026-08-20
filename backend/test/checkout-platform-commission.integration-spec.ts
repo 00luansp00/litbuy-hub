@@ -6,6 +6,7 @@ import { PrismaService } from '../src/database/prisma.service';
 import { CartsService } from '../src/carts/carts.service';
 import { CheckoutService } from '../src/checkout/checkout.service';
 import { parseIdempotencyKey } from '../src/commerce/idempotency-key';
+import { ListingTierPolicyService } from '../src/financial/listing-tier-policy.service';
 import {
   commerceFixture,
   publishPlatformCommissionPolicy,
@@ -18,12 +19,14 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
   let prisma: PrismaService;
   let carts: CartsService;
   let checkout: CheckoutService;
+  let listingTierPolicy: ListingTierPolicyService;
 
   beforeAll(async () => {
     app = await Test.createTestingModule({ imports: [AppModule] }).compile();
     prisma = app.get(PrismaService);
     carts = app.get(CartsService);
     checkout = app.get(CheckoutService);
+    listingTierPolicy = app.get(ListingTierPolicyService);
   });
   async function cleanup() {
     await prisma.$executeRawUnsafe('TRUNCATE TABLE "User", "CatalogCategory" CASCADE');
@@ -38,16 +41,24 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
   afterAll(() => app.close());
 
   const key = () => parseIdempotencyKey(`commission:${crypto.randomUUID()}`);
-  async function ready(policyOptions: Parameters<typeof publishPlatformCommissionPolicy>[2] = {}) {
+  async function ready(
+    policyOptions: Parameters<typeof publishPlatformCommissionPolicy>[2] = {},
+    tier: 'SILVER' | 'GOLD' | 'DIAMOND' = 'SILVER',
+    quantity = 1,
+  ) {
     const fixture = await commerceFixture(prisma, 'NORMAL', undefined, 5, false);
-    const policy = await publishPlatformCommissionPolicy(
-      prisma,
-      fixture.sellerUser.id,
-      policyOptions,
-    );
+    await prisma.listingDraft.update({
+      where: { id: fixture.draft.id },
+      data: { requestedPromotionTier: tier },
+    });
+    await prisma.product.update({ where: { id: fixture.product.id }, data: { listingTier: tier } });
+    const policy = await publishPlatformCommissionPolicy(prisma, fixture.sellerUser.id, {
+      ...policyOptions,
+      rule: { promotionTier: tier, ...policyOptions.rule },
+    });
     const preview = await carts.add(fixture.buyer.id, fixture.seller.slug, {
       productId: fixture.product.id,
-      quantity: 1,
+      quantity,
       expectedVersion: 0,
     });
     return {
@@ -63,22 +74,13 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
   }
 
   it.each([
-    ['FIXED', null, 125n, null, null, 125n],
-    ['PERCENT_BPS', 1251, null, null, null, 125n],
-    ['PERCENT_BPS_PLUS_FIXED', 1000, 25n, null, null, 125n],
-    ['PERCENT_BPS', 100, null, 50n, null, 50n],
-    ['PERCENT_BPS', 9000, null, null, 250n, 250n],
-    ['FIXED', null, 0n, null, null, 0n],
+    ['SILVER', 999, 999n],
+    ['GOLD', 1199, 1199n],
+    ['DIAMOND', 1299, 1299n],
   ] as const)(
-    'snapshots %s commission with deterministic limits',
-    async (formula, percentBps, fixedAmountMinor, minimumAmountMinor, maximumAmountMinor, fee) => {
-      const f = await ready({
-        formula,
-        percentBps,
-        fixedAmountMinor,
-        minimumAmountMinor,
-        maximumAmountMinor,
-      });
+    'snapshots the exact %s listing tier commission without increasing Buyer total',
+    async (tier, percentBps, fee) => {
+      const f = await ready({ percentBps }, tier, 10);
       const rule = f.policy.rules[0];
       const response = await checkout.create(f.buyer.id, key(), f.dto);
       const order = await prisma.order.findUniqueOrThrow({
@@ -89,8 +91,8 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
         feePolicyVersionId: f.policy.id,
         platformCommissionRuleId: rule.id,
         pricingPolicyVersion: f.policy.publicVersion,
-        subtotalAmountMinor: 1000n,
-        totalAmountMinor: 1000n,
+        subtotalAmountMinor: 10_000n,
+        totalAmountMinor: 10_000n,
         platformFeeAmountMinor: fee,
       });
       expect(
@@ -111,33 +113,38 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
     ],
     ['retired policy', { status: 'RETIRED' }, 'FEE_POLICY_NOT_FOUND'],
     ['expired policy', { effectiveTo: new Date(Date.now() - 1) }, 'FEE_POLICY_NOT_FOUND'],
-    ['no commission rule', { rule: { category: 'OTHER' } }, 'PLATFORM_COMMISSION_RULE_NOT_FOUND'],
-    ['buyer rule', { rule: { partyCharged: 'BUYER' } }, 'PLATFORM_COMMISSION_RULE_NOT_FOUND'],
-    ['platform rule', { rule: { partyCharged: 'PLATFORM' } }, 'PLATFORM_COMMISSION_RULE_NOT_FOUND'],
-    ['disabled rule', { rule: { enabled: false } }, 'PLATFORM_COMMISSION_RULE_NOT_FOUND'],
-    ['payment qualifier', { rule: { paymentMethod: 'PIX' } }, 'PLATFORM_COMMISSION_RULE_NOT_FOUND'],
+    ['no commission rule', { rule: { category: 'OTHER' } }, 'LISTING_TIER_FEE_RULE_NOT_FOUND'],
+    ['buyer rule', { rule: { partyCharged: 'BUYER' } }, 'LISTING_TIER_FEE_RULE_NOT_FOUND'],
+    ['platform rule', { rule: { partyCharged: 'PLATFORM' } }, 'LISTING_TIER_FEE_RULE_NOT_FOUND'],
+    ['disabled rule', { rule: { enabled: false } }, 'LISTING_TIER_FEE_RULE_NOT_FOUND'],
+    ['wildcard rule', { rule: { promotionTier: null } }, 'LISTING_TIER_FEE_RULE_NOT_FOUND'],
+    ['fixed rule', { formula: 'FIXED', fixedAmountMinor: 1n }, 'LISTING_TIER_FEE_RULE_INVALID'],
+    [
+      'plus fixed rule',
+      { formula: 'PERCENT_BPS_PLUS_FIXED', percentBps: 1, fixedAmountMinor: 1n },
+      'LISTING_TIER_FEE_RULE_INVALID',
+    ],
+    ['minimum', { minimumAmountMinor: 1n }, 'LISTING_TIER_FEE_RULE_INVALID'],
+    ['maximum', { maximumAmountMinor: 1n }, 'LISTING_TIER_FEE_RULE_INVALID'],
+    ['payment qualifier', { rule: { paymentMethod: 'PIX' } }, 'LISTING_TIER_FEE_RULE_NOT_FOUND'],
     [
       'installments qualifier',
       { rule: { installmentsFrom: 1 } },
-      'PLATFORM_COMMISSION_RULE_NOT_FOUND',
+      'LISTING_TIER_FEE_RULE_NOT_FOUND',
     ],
     [
       'seller level qualifier',
       { rule: { sellerLevel: 'GOLD' } },
-      'PLATFORM_COMMISSION_RULE_NOT_FOUND',
+      'LISTING_TIER_FEE_RULE_NOT_FOUND',
     ],
-    [
-      'seller plan qualifier',
-      { rule: { sellerPlan: 'PRO' } },
-      'PLATFORM_COMMISSION_RULE_NOT_FOUND',
-    ],
-    ['promotion qualifier', { rule: { promotionTier: 'A' } }, 'PLATFORM_COMMISSION_RULE_NOT_FOUND'],
+    ['seller plan qualifier', { rule: { sellerPlan: 'PRO' } }, 'LISTING_TIER_FEE_RULE_NOT_FOUND'],
+    ['other tier', { rule: { promotionTier: 'GOLD' } }, 'LISTING_TIER_FEE_RULE_NOT_FOUND'],
     [
       'withdrawal qualifier',
       { rule: { withdrawalSpeed: 'STANDARD' } },
-      'PLATFORM_COMMISSION_RULE_NOT_FOUND',
+      'LISTING_TIER_FEE_RULE_NOT_FOUND',
     ],
-    ['product qualifier', { rule: { productType: 'GAME' } }, 'PLATFORM_COMMISSION_RULE_NOT_FOUND'],
+    ['product qualifier', { rule: { productType: 'GAME' } }, 'LISTING_TIER_FEE_RULE_NOT_FOUND'],
   ] as const)(
     'fails closed for %s and rolls back commerce effects',
     async (_name, options, code) => {
@@ -179,37 +186,23 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
     expect(await prisma.order.count()).toBe(0);
   });
 
-  it('uses priority, rejects a real tie, and rejects a fee above the order total', async () => {
-    const f = await ready({
-      fixedAmountMinor: 100n,
-      rule: { priority: 1 },
-      additionalRules: [{ code: 'higher', fixedAmountMinor: 200n, priority: 2 }],
-    });
-    const winner = f.policy.rules.find((rule) => rule.code === 'higher');
-    const result = await checkout.create(f.buyer.id, key(), f.dto);
-    expect(
-      await prisma.order.findUniqueOrThrow({
-        where: { publicCode: (result as { orderCode: string }).orderCode },
-      }),
-    ).toMatchObject({ platformCommissionRuleId: winner?.id, platformFeeAmountMinor: 200n });
-
-    await prisma.$executeRawUnsafe('TRUNCATE TABLE "User", "CatalogCategory" CASCADE');
+  it('rejects ambiguous exact rules and a percentage fee above the order total', async () => {
     const tied = await ready({
-      additionalRules: [{ code: 'tie', fixedAmountMinor: 0n }],
+      additionalRules: [{ code: 'tie', percentBps: 999 }],
     });
     await expect(checkout.create(tied.buyer.id, key(), tied.dto)).rejects.toMatchObject({
-      code: 'FEE_RULE_AMBIGUOUS',
+      code: 'LISTING_TIER_FEE_RULE_INVALID',
     });
 
     await prisma.$executeRawUnsafe('TRUNCATE TABLE "User", "CatalogCategory" CASCADE');
-    const excessive = await ready({ fixedAmountMinor: 1001n });
+    const excessive = await ready({ percentBps: 10_001 });
     await expect(checkout.create(excessive.buyer.id, key(), excessive.dto)).rejects.toMatchObject({
       code: 'PLATFORM_COMMISSION_EXCEEDS_ORDER_TOTAL',
     });
   });
 
   it('freezes the first order and replay while a later checkout uses a new policy', async () => {
-    const first = await ready({ fixedAmountMinor: 100n });
+    const first = await ready({ percentBps: 1000 });
     const replayKey = key();
     const firstResponse = await checkout.create(first.buyer.id, replayKey, first.dto);
     const firstReleasePolicy = await prisma.sellerReleasePolicyVersion.findFirstOrThrow({
@@ -221,8 +214,7 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
     });
     const secondPolicy = await publishPlatformCommissionPolicy(prisma, first.sellerUser.id, {
       publicVersion: 2,
-      formula: 'FIXED',
-      fixedAmountMinor: 200n,
+      percentBps: 2000,
     });
     await prisma.sellerReleasePolicyVersion.update({
       where: { id: firstReleasePolicy.id },
@@ -276,7 +268,7 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
   }
 
   it('enforces database fee constraints and creates no financial records', async () => {
-    const f = await ready({ fixedAmountMinor: 125n });
+    const f = await ready({ percentBps: 1250 });
     const beforeFinancial = await financialCounts();
     const result = await checkout.create(f.buyer.id, key(), f.dto);
     const order = await prisma.order.findUniqueOrThrow({
@@ -363,7 +355,7 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
   }
 
   it('makes checkout pricing snapshots immutable while preserving normal lifecycle updates', async () => {
-    const f = await ready({ fixedAmountMinor: 125n });
+    const f = await ready({ percentBps: 1250 });
     const result = await checkout.create(f.buyer.id, key(), f.dto);
     const order = await prisma.order.findUniqueOrThrow({
       where: { publicCode: (result as { orderCode: string }).orderCode },
@@ -371,7 +363,7 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
     const other = await publishPlatformCommissionPolicy(prisma, f.sellerUser.id, {
       publicVersion: 2,
       status: 'DRAFT',
-      fixedAmountMinor: 0n,
+      percentBps: 0,
     });
 
     await expectImmutable(
@@ -421,12 +413,12 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
   it('enforces policy/rule snapshot coherence while preserving true legacy null snapshots', async () => {
     const fixture = await commerceFixture(prisma, 'NORMAL', undefined, 5, false);
     const policyA = await publishPlatformCommissionPolicy(prisma, fixture.sellerUser.id, {
-      fixedAmountMinor: 125n,
+      percentBps: 1250,
     });
     const policyB = await publishPlatformCommissionPolicy(prisma, fixture.sellerUser.id, {
       publicVersion: 2,
       status: 'DRAFT',
-      fixedAmountMinor: 0n,
+      percentBps: 0,
     });
 
     const legacyPreview = await createCartShell(fixture);
@@ -566,6 +558,35 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
         total: 2000n,
       },
     ]);
+  });
+
+  it('holds a shared policy lock until the checkout transaction commits', async () => {
+    const fixture = await commerceFixture(prisma, 'NORMAL', undefined, 5, false);
+    const policy = await publishPlatformCommissionPolicy(prisma, fixture.sellerUser.id);
+    let signalLocked!: () => void;
+    let release!: () => void;
+    const locked = new Promise<void>((resolve) => (signalLocked = resolve));
+    const barrier = new Promise<void>((resolve) => (release = resolve));
+    const transactionA = prisma.$transaction(async (tx) => {
+      await listingTierPolicy.resolve(tx, 'SILVER', 1000n);
+      signalLocked();
+      await barrier;
+    });
+    await locked;
+    try {
+      await expect(
+        prisma.$transaction(async (tx) => {
+          await tx.$executeRawUnsafe(`SET LOCAL lock_timeout = '100ms'`);
+          await tx.$executeRaw`UPDATE "FeePolicyVersion" SET "status" = 'RETIRED' WHERE "id" = ${policy.id}::uuid`;
+        }),
+      ).rejects.toBeDefined();
+    } finally {
+      release();
+      await transactionA;
+    }
+    await expect(
+      prisma.feePolicyVersion.update({ where: { id: policy.id }, data: { status: 'RETIRED' } }),
+    ).resolves.toMatchObject({ status: 'RETIRED' });
   });
 
   it('does not depend on PSP or ledger posting from CheckoutService', () => {

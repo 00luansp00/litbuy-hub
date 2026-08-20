@@ -259,7 +259,7 @@ describe('Seller finance read HTTP with real auth and PostgreSQL', () => {
     });
     await publishPlatformCommissionPolicy(prisma, sellerActor.userId, {
       publicVersion: policyVersion++,
-      fixedAmountMinor: 1000n,
+      percentBps: 1000,
     });
     await publishSellerReleasePolicy(prisma, sellerActor.userId, 0);
 

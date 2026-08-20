@@ -17,6 +17,7 @@ type ConsistencySnapshot = {
 type ListingDraftsServiceProbe = {
   productType(value: string | null | undefined): CatalogProductType | null | undefined;
   assertModelConsistency(snapshot: ConsistencySnapshot): void;
+  validateSubmit(snapshot: unknown): void;
 };
 
 const makeProbe = () =>
@@ -126,6 +127,35 @@ describe('ListingDraftsService', () => {
       );
     });
   });
+
+  describe('explicit listing tier selection', () => {
+    const complete = (requestedPromotionTier: 'SILVER' | 'GOLD' | 'DIAMOND' | null) => ({
+      model: ListingDraftModel.NORMAL,
+      productType: CatalogProductType.GAME,
+      categoryId: '00000000-0000-4000-8000-000000000001',
+      requestedPromotionTier,
+      deliveryMode: 'MANUAL',
+      title: 'Produto completo',
+      description: 'Descrição completa do produto',
+      price: new Prisma.Decimal('100.00'),
+      stock: 1,
+      variants: [],
+      serviceDetails: null,
+      accountDetails: null,
+    });
+
+    it('requires a tier at submit time', () => {
+      expectAppError(
+        () => makeProbe().validateSubmit(complete(null)),
+        'LISTING_TIER_REQUIRED',
+        HttpStatus.BAD_REQUEST,
+      );
+    });
+
+    it.each(['SILVER', 'GOLD', 'DIAMOND'] as const)('accepts explicit %s', (tier) => {
+      expect(() => makeProbe().validateSubmit(complete(tier))).not.toThrow();
+    });
+  });
 });
 
 type FakeDraft = {
@@ -141,7 +171,7 @@ type FakeDraft = {
   price: Prisma.Decimal | null;
   stock: number | null;
   deliveryMode: 'MANUAL';
-  requestedPromotionTier: 'SILVER';
+  requestedPromotionTier: 'SILVER' | 'GOLD' | 'DIAMOND' | null;
   requestedSellerPlan: 'STANDARD';
   autoMessage: string | null;
   notifyInApp: boolean;
@@ -207,7 +237,7 @@ const makeDraft = (userId: string, data: Partial<FakeDraft> = {}): FakeDraft => 
     price: null,
     stock: null,
     deliveryMode: 'MANUAL',
-    requestedPromotionTier: 'SILVER',
+    requestedPromotionTier: null,
     requestedSellerPlan: 'STANDARD',
     autoMessage: null,
     notifyInApp: true,
@@ -305,7 +335,12 @@ describe('ListingDraftsService public methods', () => {
       wizardStep: 2,
     });
 
-    expect(result).toMatchObject({ status: 'DRAFT', title: 'Rascunho Seguro', version: 1 });
+    expect(result).toMatchObject({
+      status: 'DRAFT',
+      title: 'Rascunho Seguro',
+      requestedPromotionTier: null,
+      version: 1,
+    });
     expect(JSON.stringify(result)).not.toContain('userEmail');
     expect(JSON.stringify(result)).not.toContain('reviewedBy');
     expect(store.drafts).toHaveLength(1);
