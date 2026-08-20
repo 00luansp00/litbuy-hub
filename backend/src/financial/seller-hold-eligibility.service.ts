@@ -168,6 +168,16 @@ export class SellerHoldEligibilityService {
     )
       return this.fail(tx, holdId, { type: 'AMOUNT_MISMATCH', code: 'HOLD_ORDER_INVALID' });
 
+    const deliveries = await tx.orderDelivery.findMany({ where: { orderId: order.id } });
+    const delivery = deliveries[0];
+    if (
+      deliveries.length !== 1 ||
+      !delivery ||
+      delivery.sellerProfileId !== order.sellerProfileId ||
+      delivery.createdAt.getTime() !== hold.releasePolicyAppliedAt!.getTime()
+    )
+      return this.fail(tx, holdId, { type: 'OTHER', code: 'DELIVERY_AUTHORITY_INVALID' });
+
     const payments = await tx.payment.findMany({ where: { orderId: order.id } });
     const payment = payments[0];
     if (
@@ -202,15 +212,15 @@ export class SellerHoldEligibilityService {
         });
       return 'ALREADY_ELIGIBLE';
     }
-    if (order.disputeStatus === 'OPEN' || order.disputeStatus === 'UNDER_REVIEW')
-      return 'BUSINESS_BLOCKED';
-    if (
-      order.status !== 'COMPLETED' ||
-      order.paymentStatus !== 'PAID' ||
-      order.fulfillmentStatus !== 'CONFIRMED' ||
-      order.disputeStatus !== 'NONE'
-    )
+    const validPostDeliveryState =
+      (order.status === 'ACTIVE' && order.fulfillmentStatus === 'AWAITING_BUYER_CONFIRMATION') ||
+      (order.status === 'COMPLETED' && order.fulfillmentStatus === 'CONFIRMED');
+    if (order.paymentStatus !== 'PAID' || !validPostDeliveryState)
       return this.fail(tx, holdId, { type: 'STATUS_MISMATCH', code: 'ORDER_STATE_INVALID' });
+    if (['OPEN', 'UNDER_REVIEW', 'RESOLVED_BUYER', 'CLOSED'].includes(order.disputeStatus))
+      return 'BUSINESS_BLOCKED';
+    if (!['NONE', 'RESOLVED_SELLER'].includes(order.disputeStatus))
+      return this.fail(tx, holdId, { type: 'STATUS_MISMATCH', code: 'ORDER_DISPUTE_INVALID' });
     if (!hold.due) return 'NOT_DUE';
 
     await tx.financialHold.update({ where: { id: hold.id }, data: { status: 'RELEASE_ELIGIBLE' } });

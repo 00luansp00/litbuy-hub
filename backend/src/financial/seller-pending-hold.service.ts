@@ -86,10 +86,10 @@ export class SellerPendingHoldService {
     const seen = [...seenOrderIds];
     const rows = await this.prisma.$queryRaw<Array<{ id: string }>>`
       SELECT o."id" FROM "Order" o
-      WHERE o."status" = 'COMPLETED'
-        AND o."paymentStatus" = 'PAID'
-        AND o."fulfillmentStatus" = 'CONFIRMED'
-        AND o."disputeStatus" NOT IN ('OPEN', 'UNDER_REVIEW')
+      WHERE o."paymentStatus" = 'PAID'
+        AND ((o."status" = 'ACTIVE' AND o."fulfillmentStatus" = 'AWAITING_BUYER_CONFIRMATION')
+          OR (o."status" = 'COMPLETED' AND o."fulfillmentStatus" = 'CONFIRMED'))
+        AND EXISTS (SELECT 1 FROM "OrderDelivery" d WHERE d."orderId" = o."id")
         AND NOT EXISTS (SELECT 1 FROM "SellerPendingHoldZero" z
           JOIN "Payment" zp ON zp."id" = z."paymentId" AND zp."orderId" = o."id"
           WHERE z."orderId" = o."id" AND z."sellerProfileId" = o."sellerProfileId"
@@ -165,17 +165,19 @@ export class SellerPendingHoldService {
     `;
     const order = rows[0];
     if (!order) return { failure: { type: 'MISSING_LOCAL', code: 'ORDER_MISSING' } };
-    if (order.status !== OrderStatus.COMPLETED)
-      return { failure: { type: 'STATUS_MISMATCH', code: 'ORDER_NOT_COMPLETED' } };
+    const beforeDelivery =
+      order.fulfillmentStatus === FulfillmentStatus.NOT_AVAILABLE ||
+      order.fulfillmentStatus === FulfillmentStatus.AWAITING_SELLER;
+    if (beforeDelivery) return 'ALREADY_HANDLED';
+    const validPostDeliveryState =
+      (order.status === OrderStatus.ACTIVE &&
+        order.fulfillmentStatus === FulfillmentStatus.AWAITING_BUYER_CONFIRMATION) ||
+      (order.status === OrderStatus.COMPLETED &&
+        order.fulfillmentStatus === FulfillmentStatus.CONFIRMED);
+    if (!validPostDeliveryState)
+      return { failure: { type: 'STATUS_MISMATCH', code: 'ORDER_STATE_INVALID' } };
     if (order.paymentStatus !== PaymentStatus.PAID)
       return { failure: { type: 'STATUS_MISMATCH', code: 'ORDER_PAYMENT_STATUS_MISMATCH' } };
-    if (order.fulfillmentStatus !== FulfillmentStatus.CONFIRMED)
-      return { failure: { type: 'STATUS_MISMATCH', code: 'ORDER_FULFILLMENT_STATUS_MISMATCH' } };
-    if (
-      order.disputeStatus === DisputeStatus.OPEN ||
-      order.disputeStatus === DisputeStatus.UNDER_REVIEW
-    )
-      return 'ALREADY_HANDLED';
     if (order.currency !== 'BRL')
       return { failure: { type: 'OTHER', code: 'PAYMENT_CURRENCY_MISMATCH' } };
     if (!this.hasCompleteOrderSnapshot(order) && !this.hasEmptyOrderSnapshot(order))
@@ -208,6 +210,9 @@ export class SellerPendingHoldService {
       return { failure: { type: 'MISSING_LOCAL', code: 'SALE_RECOGNITION_MISSING' } };
     if (!this.validRecognition(recognition, order, proceeds))
       return { failure: { type: 'OTHER', code: 'SALE_RECOGNITION_INVALID' } };
+
+    const deliveryClock = await this.deliveryClock(tx, order, payment);
+    if ('failure' in deliveryClock) return deliveryClock;
 
     if (proceeds === 0n) {
       const marker = await tx.sellerPendingHoldZero.findUnique({ where: { orderId: order.id } });
@@ -255,14 +260,10 @@ export class SellerPendingHoldService {
             };
       if (!this.hasEmptySnapshot(hold))
         return { failure: { type: 'OTHER', code: 'SELLER_HOLD_ARTIFACT_MISMATCH' } };
-      const deliveryClock = await this.deliveryClock(tx, order, payment);
-      if ('failure' in deliveryClock) return deliveryClock;
       const snapshot = await this.resolveSnapshot(tx, order, deliveryClock.createdAt);
       await tx.financialHold.update({ where: { id: hold.id }, data: snapshot });
       return 'PROCESSED';
     }
-    const deliveryClock = await this.deliveryClock(tx, order, payment);
-    if ('failure' in deliveryClock) return deliveryClock;
     const snapshot = await this.resolveSnapshot(tx, order, deliveryClock.createdAt);
     if (posting) {
       await this.createHold(tx, order, payment, proceeds, posting.id, snapshot);
