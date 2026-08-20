@@ -33,6 +33,7 @@ type HoldRow = {
   snapshotValid: boolean;
   due: boolean;
 };
+type DeliveryRow = { id: string; sellerProfileId: string; createdAt: Date };
 type Posting = Prisma.LedgerTransactionGetPayload<{
   include: { entries: { include: { account: true } } };
 }>;
@@ -185,6 +186,22 @@ export class SellerHeldFundsReleaseService {
       proceeds !== hold.amountMinor
     )
       return this.fail(tx, holdId, 'STATUS_MISMATCH', 'ORDER_INVALID');
+
+    const deliveries = await tx.$queryRaw<DeliveryRow[]>`
+      SELECT "id", "sellerProfileId", "createdAt"
+      FROM "OrderDelivery"
+      WHERE "orderId" = ${order.id}::uuid
+      FOR SHARE
+    `;
+    const delivery = deliveries[0];
+    if (
+      deliveries.length !== 1 ||
+      !delivery ||
+      delivery.sellerProfileId !== order.sellerProfileId ||
+      delivery.sellerProfileId !== hold.sellerProfileId ||
+      delivery.createdAt.getTime() !== hold.releasePolicyAppliedAt!.getTime()
+    )
+      return this.fail(tx, holdId, 'OTHER', 'DELIVERY_AUTHORITY_INVALID');
 
     await tx.$queryRaw`SELECT "id" FROM "Payment" WHERE "orderId" = ${order.id}::uuid FOR UPDATE`;
     const payments = await tx.payment.findMany({ where: { orderId: order.id } });

@@ -1177,6 +1177,40 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
     expect(postings[0].createdAt.getTime()).toBe(released.releasedAt!.getTime());
   });
 
+  it('fails closed when authoritative delivery disappears after eligibility', async () => {
+    const { order, hold } = await eligibleHold();
+    const ledger = app.get(FinancialLedgerService);
+    const beforeBalance = await ledger.getSellerFinancialBalance(order.sellerProfileId);
+    expect((await prisma.financialHold.findUniqueOrThrow({ where: { id: hold.id } })).status).toBe(
+      'RELEASE_ELIGIBLE',
+    );
+
+    await prisma.orderDelivery.delete({ where: { orderId: order.id } });
+
+    expect(await release.processOne(hold.id)).toBe('RECONCILIATION_REQUIRED');
+    expect(await prisma.financialHold.findUniqueOrThrow({ where: { id: hold.id } })).toMatchObject({
+      status: 'RELEASE_ELIGIBLE',
+      releaseLedgerTransactionId: null,
+      releasedAt: null,
+    });
+    expect(await ledger.getSellerFinancialBalance(order.sellerProfileId)).toEqual(beforeBalance);
+    expect(
+      await prisma.ledgerTransaction.count({
+        where: { type: 'SELLER_FUNDS_RELEASED', referenceId: hold.id },
+      }),
+    ).toBe(0);
+    expect(
+      await prisma.reconciliationIssue.findMany({
+        where: {
+          referenceType: 'SellerHeldFundsRelease',
+          referenceId: hold.id,
+          status: 'OPEN',
+        },
+        select: { details: true },
+      }),
+    ).toEqual([{ details: { errorCode: 'DELIVERY_AUTHORITY_INVALID' } }]);
+  });
+
   it('rejects RELEASED when releasedAt is before releaseEligibleAt at the database boundary', async () => {
     const { hold } = await eligibleHold();
     const original = await prisma.ledgerTransaction.findUniqueOrThrow({
