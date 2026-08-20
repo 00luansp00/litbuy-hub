@@ -47,6 +47,7 @@ describe('Product lifecycle with real PostgreSQL transactions', () => {
         productType: 'ACCOUNT',
         model: 'NORMAL',
         status: 'APPROVED',
+        requestedPromotionTier: 'SILVER',
         title: 'Produto real',
         description: 'Descrição real',
         price: 10,

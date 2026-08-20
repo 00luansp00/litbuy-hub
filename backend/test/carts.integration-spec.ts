@@ -52,6 +52,7 @@ describe('Cart database constraints with real PostgreSQL', () => {
         productType: 'GAME',
         model: 'NORMAL',
         status: 'APPROVED',
+        requestedPromotionTier: 'SILVER',
       },
     });
     const product = await prisma.product.create({
@@ -118,6 +119,7 @@ describe('Cart database constraints with real PostgreSQL', () => {
         productType: 'GAME',
         model: 'NORMAL',
         status: 'APPROVED',
+        requestedPromotionTier: 'SILVER',
       },
     });
     return prisma.product.create({
@@ -164,6 +166,7 @@ describe('Cart database constraints with real PostgreSQL', () => {
         productType: model === 'SERVICE' ? 'SERVICE' : 'GAME',
         model,
         status: 'APPROVED',
+        requestedPromotionTier: 'SILVER',
       },
     });
     const fixed = model === 'SERVICE' && pricingType === 'FIXED';
@@ -272,6 +275,7 @@ describe('Cart database constraints with real PostgreSQL', () => {
         productType: 'GAME',
         model: 'DYNAMIC',
         status: 'APPROVED',
+        requestedPromotionTier: 'SILVER',
       },
     });
     const other = await prisma.product.create({

@@ -104,6 +104,7 @@ describe('Carts HTTP with real guards, sessions, CSRF and PostgreSQL', () => {
           productType: 'GAME',
           model: 'NORMAL',
           status: 'APPROVED',
+          requestedPromotionTier: 'SILVER',
         },
       });
       products.push(

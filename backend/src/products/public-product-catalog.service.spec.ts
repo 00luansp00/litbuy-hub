@@ -94,6 +94,7 @@ const candidate = (id: string, eligible = true) => ({
   price: new Prisma.Decimal('19.90'),
   stock: 4,
   deliveryMode: 'MANUAL' as const,
+  listingTier: 'SILVER' as const,
   autoMessage: 'private',
   version: 2,
   createdAt: new Date(),

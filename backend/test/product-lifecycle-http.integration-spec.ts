@@ -103,6 +103,7 @@ describe('Product lifecycle HTTP with real auth and PostgreSQL', () => {
         productType: 'ACCOUNT',
         model: 'NORMAL',
         status: 'APPROVED',
+        requestedPromotionTier: 'SILVER',
         title: 'Produto',
         description: 'Descrição',
         price: 10,
