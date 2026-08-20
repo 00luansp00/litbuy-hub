@@ -80,9 +80,9 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
   }
 
   it.each([
-    ['SILVER', 999, 999n],
-    ['GOLD', 1199, 1199n],
-    ['DIAMOND', 1299, 1299n],
+    ['SILVER', 731, 731n],
+    ['GOLD', 842, 842n],
+    ['DIAMOND', 953, 953n],
   ] as const)(
     'snapshots the exact %s listing tier commission without increasing Buyer total',
     async (tier, percentBps, fee) => {
@@ -91,7 +91,7 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
       const response = await checkout.create(f.buyer.id, key(), f.dto);
       const order = await prisma.order.findUniqueOrThrow({
         where: { publicCode: (response as { orderCode: string }).orderCode },
-        include: { items: true },
+        include: { items: true, feeComponentSnapshots: true },
       });
       expect(order).toMatchObject({
         feePolicyVersionId: f.policy.id,
@@ -100,7 +100,25 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
         subtotalAmountMinor: 10_000n,
         totalAmountMinor: 10_000n,
         platformFeeAmountMinor: fee,
+        feeSnapshotVersion: 1,
       });
+      expect(order.feeComponentSnapshots).toEqual([
+        expect.objectContaining({
+          orderId: order.id,
+          componentKind: 'LISTING_TIER',
+          feePolicyVersionId: f.policy.id,
+          feeRuleId: rule.id,
+          pricingPolicyVersion: f.policy.publicVersion,
+          listingTier: tier,
+          category: 'PLATFORM_COMMISSION',
+          partyCharged: 'SELLER',
+          formula: 'PERCENT_BPS',
+          percentBps,
+          baseAmountMinor: 10_000n,
+          feeAmountMinor: fee,
+          currency: 'BRL',
+        }),
+      ]);
       expect(
         order.items.every((item) => item.pricingPolicyVersion === f.policy.publicVersion),
       ).toBe(true);
@@ -109,6 +127,19 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
       );
     },
   );
+
+  it('materializes an explicit zero-bps component instead of treating absence as zero', async () => {
+    const f = await ready({ percentBps: 0 }, 'SILVER', 2);
+    const response = await checkout.create(f.buyer.id, key(), f.dto);
+    const order = await prisma.order.findUniqueOrThrow({
+      where: { publicCode: (response as { orderCode: string }).orderCode },
+      include: { feeComponentSnapshots: true },
+    });
+    expect(order.platformFeeAmountMinor).toBe(0n);
+    expect(order.feeComponentSnapshots).toEqual([
+      expect.objectContaining({ percentBps: 0, baseAmountMinor: 2_000n, feeAmountMinor: 0n }),
+    ]);
+  });
 
   it.each([
     ['draft policy', { status: 'DRAFT' }, 'FEE_POLICY_NOT_FOUND'],
@@ -239,7 +270,10 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
       expectedCartVersion: preview.version,
       expectedPreviewFingerprint: preview.previewFingerprint,
     });
-    const orders = await prisma.order.findMany({ orderBy: { createdAt: 'asc' } });
+    const orders = await prisma.order.findMany({
+      orderBy: { createdAt: 'asc' },
+      include: { feeComponentSnapshots: true },
+    });
     expect(orders[0]).toMatchObject({
       feePolicyVersionId: first.policy.id,
       platformFeeAmountMinor: 100n,
@@ -254,6 +288,20 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
     expect((secondResponse as { platformFeeAmountMinor: string }).platformFeeAmountMinor).toBe(
       '200',
     );
+    expect(orders[0].feeComponentSnapshots).toEqual([
+      expect.objectContaining({
+        feePolicyVersionId: first.policy.id,
+        percentBps: 1000,
+        feeAmountMinor: 100n,
+      }),
+    ]);
+    expect(orders[1].feeComponentSnapshots).toEqual([
+      expect.objectContaining({
+        feePolicyVersionId: secondPolicy.id,
+        percentBps: 2000,
+        feeAmountMinor: 200n,
+      }),
+    ]);
     await expect(
       prisma.feePolicyVersion.delete({ where: { id: first.policy.id } }),
     ).rejects.toBeDefined();
@@ -393,6 +441,21 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
         data: { feePolicyVersionId: null, platformCommissionRuleId: null },
       }),
     );
+    await expectImmutable(
+      prisma.order.update({ where: { id: order.id }, data: { feeSnapshotVersion: null } }),
+    );
+    const component = await prisma.orderFeeComponentSnapshot.findFirstOrThrow({
+      where: { orderId: order.id },
+    });
+    await expect(
+      prisma.orderFeeComponentSnapshot.update({
+        where: { id: component.id },
+        data: { percentBps: 1 },
+      }),
+    ).rejects.toThrow(/ORDER_FEE_COMPONENT_SNAPSHOT_IMMUTABLE/);
+    await expect(
+      prisma.orderFeeComponentSnapshot.delete({ where: { id: component.id } }),
+    ).rejects.toThrow(/ORDER_FEE_COMPONENT_SNAPSHOT_IMMUTABLE/);
 
     await expect(
       prisma.order.update({
@@ -441,7 +504,12 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
       id: legacy.id,
       feePolicyVersionId: null,
       platformCommissionRuleId: null,
+      feeSnapshotVersion: null,
     });
+    expect(await prisma.orderFeeComponentSnapshot.count({ where: { orderId: legacy.id } })).toBe(0);
+    await expectImmutable(
+      prisma.order.update({ where: { id: legacy.id }, data: { feeSnapshotVersion: 1 } }),
+    );
 
     const partialPolicyPreview = await createCartShell(fixture);
     await expect(

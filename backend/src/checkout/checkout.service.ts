@@ -182,6 +182,7 @@ export class CheckoutService {
               feePolicyVersionId: commission.policy.id,
               platformCommissionRuleId: commission.rule.id,
               pricingPolicyVersion: commission.policy.publicVersion,
+              feeSnapshotVersion: 1,
               sellerReleasePolicyVersionId: releasePolicy.policyVersionId,
               sellerReleasePolicyRuleId: releasePolicy.ruleId,
               sellerReleasePolicySource: releasePolicy.source,
@@ -203,6 +204,23 @@ export class CheckoutService {
         }
       }
       if (!order) this.fail('CHECKOUT_CONFLICT', 409);
+      await tx.orderFeeComponentSnapshot.create({
+        data: {
+          orderId: order.id,
+          componentKind: 'LISTING_TIER',
+          feePolicyVersionId: commission.policy.id,
+          feeRuleId: commission.rule.id,
+          pricingPolicyVersion: commission.policy.publicVersion,
+          listingTier: product.listingTier,
+          category: commission.rule.category,
+          partyCharged: commission.rule.partyCharged,
+          formula: commission.rule.formula,
+          percentBps: commission.rule.percentBps!,
+          baseAmountMinor: subtotal,
+          feeAmountMinor: commission.amountMinor,
+          currency: 'BRL',
+        },
+      });
       const reservations: string[] = [];
       for (const { item, selection } of selections) {
         const created = await tx.orderItem.create({

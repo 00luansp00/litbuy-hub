@@ -931,6 +931,7 @@ model Order {
   pricingPolicyVersion             Int                         @default(1)
   feePolicyVersionId               String?                     @db.Uuid
   platformCommissionRuleId         String?                     @db.Uuid
+  feeSnapshotVersion               Int?
   sellerReleasePolicyVersionId     String?                     @db.Uuid
   sellerReleasePolicyRuleId        String?                     @db.Uuid
   sellerReleasePolicySource        SellerReleasePolicyScope?
@@ -955,6 +956,7 @@ model Order {
   refunds                          Refund[]
   feePolicyVersion                 FeePolicyVersion?           @relation(fields: [feePolicyVersionId], references: [id], onDelete: Restrict)
   platformCommissionRule           FeeRule?                    @relation("OrderPlatformCommissionRule", fields: [platformCommissionRuleId, feePolicyVersionId], references: [id, policyVersionId], onDelete: Restrict)
+  feeComponentSnapshots            OrderFeeComponentSnapshot[]
   sellerReleasePolicyVersion       SellerReleasePolicyVersion? @relation(fields: [sellerReleasePolicyVersionId], references: [id], onDelete: Restrict)
   sellerReleasePolicyRule          SellerReleasePolicyRule?    @relation(fields: [sellerReleasePolicyRuleId, sellerReleasePolicyVersionId], references: [id, policyVersionId], onDelete: Restrict)
   sellerReleasePolicyCategory      CatalogCategory?            @relation("OrderSellerReleasePolicyCategory", fields: [sellerReleasePolicyCategoryId], references: [id], onDelete: Restrict)
@@ -971,6 +973,31 @@ model Order {
   @@index([sellerReleasePolicyRuleId])
   @@index([sellerReleasePolicyCategoryId])
   @@index([sellerReleasePolicySubcategoryId])
+}
+
+model OrderFeeComponentSnapshot {
+  id                   String                          @id @default(uuid()) @db.Uuid
+  orderId              String                          @db.Uuid
+  componentKind        OrderFeeComponentKind
+  feePolicyVersionId   String                          @db.Uuid
+  feeRuleId            String                          @db.Uuid
+  pricingPolicyVersion Int
+  listingTier          ListingDraftPromotionPreference
+  category             FeeRuleCategory
+  partyCharged         FeeParty
+  formula              FeeFormula
+  percentBps           Int
+  baseAmountMinor      BigInt
+  feeAmountMinor       BigInt
+  currency             String
+  createdAt            DateTime                        @default(now())
+  order                Order                           @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  feePolicyVersion     FeePolicyVersion                @relation(fields: [feePolicyVersionId], references: [id], onDelete: Restrict)
+  feeRule              FeeRule                         @relation(fields: [feeRuleId, feePolicyVersionId], references: [id, policyVersionId], onDelete: Restrict)
+
+  @@unique([orderId, componentKind])
+  @@index([feePolicyVersionId])
+  @@index([feeRuleId])
 }
 
 model OrderChatConversation {
@@ -1393,6 +1420,10 @@ enum FeeParty {
   PLATFORM
 }
 
+enum OrderFeeComponentKind {
+  LISTING_TIER
+}
+
 enum WithdrawalPolicyStatus {
   DRAFT
   SCHEDULED
@@ -1774,47 +1805,49 @@ model FinancialOutboxEvent {
 }
 
 model FeePolicyVersion {
-  id                String          @id @default(uuid()) @db.Uuid
-  publicVersion     Int             @unique
-  status            FeePolicyStatus @default(DRAFT)
-  effectiveFrom     DateTime
-  effectiveTo       DateTime?
-  createdByUserId   String          @db.Uuid
-  publishedByUserId String?         @db.Uuid
-  publishedAt       DateTime?
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-  rules             FeeRule[]
-  orders            Order[]
-  createdBy         User            @relation("FeePolicyCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  publishedBy       User?           @relation("FeePolicyPublisher", fields: [publishedByUserId], references: [id], onDelete: Restrict)
+  id                         String                      @id @default(uuid()) @db.Uuid
+  publicVersion              Int                         @unique
+  status                     FeePolicyStatus             @default(DRAFT)
+  effectiveFrom              DateTime
+  effectiveTo                DateTime?
+  createdByUserId            String                      @db.Uuid
+  publishedByUserId          String?                     @db.Uuid
+  publishedAt                DateTime?
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
+  rules                      FeeRule[]
+  orders                     Order[]
+  orderFeeComponentSnapshots OrderFeeComponentSnapshot[]
+  createdBy                  User                        @relation("FeePolicyCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  publishedBy                User?                       @relation("FeePolicyPublisher", fields: [publishedByUserId], references: [id], onDelete: Restrict)
 }
 
 model FeeRule {
-  id                 String              @id @default(uuid()) @db.Uuid
-  policyVersionId    String              @db.Uuid
-  category           FeeRuleCategory
-  code               String
-  formula            FeeFormula
-  partyCharged       FeeParty
-  percentBps         Int?
-  fixedAmountMinor   BigInt?
-  minimumAmountMinor BigInt?
-  maximumAmountMinor BigInt?
-  paymentMethod      PaymentMethod?
-  installmentsFrom   Int?
-  installmentsTo     Int?
-  sellerLevel        String?
-  sellerPlan         String?
-  promotionTier      String?
-  withdrawalSpeed    WithdrawalSpeed?
-  productType        CatalogProductType?
-  priority           Int                 @default(0)
-  enabled            Boolean             @default(true)
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
-  policyVersion      FeePolicyVersion    @relation(fields: [policyVersionId], references: [id], onDelete: Restrict)
-  commissionOrders   Order[]             @relation("OrderPlatformCommissionRule")
+  id                         String                      @id @default(uuid()) @db.Uuid
+  policyVersionId            String                      @db.Uuid
+  category                   FeeRuleCategory
+  code                       String
+  formula                    FeeFormula
+  partyCharged               FeeParty
+  percentBps                 Int?
+  fixedAmountMinor           BigInt?
+  minimumAmountMinor         BigInt?
+  maximumAmountMinor         BigInt?
+  paymentMethod              PaymentMethod?
+  installmentsFrom           Int?
+  installmentsTo             Int?
+  sellerLevel                String?
+  sellerPlan                 String?
+  promotionTier              String?
+  withdrawalSpeed            WithdrawalSpeed?
+  productType                CatalogProductType?
+  priority                   Int                         @default(0)
+  enabled                    Boolean                     @default(true)
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
+  policyVersion              FeePolicyVersion            @relation(fields: [policyVersionId], references: [id], onDelete: Restrict)
+  commissionOrders           Order[]                     @relation("OrderPlatformCommissionRule")
+  orderFeeComponentSnapshots OrderFeeComponentSnapshot[]
 
   @@unique([policyVersionId, code])
   @@unique([id, policyVersionId])

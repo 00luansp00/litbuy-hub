@@ -605,6 +605,31 @@ describe('SaleFinancialRecognitionService with real PostgreSQL', () => {
     ).toEqual({ pricingPolicyVersion: order.pricingPolicyVersion });
   });
 
+  it('fails closed and deduplicates reconciliation when a marked H2 component is missing', async () => {
+    const { order } = await activePaidOrder({ fee: 100n });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe("SET LOCAL session_replication_role = 'replica'");
+      await tx.$executeRaw`DELETE FROM "OrderFeeComponentSnapshot" WHERE "orderId" = ${order.id}::uuid`;
+    });
+    await expectSingleIssue(order.id, 'H2_FEE_SNAPSHOT_INVALID');
+  });
+
+  it('preserves valid legacy flat recognition without requiring a composite row', async () => {
+    const { order } = await activePaidOrder({ fee: 100n });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe("SET LOCAL session_replication_role = 'replica'");
+      await tx.$executeRaw`DELETE FROM "OrderFeeComponentSnapshot" WHERE "orderId" = ${order.id}::uuid`;
+      await tx.$executeRaw`UPDATE "Order" SET "feeSnapshotVersion" = NULL WHERE "id" = ${order.id}::uuid`;
+    });
+    await recognition.processOne(order.id);
+    expect(await entriesFor(order.id)).not.toHaveLength(0);
+    expect(
+      await prisma.reconciliationIssue.count({
+        where: { referenceType: 'SaleFinancialRecognition', referenceId: order.id },
+      }),
+    ).toBe(0);
+  });
+
   it('fails closed for legacy and commission snapshot mismatch without disabling triggers', async () => {
     const fixture = await commerceFixture(prisma, 'NORMAL', undefined, 5, false);
     const cart = await prisma.cart.create({
