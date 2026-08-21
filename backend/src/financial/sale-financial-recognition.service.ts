@@ -42,13 +42,17 @@ type OrderSnapshot = {
   feePolicyVersionId: string | null;
   platformCommissionRuleId: string | null;
   feeSnapshotVersion: number | null;
+  commercialSnapshotVersion: number | null;
+  sellerPlanSnapshot: string | null;
 };
 
 type FeeComponentSnapshot = {
+  componentKind: string;
   feePolicyVersionId: string;
   feeRuleId: string;
   pricingPolicyVersion: number;
-  listingTier: string;
+  listingTier: string | null;
+  sellerPlan: string | null;
   category: string;
   partyCharged: string;
   formula: string;
@@ -208,7 +212,8 @@ export class SaleFinancialRecognitionService {
     return this.prisma.$transaction(async (tx) => {
       const orders = await tx.$queryRaw<OrderSnapshot[]>`
         SELECT "id", "sellerProfileId", "status", "paymentStatus", "currency", "subtotalAmountMinor", "totalAmountMinor",
-               "platformFeeAmountMinor", "pricingPolicyVersion", "feePolicyVersionId", "platformCommissionRuleId", "feeSnapshotVersion"
+               "platformFeeAmountMinor", "pricingPolicyVersion", "feePolicyVersionId", "platformCommissionRuleId", "feeSnapshotVersion",
+               "commercialSnapshotVersion", "sellerPlanSnapshot"
         FROM "Order" WHERE "id" = ${orderId}::uuid FOR UPDATE
       `;
       const order = orders[0];
@@ -229,18 +234,28 @@ export class SaleFinancialRecognitionService {
         return { failure: { type: 'MISSING_LOCAL', code: 'ORDER_PRICING_SNAPSHOT_MISSING' } };
 
       let component: FeeComponentSnapshot | undefined;
-      if (order.feeSnapshotVersion === 1) {
+      if (order.feeSnapshotVersion === 1 || order.feeSnapshotVersion === 2) {
         const components = await tx.$queryRaw<FeeComponentSnapshot[]>`
-          SELECT "feePolicyVersionId", "feeRuleId", "pricingPolicyVersion", "listingTier",
+          SELECT "componentKind", "feePolicyVersionId", "feeRuleId", "pricingPolicyVersion", "listingTier", "sellerPlan",
                  "category", "partyCharged", "formula", "percentBps", "baseAmountMinor",
                  "feeAmountMinor", "currency"
           FROM "OrderFeeComponentSnapshot"
-          WHERE "orderId" = ${orderId}::uuid AND "componentKind" = 'LISTING_TIER'
+          WHERE "orderId" = ${orderId}::uuid
           FOR SHARE
         `;
-        if (components.length !== 1)
+        const listing = components.filter((x) => x.componentKind === 'LISTING_TIER');
+        const sellerMax = components.filter((x) => x.componentKind === 'SELLER_MAX');
+        const expectedMax =
+          order.feeSnapshotVersion === 2 && order.sellerPlanSnapshot === 'LIT_MAX';
+        if (
+          listing.length !== 1 ||
+          (order.feeSnapshotVersion === 1 && sellerMax.length !== 0) ||
+          (order.feeSnapshotVersion === 2 && order.commercialSnapshotVersion !== 1) ||
+          (expectedMax ? sellerMax.length !== 1 : sellerMax.length !== 0)
+        )
           return { failure: { type: 'MISSING_LOCAL', code: 'H2_FEE_SNAPSHOT_INVALID' } };
-        component = components[0];
+        component = listing[0];
+        const aggregate = components.reduce((sum, item) => sum + item.feeAmountMinor, 0n);
         if (
           component.feePolicyVersionId !== order.feePolicyVersionId ||
           component.feeRuleId !== order.platformCommissionRuleId ||
@@ -249,14 +264,47 @@ export class SaleFinancialRecognitionService {
           component.partyCharged !== 'SELLER' ||
           component.formula !== 'PERCENT_BPS' ||
           component.percentBps < 0 ||
+          component.listingTier === null ||
           !['SILVER', 'GOLD', 'DIAMOND'].includes(component.listingTier) ||
           component.baseAmountMinor !== order.subtotalAmountMinor ||
-          component.feeAmountMinor !== order.platformFeeAmountMinor ||
+          (order.feeSnapshotVersion === 1 &&
+            component.feeAmountMinor !== order.platformFeeAmountMinor) ||
           component.currency !== order.currency ||
+          aggregate !== order.platformFeeAmountMinor ||
           (component.baseAmountMinor * BigInt(component.percentBps)) / 10_000n !==
             component.feeAmountMinor
         )
           return { failure: { type: 'AMOUNT_MISMATCH', code: 'H2_FEE_SNAPSHOT_INVALID' } };
+        if (sellerMax[0]) {
+          const max = sellerMax[0];
+          const maxRule = await tx.feeRule.findUnique({
+            where: {
+              id_policyVersionId: { id: max.feeRuleId, policyVersionId: max.feePolicyVersionId },
+            },
+          });
+          if (
+            max.feePolicyVersionId !== order.feePolicyVersionId ||
+            max.pricingPolicyVersion !== order.pricingPolicyVersion ||
+            max.category !== 'LIT_MAX_PRICE' ||
+            max.partyCharged !== 'SELLER' ||
+            max.formula !== 'PERCENT_BPS' ||
+            max.sellerPlan !== 'LIT_MAX' ||
+            max.listingTier !== null ||
+            max.baseAmountMinor !== order.subtotalAmountMinor ||
+            max.currency !== order.currency ||
+            (max.baseAmountMinor * BigInt(max.percentBps)) / 10_000n !== max.feeAmountMinor ||
+            !maxRule ||
+            !maxRule.enabled ||
+            maxRule.sellerPlan !== 'LIT_MAX' ||
+            maxRule.category !== 'LIT_MAX_PRICE' ||
+            maxRule.partyCharged !== 'SELLER' ||
+            maxRule.formula !== 'PERCENT_BPS' ||
+            maxRule.percentBps !== max.percentBps
+          )
+            return {
+              failure: { type: 'AMOUNT_MISMATCH', code: 'SELLER_MAX_FEE_SNAPSHOT_INVALID' },
+            };
+        }
       } else if (order.feeSnapshotVersion !== null) {
         return { failure: { type: 'OTHER', code: 'H2_FEE_SNAPSHOT_VERSION_UNSUPPORTED' } };
       }

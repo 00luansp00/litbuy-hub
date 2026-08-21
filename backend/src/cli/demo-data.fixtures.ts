@@ -15,6 +15,7 @@ export const DEMO_IDS = {
   feeRule: uuid(8, 2),
   feeRuleGold: uuid(8, 6),
   feeRuleDiamond: uuid(8, 7),
+  feeRuleSellerMax: uuid(8, 8),
   feePolicyAuthor: uuid(8, 3),
   sellerReleasePolicy: uuid(8, 4),
   sellerReleaseRule: uuid(8, 5),
@@ -55,6 +56,14 @@ export const DEMO_FEE_POLICY = {
       code: 'demo-diamond-listing-tier',
       promotionTier: 'DIAMOND',
       percentBps: 1299,
+    },
+    {
+      id: DEMO_IDS.feeRuleSellerMax,
+      code: 'demo-seller-max',
+      category: 'LIT_MAX_PRICE',
+      sellerPlan: 'LIT_MAX',
+      promotionTier: null,
+      percentBps: 299,
     },
   ],
 } as const;

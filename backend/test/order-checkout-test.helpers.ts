@@ -93,6 +93,15 @@ export async function publishPlatformCommissionPolicy(
               promotionTier: 'SILVER',
               ...options.rule,
             },
+            {
+              code: `seller-max-${crypto.randomUUID()}`,
+              category: 'LIT_MAX_PRICE',
+              partyCharged: 'SELLER',
+              formula: 'PERCENT_BPS',
+              percentBps: 299,
+              fixedAmountMinor: null,
+              sellerPlan: 'LIT_MAX',
+            },
             ...(options.additionalRules ?? []).map((rule) => ({
               code: `platform-commission-${crypto.randomUUID()}`,
               category: 'PLATFORM_COMMISSION' as const,

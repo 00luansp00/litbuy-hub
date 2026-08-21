@@ -100,7 +100,7 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
         subtotalAmountMinor: 10_000n,
         totalAmountMinor: 10_000n,
         platformFeeAmountMinor: fee,
-        feeSnapshotVersion: 1,
+        feeSnapshotVersion: 2,
       });
       expect(order.feeComponentSnapshots).toEqual([
         expect.objectContaining({

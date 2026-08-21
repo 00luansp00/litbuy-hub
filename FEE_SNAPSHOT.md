@@ -22,6 +22,12 @@ A completed idempotency replay returns its persisted response before policy reso
 
 Legacy Orders (`feeSnapshotVersion IS NULL`) retain flat-snapshot validation. For version 1, sale recognition additionally requires exactly one coherent Listing Tier component and validates its frozen policy/rule/version/tier/rate/base/amount without consulting an active policy or recalculating from a current policy. Missing or inconsistent H2 evidence fails closed, deduplicates a `ReconciliationIssue`, and creates no `SALE_RECOGNIZED` transaction or ledger entry. Valid H2 evidence preserves existing ledger economics.
 
+## Version 2 — Seller MAX
+
+I2 cria prospectivamente `feeSnapshotVersion = 2`. Toda Order v2 possui exatamente um componente `LISTING_TIER`; uma Order cujo snapshot comercial é `LIT_MAX` possui também exatamente um `SELLER_MAX`, enquanto `STANDARD` não possui esse componente. Ambos congelam a mesma policy/public version e usam o subtotal do produto como base. `platformFeeAmountMinor` é a soma dos componentes Seller-side; `totalAmountMinor` continua igual ao subtotal pago pelo Buyer. Legacy `NULL` e v1 não são alterados nem promovidos.
+
+O componente MAX identifica `sellerPlan=LIT_MAX`, `category=LIT_MAX_PRICE`, Seller, `PERCENT_BPS`, rate, base, amount, policy e rule. Recognition usa esses valores congelados, não uma policy ativa, e falha fechado diante de ausência, duplicidade ou incoerência.
+
 ## Future boundaries
 
 H2 persists the evidence a future refund capability will need, but implements no refund, reversal, PSP expense, recovery, deficit, payout, or withdrawal behavior. Seller MAX and Buyer VIP remain separate future capabilities; extending the component enum and rules requires their own migrations and contracts. H2 adds no commercial rate constants: rates continue to come from versioned `FeeRule` rows.

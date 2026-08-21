@@ -979,13 +979,14 @@ model Order {
 }
 
 model OrderFeeComponentSnapshot {
-  id                   String                          @id @default(uuid()) @db.Uuid
-  orderId              String                          @db.Uuid
+  id                   String                            @id @default(uuid()) @db.Uuid
+  orderId              String                            @db.Uuid
   componentKind        OrderFeeComponentKind
-  feePolicyVersionId   String                          @db.Uuid
-  feeRuleId            String                          @db.Uuid
+  feePolicyVersionId   String                            @db.Uuid
+  feeRuleId            String                            @db.Uuid
   pricingPolicyVersion Int
-  listingTier          ListingDraftPromotionPreference
+  listingTier          ListingDraftPromotionPreference?
+  sellerPlan           ListingDraftSellerPlanPreference?
   category             FeeRuleCategory
   partyCharged         FeeParty
   formula              FeeFormula
@@ -993,10 +994,10 @@ model OrderFeeComponentSnapshot {
   baseAmountMinor      BigInt
   feeAmountMinor       BigInt
   currency             String
-  createdAt            DateTime                        @default(now())
-  order                Order                           @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  feePolicyVersion     FeePolicyVersion                @relation(fields: [feePolicyVersionId], references: [id], onDelete: Restrict)
-  feeRule              FeeRule                         @relation(fields: [feeRuleId, feePolicyVersionId], references: [id, policyVersionId], onDelete: Restrict)
+  createdAt            DateTime                          @default(now())
+  order                Order                             @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  feePolicyVersion     FeePolicyVersion                  @relation(fields: [feePolicyVersionId], references: [id], onDelete: Restrict)
+  feeRule              FeeRule                           @relation(fields: [feeRuleId, feePolicyVersionId], references: [id, policyVersionId], onDelete: Restrict)
 
   @@unique([orderId, componentKind])
   @@index([feePolicyVersionId])
@@ -1425,6 +1426,7 @@ enum FeeParty {
 
 enum OrderFeeComponentKind {
   LISTING_TIER
+  SELLER_MAX
 }
 
 enum WithdrawalPolicyStatus {

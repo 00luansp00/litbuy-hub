@@ -153,7 +153,12 @@ export class CheckoutService {
         0n,
       );
       const product = selections[0].item.product;
-      const commission = await this.listingTierPolicy.resolve(tx, product.listingTier, subtotal);
+      const commission = await this.listingTierPolicy.resolveCheckout(
+        tx,
+        product.listingTier,
+        product.sellerPlan,
+        subtotal,
+      );
       let releasePolicy: Awaited<ReturnType<SellerReleasePolicyService['resolveEffectivePolicy']>>;
       try {
         releasePolicy = await this.sellerReleasePolicy.resolveEffectivePolicy(tx, {
@@ -180,9 +185,9 @@ export class CheckoutService {
               platformFeeAmountMinor: commission.amountMinor,
               totalAmountMinor: subtotal,
               feePolicyVersionId: commission.policy.id,
-              platformCommissionRuleId: commission.rule.id,
+              platformCommissionRuleId: commission.listingRule.id,
               pricingPolicyVersion: commission.policy.publicVersion,
-              feeSnapshotVersion: 1,
+              feeSnapshotVersion: 2,
               commercialSnapshotVersion: 1,
               sellerPlanSnapshot: product.sellerPlan,
               sellerReleasePolicyVersionId: releasePolicy.policyVersionId,
@@ -211,18 +216,37 @@ export class CheckoutService {
           orderId: order.id,
           componentKind: 'LISTING_TIER',
           feePolicyVersionId: commission.policy.id,
-          feeRuleId: commission.rule.id,
+          feeRuleId: commission.listingRule.id,
           pricingPolicyVersion: commission.policy.publicVersion,
           listingTier: product.listingTier,
-          category: commission.rule.category,
-          partyCharged: commission.rule.partyCharged,
-          formula: commission.rule.formula,
-          percentBps: commission.rule.percentBps!,
+          category: commission.listingRule.category,
+          partyCharged: commission.listingRule.partyCharged,
+          formula: commission.listingRule.formula,
+          percentBps: commission.listingRule.percentBps!,
           baseAmountMinor: subtotal,
-          feeAmountMinor: commission.amountMinor,
+          feeAmountMinor: commission.listingAmountMinor,
           currency: 'BRL',
         },
       });
+      if (commission.sellerMaxRule) {
+        await tx.orderFeeComponentSnapshot.create({
+          data: {
+            orderId: order.id,
+            componentKind: 'SELLER_MAX',
+            feePolicyVersionId: commission.policy.id,
+            feeRuleId: commission.sellerMaxRule.id,
+            pricingPolicyVersion: commission.policy.publicVersion,
+            sellerPlan: 'LIT_MAX',
+            category: commission.sellerMaxRule.category,
+            partyCharged: commission.sellerMaxRule.partyCharged,
+            formula: commission.sellerMaxRule.formula,
+            percentBps: commission.sellerMaxRule.percentBps!,
+            baseAmountMinor: subtotal,
+            feeAmountMinor: commission.sellerMaxAmountMinor,
+            currency: 'BRL',
+          },
+        });
+      }
       const reservations: string[] = [];
       for (const { item, selection } of selections) {
         const created = await tx.orderItem.create({
@@ -271,7 +295,7 @@ export class CheckoutService {
         version: 1,
         feePolicyVersionId: commission.policy.id,
         pricingPolicyVersion: commission.policy.publicVersion,
-        platformCommissionRuleId: commission.rule.id,
+        platformCommissionRuleId: commission.listingRule.id,
         platformFeeAmountMinor: commission.amountMinor.toString(),
       });
       if (reservations.length)

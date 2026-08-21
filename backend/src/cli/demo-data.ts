@@ -391,7 +391,7 @@ async function seed(context: Runtime) {
           rules: {
             create: DEMO_FEE_POLICY.rules.map((rule) => ({
               ...rule,
-              category: 'PLATFORM_COMMISSION' as const,
+              category: 'category' in rule ? rule.category : 'PLATFORM_COMMISSION',
               partyCharged: 'SELLER' as const,
               formula: 'PERCENT_BPS' as const,
               fixedAmountMinor: null,

@@ -103,12 +103,60 @@ export class ListingTierPolicyService {
     return rule;
   }
 
+  private sellerMaxRule(policy: Awaited<ReturnType<ListingTierPolicyService['policy']>>) {
+    const exact = policy.rules.filter(
+      (rule) => rule.enabled && rule.category === 'LIT_MAX_PRICE' && rule.sellerPlan === 'LIT_MAX',
+    );
+    if (exact.length === 0) this.fail('SELLER_MAX_FEE_RULE_NOT_FOUND');
+    if (exact.length !== 1) this.fail('SELLER_MAX_FEE_RULE_AMBIGUOUS');
+    const rule = exact[0];
+    const canonical =
+      rule.partyCharged === 'SELLER' &&
+      rule.formula === 'PERCENT_BPS' &&
+      rule.percentBps !== null &&
+      rule.fixedAmountMinor === null &&
+      rule.minimumAmountMinor === null &&
+      rule.maximumAmountMinor === null &&
+      rule.promotionTier === null &&
+      rule.paymentMethod === null &&
+      rule.installmentsFrom === null &&
+      rule.installmentsTo === null &&
+      rule.sellerLevel === null &&
+      rule.withdrawalSpeed === null &&
+      rule.productType === null;
+    if (!canonical) this.fail('SELLER_MAX_FEE_RULE_INVALID');
+    return rule;
+  }
+
   async resolve(client: Client, tier: ListingDraftPromotionPreference, amountMinor: bigint) {
     const policy = await this.policy(client, true);
     const rule = this.exactRule(policy, tier);
     const amount = calculateFee(amountMinor, rule);
     if (amount < 0n || amount > amountMinor) this.fail('PLATFORM_COMMISSION_EXCEEDS_ORDER_TOTAL');
     return { policy, rule, amountMinor: amount };
+  }
+
+  async resolveCheckout(
+    client: Client,
+    tier: ListingDraftPromotionPreference,
+    sellerPlan: 'STANDARD' | 'LIT_MAX',
+    amountMinor: bigint,
+  ) {
+    const policy = await this.policy(client, true);
+    const listingRule = this.exactRule(policy, tier);
+    const listingAmountMinor = calculateFee(amountMinor, listingRule);
+    const sellerMaxRule = sellerPlan === 'LIT_MAX' ? this.sellerMaxRule(policy) : null;
+    const sellerMaxAmountMinor = sellerMaxRule ? calculateFee(amountMinor, sellerMaxRule) : 0n;
+    const amount = listingAmountMinor + sellerMaxAmountMinor;
+    if (amount < 0n || amount > amountMinor) this.fail('PLATFORM_COMMISSION_EXCEEDS_ORDER_TOTAL');
+    return {
+      policy,
+      listingRule,
+      listingAmountMinor,
+      sellerMaxRule,
+      sellerMaxAmountMinor,
+      amountMinor: amount,
+    };
   }
 
   async options() {
