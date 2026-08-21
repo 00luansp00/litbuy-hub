@@ -10,6 +10,7 @@ import {
   PaymentStatus,
   Prisma,
   ReconciliationIssueType,
+  SellerMaxQualificationStatus,
 } from '@prisma/client';
 import { acquireAdvisoryTransactionLock } from '../database/advisory-lock';
 import { PrismaService } from '../database/prisma.service';
@@ -17,6 +18,13 @@ import { PrismaService } from '../database/prisma.service';
 const REFERENCE_TYPE = 'OrderFulfillment';
 const SALE_REFERENCE_TYPE = 'OrderSale';
 const SALE_TYPE = 'SALE_RECOGNIZED';
+export const classifySellerMaxQualification = (
+  deadlineAt: Date,
+  buyerConfirmedAt: Date,
+): SellerMaxQualificationStatus =>
+  buyerConfirmedAt.getTime() <= deadlineAt.getTime()
+    ? SellerMaxQualificationStatus.QUALIFIED
+    : SellerMaxQualificationStatus.EXPIRED;
 type Tx = Prisma.TransactionClient;
 type Failure = { type: ReconciliationIssueType; code: string };
 type CandidateResult = 'NO_CANDIDATE' | 'ALREADY_HANDLED' | 'PROCESSED';
@@ -43,6 +51,12 @@ type LockedOrder = {
   fulfillmentStatus: FulfillmentStatus;
   disputeStatus: DisputeStatus;
   version: number;
+  sellerPlanSnapshot: string | null;
+  sellerMaxQualificationVersion: number | null;
+  sellerMaxQualificationStatus: SellerMaxQualificationStatus | null;
+  sellerMaxQualificationDeadlineAt: Date | null;
+  sellerMaxQualificationDecidedAt: Date | null;
+  buyerConfirmedAt: Date | null;
 };
 
 export type RecordDeliveryInput = {
@@ -81,6 +95,14 @@ export class OrderFulfillmentService {
       limit,
       () => this.nextCompletionCandidate(),
       (id) => this.processCompletionResult(id),
+    );
+  }
+
+  async processSellerMaxQualificationExpirationBatch(limit = 25): Promise<number> {
+    return this.processBatch(
+      limit,
+      () => this.nextSellerMaxExpirationCandidate(),
+      (id) => this.expireSellerMaxQualification(id),
     );
   }
 
@@ -143,9 +165,31 @@ export class OrderFulfillmentService {
           code: 'DELIVERY_SELLER_MISMATCH',
         });
 
+      const [{ now: buyerConfirmedAt }] = await tx.$queryRaw<Array<{ now: Date }>>`
+        SELECT transaction_timestamp()::timestamp(3) AS "now"
+      `;
+      const qualificationPending =
+        order.sellerPlanSnapshot === 'LIT_MAX' &&
+        order.sellerMaxQualificationVersion === 1 &&
+        order.sellerMaxQualificationStatus === SellerMaxQualificationStatus.PENDING &&
+        order.sellerMaxQualificationDeadlineAt !== null;
+      const qualificationStatus = qualificationPending
+        ? classifySellerMaxQualification(order.sellerMaxQualificationDeadlineAt!, buyerConfirmedAt)
+        : order.sellerMaxQualificationStatus;
+
       await tx.order.update({
         where: { id: order.id },
-        data: { fulfillmentStatus: 'CONFIRMED', version: { increment: 1 } },
+        data: {
+          fulfillmentStatus: 'CONFIRMED',
+          buyerConfirmedAt,
+          ...(qualificationPending
+            ? {
+                sellerMaxQualificationStatus: qualificationStatus,
+                sellerMaxQualificationDecidedAt: buyerConfirmedAt,
+              }
+            : {}),
+          version: { increment: 1 },
+        },
       });
       await this.event(
         tx,
@@ -159,6 +203,27 @@ export class OrderFulfillmentService {
           actorRole: 'BUYER',
         },
       );
+      if (qualificationPending) {
+        const qualified = qualificationStatus === SellerMaxQualificationStatus.QUALIFIED;
+        await this.event(
+          tx,
+          order.id,
+          qualified ? 'SELLER_MAX_QUALIFIED' : 'SELLER_MAX_QUALIFICATION_EXPIRED',
+          qualified ? 'seller_max.qualified' : 'seller_max.qualification_expired',
+          actorUserId,
+          {
+            orderId: order.id,
+            deliveredAt: delivery.createdAt,
+            qualificationDeadlineAt: order.sellerMaxQualificationDeadlineAt,
+            buyerConfirmedAt,
+            qualificationVersion: 1,
+            previousStatus: 'PENDING',
+            nextStatus: qualificationStatus,
+            actorRole: 'BUYER',
+            reason: qualified ? 'BUYER_CONFIRMED_WITHIN_WINDOW' : 'BUYER_CONFIRMED_AFTER_WINDOW',
+          },
+        );
+      }
       const confirmed = { ...order, fulfillmentStatus: FulfillmentStatus.CONFIRMED };
       const completion = await this.completeLocked(tx, confirmed);
       if (completion.kind !== 'SUCCESS') return completion;
@@ -209,9 +274,21 @@ export class OrderFulfillmentService {
         evidenceHash: input.evidenceHash,
       },
     });
+    const startsSellerMaxQualification = order.sellerPlanSnapshot === 'LIT_MAX';
+    const qualificationDeadlineAt = new Date(delivery.createdAt.getTime() + 48 * 60 * 60 * 1000);
     await tx.order.update({
       where: { id: order.id },
-      data: { fulfillmentStatus: 'DELIVERED', version: { increment: 1 } },
+      data: {
+        fulfillmentStatus: 'DELIVERED',
+        ...(startsSellerMaxQualification
+          ? {
+              sellerMaxQualificationVersion: 1,
+              sellerMaxQualificationStatus: 'PENDING',
+              sellerMaxQualificationDeadlineAt: qualificationDeadlineAt,
+            }
+          : {}),
+        version: { increment: 1 },
+      },
     });
     const metadata = {
       orderId: order.id,
@@ -228,6 +305,24 @@ export class OrderFulfillmentService {
       input.actorUserId,
       metadata,
     );
+    if (startsSellerMaxQualification)
+      await this.event(
+        tx,
+        order.id,
+        'SELLER_MAX_QUALIFICATION_STARTED',
+        'seller_max.qualification_started',
+        input.actorUserId,
+        {
+          orderId: order.id,
+          deliveredAt: delivery.createdAt,
+          qualificationDeadlineAt,
+          qualificationVersion: 1,
+          previousStatus: null,
+          nextStatus: 'PENDING',
+          actorRole: 'SELLER',
+          reason: 'SELLER_DELIVERY_RECORDED',
+        },
+      );
     await tx.order.update({
       where: { id: order.id },
       data: { fulfillmentStatus: 'AWAITING_BUYER_CONFIRMATION', version: { increment: 1 } },
@@ -390,11 +485,73 @@ export class OrderFulfillmentService {
     return rows[0]?.id ?? null;
   }
 
+  private async nextSellerMaxExpirationCandidate(): Promise<string | null> {
+    const rows = await this.prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT "id" FROM "Order"
+      WHERE "sellerMaxQualificationVersion" = 1
+        AND "sellerMaxQualificationStatus" = 'PENDING'
+        AND "buyerConfirmedAt" IS NULL
+        AND "sellerMaxQualificationDeadlineAt" < transaction_timestamp()
+      ORDER BY "sellerMaxQualificationDeadlineAt", "id" LIMIT 1
+    `;
+    return rows[0]?.id ?? null;
+  }
+
+  private async expireSellerMaxQualification(orderId: string): Promise<CandidateResult> {
+    return this.prisma.$transaction(async (tx) => {
+      await acquireAdvisoryTransactionLock(tx, `order:${orderId}`);
+      const order = await this.lockOrder(tx, orderId);
+      if (
+        !order ||
+        order.sellerMaxQualificationVersion !== 1 ||
+        order.sellerMaxQualificationStatus !== SellerMaxQualificationStatus.PENDING ||
+        order.buyerConfirmedAt !== null ||
+        order.sellerMaxQualificationDeadlineAt === null
+      )
+        return 'ALREADY_HANDLED';
+      const [{ now }] = await tx.$queryRaw<Array<{ now: Date }>>`
+        SELECT transaction_timestamp()::timestamp(3) AS "now"
+      `;
+      if (now.getTime() <= order.sellerMaxQualificationDeadlineAt.getTime())
+        return 'ALREADY_HANDLED';
+      await tx.order.update({
+        where: { id: order.id },
+        data: {
+          sellerMaxQualificationStatus: 'EXPIRED',
+          sellerMaxQualificationDecidedAt: now,
+          version: { increment: 1 },
+        },
+      });
+      const delivery = await tx.orderDelivery.findUniqueOrThrow({ where: { orderId } });
+      await this.event(
+        tx,
+        order.id,
+        'SELLER_MAX_QUALIFICATION_EXPIRED',
+        'seller_max.qualification_expired',
+        undefined,
+        {
+          orderId: order.id,
+          deliveredAt: delivery.createdAt,
+          qualificationDeadlineAt: order.sellerMaxQualificationDeadlineAt,
+          qualificationVersion: 1,
+          previousStatus: 'PENDING',
+          nextStatus: 'EXPIRED',
+          actorRole: 'SYSTEM',
+          reason: 'BUYER_CONFIRMATION_WINDOW_ELAPSED',
+        },
+      );
+      return 'PROCESSED';
+    });
+  }
+
   private async lockOrder(tx: Tx, orderId: string): Promise<LockedOrder | null> {
     const rows = await tx.$queryRaw<LockedOrder[]>`
       SELECT o."id", o."publicCode", o."buyerUserId", o."sellerProfileId",
              sp."userId" AS "sellerUserId", o."status", o."paymentStatus",
              o."fulfillmentStatus", o."disputeStatus", o."version"
+             , o."sellerPlanSnapshot", o."sellerMaxQualificationVersion",
+             o."sellerMaxQualificationStatus", o."sellerMaxQualificationDeadlineAt",
+             o."sellerMaxQualificationDecidedAt", o."buyerConfirmedAt"
       FROM "Order" o JOIN "SellerProfile" sp ON sp."id" = o."sellerProfileId"
       WHERE o."id" = ${orderId}::uuid FOR UPDATE OF o
     `;

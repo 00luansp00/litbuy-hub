@@ -50,8 +50,18 @@ describe('OrderFulfillmentService with real PostgreSQL', () => {
     await cleanup.$disconnect();
   });
 
-  async function activePaid(recognized = true) {
+  async function activePaid(recognized = true, sellerMax = false) {
     const fixture = await commerceFixture(prisma, 'NORMAL', undefined, 20, false);
+    if (sellerMax) {
+      await prisma.listingDraft.update({
+        where: { id: fixture.product.sourceListingDraftId },
+        data: { requestedSellerPlan: 'LIT_MAX' },
+      });
+      await prisma.product.update({
+        where: { id: fixture.product.id },
+        data: { sellerPlan: 'LIT_MAX' },
+      });
+    }
     const activePolicy = await prisma.feePolicyVersion.findFirst({ where: { status: 'ACTIVE' } });
     if (!activePolicy)
       await publishPlatformCommissionPolicy(prisma, fixture.sellerUser.id, {
@@ -100,6 +110,47 @@ describe('OrderFulfillmentService with real PostgreSQL', () => {
     if (recognized) await recognition.processOne(order.id);
     return { fixture, order: await prisma.order.findUniqueOrThrow({ where: { id: order.id } }) };
   }
+
+  it('materializes and qualifies one Seller MAX v1 window from the delivery DB clock', async () => {
+    const { fixture, order } = await activePaid(true, true);
+    await fulfillment.makeAvailable(order.id);
+    await fulfillment.recordDelivered({
+      orderCode: order.publicCode,
+      actorUserId: fixture.sellerUser.id,
+      deliveryType: 'MANUAL_REFERENCE',
+      evidenceHash: 'f'.repeat(64),
+    });
+    const delivery = await prisma.orderDelivery.findUniqueOrThrow({ where: { orderId: order.id } });
+    const pending = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(pending).toMatchObject({
+      sellerPlanSnapshot: 'LIT_MAX',
+      sellerMaxQualificationVersion: 1,
+      sellerMaxQualificationStatus: 'PENDING',
+      sellerMaxQualificationDecidedAt: null,
+      buyerConfirmedAt: null,
+    });
+    expect(pending.sellerMaxQualificationDeadlineAt!.getTime()).toBe(
+      delivery.createdAt.getTime() + 48 * 60 * 60 * 1000,
+    );
+    await Promise.all([
+      fulfillment.confirmReceipt(order.publicCode, fixture.buyer.id),
+      fulfillment.confirmReceipt(order.publicCode, fixture.buyer.id),
+    ]);
+    const qualified = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(qualified).toMatchObject({
+      sellerMaxQualificationStatus: 'QUALIFIED',
+      buyerConfirmedAt: expect.any(Date),
+      sellerMaxQualificationDecidedAt: expect.any(Date),
+    });
+    expect(
+      await prisma.orderEvent.count({ where: { orderId: order.id, type: 'SELLER_MAX_QUALIFIED' } }),
+    ).toBe(1);
+    expect(
+      await prisma.orderEvent.count({
+        where: { orderId: order.id, type: 'SELLER_MAX_QUALIFICATION_STARTED' },
+      }),
+    ).toBe(1);
+  });
 
   async function makeAwaiting(recognized = true) {
     const value = await activePaid(recognized);
