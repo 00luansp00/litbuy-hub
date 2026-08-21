@@ -109,8 +109,9 @@ export class SellerMaxInventoryService {
       let nextStatus = previousStatus;
       let autoResumed = false;
       let publicationBlocker: string | null = null;
+      let hasPersistedSellableStock = false;
       if (hadAutoPause) {
-        const hasStock =
+        hasPersistedSellableStock =
           product.model === ListingDraftModel.NORMAL
             ? stockAfter > 0
             : product.variants.some(
@@ -119,7 +120,7 @@ export class SellerMaxInventoryService {
                   variant.stock !== null &&
                   variant.stock > 0,
               );
-        if (hasStock) {
+        if (hasPersistedSellableStock) {
           publicationBlocker = publicationEligibilityCode(product);
           if (!publicationBlocker) {
             nextStatus = ProductStatus.ACTIVE;
@@ -132,7 +133,7 @@ export class SellerMaxInventoryService {
         where: { id: product.id },
         data: {
           status: nextStatus,
-          pauseReason: hadAutoPause ? null : product.pauseReason,
+          pauseReason: hadAutoPause && hasPersistedSellableStock ? null : product.pauseReason,
           version: nextVersion,
         },
       });

@@ -104,6 +104,7 @@ describe('Product lifecycle HTTP with real auth and PostgreSQL', () => {
         model: 'NORMAL',
         status: 'APPROVED',
         requestedPromotionTier: 'SILVER',
+        requestedSellerPlan: 'LIT_MAX',
         title: 'Produto',
         description: 'Descrição',
         price: 10,
@@ -113,6 +114,7 @@ describe('Product lifecycle HTTP with real auth and PostgreSQL', () => {
     const product = await prisma.product.create({
       data: {
         listingTier: 'SILVER',
+        sellerPlan: 'LIT_MAX',
         sourceListingDraftId: draft.id,
         sellerProfileId: owner.profile!.id,
         categoryId: category.id,
@@ -148,6 +150,21 @@ describe('Product lifecycle HTTP with real auth and PostgreSQL', () => {
       .set('Cookie', owner.cookies)
       .set('X-CSRF-Token', owner.csrf)
       .send(body);
+  const restock = (
+    owner: Awaited<ReturnType<typeof actor>>,
+    id: string,
+    body: object,
+    key: string | null = `restock:${crypto.randomUUID()}`,
+    csrf = true,
+  ) => {
+    let call = request(app.getHttpServer())
+      .post(`/api/v1/seller/products/${id}/inventory/restock`)
+      .set('Authorization', owner.authorization)
+      .set('Cookie', owner.cookies);
+    if (csrf) call = call.set('X-CSRF-Token', owner.csrf);
+    if (key !== null) call = call.set('Idempotency-Key', key);
+    return call.send(body);
+  };
 
   it('requires authentication, SELLER role, active profile and valid CSRF', async () => {
     const f = await fixture();
@@ -167,6 +184,50 @@ describe('Product lifecycle HTTP with real auth and PostgreSQL', () => {
     await patch(suspended, crypto.randomUUID(), { action: 'ACTIVATE', expectedVersion: 1 }).expect(
       403,
     );
+  });
+
+  it('proves the Seller MAX restock HTTP success and idempotency boundary', async () => {
+    const f = await fixture();
+    const key = `restock:${crypto.randomUUID()}`;
+    const body = { quantityToAdd: 2, expectedVersion: f.product.version };
+    const first = await restock(f.owner, f.product.id, body, key).expect(201);
+    expect(first.body).toMatchObject({
+      productId: f.product.id,
+      quantityAdded: 2,
+      stockBefore: 0,
+      stockAfter: 2,
+      version: f.product.version + 1,
+      autoResumed: false,
+    });
+    await restock(f.owner, f.product.id, body, key).expect(201).expect(first.body);
+  });
+
+  it('rejects missing/invalid idempotency, CSRF, UUID, DTO and IDOR at HTTP boundary', async () => {
+    const f = await fixture();
+    await restock(f.owner, f.product.id, { quantityToAdd: 1, expectedVersion: 1 }, null).expect(
+      400,
+    );
+    await restock(f.owner, f.product.id, { quantityToAdd: 1, expectedVersion: 1 }, 'short').expect(
+      400,
+    );
+    await restock(
+      f.owner,
+      f.product.id,
+      { quantityToAdd: 1, expectedVersion: 1 },
+      undefined,
+      false,
+    ).expect(401);
+    await restock(f.owner, 'not-a-uuid', { quantityToAdd: 1, expectedVersion: 1 }).expect(400);
+    for (const body of [
+      { quantityToAdd: 0, expectedVersion: 1 },
+      { quantityToAdd: -1, expectedVersion: 1 },
+      { quantityToAdd: 1.5, expectedVersion: 1 },
+      { quantityToAdd: 1, expectedVersion: 0 },
+      { quantityToAdd: 1, expectedVersion: 1, variantId: 'invalid' },
+    ])
+      await restock(f.owner, f.product.id, body).expect(400);
+    const other = await actor();
+    await restock(other, f.product.id, { quantityToAdd: 1, expectedVersion: 1 }).expect(404);
   });
   it('rejects invalid UUIDs and strict DTO violations before persistence', async () => {
     const f = await fixture();

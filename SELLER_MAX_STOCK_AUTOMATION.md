@@ -61,6 +61,9 @@ Após restock, apenas `PAUSED + SELLER_MAX_OUT_OF_STOCK` é candidato a resume. 
 vendável, o backend reutiliza `publicationEligibilityCode`. Se elegível, ativa e limpa o marker; se
 outro blocker existir, persiste estoque, mantém `PAUSED`, limpa o marker que deixou de ser verdade e
 retorna o blocker. O Seller pode corrigir o blocker e usar o lifecycle normal.
+Em `DYNAMIC`, estoque positivo apenas em variante `PAUSED` ainda não é vendável: nesse caso o
+Product permanece `PAUSED` e conserva `SELLER_MAX_OUT_OF_STOCK` até uma variante `ACTIVE` voltar a
+ter estoque positivo.
 
 ## Auditoria, legado e futuro
 
