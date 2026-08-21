@@ -63,6 +63,8 @@ export async function publishPlatformCommissionPolicy(
     effectiveTo?: Date | null;
     rule?: Partial<Prisma.FeeRuleUncheckedCreateInput>;
     additionalRules?: Array<Partial<Prisma.FeeRuleUncheckedCreateInput>>;
+    includeSellerMaxRule?: boolean;
+    sellerMaxRule?: Partial<Prisma.FeeRuleUncheckedCreateInput>;
   } = {},
 ) {
   const formula =
@@ -93,6 +95,20 @@ export async function publishPlatformCommissionPolicy(
               promotionTier: 'SILVER',
               ...options.rule,
             },
+            ...(options.includeSellerMaxRule === false
+              ? []
+              : [
+                  {
+                    code: `seller-max-${crypto.randomUUID()}`,
+                    category: 'LIT_MAX_PRICE' as const,
+                    partyCharged: 'SELLER' as const,
+                    formula: 'PERCENT_BPS' as const,
+                    percentBps: 299,
+                    fixedAmountMinor: null,
+                    sellerPlan: 'LIT_MAX',
+                    ...options.sellerMaxRule,
+                  },
+                ]),
             ...(options.additionalRules ?? []).map((rule) => ({
               code: `platform-commission-${crypto.randomUUID()}`,
               category: 'PLATFORM_COMMISSION' as const,

@@ -100,7 +100,7 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
         subtotalAmountMinor: 10_000n,
         totalAmountMinor: 10_000n,
         platformFeeAmountMinor: fee,
-        feeSnapshotVersion: 1,
+        feeSnapshotVersion: 2,
       });
       expect(order.feeComponentSnapshots).toEqual([
         expect.objectContaining({
@@ -545,7 +545,7 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
           },
         }),
       ),
-    ).rejects.toThrow(/H2_LISTING_TIER_COMPONENT_REQUIRED/);
+    ).rejects.toThrow(/ORDER_FEE_COMPONENTS_INCOMPLETE/);
     expect(await prisma.order.count({ where: { sourceCartId: cart.id } })).toBe(0);
   });
 

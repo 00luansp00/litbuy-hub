@@ -162,6 +162,14 @@ describe('local demo data with real PostgreSQL and MinIO', () => {
         percentBps: 999,
         fixedAmountMinor: null,
       },
+      {
+        promotionTier: null,
+        category: 'LIT_MAX_PRICE',
+        partyCharged: 'SELLER',
+        formula: 'PERCENT_BPS',
+        percentBps: 299,
+        fixedAmountMinor: null,
+      },
     ]);
   });
 
@@ -767,6 +775,54 @@ describe('local demo data with real PostgreSQL and MinIO', () => {
       });
     } finally {
       await prisma.user.delete({ where: { id } });
+    }
+  });
+
+  it('protects every deterministic demo FeeRule ID, including Seller MAX', async () => {
+    await runDemoCommand(['reset', '--confirm'], env);
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe("SET LOCAL session_replication_role = 'replica'");
+      await tx.feeRule.deleteMany({ where: { policyVersionId: DEMO_FEE_POLICY.id } });
+      await tx.feePolicyVersion.deleteMany({ where: { id: DEMO_FEE_POLICY.id } });
+    });
+    const owner = await prisma.user.create({
+      data: externalUser(crypto.randomUUID(), 'external-fee-rule@example.test'),
+    });
+    const policy = await prisma.feePolicyVersion.create({
+      data: {
+        publicVersion: 9_999_991,
+        status: 'DRAFT',
+        effectiveFrom: new Date('2099-01-01T00:00:00.000Z'),
+        createdByUserId: owner.id,
+        rules: {
+          create: {
+            id: DEMO_IDS.feeRuleSellerMax,
+            code: 'external-reserved-seller-max-id',
+            category: 'OTHER',
+            partyCharged: 'PLATFORM',
+            formula: 'FIXED',
+            fixedAmountMinor: 1n,
+          },
+        },
+      },
+    });
+    try {
+      await expect(runDemoCommand(['seed'], env)).rejects.toMatchObject({
+        code: 'DEMO_DATA_NAMESPACE_CONFLICT',
+      });
+      expect(
+        await prisma.feeRule.findUnique({ where: { id: DEMO_IDS.feeRuleSellerMax } }),
+      ).toMatchObject({
+        policyVersionId: policy.id,
+        code: 'external-reserved-seller-max-id',
+      });
+    } finally {
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe("SET LOCAL session_replication_role = 'replica'");
+        await tx.feeRule.deleteMany({ where: { policyVersionId: policy.id } });
+        await tx.feePolicyVersion.delete({ where: { id: policy.id } });
+      });
+      await prisma.user.delete({ where: { id: owner.id } });
     }
   });
 
