@@ -27,9 +27,11 @@ const candidate = (): PublicationCandidate => ({
   model: ListingDraftModel.NORMAL,
   sellerProfile: { status: SellerProfileStatus.ACTIVE },
   listingTier: 'SILVER',
+  sellerPlan: 'STANDARD',
   sourceListingDraft: {
     status: ListingDraftStatus.APPROVED,
     requestedPromotionTier: 'SILVER',
+    requestedSellerPlan: 'STANDARD',
     categoryId: 'category',
     subcategoryId: null,
     productType: 'ACCOUNT',

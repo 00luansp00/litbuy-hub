@@ -829,6 +829,7 @@ model Product {
   stock                Int?
   deliveryMode         ListingDraftDeliveryMode        @default(MANUAL)
   listingTier          ListingDraftPromotionPreference
+  sellerPlan           ListingDraftSellerPlanPreference @default(STANDARD)
   autoMessage          String?
   version              Int                             @default(1)
   createdAt            DateTime                        @default(now())
@@ -932,6 +933,8 @@ model Order {
   feePolicyVersionId               String?                     @db.Uuid
   platformCommissionRuleId         String?                     @db.Uuid
   feeSnapshotVersion               Int?
+  commercialSnapshotVersion        Int?
+  sellerPlanSnapshot               ListingDraftSellerPlanPreference?
   sellerReleasePolicyVersionId     String?                     @db.Uuid
   sellerReleasePolicyRuleId        String?                     @db.Uuid
   sellerReleasePolicySource        SellerReleasePolicyScope?

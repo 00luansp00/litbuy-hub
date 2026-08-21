@@ -28,6 +28,7 @@ export const cartProductInclude = {
       subcategoryId: true,
       productType: true,
       requestedPromotionTier: true,
+      requestedSellerPlan: true,
     },
   },
   category: { select: { status: true } },
