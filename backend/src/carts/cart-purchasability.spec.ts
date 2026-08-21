@@ -37,9 +37,11 @@ const product = (overrides: Partial<CartProductCandidate> = {}): CartProductCand
     status: SellerProfileStatus.ACTIVE,
   },
   listingTier: 'SILVER',
+  sellerPlan: 'STANDARD',
   sourceListingDraft: {
     status: ListingDraftStatus.APPROVED,
     requestedPromotionTier: 'SILVER',
+    requestedSellerPlan: 'STANDARD',
     categoryId: 'cat',
     subcategoryId: null,
     productType: CatalogProductType.GAME,

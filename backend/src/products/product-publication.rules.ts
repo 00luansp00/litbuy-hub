@@ -8,7 +8,11 @@ import {
   ProductVariantStatus,
   SellerProfileStatus,
 } from '@prisma/client';
-import type { CatalogProductType, ListingDraftPromotionPreference } from '@prisma/client';
+import type {
+  CatalogProductType,
+  ListingDraftPromotionPreference,
+  ListingDraftSellerPlanPreference,
+} from '@prisma/client';
 import { AppError } from '../common/errors/app-error';
 import { ProductLifecycleAction } from './dto';
 
@@ -22,6 +26,7 @@ export type PublicationCandidate = {
   stock: number | null;
   model: ListingDraftModel;
   listingTier: ListingDraftPromotionPreference;
+  sellerPlan: ListingDraftSellerPlanPreference;
   sellerProfile: { status: SellerProfileStatus };
   sourceListingDraft: {
     status: ListingDraftStatus;
@@ -29,6 +34,7 @@ export type PublicationCandidate = {
     subcategoryId: string | null;
     productType: CatalogProductType | null;
     requestedPromotionTier: ListingDraftPromotionPreference | null;
+    requestedSellerPlan: ListingDraftSellerPlanPreference;
   } | null;
   category: { status: CatalogEntityStatus } | null;
   subcategory: { status: CatalogEntityStatus; categoryId: string } | null;
@@ -76,6 +82,8 @@ export function publicationEligibilityCode(p: PublicationCandidate): string | nu
     p.listingTier !== p.sourceListingDraft.requestedPromotionTier
   )
     return 'PRODUCT_LISTING_TIER_MISMATCH';
+  if (p.sellerPlan !== p.sourceListingDraft.requestedSellerPlan)
+    return 'PRODUCT_SELLER_PLAN_MISMATCH';
   if (
     p.categoryId !== p.sourceListingDraft.categoryId ||
     p.subcategoryId !== p.sourceListingDraft.subcategoryId ||

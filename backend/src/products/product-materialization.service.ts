@@ -40,12 +40,15 @@ type ProductFull = Prisma.ProductGetPayload<{ include: typeof productInclude }>;
 export class ProductMaterializationService {
   constructor(private readonly prisma: PrismaService) {}
 
-  productReference(product: Pick<ProductFull, 'id' | 'slug' | 'status' | 'listingTier'>) {
+  productReference(
+    product: Pick<ProductFull, 'id' | 'slug' | 'status' | 'listingTier' | 'sellerPlan'>,
+  ) {
     return {
       id: product.id,
       slug: product.slug,
       status: product.status,
       listingTier: product.listingTier,
+      sellerPlan: product.sellerPlan,
     };
   }
 
@@ -63,6 +66,7 @@ export class ProductMaterializationService {
       stock: product.stock,
       deliveryMode: product.deliveryMode,
       listingTier: product.listingTier,
+      sellerPlan: product.sellerPlan,
       autoMessage: product.autoMessage,
       version: product.version,
       createdAt: product.createdAt.toISOString(),
@@ -270,6 +274,7 @@ export class ProductMaterializationService {
         stock: draft.model === ListingDraftModel.NORMAL ? draft.stock : null,
         deliveryMode: draft.deliveryMode,
         listingTier: draft.requestedPromotionTier!,
+        sellerPlan: draft.requestedSellerPlan,
         autoMessage: draft.autoMessage,
         variants: { create: this.variantData(draft) },
         attributes: { create: draft.attributes.map((a) => ({ key: a.key, value: a.value })) },

@@ -183,6 +183,8 @@ export class CheckoutService {
               platformCommissionRuleId: commission.rule.id,
               pricingPolicyVersion: commission.policy.publicVersion,
               feeSnapshotVersion: 1,
+              commercialSnapshotVersion: 1,
+              sellerPlanSnapshot: product.sellerPlan,
               sellerReleasePolicyVersionId: releasePolicy.policyVersionId,
               sellerReleasePolicyRuleId: releasePolicy.ruleId,
               sellerReleasePolicySource: releasePolicy.source,

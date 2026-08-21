@@ -95,6 +95,7 @@ const candidate = (id: string, eligible = true) => ({
   stock: 4,
   deliveryMode: 'MANUAL' as const,
   listingTier: 'SILVER' as const,
+  sellerPlan: 'STANDARD' as const,
   autoMessage: 'private',
   version: 2,
   createdAt: new Date(),
