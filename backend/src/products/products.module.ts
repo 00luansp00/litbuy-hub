@@ -8,6 +8,7 @@ import { PublicProductCatalogService } from './public-product-catalog.service';
 import { ProductMaterializationService } from './product-materialization.service';
 import { ProductLifecycleService } from './product-lifecycle.service';
 import { ProductLifecycleCsrfGuard } from './product-lifecycle-csrf.guard';
+import { SellerMaxInventoryService } from './seller-max-inventory.service';
 import { AdminProductsController, SellerProductsController } from './products.controller';
 @Module({
   imports: [DatabaseModule, AuthModule, JwtModule.register({}), ProductImagesModule],
@@ -16,6 +17,7 @@ import { AdminProductsController, SellerProductsController } from './products.co
     ProductMaterializationService,
     ProductLifecycleService,
     ProductLifecycleCsrfGuard,
+    SellerMaxInventoryService,
     PublicProductCatalogService,
   ],
   exports: [ProductMaterializationService],

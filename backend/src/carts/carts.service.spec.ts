@@ -24,6 +24,7 @@ const product = (sellerUserId = 'seller-user') => ({
   productType: CatalogProductType.GAME,
   model: ListingDraftModel.NORMAL,
   status: ProductStatus.ACTIVE,
+  pauseReason: null,
   slug: 'valid-product',
   title: 'Valid',
   description: 'Description',

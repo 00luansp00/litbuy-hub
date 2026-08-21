@@ -8,6 +8,7 @@ import { OrderExpirationService } from '../src/orders/order-expiration.service';
 import { parseIdempotencyKey } from '../src/commerce/idempotency-key';
 import { commerceFixture } from './order-checkout-test.helpers';
 import { acquireAdvisoryTransactionLock } from '../src/database/advisory-lock';
+import { SellerMaxInventoryService } from '../src/products/seller-max-inventory.service';
 
 describe('Paid order activation with real PostgreSQL', () => {
   jest.setTimeout(120_000);
@@ -17,6 +18,7 @@ describe('Paid order activation with real PostgreSQL', () => {
   let checkout: CheckoutService;
   let activation: PaidOrderActivationService;
   let expiration: OrderExpirationService;
+  let inventory: SellerMaxInventoryService;
 
   beforeAll(async () => {
     app = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -25,17 +27,32 @@ describe('Paid order activation with real PostgreSQL', () => {
     checkout = app.get(CheckoutService);
     activation = app.get(PaidOrderActivationService);
     expiration = app.get(OrderExpirationService);
+    inventory = app.get(SellerMaxInventoryService);
   });
   beforeEach(() => prisma.$executeRawUnsafe('TRUNCATE TABLE "User", "CatalogCategory" CASCADE'));
   afterAll(() => app.close());
 
-  async function paidOrder(model: 'NORMAL' | 'DYNAMIC' | 'SERVICE' = 'NORMAL', stock = 5) {
+  async function paidOrder(
+    model: 'NORMAL' | 'DYNAMIC' | 'SERVICE' = 'NORMAL',
+    stock = 5,
+    sellerMax = false,
+  ) {
     const fixture = await commerceFixture(
       prisma,
       model,
       model === 'SERVICE' ? 'FIXED' : undefined,
       stock,
     );
+    if (sellerMax) {
+      await prisma.listingDraft.update({
+        where: { id: fixture.product.sourceListingDraftId },
+        data: { requestedSellerPlan: 'LIT_MAX' },
+      });
+      await prisma.product.update({
+        where: { id: fixture.product.id },
+        data: { sellerPlan: 'LIT_MAX' },
+      });
+    }
     const variantId = model === 'DYNAMIC' ? fixture.product.variants[0].id : undefined;
     const preview = await carts.add(fixture.buyer.id, fixture.seller.slug, {
       productId: fixture.product.id,
@@ -814,5 +831,83 @@ describe('Paid order activation with real PostgreSQL', () => {
         where: { id: { in: [first.order.id, second.order.id] }, status: 'ACTIVE' },
       }),
     ).toBe(2);
+  });
+
+  it('auto-pauses only a definitive LIT_MAX final sale and replay is inert', async () => {
+    const { fixture, order } = await paidOrder('NORMAL', 1, true);
+    await activation.processOne(order.id);
+    const paused = await prisma.product.findUniqueOrThrow({ where: { id: fixture.product.id } });
+    expect(paused).toMatchObject({
+      stock: 0,
+      status: 'PAUSED',
+      pauseReason: 'SELLER_MAX_OUT_OF_STOCK',
+    });
+    const version = paused.version;
+    expect(
+      await prisma.securityEvent.count({
+        where: { eventType: 'PRODUCT_AUTO_PAUSED_OUT_OF_STOCK' },
+      }),
+    ).toBe(1);
+    await activation.processOne(order.id);
+    expect(
+      await prisma.product.findUniqueOrThrow({ where: { id: fixture.product.id } }),
+    ).toMatchObject({
+      stock: 0,
+      version,
+    });
+    expect(
+      await prisma.securityEvent.count({
+        where: { eventType: 'PRODUCT_AUTO_PAUSED_OUT_OF_STOCK' },
+      }),
+    ).toBe(1);
+  });
+
+  it('keeps DYNAMIC active while another ACTIVE variant has persisted stock', async () => {
+    const { fixture, order, otherVariantId } = await paidOrder('DYNAMIC', 1, true);
+    await activation.processOne(order.id);
+    expect(
+      await prisma.product.findUniqueOrThrow({ where: { id: fixture.product.id } }),
+    ).toMatchObject({
+      status: 'ACTIVE',
+      pauseReason: null,
+    });
+    expect(
+      await prisma.productVariant.findUniqueOrThrow({ where: { id: otherVariantId! } }),
+    ).toMatchObject({
+      stock: 1,
+    });
+  });
+
+  it('restocks additively once and auto-resumes only the typed inventory pause', async () => {
+    const { fixture, order } = await paidOrder('NORMAL', 1, true);
+    await activation.processOne(order.id);
+    const paused = await prisma.product.findUniqueOrThrow({ where: { id: fixture.product.id } });
+    const key = parseIdempotencyKey(`restock:${crypto.randomUUID()}`);
+    const dto = { quantityToAdd: 5, expectedVersion: paused.version };
+    const first = await inventory.restock(fixture.seller.userId, fixture.product.id, key, dto);
+    const replay = await inventory.restock(fixture.seller.userId, fixture.product.id, key, dto);
+    expect(replay).toEqual(first);
+    expect(
+      await prisma.product.findUniqueOrThrow({ where: { id: fixture.product.id } }),
+    ).toMatchObject({
+      stock: 5,
+      status: 'ACTIVE',
+      pauseReason: null,
+      version: paused.version + 1,
+    });
+    expect(
+      await prisma.securityEvent.count({ where: { eventType: 'PRODUCT_INVENTORY_RESTOCKED' } }),
+    ).toBe(1);
+    expect(
+      await prisma.securityEvent.count({
+        where: { eventType: 'PRODUCT_AUTO_RESUMED_AFTER_RESTOCK' },
+      }),
+    ).toBe(1);
+    await expect(
+      inventory.restock(fixture.seller.userId, fixture.product.id, key, {
+        quantityToAdd: 6,
+        expectedVersion: paused.version,
+      }),
+    ).rejects.toMatchObject({ code: 'IDEMPOTENCY_KEY_REUSED' });
   });
 });
