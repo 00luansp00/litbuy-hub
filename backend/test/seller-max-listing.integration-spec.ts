@@ -94,9 +94,16 @@ describe('I1 Seller MAX listing authority with real PostgreSQL', () => {
     };
   }
 
-  it.each(['STANDARD', 'LIT_MAX'] as const)(
-    'freezes Product %s on Order without changing Buyer total, listing fee, or release policy',
-    async (sellerPlan) => {
+  it.each([
+    ['STANDARD', 99n, []],
+    [
+      'LIT_MAX',
+      128n,
+      [expect.objectContaining({ componentKind: 'SELLER_MAX', feeAmountMinor: 29n })],
+    ],
+  ] as const)(
+    'freezes Product %s and applies the CURRENT fee components without changing Buyer total or release policy',
+    async (sellerPlan, aggregateFee, maxComponents) => {
       const f = await ready(sellerPlan);
       const response = await checkout.create(
         f.buyer.id,
@@ -113,12 +120,16 @@ describe('I1 Seller MAX listing authority with real PostgreSQL', () => {
         sellerPlanSnapshot: sellerPlan,
         subtotalAmountMinor: 1_000n,
         totalAmountMinor: 1_000n,
-        platformFeeAmountMinor: 99n,
+        platformFeeAmountMinor: aggregateFee,
         frozenBaseReleaseDelayHours: 168,
       });
-      expect(order.feeComponentSnapshots).toEqual([
-        expect.objectContaining({ componentKind: 'LISTING_TIER', feeAmountMinor: 99n }),
-      ]);
+      expect(order.feeComponentSnapshots).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ componentKind: 'LISTING_TIER', feeAmountMinor: 99n }),
+          ...maxComponents,
+        ]),
+      );
+      expect(order.feeComponentSnapshots).toHaveLength(sellerPlan === 'LIT_MAX' ? 2 : 1);
     },
   );
 

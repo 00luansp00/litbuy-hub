@@ -62,9 +62,11 @@ function isExpectedFeePolicy(policy: FeePolicyWithRules) {
     policy.rules.length === DEMO_FEE_POLICY.rules.length &&
     DEMO_FEE_POLICY.rules.every((expected) => {
       const rule = policy.rules.find(({ id }) => id === expected.id);
+      const expectedCategory = 'category' in expected ? expected.category : 'PLATFORM_COMMISSION';
+      const expectedSellerPlan = 'sellerPlan' in expected ? expected.sellerPlan : null;
       return (
         rule?.code === expected.code &&
-        rule.category === 'PLATFORM_COMMISSION' &&
+        rule.category === expectedCategory &&
         rule.partyCharged === 'SELLER' &&
         rule.formula === 'PERCENT_BPS' &&
         rule.percentBps === expected.percentBps &&
@@ -75,7 +77,7 @@ function isExpectedFeePolicy(policy: FeePolicyWithRules) {
         rule.installmentsFrom === null &&
         rule.installmentsTo === null &&
         rule.sellerLevel === null &&
-        rule.sellerPlan === null &&
+        rule.sellerPlan === expectedSellerPlan &&
         rule.promotionTier === expected.promotionTier &&
         rule.withdrawalSpeed === null &&
         rule.productType === null &&
@@ -116,7 +118,7 @@ async function assertNoNamespaceConflicts({ prisma }: Runtime) {
     authorById,
     policyById,
     policyByVersion,
-    ruleById,
+    reservedRulesById,
     releasePolicyById,
     releasePolicyByVersion,
     releaseRuleById,
@@ -131,8 +133,8 @@ async function assertNoNamespaceConflicts({ prisma }: Runtime) {
       where: { publicVersion: DEMO_FEE_POLICY.publicVersion },
       select: { id: true },
     }),
-    prisma.feeRule.findUnique({
-      where: { id: DEMO_FEE_POLICY.rule.id },
+    prisma.feeRule.findMany({
+      where: { id: { in: DEMO_FEE_POLICY.rules.map(({ id }) => id) } },
       select: { policyVersionId: true },
     }),
     prisma.sellerReleasePolicyVersion.findUnique({
@@ -151,7 +153,7 @@ async function assertNoNamespaceConflicts({ prisma }: Runtime) {
     (authorByEmail && authorByEmail.id !== DEMO_FEE_POLICY.author.id) ||
     (authorById && authorById.email !== DEMO_FEE_POLICY.author.email) ||
     (policyByVersion && policyByVersion.id !== DEMO_FEE_POLICY.id) ||
-    (ruleById && ruleById.policyVersionId !== DEMO_FEE_POLICY.id) ||
+    reservedRulesById.some(({ policyVersionId }) => policyVersionId !== DEMO_FEE_POLICY.id) ||
     (policyById && policyById.publicVersion !== DEMO_FEE_POLICY.publicVersion) ||
     (releasePolicyByVersion && releasePolicyByVersion.id !== DEMO_SELLER_RELEASE_POLICY.id) ||
     (releaseRuleById && releaseRuleById.policyVersionId !== DEMO_SELLER_RELEASE_POLICY.id) ||
