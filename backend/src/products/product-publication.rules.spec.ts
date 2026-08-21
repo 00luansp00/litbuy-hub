@@ -100,6 +100,12 @@ describe('product publication eligibility', () => {
   });
   it('accepts NORMAL with zero stock', () =>
     expect(() => assertPublicationEligible(candidate())).not.toThrow());
+  it('rejects a Product seller plan that differs from its source Draft', () => {
+    const p = candidate();
+    p.sellerPlan = 'LIT_MAX';
+    expect(publicationEligibilityCode(p)).toBe('PRODUCT_SELLER_PLAN_MISMATCH');
+    code(() => assertPublicationEligible(p), 'PRODUCT_SELLER_PLAN_MISMATCH');
+  });
   test.each([
     ['sellerProfile.status', SellerProfileStatus.SUSPENDED, 'SELLER_PROFILE_ACTIVE_REQUIRED'],
     ['sourceListingDraft.status', ListingDraftStatus.REJECTED, 'PRODUCT_SOURCE_NOT_APPROVED'],
