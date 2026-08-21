@@ -2,6 +2,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import {
   Prisma,
   ProductStatus,
+  ProductPauseReason,
   SecurityEventOutcome,
   SecurityEventType,
   SellerProfileStatus,
@@ -44,7 +45,12 @@ export class ProductLifecycleService {
       if (!product)
         throw new AppError('PRODUCT_NOT_FOUND', 'PRODUCT_NOT_FOUND', HttpStatus.NOT_FOUND, []);
       const target = lifecycleTarget(product.status, dto.action);
-      if (!target.changed) return this.response(product, false);
+      const claimsManualPause =
+        !target.changed &&
+        dto.action === ProductLifecycleAction.PAUSE &&
+        product.status === ProductStatus.PAUSED &&
+        product.pauseReason === ProductPauseReason.SELLER_MAX_OUT_OF_STOCK;
+      if (!target.changed && !claimsManualPause) return this.response(product, false);
       if (product.version !== dto.expectedVersion)
         throw new AppError(
           'PRODUCT_VERSION_CONFLICT',
@@ -55,7 +61,7 @@ export class ProductLifecycleService {
       if (target.status === ProductStatus.ACTIVE) assertPublicationEligible(product);
       const updated = await tx.product.updateMany({
         where: { id: product.id, version: dto.expectedVersion, status: product.status },
-        data: { status: target.status, version: { increment: 1 } },
+        data: { status: target.status, pauseReason: null, version: { increment: 1 } },
       });
       if (updated.count !== 1)
         throw new AppError(

@@ -32,6 +32,11 @@ A transação adquire `pg_advisory_xact_lock(hashtext('product-lifecycle:' || pr
 
 Mudanças reais escrevem exatamente um evento sanitizado: `PRODUCT_ACTIVATED`, `PRODUCT_PAUSED`, `PRODUCT_RESUMED` ou `PRODUCT_REMOVED`. Metadados contêm apenas IDs, ator, ação, estados e versões; não contêm `objectKey`, URL assinada, token, cookie, header ou conteúdo do produto.
 
+Após I3, `Product.pauseReason = SELLER_MAX_OUT_OF_STOCK` distingue a pausa automática MAX da pausa
+manual. Qualquer intenção manual de lifecycle limpa esse marker. Venda definitiva e restock
+coordenam com o mesmo lock `product-lifecycle:<productId>` antes dos locks de estoque; somente
+restock de uma pausa marcada pode tentar retomada, sempre reutilizando a elegibilidade acima.
+
 ## Frontend interno
 
 `ProductLifecycleManager` consulta o produto real, apresenta status/versão, oferece somente ações coerentes, confirma remoção, bloqueia clique duplo e relê o backend após sucesso ou conflito. O parser valida UUID v4, slug, status, versão, ISO e `changed`. Não existe fallback mock nem persistência em storage/URL.

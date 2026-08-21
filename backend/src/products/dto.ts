@@ -17,3 +17,9 @@ export class ProductLifecycleDto {
   @IsEnum(ProductLifecycleAction) action!: ProductLifecycleAction;
   @IsInt() @Min(1) expectedVersion!: number;
 }
+
+export class SellerMaxRestockDto {
+  @IsInt() @Min(1) quantityToAdd!: number;
+  @IsOptional() @IsUUID('4') variantId?: string;
+  @IsInt() @Min(1) expectedVersion!: number;
+}

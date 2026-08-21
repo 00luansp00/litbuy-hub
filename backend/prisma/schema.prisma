@@ -137,6 +137,9 @@ enum SecurityEventType {
   PRODUCT_PAUSED
   PRODUCT_RESUMED
   PRODUCT_REMOVED
+  PRODUCT_AUTO_PAUSED_OUT_OF_STOCK
+  PRODUCT_INVENTORY_RESTOCKED
+  PRODUCT_AUTO_RESUMED_AFTER_RESTOCK
   CART_CREATED
   CART_ITEM_ADDED
   CART_ITEM_UPDATED
@@ -202,6 +205,7 @@ enum InventoryReservationStatus {
 enum CommerceIdempotencyOperation {
   CHECKOUT_CREATE
   ORDER_CANCEL
+  SELLER_MAX_RESTOCK
 }
 
 enum OrderEventType {
@@ -802,6 +806,10 @@ enum ProductStatus {
   REMOVED
 }
 
+enum ProductPauseReason {
+  SELLER_MAX_OUT_OF_STOCK
+}
+
 enum ProductVariantStatus {
   ACTIVE
   PAUSED
@@ -822,6 +830,7 @@ model Product {
   productType          CatalogProductType
   model                ListingDraftModel
   status               ProductStatus                    @default(UNPUBLISHED)
+  pauseReason          ProductPauseReason?
   slug                 String                           @unique
   title                String
   description          String

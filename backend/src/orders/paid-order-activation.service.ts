@@ -6,7 +6,12 @@ import {
   OutboxEventStatus,
   PaymentStatus,
   Prisma,
+  ProductPauseReason,
+  ProductStatus,
+  ProductVariantStatus,
   ReconciliationIssueType,
+  SecurityEventOutcome,
+  SecurityEventType,
 } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { acquireAdvisoryTransactionLock } from '../database/advisory-lock';
@@ -95,7 +100,8 @@ export class PaidOrderActivationService {
       FROM "Payment" WHERE "orderId" = ${orderId}::uuid FOR UPDATE
     `;
     const orders = await tx.$queryRaw<LockedOrder[]>`
-      SELECT "id", "status", "paymentStatus", "totalAmountMinor", "currency", "expiresAt"
+      SELECT "id", "status", "paymentStatus", "totalAmountMinor", "currency", "expiresAt",
+             "sellerPlanSnapshot", "sellerProfileId"
       FROM "Order" WHERE "id" = ${orderId}::uuid FOR UPDATE
     `;
     const order = orders[0];
@@ -182,9 +188,27 @@ export class PaidOrderActivationService {
           : `checkout-stock:product:${item.sourceProductId}`,
       });
     }
+    if (order.sellerPlanSnapshot === 'LIT_MAX')
+      for (const productId of [
+        ...new Set(consumptions.map(({ reservation }) => reservation.productId)),
+      ].sort())
+        await acquireAdvisoryTransactionLock(tx, `product-lifecycle:${productId}`);
     for (const key of [...new Set(consumptions.map(({ key }) => key))].sort())
       await acquireAdvisoryTransactionLock(tx, key);
+    const stockChanges: Array<{
+      productId: string;
+      variantId: string | null;
+      quantity: number;
+      before: number;
+      after: number;
+    }> = [];
     for (const { reservation, model } of consumptions) {
+      const current =
+        model === 'DYNAMIC'
+          ? await tx.productVariant.findUnique({ where: { id: reservation.productVariantId! } })
+          : await tx.product.findUnique({ where: { id: reservation.productId } });
+      if (!current || current.stock === null)
+        throw new ActivationRollback({ type: 'OTHER', code: 'RESERVED_STOCK_UNAVAILABLE' });
       const changed =
         model === 'DYNAMIC'
           ? await tx.productVariant.updateMany({
@@ -204,6 +228,13 @@ export class PaidOrderActivationService {
             });
       if (changed.count !== 1)
         throw new ActivationRollback({ type: 'OTHER', code: 'RESERVED_STOCK_UNAVAILABLE' });
+      stockChanges.push({
+        productId: reservation.productId,
+        variantId: reservation.productVariantId,
+        quantity: reservation.quantity,
+        before: current.stock,
+        after: current.stock - reservation.quantity,
+      });
     }
     const activatedAt = new Date();
     if (consumptions.length)
@@ -214,6 +245,57 @@ export class PaidOrderActivationService {
         },
         data: { status: 'CONSUMED', consumedAt: activatedAt },
       });
+    if (order.sellerPlanSnapshot === 'LIT_MAX') {
+      for (const productId of [...new Set(stockChanges.map((change) => change.productId))].sort()) {
+        const product = await tx.product.findUniqueOrThrow({
+          where: { id: productId },
+          include: { variants: true },
+        });
+        const hasPersistedSellableStock =
+          product.model === 'NORMAL'
+            ? product.stock !== null && product.stock > 0
+            : product.model === 'DYNAMIC'
+              ? product.variants.some(
+                  (variant) =>
+                    variant.status === ProductVariantStatus.ACTIVE &&
+                    variant.stock !== null &&
+                    variant.stock > 0,
+                )
+              : true;
+        if (!hasPersistedSellableStock && product.status === ProductStatus.ACTIVE) {
+          const changed = await tx.product.updateMany({
+            where: { id: product.id, status: ProductStatus.ACTIVE, version: product.version },
+            data: {
+              status: ProductStatus.PAUSED,
+              pauseReason: ProductPauseReason.SELLER_MAX_OUT_OF_STOCK,
+              version: { increment: 1 },
+            },
+          });
+          if (changed.count !== 1)
+            throw new ActivationRollback({ type: 'OTHER', code: 'PRODUCT_LIFECYCLE_CONFLICT' });
+          const relevant = stockChanges.filter((change) => change.productId === product.id);
+          await tx.securityEvent.create({
+            data: {
+              userId: null,
+              eventType: SecurityEventType.PRODUCT_AUTO_PAUSED_OUT_OF_STOCK,
+              outcome: SecurityEventOutcome.SUCCESS,
+              metadata: {
+                actorType: 'SYSTEM',
+                reason: 'SELLER_MAX_OUT_OF_STOCK',
+                productId: product.id,
+                sellerProfileId: order.sellerProfileId,
+                orderId,
+                consumptions: relevant,
+                previousStatus: product.status,
+                nextStatus: ProductStatus.PAUSED,
+                previousVersion: product.version,
+                nextVersion: product.version + 1,
+              },
+            },
+          });
+        }
+      }
+    }
     await tx.order.update({
       where: { id: orderId },
       data: { status: 'ACTIVE', paymentStatus: 'PAID', version: { increment: 1 } },
@@ -302,6 +384,8 @@ type LockedOrder = {
   totalAmountMinor: bigint;
   currency: string;
   expiresAt: Date;
+  sellerPlanSnapshot: string | null;
+  sellerProfileId: string;
 };
 type LockedItem = {
   id: string;
