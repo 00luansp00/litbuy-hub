@@ -1,4 +1,3 @@
-ALTER TYPE "OrderFeeComponentKind" ADD VALUE 'SELLER_MAX';
 ALTER TABLE "OrderFeeComponentSnapshot" ALTER COLUMN "listingTier" DROP NOT NULL;
 ALTER TABLE "OrderFeeComponentSnapshot" ADD COLUMN "sellerPlan" "ListingDraftSellerPlanPreference";
 ALTER TABLE "Order" DROP CONSTRAINT "Order_feeSnapshotVersion_check";

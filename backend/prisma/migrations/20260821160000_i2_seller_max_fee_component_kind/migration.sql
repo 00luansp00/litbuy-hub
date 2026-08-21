@@ -1,0 +1,1 @@
+ALTER TYPE "OrderFeeComponentKind" ADD VALUE 'SELLER_MAX';

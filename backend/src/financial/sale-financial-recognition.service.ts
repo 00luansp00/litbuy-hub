@@ -251,6 +251,8 @@ export class SaleFinancialRecognitionService {
           listing.length !== 1 ||
           (order.feeSnapshotVersion === 1 && sellerMax.length !== 0) ||
           (order.feeSnapshotVersion === 2 && order.commercialSnapshotVersion !== 1) ||
+          (order.feeSnapshotVersion === 2 &&
+            !['STANDARD', 'LIT_MAX'].includes(order.sellerPlanSnapshot ?? '')) ||
           (expectedMax ? sellerMax.length !== 1 : sellerMax.length !== 0)
         )
           return { failure: { type: 'MISSING_LOCAL', code: 'H2_FEE_SNAPSHOT_INVALID' } };
@@ -299,7 +301,17 @@ export class SaleFinancialRecognitionService {
             maxRule.category !== 'LIT_MAX_PRICE' ||
             maxRule.partyCharged !== 'SELLER' ||
             maxRule.formula !== 'PERCENT_BPS' ||
-            maxRule.percentBps !== max.percentBps
+            maxRule.percentBps !== max.percentBps ||
+            maxRule.fixedAmountMinor !== null ||
+            maxRule.minimumAmountMinor !== null ||
+            maxRule.maximumAmountMinor !== null ||
+            maxRule.promotionTier !== null ||
+            maxRule.paymentMethod !== null ||
+            maxRule.installmentsFrom !== null ||
+            maxRule.installmentsTo !== null ||
+            maxRule.sellerLevel !== null ||
+            maxRule.withdrawalSpeed !== null ||
+            maxRule.productType !== null
           )
             return {
               failure: { type: 'AMOUNT_MISMATCH', code: 'SELLER_MAX_FEE_SNAPSHOT_INVALID' },

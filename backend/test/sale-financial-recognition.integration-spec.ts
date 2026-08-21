@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PrismaClient } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import { Test } from '@nestjs/testing';
 import { AppModule } from '../src/app.module';
 import { CartsService } from '../src/carts/carts.service';
@@ -57,11 +58,27 @@ describe('SaleFinancialRecognitionService with real PostgreSQL', () => {
       quantity?: number;
       stock?: number;
       useExistingActivePolicy?: boolean;
+      sellerPlan?: 'STANDARD' | 'LIT_MAX';
+      listingTier?: 'SILVER' | 'GOLD' | 'DIAMOND';
     } = {},
   ) {
     const fee = options.fee ?? 1000n;
     const quantity = options.quantity ?? 1;
     const fixture = await commerceFixture(prisma, 'NORMAL', undefined, options.stock ?? 20, false);
+    await prisma.listingDraft.update({
+      where: { id: fixture.draft.id },
+      data: {
+        requestedSellerPlan: options.sellerPlan ?? 'STANDARD',
+        requestedPromotionTier: options.listingTier ?? 'SILVER',
+      },
+    });
+    await prisma.product.update({
+      where: { id: fixture.product.id },
+      data: {
+        sellerPlan: options.sellerPlan ?? 'STANDARD',
+        listingTier: options.listingTier ?? 'SILVER',
+      },
+    });
     const policy = options.useExistingActivePolicy
       ? await prisma.feePolicyVersion.findFirstOrThrow({
           where: {
@@ -80,6 +97,7 @@ describe('SaleFinancialRecognitionService with real PostgreSQL', () => {
       : await publishPlatformCommissionPolicy(prisma, fixture.sellerUser.id, {
           publicVersion: publicVersion++,
           percentBps: Number((fee * 10_000n) / (BigInt(quantity) * 1000n)),
+          rule: { promotionTier: options.listingTier ?? 'SILVER' },
         });
     expect(policy.rules).toEqual(
       expect.arrayContaining([
@@ -262,6 +280,79 @@ describe('SaleFinancialRecognitionService with real PostgreSQL', () => {
         where: { financialEvent: { ledgerTransactionId: txs[0].id } },
       }),
     ).toBe(1);
+  });
+
+  it('recognizes the frozen 10000/1299/299 Seller MAX economy without rerating', async () => {
+    const { order, policy } = await activePaidOrder({
+      fee: 1299n,
+      quantity: 10,
+      sellerPlan: 'LIT_MAX',
+      listingTier: 'DIAMOND',
+    });
+    await prisma.feePolicyVersion.update({ where: { id: policy.id }, data: { status: 'RETIRED' } });
+
+    await expect(recognition.processOne(order.id)).resolves.toBe(true);
+    await expect(recognition.processOne(order.id)).resolves.toBe(true);
+
+    const entries = await entriesFor(order.id);
+    expect(entries).toHaveLength(3);
+    expect(
+      entries.map((entry) => ({
+        purpose: entry.account.purpose,
+        direction: entry.direction,
+        amountMinor: entry.amountMinor,
+      })),
+    ).toEqual(
+      expect.arrayContaining([
+        { purpose: 'PROVIDER_CLEARING', direction: 'DEBIT', amountMinor: 10_000n },
+        { purpose: 'SELLER_PENDING', direction: 'CREDIT', amountMinor: 8402n },
+        { purpose: 'PLATFORM_COMMISSION', direction: 'CREDIT', amountMinor: 1598n },
+      ]),
+    );
+    expect(
+      await prisma.ledgerTransaction.count({
+        where: { type: 'SALE_RECOGNIZED', referenceId: order.id },
+      }),
+    ).toBe(1);
+  });
+
+  it.each([
+    [
+      'missing MAX component',
+      async (tx: Prisma.TransactionClient, id: string) =>
+        tx.$executeRaw`DELETE FROM "OrderFeeComponentSnapshot" WHERE "orderId"=${id}::uuid AND "componentKind"='SELLER_MAX'`,
+      'H2_FEE_SNAPSHOT_INVALID',
+    ],
+    [
+      'tampered aggregate',
+      async (tx: Prisma.TransactionClient, id: string) =>
+        tx.$executeRaw`UPDATE "Order" SET "platformFeeAmountMinor"=1597 WHERE "id"=${id}::uuid`,
+      'H2_FEE_SNAPSHOT_INVALID',
+    ],
+    [
+      'tampered MAX rate/base/amount',
+      async (tx: Prisma.TransactionClient, id: string) =>
+        tx.$executeRaw`UPDATE "OrderFeeComponentSnapshot" SET "percentBps"=300, "baseAmountMinor"=9999, "feeAmountMinor"=300 WHERE "orderId"=${id}::uuid AND "componentKind"='SELLER_MAX'`,
+      'H2_FEE_SNAPSHOT_INVALID',
+    ],
+    [
+      'seller plan mismatch',
+      async (tx: Prisma.TransactionClient, id: string) =>
+        tx.$executeRaw`UPDATE "Order" SET "sellerPlanSnapshot"='STANDARD' WHERE "id"=${id}::uuid`,
+      'H2_FEE_SNAPSHOT_INVALID',
+    ],
+  ])('fails closed for Seller MAX corruption: %s', async (_case, mutate, code) => {
+    const { order } = await activePaidOrder({
+      fee: 1299n,
+      quantity: 10,
+      sellerPlan: 'LIT_MAX',
+      listingTier: 'DIAMOND',
+    });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe("SET LOCAL session_replication_role = 'replica'");
+      await mutate(tx, order.id);
+    });
+    await expectSingleIssue(order.id, code);
   });
 
   it('distinguishes created postings from replay for processBatch concurrency', async () => {
