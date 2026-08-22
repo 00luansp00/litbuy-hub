@@ -5,6 +5,7 @@ import { acquireAdvisoryTransactionLock } from '../database/advisory-lock';
 import { PrismaService } from '../database/prisma.service';
 import { FinancialDomainError } from './financial.errors';
 import { FinancialLedgerService } from './financial-ledger.service';
+import { effectiveReleaseDeadline } from './seller-max-release-calculator';
 
 const LEDGER_TYPE = 'SELLER_FUNDS_RELEASED';
 const LEDGER_REFERENCE_TYPE = 'FinancialHoldRelease';
@@ -202,6 +203,13 @@ export class SellerHeldFundsReleaseService {
       delivery.createdAt.getTime() !== hold.releasePolicyAppliedAt!.getTime()
     )
       return this.fail(tx, holdId, 'OTHER', 'DELIVERY_AUTHORITY_INVALID');
+    const effective = effectiveReleaseDeadline(order, delivery.createdAt, hold.releaseEligibleAt!);
+    if (!effective.valid)
+      return this.fail(tx, holdId, 'OTHER', 'SELLER_MAX_RELEASE_SNAPSHOT_INVALID');
+    const [{ now }] = await tx.$queryRaw<
+      Array<{ now: Date }>
+    >`SELECT transaction_timestamp()::timestamp(3) AS "now"`;
+    hold.due = now.getTime() >= effective.effectiveDueAt.getTime();
 
     await tx.$queryRaw`SELECT "id" FROM "Payment" WHERE "orderId" = ${order.id}::uuid FOR UPDATE`;
     const payments = await tx.payment.findMany({ where: { orderId: order.id } });
@@ -249,8 +257,8 @@ export class SellerHeldFundsReleaseService {
         return this.fail(tx, holdId, 'OTHER', 'RELEASE_POSTING_INVALID');
       const releasePosting = releases[0];
       if (
-        hold.releasedAt!.getTime() < hold.releaseEligibleAt!.getTime() ||
-        releasePosting.createdAt.getTime() < hold.releaseEligibleAt!.getTime() ||
+        hold.releasedAt!.getTime() < effective.effectiveDueAt.getTime() ||
+        releasePosting.createdAt.getTime() < effective.effectiveDueAt.getTime() ||
         hold.releasedAt!.getTime() !== releasePosting.createdAt.getTime()
       )
         return this.fail(tx, holdId, 'STATUS_MISMATCH', 'SELLER_HELD_FUNDS_RELEASE_TIMING_INVALID');

@@ -1,6 +1,6 @@
 # Seller hold release-policy snapshot
 
-> **CURRENT IMPLEMENTATION (G1):** policy is frozen at checkout for new Orders and the normal clock of every new positive-proceeds delivery-protection hold starts at authoritative `OrderDelivery.createdAt`. Holds can be materialized and become eligible after delivery without Buyer confirmation. Legacy all-NULL Order snapshots retain DEFAULT policy resolution with the same delivery clock. Seller MAX remains not implemented; G2 release execution is implemented separately.
+> **CURRENT IMPLEMENTATION (G1):** policy is frozen at checkout for new Orders and the normal clock of every new positive-proceeds delivery-protection hold starts at authoritative `OrderDelivery.createdAt`. Holds can be materialized and become eligible after delivery without Buyer confirmation. Legacy all-NULL Order snapshots retain DEFAULT policy resolution with the same delivery clock. Seller MAX listing, fee, stock automation, J qualification, and K release calculation are implemented. `FinancialHold.releaseEligibleAt` remains the base deadline; K stores and consumes a separate effective deadline. G2 release execution remains separate.
 
 The immutable snapshot is the sole temporal authority used by the PR #53 eligibility phase;
 the current effective policy is never consulted and a retired historical policy remains valid.
