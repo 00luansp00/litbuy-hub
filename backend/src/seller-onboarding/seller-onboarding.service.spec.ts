@@ -2,13 +2,12 @@
 import type { ConfigService } from '@nestjs/config';
 import {
   PlatformRole,
-  Prisma,
   SecurityEventType,
   SellerApplicationStatus,
   SellerProfileStatus,
   UserStatus,
 } from '@prisma/client';
-import type { SellerProfile, UserRoleAssignment } from '@prisma/client';
+import type { Prisma, SellerProfile, UserRoleAssignment } from '@prisma/client';
 import { SellerOnboardingService } from './seller-onboarding.service';
 
 const userId = '11111111-1111-4111-8111-111111111111';
