@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { ImageOff } from "lucide-react";
 import type { PublicCatalogCard as CatalogCard } from "@/services/publicCatalog";
 import { formatPublicCatalogPrice } from "./formatPublicCatalogPrice";
+import { SellerVerificationStatus } from "./SellerVerificationStatus";
 
 const productTypeLabels: Record<CatalogCard["productType"], string> = {
   ACCOUNT: "Conta",
@@ -81,6 +82,7 @@ export function PublicCatalogCard({ product }: { product: CatalogCard }) {
         </div>
         <div className="border-t border-border pt-3">
           <p className="text-xs text-muted-foreground">Loja {product.seller.storeName}</p>
+          <SellerVerificationStatus verified={product.seller.verified} className="mt-1" />
           <p className="mt-1 text-lg font-bold text-primary">
             {formatPublicCatalogPrice(product.pricing)}
           </p>

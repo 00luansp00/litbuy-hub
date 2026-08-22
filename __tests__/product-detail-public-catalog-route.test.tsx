@@ -70,7 +70,7 @@ const realProduct: PublicCatalogProductDetail = {
   stock: 2,
   category: { slug: "jogos", name: "Jogos" },
   subcategory: null,
-  seller: { slug: "loja", storeName: "Loja" },
+  seller: { slug: "loja", storeName: "Loja", verified: false },
   coverImage: {
     url: "https://images.test/cover",
     expiresAt: "2030-01-01T00:00:00Z",

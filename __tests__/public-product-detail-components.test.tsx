@@ -61,7 +61,7 @@ const product = (
   stock: 10,
   category: { slug: "jogos", name: "Jogos reais" },
   subcategory: { slug: "pc", name: "PC real" },
-  seller: { slug: "loja-real", storeName: "Loja Real" },
+  seller: { slug: "loja-real", storeName: "Loja Real", verified: false },
   coverImage: {
     url: "https://images.test/cover",
     expiresAt: "2030-01-01T00:00:00Z",
@@ -106,7 +106,8 @@ describe("public product detail content", () => {
       "/categoria/jogos?subcategory=pc",
     );
     expect(screen.queryByRole("link", { name: /Loja Real|loja-real/ })).not.toBeInTheDocument();
-    expect(screen.queryByText(/reputa|verificad|nível|vendas/i)).not.toBeInTheDocument();
+    expect(screen.getByText("Vendedor não verificado")).toBeVisible();
+    expect(screen.queryByText(/reputa|nível|vendas|em análise/i)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Entrar para comprar" })).toHaveAttribute(
       "href",
       "/login",
@@ -114,6 +115,15 @@ describe("public product detail content", () => {
     expect(screen.getByText(/pagamento Alpha usam o fluxo persistente/i)).toBeInTheDocument();
     expect(screen.getByText(/comunicação com o vendedor permanece fora/i)).toBeInTheDocument();
     absentCommerce();
+  });
+  it("renders the authoritative verified state with the same truthful copy", () => {
+    render(
+      <PublicProductDetailContent
+        product={product({ seller: { slug: "loja-real", storeName: "Loja Real", verified: true } })}
+      />,
+    );
+    expect(screen.getByText("Vendedor verificado")).toBeVisible();
+    expect(screen.queryByText(/KYC aprovado|garantido pela LIT Buy/i)).not.toBeInTheDocument();
   });
   it("renders FROM variants in API order and hides a generic NORMAL option", () => {
     const variants = [

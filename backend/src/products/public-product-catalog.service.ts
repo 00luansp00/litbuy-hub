@@ -196,7 +196,11 @@ export class PublicProductCatalogService {
       subcategory: product.subcategory
         ? { slug: product.subcategory.slug, name: product.subcategory.name }
         : null,
-      seller: { slug: product.sellerProfile.slug, storeName: product.sellerProfile.storeName },
+      seller: {
+        slug: product.sellerProfile.slug,
+        storeName: product.sellerProfile.storeName,
+        verified: product.sellerProfile.verified,
+      },
       coverImage: {
         ...(signedCover ?? (await this.signed(cover.objectKey))),
         altText: cover.altText,

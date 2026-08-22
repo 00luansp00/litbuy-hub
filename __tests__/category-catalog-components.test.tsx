@@ -46,7 +46,7 @@ const product = {
   stock: null,
   category: { slug: "demo-jogos", name: "Jogos" },
   subcategory: null,
-  seller: { slug: "loja", storeName: "Loja" },
+  seller: { slug: "loja", storeName: "Loja", verified: false },
   coverImage: { url: "/fallback.webp", expiresAt: "2030-01-01T00:00:00.000Z", altText: null },
 } as const;
 const catalog = (items = [product], page = 1, hasNext = false): PublicCatalogListResponse => ({

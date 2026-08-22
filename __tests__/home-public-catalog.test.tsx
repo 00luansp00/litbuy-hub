@@ -45,7 +45,7 @@ const product = (id: string, pricing: CatalogCard["pricing"]): CatalogCard => ({
   stock: id === "2" ? null : 4,
   category: { slug: "jogos", name: "Jogos" },
   subcategory: null,
-  seller: { slug: "loja-demo", storeName: "Loja Demo" },
+  seller: { slug: "loja-demo", storeName: "Loja Demo", verified: false },
   coverImage: {
     url: `https://storage.local/${id}`,
     expiresAt: "2030-01-01T00:00:00Z",
@@ -93,9 +93,17 @@ describe("Home public catalog", () => {
     expect(screen.getByText(/R\$\s*49,90/)).toBeInTheDocument();
     expect(screen.getByText(/A partir de R\$\s*9,90/)).toBeInTheDocument();
     expect(screen.getByText("Sob orçamento")).toBeInTheDocument();
-    expect(screen.queryByText(/avaliaç|vendid|verificado/i)).not.toBeInTheDocument();
+    expect(screen.getAllByText("Vendedor não verificado")).toHaveLength(6);
+    expect(screen.queryByText(/avaliaç|vendid/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: /detalhes/i })).toHaveLength(12);
+  });
+  it("renders the authoritative verified state on a card", () => {
+    render(
+      <PublicCatalogCard product={{ ...six[0], seller: { ...six[0].seller, verified: true } }} />,
+    );
+    expect(screen.getByText("Vendedor verificado")).toBeVisible();
+    expect(screen.queryByText(/KYC aprovado|100% seguro/i)).not.toBeInTheDocument();
   });
   it("renders an empty result as a valid state", () => {
     render(

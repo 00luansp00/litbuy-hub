@@ -12,7 +12,7 @@ O serviço `publicCatalogService.detail` valida o slug antes da rede, faz a cham
 
 ## Interface e segurança
 
-A página mostra breadcrumb, descrição real, categoria/subcategoria, estoque aplicável, modo de entrega informado e apenas `storeName` e slug do seller. Não há link para loja, reputação, verificação, avaliações, perguntas, relacionados, denúncia, carrinho, checkout ou compra. `AUTOMATIC` não implica que o fluxo comercial esteja ativo.
+A página mostra breadcrumb, descrição real, categoria/subcategoria, estoque aplicável, modo de entrega informado, `storeName`, slug e o estado textual derivado exclusivamente de `SellerProfile.verified`. Não há link para loja, reputação, detalhes de KYC, avaliações, perguntas, relacionados ou denúncia. `AUTOMATIC` não implica que o fluxo comercial esteja ativo.
 
 Slug inválido e `404 PRODUCT_NOT_FOUND` usam a mesma mensagem pública. Rede, HTTP 5xx e contrato inválido mostram erro seguro com revalidação por “Tentar novamente”; o loading usa skeleton próprio e nunca recorre a mocks. Cards do catálogo público navegam pelo slug. O `ProductCard` legado e superfícies mockadas (busca, loja e fluxos antigos) não navegam automaticamente ao detalhe real.
 

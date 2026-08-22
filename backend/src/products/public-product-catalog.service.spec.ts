@@ -248,6 +248,27 @@ describe('PublicProductCatalogService', () => {
     expect(query.where.productType).toBe('ACCOUNT');
     expect(query.where.category.slug).toBe('category');
     expect(query.where.subcategory.slug).toBe('subcategory');
+    expect(query.where).toMatchObject({ sellerProfile: { status: 'ACTIVE' } });
+    expect(query.where).not.toHaveProperty('sellerProfile.verified');
+    expect(response.items[0].seller).toEqual({
+      slug: 'store',
+      storeName: 'Store',
+      verified: false,
+    });
+  });
+
+  it('serializes the SellerProfile verification authority consistently in list and detail', async () => {
+    const verified = candidate('verified');
+    verified.sellerProfile.verified = true;
+    findMany.mockResolvedValueOnce([verified]);
+    findFirst.mockResolvedValueOnce(verified);
+
+    const list = await service.list({ page: 1, limit: 24, sort: PublicCatalogSort.RECENT });
+    const detail = await service.detail(verified.slug);
+
+    expect(list.items[0].seller.verified).toBe(true);
+    expect(detail.seller.verified).toBe(true);
+    expect(list.items[0].seller).toEqual(detail.seller);
   });
 
   it('maps a detail explicitly and signs each READY image once', async () => {
@@ -259,6 +280,7 @@ describe('PublicProductCatalogService', () => {
       shortDescription: 'Public description',
       pricing: { kind: 'FIXED', amount: '19.90' },
       coverImage: { altText: 'Cover' },
+      seller: { slug: 'store', storeName: 'Store', verified: false },
       variants: [{ id: 'variant-detail', price: '19.90' }],
       gallery: [{ id: 'image-detail', isCover: true }],
     });

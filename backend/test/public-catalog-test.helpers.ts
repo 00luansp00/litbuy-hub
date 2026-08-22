@@ -19,6 +19,7 @@ export type CatalogFixtureOptions = {
   productId?: string;
   productStatus?: ProductStatus;
   sellerStatus?: SellerProfileStatus;
+  sellerVerified?: boolean;
   draftStatus?: ListingDraftStatus;
   productType?: CatalogProductType;
   draftProductType?: CatalogProductType;
@@ -63,6 +64,7 @@ export async function createCatalogFixture(
       slug: `seller-${suffix}`,
       storeName: `Seller ${suffix}`,
       status: options.sellerStatus ?? 'ACTIVE',
+      verified: options.sellerVerified ?? false,
     },
   });
   const category = await prisma.catalogCategory.create({

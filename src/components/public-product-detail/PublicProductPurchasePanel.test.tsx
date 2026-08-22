@@ -47,7 +47,7 @@ const product = (
   deliveryMode: "MANUAL",
   category: { slug: "categoria", name: "Categoria" },
   subcategory: null,
-  seller: { slug: "loja", storeName: "Loja" },
+  seller: { slug: "loja", storeName: "Loja", verified: false },
   coverImage: { url: "https://example.com/image", expiresAt: "2026-08-11", altText: null },
   gallery: [],
   variants: [],

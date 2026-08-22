@@ -18,7 +18,7 @@ const detail = (overrides: Record<string, unknown> = {}) => ({
   stock: 10,
   category: { slug: "jogos", name: "Jogos" },
   subcategory: null,
-  seller: { slug: "demo-store", storeName: "Demo Store" },
+  seller: { slug: "demo-store", storeName: "Demo Store", verified: false },
   deliveryMode: "MANUAL",
   variants: [],
   coverImage: {

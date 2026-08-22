@@ -20,7 +20,7 @@ import {
 
 const expiresAt = new Date('2030-01-01T00:00:00.000Z');
 type ListBody = {
-  items: Array<{ id: string; slug: string }>;
+  items: Array<{ id: string; slug: string; seller: { verified: boolean } }>;
   pagination: { page: number; limit: number; hasNext: boolean };
 };
 type DetailBody = {
@@ -29,6 +29,7 @@ type DetailBody = {
   variants: Array<{ title: string }>;
   gallery: Array<{ id: string; url: string }>;
   coverImage: { url: string };
+  seller: { verified: boolean };
 };
 const forbidden = [
   'objectKey',
@@ -113,9 +114,25 @@ describe('Public product catalog HTTP with PostgreSQL and controlled storage', (
       .get('/api/v1/catalog/products/public-product')
       .expect(200);
     expect((detail.body as DetailBody).id).toBe(fixture.product.id);
+    expect(listBody.items[0].seller.verified).toBe(false);
+    expect((detail.body as DetailBody).seller.verified).toBe(false);
     expectPublicPayload(list.body);
     expectPublicPayload(detail.body);
     expect(await prisma.securityEvent.count()).toBe(0);
+  });
+
+  it('exposes true from the same SellerProfile authority in list and detail', async () => {
+    const fixture = await createCatalogFixture(prisma, {
+      slug: 'verified-public-product',
+      sellerVerified: true,
+    });
+    const list = await request(app.getHttpServer()).get('/api/v1/catalog/products').expect(200);
+    const detail = await request(app.getHttpServer())
+      .get(`/api/v1/catalog/products/${fixture.product.slug}`)
+      .expect(200);
+
+    expect((list.body as ListBody).items[0].seller.verified).toBe(true);
+    expect((detail.body as DetailBody).seller.verified).toBe(true);
   });
 
   it.each<[string, CatalogFixtureOptions]>([
