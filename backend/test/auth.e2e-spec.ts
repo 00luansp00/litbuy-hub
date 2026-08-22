@@ -507,10 +507,14 @@ class FakePrisma {
     return 1;
   }
   async $queryRaw(
-    _strings: TemplateStringsArray,
-    ..._values: unknown[]
+    strings: TemplateStringsArray,
+    ...values: unknown[]
   ): Promise<Array<{ locked: number }>> {
     await Promise.resolve();
+    const sql = strings.join('?');
+    if (!sql.includes('pg_advisory_xact_lock')) throw new Error('unsupported FakePrisma $queryRaw');
+    if (values.length !== 1 || typeof values[0] !== 'string')
+      throw new Error('invalid advisory lock FakePrisma query');
     return [{ locked: 1 }];
   }
   async isHealthy() {
