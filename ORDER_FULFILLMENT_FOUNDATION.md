@@ -31,3 +31,7 @@ That consumer is now specified in `SELLER_PENDING_HOLD_FOUNDATION.md`: fulfillme
 ## Completion recovery and reconciliation
 
 System inconsistencies are recorded inside the locked transaction and returned as explicit outcomes; the transaction commits before a public operation converts that outcome to a conflict response. Active `OrderFulfillment` reconciliation issues block automatic completion retries. After an operator explicitly resolves an issue, `processCompletionBatch()` may safely reconsider an `ACTIVE + CONFIRMED + PAID` order; it never resolves or deletes the historical issue itself. Exact buyer and seller replays remain side-effect free, while a delivery replay with a changed type or evidence hash is rejected as an idempotency mismatch.
+
+## CURRENT addendum — Seller MAX qualification J
+
+O fulfillment base continua sem timeout genérico e Buyer pode confirmar a qualquer tempo. J acrescenta apenas, para novas entregas cujo snapshot da venda é `LIT_MAX`, uma janela persistente de qualificação de 48 horas corridas iniciada em `OrderDelivery.createdAt`. A expiração do benefício não bloqueia a confirmação e não redefine o relógio financeiro base. Consulte `SELLER_MAX_48H_QUALIFICATION.md`.

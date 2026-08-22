@@ -32,3 +32,7 @@ PR F implementa `OrderDelivery.createdAt` como o `deliveredAt` semântico e auto
 `releaseEligibleAt = OrderDelivery.createdAt + frozen delay`. Confirmação Buyer não reinicia o
 clock. Existing complete `FinancialHold` rows não são recalculadas. G1 aceita o estado pós-entrega
 `ACTIVE`/PAID/`AWAITING_BUYER_CONFIRMATION` e o posterior `COMPLETED`/PAID/`CONFIRMED`; blockers de disputa prevalecem e G2 executa separadamente a transição monetária para holds `RELEASE_ELIGIBLE`, sem exigir confirmação Buyer.
+
+## CURRENT addendum — J não altera release
+
+A qualificação Seller MAX v1 (`PENDING`/`QUALIFIED`/`EXPIRED`) agora existe por venda, conforme `SELLER_MAX_48H_QUALIFICATION.md`. A aceleração K continua **não implementada**: `FinancialHold.releaseEligibleAt` e toda a execução G1/G2 permanecem no prazo base congelado, independentemente do resultado J.

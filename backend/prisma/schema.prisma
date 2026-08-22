@@ -221,6 +221,15 @@ enum OrderEventType {
   FULFILLMENT_AWAITING_BUYER_CONFIRMATION
   FULFILLMENT_CONFIRMED
   ORDER_COMPLETED
+  SELLER_MAX_QUALIFICATION_STARTED
+  SELLER_MAX_QUALIFIED
+  SELLER_MAX_QUALIFICATION_EXPIRED
+}
+
+enum SellerMaxQualificationStatus {
+  PENDING
+  QUALIFIED
+  EXPIRED
 }
 
 enum OrderDeliveryType {
@@ -944,6 +953,11 @@ model Order {
   feeSnapshotVersion               Int?
   commercialSnapshotVersion        Int?
   sellerPlanSnapshot               ListingDraftSellerPlanPreference?
+  sellerMaxQualificationVersion    Int?
+  sellerMaxQualificationStatus     SellerMaxQualificationStatus?
+  sellerMaxQualificationDeadlineAt DateTime?
+  sellerMaxQualificationDecidedAt  DateTime?
+  buyerConfirmedAt                 DateTime?
   sellerReleasePolicyVersionId     String?                           @db.Uuid
   sellerReleasePolicyRuleId        String?                           @db.Uuid
   sellerReleasePolicySource        SellerReleasePolicyScope?
@@ -985,6 +999,7 @@ model Order {
   @@index([sellerReleasePolicyRuleId])
   @@index([sellerReleasePolicyCategoryId])
   @@index([sellerReleasePolicySubcategoryId])
+  @@index([sellerMaxQualificationStatus, sellerMaxQualificationDeadlineAt])
 }
 
 model OrderFeeComponentSnapshot {
