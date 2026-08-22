@@ -506,6 +506,13 @@ class FakePrisma {
     }
     return 1;
   }
+  async $queryRaw(
+    _strings: TemplateStringsArray,
+    ..._values: unknown[]
+  ): Promise<Array<{ locked: number }>> {
+    await Promise.resolve();
+    return [{ locked: 1 }];
+  }
   async isHealthy() {
     await Promise.resolve();
     return true;
