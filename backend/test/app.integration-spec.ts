@@ -2889,6 +2889,92 @@ describe('Seller onboarding with real PostgreSQL (integration)', () => {
     ).toHaveLength(1);
   });
 
+  it('converges two concurrent submits for the same user to one commercial state', async () => {
+    const candidate = await user('onboarding-same-user-concurrency@example.com');
+    await service.saveDraft(candidate.id, {
+      storeName: 'Loja Mesmo Seller',
+      requestedSlug: 'loja-mesmo-seller',
+      sellerAgreementAccepted: true,
+    });
+
+    const results = await Promise.all([service.submit(candidate.id), service.submit(candidate.id)]);
+
+    expect(results).toEqual([
+      expect.objectContaining({ status: 'submitted' }),
+      expect.objectContaining({ status: 'submitted' }),
+    ]);
+    await expect(
+      prisma.sellerProfile.findUniqueOrThrow({ where: { userId: candidate.id } }),
+    ).resolves.toMatchObject({
+      status: 'ACTIVE',
+      verified: false,
+      slug: 'loja-mesmo-seller',
+    });
+    await expect(prisma.sellerProfile.count({ where: { userId: candidate.id } })).resolves.toBe(1);
+    await expect(
+      prisma.userRoleAssignment.count({ where: { userId: candidate.id, role: 'SELLER' } }),
+    ).resolves.toBe(1);
+    await expect(
+      prisma.securityEvent.count({
+        where: { userId: candidate.id, eventType: SecurityEventType.SELLER_PROFILE_CREATED },
+      }),
+    ).resolves.toBe(1);
+    await expect(
+      prisma.sellerApplication.findUniqueOrThrow({ where: { userId: candidate.id } }),
+    ).resolves.toMatchObject({ status: 'SUBMITTED' });
+  });
+
+  it('lets a self-enabled unverified Seller create a real listing draft before Admin review', async () => {
+    const candidate = await user('onboarding-listing-draft@example.com');
+    await service.saveDraft(candidate.id, {
+      storeName: 'Loja Listing Sem Aprovação',
+      requestedSlug: 'loja-listing-sem-aprovacao',
+      sellerAgreementAccepted: true,
+    });
+    await expect(service.submit(candidate.id)).resolves.toMatchObject({ status: 'submitted' });
+
+    const profile = await prisma.sellerProfile.findUniqueOrThrow({
+      where: { userId: candidate.id },
+    });
+    expect(profile).toMatchObject({ status: 'ACTIVE', verified: false });
+    await expect(
+      prisma.userRoleAssignment.count({ where: { userId: candidate.id, role: 'SELLER' } }),
+    ).resolves.toBe(1);
+    const listing = await app.get(ListingDraftsService).create(candidate.id, {
+      title: 'Rascunho do novo Seller',
+      wizardStep: 2,
+    });
+    expect(listing).toMatchObject({ status: 'DRAFT', title: 'Rascunho do novo Seller' });
+    await expect(prisma.listingDraft.count({ where: { id: listing.id } })).resolves.toBe(1);
+    await expect(
+      prisma.sellerApplication.findUniqueOrThrow({ where: { userId: candidate.id } }),
+    ).resolves.toMatchObject({ status: 'SUBMITTED' });
+  });
+
+  it('keeps commercial access after independent Admin review and rejection', async () => {
+    const candidate = await user('onboarding-review-independent@example.com');
+    const admin = await user('onboarding-review-independent-admin@example.com', 'ADMIN');
+    await service.saveDraft(candidate.id, {
+      storeName: 'Loja Review Independente',
+      requestedSlug: 'loja-review-independente',
+      sellerAgreementAccepted: true,
+    });
+    await service.submit(candidate.id);
+    const application = await prisma.sellerApplication.findUniqueOrThrow({
+      where: { userId: candidate.id },
+    });
+    await service.startReview(application.id, admin.id);
+    await service.reject(application.id, admin.id, { code: 'OTHER', reason: 'Review separado.' });
+
+    await expect(
+      prisma.sellerProfile.findUniqueOrThrow({ where: { userId: candidate.id } }),
+    ).resolves.toMatchObject({ status: 'ACTIVE', verified: false });
+    await expect(
+      prisma.userRoleAssignment.count({ where: { userId: candidate.id, role: 'SELLER' } }),
+    ).resolves.toBe(1);
+    await expect(service.me(candidate.id)).resolves.toMatchObject({ commercialEnabled: true });
+  });
+
   it('rolls back profile, role and approved status when SELLER role insertion fails', async () => {
     const candidate = await user('onboarding-role-rollback@example.com');
     await service.saveDraft(candidate.id, {

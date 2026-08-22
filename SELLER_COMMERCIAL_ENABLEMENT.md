@@ -33,10 +33,14 @@ da existência simultânea de `SellerProfile.status=ACTIVE` e da role `SELLER` n
   pode ser trocado silenciosamente.
 - Applications legadas `SUBMITTED` e `UNDER_REVIEW` adotam o enablement sob demanda, preservando
   o status. Não existe backfill em lote.
-- `APPROVED` legado coerente permanece inalterado; inconsistência entre profile e role falha
-  fechada, sem reconstrução silenciosa.
+- `APPROVED` legado só é coerente quando mantém profile `ACTIVE`, a mesma identidade de loja
+  (`userId`, slug validado, nome e descrição) e role `SELLER`; qualquer divergência falha fechada,
+  sem reconstrução silenciosa, tanto no replay de submit quanto no replay de Admin approve.
 - `REJECTED` precisa voltar a `DRAFT` por correção e passar por nova submissão válida.
 - Profile `SUSPENDED` ou `CLOSED` nunca é reativado pelo onboarding.
+- Submits concorrentes do mesmo user são serializados por advisory transaction lock determinístico;
+  ambos convergem para a mesma application `SUBMITTED`, um profile, uma role e um audit de criação,
+  sem bloquear o enablement de users diferentes.
 - Slug de terceiro falha com `SELLER_SLUG_UNAVAILABLE`; a transaction não deixa application,
   profile e role parcialmente persistidos.
 - `approve` administrativo aceita o profile coerente já criado e apenas conclui seu workflow,

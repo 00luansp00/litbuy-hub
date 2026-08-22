@@ -19,6 +19,7 @@ import {
   serializableTransactionWithRetry,
 } from '../auth/platform-role-operations';
 import { PrismaService } from '../database/prisma.service';
+import { acquireAdvisoryTransactionLock } from '../database/advisory-lock';
 import {
   AdminSellerApplicationsQueryDto,
   RejectSellerApplicationDto,
@@ -234,22 +235,41 @@ export class SellerOnboardingService {
       throw this.appError('SELLER_AGE_REQUIREMENT_NOT_MET', HttpStatus.FORBIDDEN);
     return user;
   }
+  private async assertApprovedCommercialState(
+    tx: Prisma.TransactionClient,
+    application: SellerApplication,
+  ): Promise<void> {
+    const slug = validateSellerSlug(application.requestedSlug);
+    if (!slug) throw this.appError('SELLER_COMMERCIAL_STATE_INCONSISTENT', HttpStatus.CONFLICT);
+    const [profile, sellerRole] = await Promise.all([
+      tx.sellerProfile.findUnique({ where: { userId: application.userId } }),
+      tx.userRoleAssignment.findUnique({
+        where: {
+          userId_role: { userId: application.userId, role: PlatformRole.SELLER },
+        },
+      }),
+    ]);
+    if (
+      !profile ||
+      profile.userId !== application.userId ||
+      profile.status !== SellerProfileStatus.ACTIVE ||
+      profile.slug !== slug ||
+      profile.storeName !== application.storeName ||
+      profile.description !== application.description ||
+      !sellerRole
+    )
+      throw this.appError('SELLER_COMMERCIAL_STATE_INCONSISTENT', HttpStatus.CONFLICT);
+  }
   async submit(userId: string): Promise<ApplicationPublic> {
     return serializableTransactionWithRetry(this.prisma, async (tx) => {
+      await acquireAdvisoryTransactionLock(tx, `seller-commercial-enablement:${userId}`);
       await this.assertRequirements(tx, userId);
       const app = await tx.sellerApplication.findUnique({ where: { userId } });
       if (!app) throw this.appError('SELLER_APPLICATION_NOT_FOUND', HttpStatus.NOT_FOUND);
       if (app.status === SellerApplicationStatus.REJECTED)
         throw this.appError('SELLER_APPLICATION_INVALID_TRANSITION', HttpStatus.CONFLICT);
       if (app.status === SellerApplicationStatus.APPROVED) {
-        const [profile, sellerRole] = await Promise.all([
-          tx.sellerProfile.findUnique({ where: { userId } }),
-          tx.userRoleAssignment.findUnique({
-            where: { userId_role: { userId, role: PlatformRole.SELLER } },
-          }),
-        ]);
-        if (!profile || !sellerRole)
-          throw this.appError('SELLER_COMMERCIAL_STATE_INCONSISTENT', HttpStatus.CONFLICT);
+        await this.assertApprovedCommercialState(tx, app);
         return this.mapApp(app)!;
       }
       if (
@@ -456,7 +476,10 @@ export class SellerOnboardingService {
       return await serializableTransactionWithRetry(this.prisma, async (tx) => {
         const app = await tx.sellerApplication.findUnique({ where: { id } });
         if (!app) throw new NotFoundException({ code: 'SELLER_APPLICATION_NOT_FOUND' });
-        if (app.status === SellerApplicationStatus.APPROVED) return this.mapApp(app)!;
+        if (app.status === SellerApplicationStatus.APPROVED) {
+          await this.assertApprovedCommercialState(tx, app);
+          return this.mapApp(app)!;
+        }
         if (
           app.status !== SellerApplicationStatus.SUBMITTED &&
           app.status !== SellerApplicationStatus.UNDER_REVIEW
