@@ -17,7 +17,7 @@ const item = (overrides: Record<string, unknown> = {}) => ({
   stock: 3,
   category: { slug: "jogos", name: "Jogos" },
   subcategory: { slug: "pc", name: "PC" },
-  seller: { slug: "demo-store", storeName: "Demo Store" },
+  seller: { slug: "demo-store", storeName: "Demo Store", verified: false },
   coverImage: {
     url: "https://storage.local/signed-image?signature=secret",
     expiresAt: "2030-01-01T00:00:00.000Z",
@@ -94,6 +94,20 @@ describe("publicCatalogService", () => {
 });
 
 describe("public catalog parser", () => {
+  it.each([true, false])("accepts seller.verified=%s without coercion", (verified) => {
+    expect(
+      parsePublicCatalogListResponse(response(item({ seller: { ...item().seller, verified } })))
+        .items[0].seller.verified,
+    ).toBe(verified);
+  });
+
+  it.each([undefined, "true", null])("rejects invalid seller.verified=%s", (verified) => {
+    const seller = { ...item().seller, verified };
+    if (verified === undefined) delete seller.verified;
+    expect(() => parsePublicCatalogListResponse(response(item({ seller })))).toThrow(
+      MALFORMED_PUBLIC_CATALOG_RESPONSE,
+    );
+  });
   it.each([
     [{ kind: "FIXED", amount: "49.90" }, 2, { slug: "pc", name: "PC" }],
     [{ kind: "FROM", amount: "9.90" }, null, null],

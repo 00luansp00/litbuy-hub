@@ -50,7 +50,7 @@ Esta matriz serve para planejar PRs, não para afirmar production readiness. Div
 | LITPOINTS-REFUND | Reversão/devolução LP | Freeze; Refund contract | NOT_PROVEN; contrato documental em `REFUND_DELIVERY_GUARANTEE_CONTRACT.md` | Buyer: reversão proporcional; tender LP volta com novos 3 meses; sem novo earn. Seller LP/gasto prévio seguem abertos | Dependência documental satisfeita após merge; decisões abertas e engine pendentes | LP ledger; refund engine | HUMAN_PROD_REVIEW | W | 7 | NOT_IMPLEMENTED | HUMAN_PROD_REVIEW |
 | SELLER-COMMERCIAL-ENABLEMENT | Loja habilita venda | Freeze; `SELLER_COMMERCIAL_ENABLEMENT.md` | Submit self-service materializa profile `ACTIVE/verified=false` + role `SELLER` atomicamente; review Admin é independente; legacy adota sob demanda; replay/concurrency e acesso Seller são cobertos | Configurar lojinha permite vender sem approval comercial | — | RBAC; listing | AI_CANDIDATE | N | 3 | IMPLEMENTED | IMPLEMENTED |
 | SELLER-VERIFICATION | Verificação separada | Freeze | `SellerProfile.verified` boolean existe, explicitamente não KYC | Estado separado; SLA 3 dias úteis; provider humano | Lifecycle/audit/provider port | commercial enablement | EXTERNAL_PROVIDER_DECISION | O1 | 5 | PARTIAL | HUMAN_PROD_REVIEW |
-| SELLER-UNVERIFIED-VISIBILITY | Badge público | Freeze | `verified` chega a DTOs/catalog; cobertura visual/semântica target não provada | status visível ao Buyer | Consistência API/UI e truthful copy | verification | AI_CANDIDATE | O2 | 5 | PARTIAL | IMPLEMENTED |
+| SELLER-UNVERIFIED-VISIBILITY | Badge público | Freeze; `SELLER_UNVERIFIED_VISIBILITY.md` | Catálogo público list/detail expõe `SellerProfile.verified`; parser exige boolean e card/detail mostram copy textual compartilhada para true e false; testes cobrem paridade e preservam Seller ACTIVE não verificado | status visível ao Buyer | — | verification | AI_CANDIDATE | O2 | 5 | IMPLEMENTED | IMPLEMENTED |
 | SELLER-WITHDRAWAL-VERIFICATION-GATE | Não verificado não saca | Freeze | Risk policy foundation existe, enforcement end-to-end não provado | verified obrigatório | Withdrawal authority + security | verification; withdrawal | HYBRID_REVIEW_REQUIRED | O3 | 5 | PARTIAL | IMPLEMENTED |
 | SELLER-UNVERIFIED-RISK-POLICY | Limites administráveis | Freeze | Não provado; thresholds não decididos | valor/venda, volume, qty, held, categorias; thresholds abertos | Config schema; risk engine | verification; admin controls | HYBRID_REVIEW_REQUIRED | P | 7 | DESIGN_REQUIRED | DESIGN_REQUIRED |
 | WITHDRAWAL-STANDARD | 60h, R$0 | Freeze | Somente STANDARD está enabled: até 48h, aprovação MANUAL ADMIN e fee adicional R$0 | 60h corridas, R$0; MAX não altera withdrawal | Versionar novo SLA preservando approval, blockers e histórico | ledger; blockers | HYBRID_REVIEW_REQUIRED | AG1 | 6 | PARTIAL | IMPLEMENTED |
@@ -81,7 +81,7 @@ Esta matriz serve para planejar PRs, não para afirmar production readiness. Div
 
 ### Contagem controlada
 
-Há **58 capabilities** nesta versão: `IMPLEMENTED 14`, `PARTIAL 10`, `NOT_IMPLEMENTED 22`, `DOCS_ONLY 1`, `DESIGN_REQUIRED 9`, `HUMAN_PROD_REVIEW 1`, `DEFERRED 1`, `SUPERSEDED 0`. A contagem usa **Current status**; target humano não altera a evidência CURRENT.
+Há **58 capabilities** nesta versão: `IMPLEMENTED 15`, `PARTIAL 9`, `NOT_IMPLEMENTED 22`, `DOCS_ONLY 1`, `DESIGN_REQUIRED 9`, `HUMAN_PROD_REVIEW 1`, `DEFERRED 1`, `SUPERSEDED 0`. A contagem usa **Current status**; target humano não altera a evidência CURRENT.
 
 ## 3. Implementation layers matrix
 

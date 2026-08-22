@@ -1,5 +1,6 @@
 import { Breadcrumb } from "@/components/common/Breadcrumb";
 import { formatPublicCatalogPrice } from "@/components/public-catalog/formatPublicCatalogPrice";
+import { SellerVerificationStatus } from "@/components/public-catalog/SellerVerificationStatus";
 import type { PublicCatalogProductDetail } from "@/services/publicCatalog";
 import { PublicProductDetailGallery } from "./PublicProductDetailGallery";
 import { PublicProductPurchasePanel } from "./PublicProductPurchasePanel";
@@ -86,6 +87,7 @@ export function PublicProductDetailContent({ product }: { product: PublicCatalog
             <h2 className="font-semibold">Sobre a loja</h2>
             <p className="mt-2">{product.seller.storeName}</p>
             <p className="text-sm text-muted-foreground">{product.seller.slug}</p>
+            <SellerVerificationStatus verified={product.seller.verified} className="mt-3" />
           </section>
           <div className="rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground">
             <p>Este anúncio é carregado diretamente do catálogo público da LIT Buy.</p>

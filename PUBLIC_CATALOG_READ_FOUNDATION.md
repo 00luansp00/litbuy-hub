@@ -18,7 +18,7 @@ Visibility requires an `ACTIVE` product and seller, an `APPROVED` source draft w
 
 ## Public contracts
 
-Cards expose only product id/slug/title/normalized 160-character summary, type/model, decimal-string pricing (`FIXED`, `FROM`, or `QUOTE`), informative stock, public taxonomy and seller names/slugs, and the signed cover. Details add description, delivery mode, active ordered variants, ordered ready gallery, and safe service pricing/delivery fields. Explicit mapping excludes Prisma records, private IDs, keys, account data, notes, automated messages, administrative state, and invented metrics.
+Cards expose only product id/slug/title/normalized 160-character summary, type/model, decimal-string pricing (`FIXED`, `FROM`, or `QUOTE`), informative stock, public taxonomy, seller name/slug and the authoritative `SellerProfile.verified` boolean, plus the signed cover. Details expose the same seller verification value and add description, delivery mode, active ordered variants, ordered ready gallery, and safe service pricing/delivery fields. Explicit mapping excludes Prisma records, private IDs, keys, account data, notes, automated messages, administrative state, and invented metrics.
 
 ## Private images
 

@@ -31,7 +31,7 @@ export interface PublicCatalogCard {
   stock: number | null;
   category: { slug: string; name: string };
   subcategory: { slug: string; name: string } | null;
-  seller: { slug: string; storeName: string };
+  seller: { slug: string; storeName: string; verified: boolean };
   coverImage: { url: string; expiresAt: string; altText: string | null };
 }
 

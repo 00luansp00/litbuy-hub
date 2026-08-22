@@ -76,6 +76,7 @@ function card(value: unknown): PublicCatalogCard {
   )
     malformed();
   const seller = record(item.seller);
+  if (typeof seller.verified !== "boolean") malformed();
   const image = record(item.coverImage);
   const url = text(image.url);
   const expiresAt = text(image.expiresAt);
@@ -104,7 +105,11 @@ function card(value: unknown): PublicCatalogCard {
     stock: item.stock as number | null,
     category: namedSlug(item.category),
     subcategory: item.subcategory === null ? null : namedSlug(item.subcategory),
-    seller: { slug: text(seller.slug), storeName: text(seller.storeName) },
+    seller: {
+      slug: text(seller.slug),
+      storeName: text(seller.storeName),
+      verified: seller.verified,
+    },
     coverImage: { url, expiresAt, altText: nullableText(image.altText) },
   };
 }
