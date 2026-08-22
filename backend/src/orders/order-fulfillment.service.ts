@@ -25,6 +25,8 @@ export const classifySellerMaxQualification = (
   buyerConfirmedAt.getTime() <= deadlineAt.getTime()
     ? SellerMaxQualificationStatus.QUALIFIED
     : SellerMaxQualificationStatus.EXPIRED;
+export const isSellerMaxQualificationExpired = (deadlineAt: Date, dbClock: Date): boolean =>
+  dbClock.getTime() > deadlineAt.getTime();
 type Tx = Prisma.TransactionClient;
 type Failure = { type: ReconciliationIssueType; code: string };
 type CandidateResult = 'NO_CANDIDATE' | 'ALREADY_HANDLED' | 'PROCESSED';
@@ -106,6 +108,10 @@ export class OrderFulfillmentService {
     );
   }
 
+  async processSellerMaxQualificationExpiration(orderId: string): Promise<boolean> {
+    return (await this.expireSellerMaxQualification(orderId)) === 'PROCESSED';
+  }
+
   async makeAvailable(orderId: string): Promise<boolean> {
     return (await this.makeAvailableResult(orderId)) === 'PROCESSED';
   }
@@ -165,9 +171,7 @@ export class OrderFulfillmentService {
           code: 'DELIVERY_SELLER_MISMATCH',
         });
 
-      const [{ now: buyerConfirmedAt }] = await tx.$queryRaw<Array<{ now: Date }>>`
-        SELECT transaction_timestamp()::timestamp(3) AS "now"
-      `;
+      const buyerConfirmedAt = await this.sellerMaxWallClock(tx);
       const qualificationPending =
         order.sellerPlanSnapshot === 'LIT_MAX' &&
         order.sellerMaxQualificationVersion === 1 &&
@@ -491,7 +495,7 @@ export class OrderFulfillmentService {
       WHERE "sellerMaxQualificationVersion" = 1
         AND "sellerMaxQualificationStatus" = 'PENDING'
         AND "buyerConfirmedAt" IS NULL
-        AND "sellerMaxQualificationDeadlineAt" < transaction_timestamp()
+        AND "sellerMaxQualificationDeadlineAt" < clock_timestamp()
       ORDER BY "sellerMaxQualificationDeadlineAt", "id" LIMIT 1
     `;
     return rows[0]?.id ?? null;
@@ -509,10 +513,8 @@ export class OrderFulfillmentService {
         order.sellerMaxQualificationDeadlineAt === null
       )
         return 'ALREADY_HANDLED';
-      const [{ now }] = await tx.$queryRaw<Array<{ now: Date }>>`
-        SELECT transaction_timestamp()::timestamp(3) AS "now"
-      `;
-      if (now.getTime() <= order.sellerMaxQualificationDeadlineAt.getTime())
+      const now = await this.sellerMaxWallClock(tx);
+      if (!isSellerMaxQualificationExpired(order.sellerMaxQualificationDeadlineAt, now))
         return 'ALREADY_HANDLED';
       await tx.order.update({
         where: { id: order.id },
@@ -556,6 +558,13 @@ export class OrderFulfillmentService {
       WHERE o."id" = ${orderId}::uuid FOR UPDATE OF o
     `;
     return rows[0] ?? null;
+  }
+
+  private async sellerMaxWallClock(tx: Tx): Promise<Date> {
+    const [{ now }] = await tx.$queryRaw<Array<{ now: Date }>>`
+      SELECT clock_timestamp()::timestamp(3) AS "now"
+    `;
+    return now;
   }
 
   private findSellerOrder(tx: Tx, publicCode: string, actorUserId: string) {

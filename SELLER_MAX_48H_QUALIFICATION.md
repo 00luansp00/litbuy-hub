@@ -2,7 +2,7 @@
 
 ## Autoridades e escopo
 
-Esta implementação prospectiva materializa, por venda, a capability J. A única autoridade para aplicar J é `Order.sellerPlanSnapshot = LIT_MAX`; o plano atual do Product nunca é consultado. A entrega autoritativa é `OrderDelivery.createdAt`, criada pelo PostgreSQL na transação Seller. A confirmação usa `transaction_timestamp()` do PostgreSQL, capturado sob o mesmo advisory transaction lock `order:<orderId>` da progressão de fulfillment. DTOs não recebem timestamps.
+Esta implementação prospectiva materializa, por venda, a capability J. A única autoridade para aplicar J é `Order.sellerPlanSnapshot = LIT_MAX`; o plano atual do Product nunca é consultado. A entrega autoritativa é `OrderDelivery.createdAt`, criada pelo PostgreSQL na transação Seller. A confirmação usa o wall-clock autoritativo `clock_timestamp()` do PostgreSQL, capturado **depois** da aquisição do advisory transaction lock `order:<orderId>` e da releitura bloqueada da Order. Assim, espera pelo lock não retroage a decisão ao início da transação. DTOs não recebem timestamps.
 
 J somente decide qualificação. Ela não calcula redução, `maxTargetAt` ou `effectiveReleaseAt`, não altera `FinancialHold.releaseEligibleAt` e não antecipa dinheiro. K (`SELLER-MAX-RELEASE-CALC`) continua não implementada.
 

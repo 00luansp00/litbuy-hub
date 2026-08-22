@@ -1,5 +1,8 @@
 import { SellerMaxQualificationStatus } from '@prisma/client';
-import { classifySellerMaxQualification } from './order-fulfillment.service';
+import {
+  classifySellerMaxQualification,
+  isSellerMaxQualificationExpired,
+} from './order-fulfillment.service';
 
 describe('classifySellerMaxQualification', () => {
   const deadline = new Date('2026-08-23T10:00:00.000Z');
@@ -16,6 +19,20 @@ describe('classifySellerMaxQualification', () => {
   it('expires one millisecond after the deadline', () => {
     expect(classifySellerMaxQualification(deadline, new Date('2026-08-23T10:00:00.001Z'))).toBe(
       SellerMaxQualificationStatus.EXPIRED,
+    );
+  });
+});
+
+describe('isSellerMaxQualificationExpired', () => {
+  const deadline = new Date('2026-08-23T10:00:00.000Z');
+
+  it('does not expire at the exact inclusive deadline', () => {
+    expect(isSellerMaxQualificationExpired(deadline, new Date(deadline))).toBe(false);
+  });
+
+  it('expires strictly after the deadline', () => {
+    expect(isSellerMaxQualificationExpired(deadline, new Date('2026-08-23T10:00:00.001Z'))).toBe(
+      true,
     );
   });
 });
