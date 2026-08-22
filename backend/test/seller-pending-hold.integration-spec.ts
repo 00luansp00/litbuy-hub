@@ -204,15 +204,7 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
     await recognition.processOne(order.id);
     await fulfillment.makeAvailable(order.id);
     if (deliveredAt) {
-      const delivery = await prisma.orderDelivery.create({
-        data: {
-          orderId: order.id,
-          sellerProfileId: order.sellerProfileId,
-          deliveryType: 'MANUAL_REFERENCE',
-          evidenceHash: 'a'.repeat(64),
-          createdAt: deliveredAt,
-        },
-      });
+      const delivery = await seedHistoricalPreGuardDelivery(order, deliveredAt);
       const k = calculateSellerMaxRelease({
         deliveredAt: delivery.createdAt,
         frozenBaseReleaseDelayHours: releaseDelayHours,
@@ -268,8 +260,61 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
     };
   }
 
-  async function historicalQualifiedMax(offsetFromEffectiveMs = 0) {
-    const deliveredAt = new Date(Date.now() - 120 * 3_600_000 + offsetFromEffectiveMs);
+  async function databaseNow() {
+    const [{ now }] = await prisma.$queryRaw<Array<{ now: Date }>>`
+      SELECT transaction_timestamp()::timestamp(3) AS "now"
+    `;
+    return now;
+  }
+
+  async function seedHistoricalPreGuardDelivery(
+    order: { id: string; sellerProfileId: string },
+    deliveredAt: Date,
+  ) {
+    expect(await prisma.orderDelivery.count({ where: { orderId: order.id } })).toBe(0);
+    // G3 deliberately rewrites timestamps on new deliveries. This narrow test-only seed models a
+    // row that already existed before the guard, then restores the production guard before J/K.
+    try {
+      await prisma.$executeRawUnsafe(
+        'ALTER TABLE "OrderDelivery" DISABLE TRIGGER "OrderDelivery_createdAt_guard"',
+      );
+      await prisma.orderDelivery.create({
+        data: {
+          orderId: order.id,
+          sellerProfileId: order.sellerProfileId,
+          deliveryType: 'MANUAL_REFERENCE',
+          evidenceHash: 'a'.repeat(64),
+          createdAt: deliveredAt,
+        },
+      });
+    } finally {
+      await prisma.$executeRawUnsafe(
+        'ALTER TABLE "OrderDelivery" ENABLE TRIGGER "OrderDelivery_createdAt_guard"',
+      );
+    }
+    const triggers = await prisma.$queryRaw<Array<{ tgname: string; tgenabled: string }>>`
+      SELECT tgname, tgenabled FROM pg_trigger
+      WHERE tgname IN (
+        'OrderDelivery_createdAt_guard',
+        'Order_seller_max_qualification_invariants',
+        'Order_seller_max_release_invariants'
+      ) ORDER BY tgname
+    `;
+    expect(triggers).toEqual([
+      { tgname: 'OrderDelivery_createdAt_guard', tgenabled: 'O' },
+      { tgname: 'Order_seller_max_qualification_invariants', tgenabled: 'O' },
+      { tgname: 'Order_seller_max_release_invariants', tgenabled: 'O' },
+    ]);
+    const persisted = await prisma.orderDelivery.findUniqueOrThrow({
+      where: { orderId: order.id },
+    });
+    expect(persisted.createdAt).toEqual(deliveredAt);
+    return persisted;
+  }
+
+  async function historicalQualifiedMax(hoursBeforeNow: 119 | 121) {
+    const now = await databaseNow();
+    const deliveredAt = new Date(now.getTime() - hoursBeforeNow * 3_600_000);
     const result = await completedOrder(
       1000n,
       168,
@@ -281,16 +326,19 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
       'QUALIFIED',
     );
     const target = new Date(result.delivery.createdAt.getTime() + 120 * 3_600_000);
-    return { ...result, target };
+    return { ...result, target, seededAt: now };
   }
 
   it('releases MAX at five days while preserving the seven-day base and replays once', async () => {
-    const { order, delivery, target } = await historicalQualifiedMax(-1_000);
+    const { order, delivery, target } = await historicalQualifiedMax(121);
     expect(await service.processOne(order.id)).toBe('PROCESSED');
     const hold = await prisma.financialHold.findFirstOrThrow({ where: { orderId: order.id } });
     expect(hold.releaseEligibleAt).toEqual(
       new Date(delivery.createdAt.getTime() + 168 * 3_600_000),
     );
+    const beforeEligibility = await databaseNow();
+    expect(beforeEligibility.getTime()).toBeGreaterThanOrEqual(target.getTime());
+    expect(beforeEligibility.getTime()).toBeLessThan(hold.releaseEligibleAt!.getTime());
     expect(await eligibility.processOne(hold.id)).toBe('RELEASE_ELIGIBLE');
     expect(await release.processOne(hold.id)).toBe('RELEASED');
     const first = await prisma.financialHold.findUniqueOrThrow({ where: { id: hold.id } });
@@ -331,8 +379,8 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
     );
   });
 
-  it('G2 rejects a prematurely promoted MAX hold and dispute still blocks a due MAX hold', async () => {
-    const premature = await historicalQualifiedMax(3_600_000);
+  it('G2 rejects a prematurely promoted MAX hold', async () => {
+    const premature = await historicalQualifiedMax(119);
     expect(await service.processOne(premature.order.id)).toBe('PROCESSED');
     const earlyHold = await prisma.financialHold.findFirstOrThrow({
       where: { orderId: premature.order.id },
@@ -348,8 +396,10 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
         where: { type: 'SELLER_FUNDS_RELEASED', referenceId: earlyHold.id },
       }),
     ).toBe(0);
+  });
 
-    const blocked = await historicalQualifiedMax(-1_000);
+  it('keeps a due MAX hold blocked by dispute', async () => {
+    const blocked = await historicalQualifiedMax(121);
     expect(await service.processOne(blocked.order.id)).toBe('PROCESSED');
     const blockedHold = await prisma.financialHold.findFirstOrThrow({
       where: { orderId: blocked.order.id },
@@ -364,8 +414,8 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
     ).toBe(0);
   });
 
-  it('keeps EXPIRED MAX on the seven-day base and rejects late reactivation', async () => {
-    const deliveredAt = new Date(Date.now() - 120 * 3_600_000);
+  it('keeps EXPIRED MAX not due at its five-day target after late confirmation', async () => {
+    const deliveredAt = new Date((await databaseNow()).getTime() - 121 * 3_600_000);
     const future = await completedOrder(
       1000n,
       168,
@@ -386,7 +436,9 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
       sellerMaxQualificationStatus: 'EXPIRED',
       sellerMaxEffectiveReleaseAt: futureHold.releaseEligibleAt,
     });
+  });
 
+  it('makes EXPIRED MAX eligible only at its seven-day base', async () => {
     const due = await completedOrder(
       1000n,
       168,
@@ -394,7 +446,7 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
       false,
       true,
       true,
-      new Date(Date.now() - 168 * 3_600_000 - 1_000),
+      new Date((await databaseNow()).getTime() - 169 * 3_600_000),
       'EXPIRED',
     );
     const dueBase = new Date(due.delivery.createdAt.getTime() + 168 * 3_600_000);
