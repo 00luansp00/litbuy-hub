@@ -17,7 +17,7 @@ import type {
   RemoveCartItemDto,
   UpdateCartItemDto,
 } from './carts.dto';
-import { checkoutFingerprint } from '../checkout/checkout-fingerprint';
+import { buyerVipCheckoutFingerprint, checkoutFingerprint } from '../checkout/checkout-fingerprint';
 
 export const cartProductInclude = {
   sellerProfile: { select: { userId: true, status: true } },
@@ -344,24 +344,30 @@ export class CartsService {
       createdAt: cart.createdAt.toISOString(),
       updatedAt: cart.updatedAt.toISOString(),
     };
+    const previewFingerprint = checkoutFingerprint({
+      cartId: cart.id,
+      cartVersion: cart.version,
+      sellerId: cart.sellerProfile.id,
+      currency: 'BRL',
+      items: cart.items.map((item, index) => ({
+        id: item.id,
+        productId: item.product.id,
+        productVersion: item.product.version,
+        variantId: item.productVariantId,
+        quantity: item.quantity,
+        unitAmountMinor: items[index].currentUnitAmountMinor,
+        purchasable: items[index].purchasable,
+        issues: items[index].issues,
+      })),
+    });
     return {
       ...response,
-      previewFingerprint: checkoutFingerprint({
-        cartId: cart.id,
-        cartVersion: cart.version,
-        sellerId: cart.sellerProfile.id,
-        currency: 'BRL',
-        items: cart.items.map((item, index) => ({
-          id: item.id,
-          productId: item.product.id,
-          productVersion: item.product.version,
-          variantId: item.productVariantId,
-          quantity: item.quantity,
-          unitAmountMinor: items[index].currentUnitAmountMinor,
-          purchasable: items[index].purchasable,
-          issues: items[index].issues,
-        })),
-      }),
+      previewFingerprint,
+      buyerVipPreviewFingerprints: {
+        NONE: buyerVipCheckoutFingerprint(previewFingerprint, 'NONE'),
+        BASIC: buyerVipCheckoutFingerprint(previewFingerprint, 'BASIC'),
+        PREMIUM: buyerVipCheckoutFingerprint(previewFingerprint, 'PREMIUM'),
+      },
     };
   }
   private audit(

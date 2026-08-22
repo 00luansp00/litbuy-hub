@@ -5,11 +5,13 @@ import type {
   OrderStatus,
   PaymentStatus,
 } from "@/services/orders";
+import type { BuyerVipPlan } from "./cartApiService";
 
 export type CreateCheckoutSessionInput = {
   sellerSlug: string;
   expectedCartVersion: number;
   expectedPreviewFingerprint: string;
+  buyerVipPlan: BuyerVipPlan;
   idempotencyKey: string;
 };
 
@@ -35,6 +37,7 @@ export type CheckoutOrder = {
   discountAmountMinor: string;
   platformFeeAmountMinor: string;
   totalAmountMinor: string;
+  buyerVipPlan: BuyerVipPlan;
   version: number;
   expiresAt: string;
   createdAt: string;
@@ -43,11 +46,22 @@ export type CheckoutOrder = {
 
 export const checkoutApiService = {
   createCheckoutSession(input: CreateCheckoutSessionInput): Promise<CheckoutOrder> {
-    const { idempotencyKey, sellerSlug, expectedCartVersion, expectedPreviewFingerprint } = input;
+    const {
+      idempotencyKey,
+      sellerSlug,
+      expectedCartVersion,
+      expectedPreviewFingerprint,
+      buyerVipPlan,
+    } = input;
     return apiFetch<CheckoutOrder>("/checkout-sessions", {
       method: "POST",
       headers: { "Idempotency-Key": idempotencyKey },
-      body: JSON.stringify({ sellerSlug, expectedCartVersion, expectedPreviewFingerprint }),
+      body: JSON.stringify({
+        sellerSlug,
+        expectedCartVersion,
+        expectedPreviewFingerprint,
+        buyerVipPlan,
+      }),
     });
   },
 };

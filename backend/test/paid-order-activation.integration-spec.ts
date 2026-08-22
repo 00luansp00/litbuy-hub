@@ -70,7 +70,8 @@ describe('Paid order activation with real PostgreSQL', () => {
       {
         sellerSlug: fixture.seller.slug,
         expectedCartVersion: preview.version,
-        expectedPreviewFingerprint: preview.previewFingerprint,
+        buyerVipPlan: 'NONE',
+        expectedPreviewFingerprint: preview.buyerVipPreviewFingerprints.NONE,
       },
     )) as { orderCode: string };
     const checkoutOrder = await prisma.order.findUniqueOrThrow({
@@ -757,7 +758,8 @@ describe('Paid order activation with real PostgreSQL', () => {
       checkout.create(buyer.id, parseIdempotencyKey(`competing:${crypto.randomUUID()}`), {
         sellerSlug: fixture.seller.slug,
         expectedCartVersion: preview.version,
-        expectedPreviewFingerprint: preview.previewFingerprint,
+        buyerVipPlan: 'NONE',
+        expectedPreviewFingerprint: preview.buyerVipPreviewFingerprints.NONE,
       });
     const first = ordering === 'activation-first' ? runActivation() : runCheckout();
     await new Promise((resolve) => setTimeout(resolve, 100));

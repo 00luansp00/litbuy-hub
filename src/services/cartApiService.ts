@@ -26,9 +26,12 @@ export type BuyerCart = {
   previewSubtotalMinor: string | null;
   checkoutReady: boolean;
   previewFingerprint: string;
+  buyerVipPreviewFingerprints: Record<BuyerVipPlan, string>;
   createdAt: string;
   updatedAt: string;
 };
+
+export type BuyerVipPlan = "NONE" | "BASIC" | "PREMIUM";
 
 export type BuyerCartPage = {
   page: number;

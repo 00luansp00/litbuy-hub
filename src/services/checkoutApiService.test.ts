@@ -13,6 +13,7 @@ describe("checkoutApiService", () => {
       sellerSlug: "loja-a",
       expectedCartVersion: 7,
       expectedPreviewFingerprint: "fingerprint-a",
+      buyerVipPlan: "BASIC",
       idempotencyKey: "checkout:00000000-0000-4000-8000-000000000000",
     });
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
@@ -25,6 +26,7 @@ describe("checkoutApiService", () => {
       sellerSlug: "loja-a",
       expectedCartVersion: 7,
       expectedPreviewFingerprint: "fingerprint-a",
+      buyerVipPlan: "BASIC",
     });
     expect(result.orderCode).toBe(response.orderCode);
   });

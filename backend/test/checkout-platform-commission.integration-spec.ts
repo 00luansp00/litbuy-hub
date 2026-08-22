@@ -73,7 +73,8 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
       dto: {
         sellerSlug: fixture.seller.slug,
         expectedCartVersion: preview.version,
-        expectedPreviewFingerprint: preview.previewFingerprint,
+        buyerVipPlan: 'NONE',
+        expectedPreviewFingerprint: preview.buyerVipPreviewFingerprints.NONE,
       },
       policy,
     };
@@ -217,7 +218,8 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
       checkout.create(f.buyer.id, key(), {
         sellerSlug: f.seller.slug,
         expectedCartVersion: preview.version,
-        expectedPreviewFingerprint: preview.previewFingerprint,
+        buyerVipPlan: 'NONE',
+        expectedPreviewFingerprint: preview.buyerVipPreviewFingerprints.NONE,
       }),
     ).rejects.toMatchObject({ code: 'FEE_POLICY_NOT_FOUND' });
     expect(await prisma.order.count()).toBe(0);
@@ -268,7 +270,8 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
     const secondResponse = await checkout.create(second.buyer.id, key(), {
       sellerSlug: second.seller.slug,
       expectedCartVersion: preview.version,
-      expectedPreviewFingerprint: preview.previewFingerprint,
+      buyerVipPlan: 'NONE',
+      expectedPreviewFingerprint: preview.buyerVipPreviewFingerprints.NONE,
     });
     const orders = await prisma.order.findMany({
       orderBy: { createdAt: 'asc' },
@@ -654,12 +657,14 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
       checkout.create(fixture.buyer.id, key(), {
         sellerSlug: fixture.seller.slug,
         expectedCartVersion: firstPreview.version,
-        expectedPreviewFingerprint: firstPreview.previewFingerprint,
+        buyerVipPlan: 'NONE',
+        expectedPreviewFingerprint: firstPreview.buyerVipPreviewFingerprints.NONE,
       }),
       checkout.create(otherBuyer.id, key(), {
         sellerSlug: fixture.seller.slug,
         expectedCartVersion: secondPreview.version,
-        expectedPreviewFingerprint: secondPreview.previewFingerprint,
+        buyerVipPlan: 'NONE',
+        expectedPreviewFingerprint: secondPreview.buyerVipPreviewFingerprints.NONE,
       }),
     ]);
 

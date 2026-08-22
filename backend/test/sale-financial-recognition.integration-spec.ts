@@ -120,7 +120,8 @@ describe('SaleFinancialRecognitionService with real PostgreSQL', () => {
       {
         sellerSlug: fixture.seller.slug,
         expectedCartVersion: preview.version,
-        expectedPreviewFingerprint: preview.previewFingerprint,
+        buyerVipPlan: 'NONE',
+        expectedPreviewFingerprint: preview.buyerVipPreviewFingerprints.NONE,
       },
     );
     const order = await prisma.order.findUniqueOrThrow({

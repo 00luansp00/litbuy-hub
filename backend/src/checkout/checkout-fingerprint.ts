@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { BuyerVipPlan } from '@prisma/client';
 
 export type FingerprintItem = {
   id: string;
@@ -24,5 +25,13 @@ export function checkoutFingerprint(input: {
       .sort((a, b) => a.id.localeCompare(b.id))
       .map((i) => ({ ...i, issues: [...i.issues].sort() })),
   });
+  return `sha256:${createHash('sha256').update(canonical).digest('hex')}`;
+}
+
+export function buyerVipCheckoutFingerprint(
+  previewFingerprint: string,
+  buyerVipPlan: BuyerVipPlan,
+) {
+  const canonical = JSON.stringify({ previewFingerprint, buyerVipPlan });
   return `sha256:${createHash('sha256').update(canonical).digest('hex')}`;
 }

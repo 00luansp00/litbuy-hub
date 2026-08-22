@@ -58,6 +58,7 @@ const cart = (
   previewSubtotalMinor: subtotal,
   checkoutReady: subtotal !== null && items > 0,
   previewFingerprint: `fingerprint-${sellerSlug}`,
+  buyerVipPreviewFingerprints: { NONE: "fp-none", BASIC: "fp-basic", PREMIUM: "fp-premium" },
   createdAt: "2026-08-10",
   updatedAt: "2026-08-10",
 });
