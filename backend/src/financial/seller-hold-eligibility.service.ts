@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { Prisma, ReconciliationIssueType } from '@prisma/client';
 import { acquireAdvisoryTransactionLock } from '../database/advisory-lock';
 import { PrismaService } from '../database/prisma.service';
+import { effectiveReleaseDeadline } from './seller-max-release-calculator';
 
 const ISSUE_REFERENCE_TYPE = 'SellerHoldEligibility';
 
@@ -58,17 +59,18 @@ export class SellerHoldEligibilityService {
     const ids = await this.prisma.$queryRaw<Array<{ id: string }>>`
       SELECT h."id"
       FROM "FinancialHold" h
+      JOIN "Order" o ON o."id" = h."orderId"
       WHERE h."reason" = 'DELIVERY_PROTECTION'
         AND h."status" = 'ACTIVE'
         AND h."releaseEligibleAt" IS NOT NULL
-        AND h."releaseEligibleAt" <= transaction_timestamp()
+        AND COALESCE(o."sellerMaxEffectiveReleaseAt", h."releaseEligibleAt") <= transaction_timestamp()
         AND NOT EXISTS (
           SELECT 1 FROM "ReconciliationIssue" r
           WHERE r."referenceType" = ${ISSUE_REFERENCE_TYPE}
             AND r."referenceId" = h."id"::text
             AND r."status" IN ('OPEN', 'INVESTIGATING')
         )
-      ORDER BY h."releaseEligibleAt", h."id"
+      ORDER BY COALESCE(o."sellerMaxEffectiveReleaseAt", h."releaseEligibleAt"), h."id"
       LIMIT ${Math.max(1, Math.min(limit, 100))}
     `;
     const results = await Promise.all(ids.map(({ id }) => this.processOne(id)));
@@ -177,6 +179,13 @@ export class SellerHoldEligibilityService {
       delivery.createdAt.getTime() !== hold.releasePolicyAppliedAt!.getTime()
     )
       return this.fail(tx, holdId, { type: 'OTHER', code: 'DELIVERY_AUTHORITY_INVALID' });
+    const effective = effectiveReleaseDeadline(order, delivery.createdAt, hold.releaseEligibleAt!);
+    if (!effective.valid)
+      return this.fail(tx, holdId, { type: 'OTHER', code: 'SELLER_MAX_RELEASE_SNAPSHOT_INVALID' });
+    const [{ now }] = await tx.$queryRaw<
+      Array<{ now: Date }>
+    >`SELECT transaction_timestamp()::timestamp(3) AS "now"`;
+    hold.due = now.getTime() >= effective.effectiveDueAt.getTime();
 
     const payments = await tx.payment.findMany({ where: { orderId: order.id } });
     const payment = payments[0];

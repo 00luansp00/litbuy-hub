@@ -9,6 +9,7 @@ import { parseIdempotencyKey } from '../src/commerce/idempotency-key';
 import { CheckoutService } from '../src/checkout/checkout.service';
 import { PrismaService } from '../src/database/prisma.service';
 import { FinancialLedgerService } from '../src/financial/financial-ledger.service';
+import { calculateSellerMaxRelease } from '../src/financial/seller-max-release-calculator';
 import { SellerHoldEligibilityService } from '../src/financial/seller-hold-eligibility.service';
 import { SellerHeldFundsReleaseService } from '../src/financial/seller-held-funds-release.service';
 import { SaleFinancialRecognitionService } from '../src/financial/sale-financial-recognition.service';
@@ -107,12 +108,25 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
     releaseScope: 'DEFAULT' | 'CATEGORY' | 'SUBCATEGORY' = 'DEFAULT',
     confirmBuyer = true,
     publishCommission = true,
+    sellerMax = false,
+    deliveredAt?: Date,
+    historicalTerminal?: 'QUALIFIED' | 'EXPIRED',
   ) {
     const fixture = await commerceFixture(prisma, 'NORMAL', undefined, 20, false, false);
     if (publishCommission) {
       await publishPlatformCommissionPolicy(prisma, fixture.sellerUser.id, {
         publicVersion: version++,
         percentBps: Number(fee),
+      });
+    }
+    if (sellerMax) {
+      await prisma.listingDraft.update({
+        where: { id: fixture.draft.id },
+        data: { requestedSellerPlan: 'LIT_MAX' },
+      });
+      await prisma.product.update({
+        where: { id: fixture.product.id },
+        data: { sellerPlan: 'LIT_MAX' },
       });
     }
     const subcategory =
@@ -189,12 +203,58 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
     await activation.processOne(order.id);
     await recognition.processOne(order.id);
     await fulfillment.makeAvailable(order.id);
-    await fulfillment.recordDelivered({
-      orderCode: order.publicCode,
-      actorUserId: fixture.sellerUser.id,
-      deliveryType: 'MANUAL_REFERENCE',
-      evidenceHash: 'a'.repeat(64),
-    });
+    if (deliveredAt) {
+      // The financial clock requires a possible history: Order <= paid Payment <= delivery <= DB now.
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { createdAt: new Date(deliveredAt.getTime() - 2 * 3_600_000) },
+      });
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: { paidAt: new Date(deliveredAt.getTime() - 3_600_000) },
+      });
+      const delivery = await seedHistoricalPreGuardDelivery(order, deliveredAt);
+      const k = calculateSellerMaxRelease({
+        deliveredAt: delivery.createdAt,
+        frozenBaseReleaseDelayHours: releaseDelayHours,
+      });
+      const confirmedAt = new Date(delivery.createdAt.getTime() + 3_600_000);
+      const baseAt = k.baseReleaseEligibleAt;
+      await prisma.order.update({
+        where: { id: order.id },
+        data: {
+          fulfillmentStatus:
+            historicalTerminal === 'QUALIFIED' ? 'CONFIRMED' : 'AWAITING_BUYER_CONFIRMATION',
+          ...(historicalTerminal === 'QUALIFIED' ? { status: 'COMPLETED' as const } : {}),
+          sellerMaxQualificationVersion: 1,
+          sellerMaxQualificationStatus: historicalTerminal ?? 'PENDING',
+          sellerMaxQualificationDeadlineAt: new Date(delivery.createdAt.getTime() + 48 * 3_600_000),
+          sellerMaxQualificationDecidedAt: historicalTerminal
+            ? historicalTerminal === 'QUALIFIED'
+              ? confirmedAt
+              : new Date(delivery.createdAt.getTime() + 48 * 3_600_000 + 1)
+            : null,
+          buyerConfirmedAt: historicalTerminal === 'QUALIFIED' ? confirmedAt : null,
+          sellerMaxReleaseCalculationVersion: 1,
+          sellerMaxReleaseReductionHours: k.reductionHours,
+          sellerMaxReleaseTargetAt: k.maxTargetAt,
+          sellerMaxEffectiveReleaseAt:
+            historicalTerminal === 'QUALIFIED'
+              ? k.effectiveReleaseAt
+              : historicalTerminal === 'EXPIRED'
+                ? baseAt
+                : null,
+          version: { increment: 1 },
+        },
+      });
+    } else {
+      await fulfillment.recordDelivered({
+        orderCode: order.publicCode,
+        actorUserId: fixture.sellerUser.id,
+        deliveryType: 'MANUAL_REFERENCE',
+        evidenceHash: 'a'.repeat(64),
+      });
+    }
     const delivery = await prisma.orderDelivery.findUniqueOrThrow({
       where: { orderId: order.id },
     });
@@ -208,6 +268,296 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
       delivery,
     };
   }
+
+  async function databaseNow() {
+    const [{ now }] = await prisma.$queryRaw<Array<{ now: Date }>>`
+      SELECT transaction_timestamp()::timestamp(3) AS "now"
+    `;
+    return now;
+  }
+
+  async function seedHistoricalPreGuardDelivery(
+    order: { id: string; sellerProfileId: string },
+    deliveredAt: Date,
+  ) {
+    expect(await prisma.orderDelivery.count({ where: { orderId: order.id } })).toBe(0);
+    // G3 deliberately rewrites timestamps on new deliveries. This narrow test-only seed models a
+    // row that already existed before the guard, then restores the production guard before J/K.
+    try {
+      await prisma.$executeRawUnsafe(
+        'ALTER TABLE "OrderDelivery" DISABLE TRIGGER "OrderDelivery_createdAt_guard"',
+      );
+      await prisma.orderDelivery.create({
+        data: {
+          orderId: order.id,
+          sellerProfileId: order.sellerProfileId,
+          deliveryType: 'MANUAL_REFERENCE',
+          evidenceHash: 'a'.repeat(64),
+          createdAt: deliveredAt,
+        },
+      });
+    } finally {
+      await prisma.$executeRawUnsafe(
+        'ALTER TABLE "OrderDelivery" ENABLE TRIGGER "OrderDelivery_createdAt_guard"',
+      );
+    }
+    const triggers = await prisma.$queryRaw<Array<{ tgname: string; tgenabled: string }>>`
+      SELECT tgname, tgenabled FROM pg_trigger
+      WHERE tgname IN (
+        'OrderDelivery_createdAt_guard',
+        'Order_seller_max_qualification_invariants',
+        'Order_seller_max_release_invariants'
+      ) ORDER BY tgname
+    `;
+    expect(triggers).toEqual([
+      { tgname: 'OrderDelivery_createdAt_guard', tgenabled: 'O' },
+      { tgname: 'Order_seller_max_qualification_invariants', tgenabled: 'O' },
+      { tgname: 'Order_seller_max_release_invariants', tgenabled: 'O' },
+    ]);
+    const persisted = await prisma.orderDelivery.findUniqueOrThrow({
+      where: { orderId: order.id },
+    });
+    expect(persisted.createdAt).toEqual(deliveredAt);
+    const [historicalOrder, historicalPayment, now] = await Promise.all([
+      prisma.order.findUniqueOrThrow({ where: { id: order.id } }),
+      prisma.payment.findUniqueOrThrow({ where: { orderId: order.id } }),
+      databaseNow(),
+    ]);
+    expect(historicalOrder.createdAt.getTime()).toBeLessThanOrEqual(
+      historicalPayment.paidAt!.getTime(),
+    );
+    expect(historicalPayment.paidAt!.getTime()).toBeLessThanOrEqual(persisted.createdAt.getTime());
+    expect(persisted.createdAt.getTime()).toBeLessThanOrEqual(now.getTime());
+    return persisted;
+  }
+
+  async function historicalQualifiedMax(hoursBeforeNow: 119 | 121) {
+    const now = await databaseNow();
+    const deliveredAt = new Date(now.getTime() - hoursBeforeNow * 3_600_000);
+    const result = await completedOrder(
+      1000n,
+      168,
+      'DEFAULT',
+      false,
+      true,
+      true,
+      deliveredAt,
+      'QUALIFIED',
+    );
+    const target = new Date(result.delivery.createdAt.getTime() + 120 * 3_600_000);
+    return { ...result, target, seededAt: now };
+  }
+
+  async function materializeExpectedHold(orderId: string) {
+    expect(await service.processOne(orderId)).toBe('PROCESSED');
+    expect(
+      await prisma.reconciliationIssue.count({
+        where: { referenceType: 'SellerPendingHold', referenceId: orderId },
+      }),
+    ).toBe(0);
+    const hold = await prisma.financialHold.findFirst({ where: { orderId } });
+    expect(hold).not.toBeNull();
+    return hold!;
+  }
+
+  it('releases MAX at five days while preserving the seven-day base and replays once', async () => {
+    const { order, delivery, target } = await historicalQualifiedMax(121);
+    const hold = await materializeExpectedHold(order.id);
+    expect(hold.releaseEligibleAt).toEqual(
+      new Date(delivery.createdAt.getTime() + 168 * 3_600_000),
+    );
+    const beforeEligibility = await databaseNow();
+    expect(beforeEligibility.getTime()).toBeGreaterThanOrEqual(target.getTime());
+    expect(beforeEligibility.getTime()).toBeLessThan(hold.releaseEligibleAt!.getTime());
+    expect(await eligibility.processOne(hold.id)).toBe('RELEASE_ELIGIBLE');
+    expect(await release.processOne(hold.id)).toBe('RELEASED');
+    const first = await prisma.financialHold.findUniqueOrThrow({ where: { id: hold.id } });
+    expect(first.releasedAt!.getTime()).toBeGreaterThanOrEqual(target.getTime());
+    expect(first.releasedAt!.getTime()).toBeLessThan(first.releaseEligibleAt!.getTime());
+    expect(await release.processOne(hold.id)).toBe('ALREADY_RELEASED');
+    const replay = await prisma.financialHold.findUniqueOrThrow({ where: { id: hold.id } });
+    expect(replay).toMatchObject({
+      releasedAt: first.releasedAt,
+      releaseLedgerTransactionId: first.releaseLedgerTransactionId,
+      releaseEligibleAt: hold.releaseEligibleAt,
+    });
+    const postings = await prisma.ledgerTransaction.findMany({
+      where: { type: 'SELLER_FUNDS_RELEASED', referenceId: hold.id },
+      include: { entries: { include: { account: true } } },
+    });
+    expect(postings).toHaveLength(1);
+    expect(postings[0]).toMatchObject({ currency: hold.currency });
+    expect(postings[0].entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          direction: 'DEBIT',
+          amountMinor: hold.amountMinor,
+          account: expect.objectContaining({
+            ownerId: hold.sellerProfileId,
+            purpose: 'SELLER_HELD',
+          }),
+        }),
+        expect.objectContaining({
+          direction: 'CREDIT',
+          amountMinor: hold.amountMinor,
+          account: expect.objectContaining({
+            ownerId: hold.sellerProfileId,
+            purpose: 'SELLER_AVAILABLE',
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it('G2 rejects a prematurely promoted MAX hold', async () => {
+    const premature = await historicalQualifiedMax(119);
+    const earlyHold = await materializeExpectedHold(premature.order.id);
+    expect(await eligibility.processOne(earlyHold.id)).toBe('NOT_DUE');
+    await prisma.financialHold.update({
+      where: { id: earlyHold.id },
+      data: { status: 'RELEASE_ELIGIBLE' },
+    });
+    expect(await release.processOne(earlyHold.id)).toBe('RECONCILIATION_REQUIRED');
+    expect(
+      await prisma.ledgerTransaction.count({
+        where: { type: 'SELLER_FUNDS_RELEASED', referenceId: earlyHold.id },
+      }),
+    ).toBe(0);
+  });
+
+  it('keeps a due MAX hold blocked by dispute', async () => {
+    const blocked = await historicalQualifiedMax(121);
+    const blockedHold = await materializeExpectedHold(blocked.order.id);
+    expect(await eligibility.processOne(blockedHold.id)).toBe('RELEASE_ELIGIBLE');
+    await prisma.order.update({ where: { id: blocked.order.id }, data: { disputeStatus: 'OPEN' } });
+    expect(await release.processOne(blockedHold.id)).toBe('BUSINESS_BLOCKED');
+    expect(
+      await prisma.ledgerTransaction.count({
+        where: { type: 'SELLER_FUNDS_RELEASED', referenceId: blockedHold.id },
+      }),
+    ).toBe(0);
+  });
+
+  it('keeps EXPIRED MAX not due at its five-day target after late confirmation', async () => {
+    const deliveredAt = new Date((await databaseNow()).getTime() - 121 * 3_600_000);
+    const future = await completedOrder(
+      1000n,
+      168,
+      'DEFAULT',
+      false,
+      true,
+      true,
+      deliveredAt,
+      'EXPIRED',
+    );
+    const futureHold = await materializeExpectedHold(future.order.id);
+    expect(await eligibility.processOne(futureHold.id)).toBe('NOT_DUE');
+    await fulfillment.confirmReceipt(future.order.publicCode, future.order.buyerUserId);
+    expect(await prisma.order.findUniqueOrThrow({ where: { id: future.order.id } })).toMatchObject({
+      sellerMaxQualificationStatus: 'EXPIRED',
+      sellerMaxEffectiveReleaseAt: futureHold.releaseEligibleAt,
+    });
+  });
+
+  it('makes EXPIRED MAX eligible only at its seven-day base', async () => {
+    const due = await completedOrder(
+      1000n,
+      168,
+      'DEFAULT',
+      false,
+      true,
+      true,
+      new Date((await databaseNow()).getTime() - 169 * 3_600_000),
+      'EXPIRED',
+    );
+    const dueBase = new Date(due.delivery.createdAt.getTime() + 168 * 3_600_000);
+    const dueHold = await materializeExpectedHold(due.order.id);
+    expect(dueHold.releaseEligibleAt).toEqual(dueBase);
+    expect(await eligibility.processOne(dueHold.id)).toBe('RELEASE_ELIGIBLE');
+  });
+
+  it.each([
+    [96, 0, 96],
+    [168, 48, 120],
+    [336, 96, 240],
+    [504, 144, 360],
+  ])(
+    'persists K v1 for %dh while the monetary hold retains its base deadline',
+    async (delayHours, reductionHours, targetHours) => {
+      const { order, delivery } = await completedOrder(
+        1000n,
+        delayHours,
+        'DEFAULT',
+        false,
+        true,
+        true,
+      );
+      expect(await service.processOne(order.id)).toBe('PROCESSED');
+      const [snapshot, hold] = await Promise.all([
+        prisma.order.findUniqueOrThrow({ where: { id: order.id } }),
+        prisma.financialHold.findFirstOrThrow({ where: { orderId: order.id } }),
+      ]);
+      expect(snapshot).toMatchObject({
+        sellerPlanSnapshot: 'LIT_MAX',
+        sellerMaxQualificationStatus: 'PENDING',
+        sellerMaxReleaseCalculationVersion: 1,
+        sellerMaxReleaseReductionHours: reductionHours,
+        sellerMaxEffectiveReleaseAt: null,
+      });
+      expect(snapshot.sellerMaxReleaseTargetAt).toEqual(
+        new Date(delivery.createdAt.getTime() + targetHours * 3_600_000),
+      );
+      expect(hold.releaseEligibleAt).toEqual(
+        new Date(delivery.createdAt.getTime() + delayHours * 3_600_000),
+      );
+      expect(await eligibility.processOne(hold.id)).toBe('NOT_DUE');
+      expect(await prisma.reconciliationIssue.count({ where: { referenceId: hold.id } })).toBe(0);
+    },
+  );
+
+  it('qualifies K after a hold exists and PostgreSQL rejects rerating K or its base hold', async () => {
+    const { order, delivery } = await completedOrder(1000n, 168, 'DEFAULT', false, true, true);
+    expect(await service.processOne(order.id)).toBe('PROCESSED');
+    const hold = await prisma.financialHold.findFirstOrThrow({ where: { orderId: order.id } });
+    await fulfillment.confirmReceipt(order.publicCode, order.buyerUserId);
+    const qualified = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(qualified.sellerMaxQualificationStatus).toBe('QUALIFIED');
+    expect(qualified.sellerMaxEffectiveReleaseAt).toEqual(
+      new Date(delivery.createdAt.getTime() + 120 * 3_600_000),
+    );
+    expect(hold.releaseEligibleAt).toEqual(
+      new Date(delivery.createdAt.getTime() + 168 * 3_600_000),
+    );
+    await expect(
+      prisma.order.update({
+        where: { id: order.id },
+        data: { sellerMaxReleaseReductionHours: 96 },
+      }),
+    ).rejects.toBeDefined();
+    await expect(
+      prisma.financialHold.update({
+        where: { id: hold.id },
+        data: { releaseEligibleAt: qualified.sellerMaxEffectiveReleaseAt },
+      }),
+    ).rejects.toBeDefined();
+    expect(
+      (await prisma.financialHold.findUniqueOrThrow({ where: { id: hold.id } })).releaseEligibleAt,
+    ).toEqual(hold.releaseEligibleAt);
+  });
+
+  it('qualifies K before hold materialization without changing the base deadline', async () => {
+    const { order, delivery } = await completedOrder(1000n, 168, 'DEFAULT', true, true, true);
+    const qualified = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+    expect(qualified.sellerMaxQualificationStatus).toBe('QUALIFIED');
+    expect(await service.processOne(order.id)).toBe('PROCESSED');
+    const hold = await prisma.financialHold.findFirstOrThrow({ where: { orderId: order.id } });
+    expect(qualified.sellerMaxEffectiveReleaseAt).toEqual(
+      new Date(delivery.createdAt.getTime() + 120 * 3_600_000),
+    );
+    expect(hold.releaseEligibleAt).toEqual(
+      new Date(delivery.createdAt.getTime() + 168 * 3_600_000),
+    );
+  });
 
   it('materializes and makes a due hold eligible while the buyer remains inactive', async () => {
     const { order, delivery } = await completedOrder(1000n, 0, 'DEFAULT', false);

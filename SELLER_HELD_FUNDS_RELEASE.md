@@ -1,6 +1,6 @@
 # Seller held funds release
 
-> **CURRENT IMPLEMENTATION (G2):** release execution is separate from G1 eligibility. A legitimate `DELIVERY_PROTECTION` hold already in `RELEASE_ELIGIBLE` can move seller proceeds from `SELLER_HELD` to `SELLER_AVAILABLE` after the frozen deadline without Buyer confirmation or Order completion.
+> **CURRENT IMPLEMENTATION (G2):** release execution is separate from G1 eligibility. A legitimate `DELIVERY_PROTECTION` hold already in `RELEASE_ELIGIBLE` can move seller proceeds from `SELLER_HELD` to `SELLER_AVAILABLE` after the validated effective deadline while preserving the frozen base deadline without Buyer confirmation or Order completion.
 
 `SellerHeldFundsReleaseService` accepts both normal post-delivery Order states: `ACTIVE / PAID / AWAITING_BUYER_CONFIRMATION` while the Buyer remains inactive, and `COMPLETED / PAID / CONFIRMED` after confirmation. It never changes, confirms, or completes the Order. An `ACTIVE` hold is not released merely because its timestamp is due: G1 remains solely responsible for `ACTIVE -> RELEASE_ELIGIBLE`.
 
@@ -10,6 +10,6 @@ The current dispute blocker is revalidated after locking the Order and within th
 
 The only posting gateway is `FinancialLedgerService.postWithOutcomeInTransaction`: `DR SELLER_HELD / CR SELLER_AVAILABLE`, in BRL, for `FinancialHold.amountMinor`. Its identity is `SELLER_FUNDS_RELEASED / FinancialHoldRelease / <hold id>` and SHA-256 of `seller-held-release:v1:<hold id>`. The posting and `RELEASE_ELIGIBLE -> RELEASED` update are atomic; `releasedAt` is copied in PostgreSQL from the release `LedgerTransaction.createdAt`, and `releaseLedgerTransactionId` identifies this posting while `ledgerTransactionId` continues identifying the original pending-to-held posting.
 
-A replay validates the historical release facts: `releasedAt >= releaseEligibleAt`, the release posting was created no earlier than eligibility, and its database transaction timestamp equals `releasedAt` at millisecond precision. A later dispute does not rewrite or reverse that history and returns `ALREADY_RELEASED`; post-release recovery remains a future capability. Invalid, premature, partial, or inconsistent artifacts fail closed into deduplicated reconciliation; insufficient held balance rolls back before its durable issue is recorded.
+A replay validates the historical release facts: `releasedAt >= effectiveReleaseAt` (or base `releaseEligibleAt` for STANDARD/legacy), the release posting was created no earlier than eligibility, and its database transaction timestamp equals `releasedAt` at millisecond precision. A later dispute does not rewrite or reverse that history and returns `ALREADY_RELEASED`; post-release recovery remains a future capability. Invalid, premature, partial, or inconsistent artifacts fail closed into deduplicated reconciliation; insufficient held balance rolls back before its durable issue is recorded.
 
 `SELLER_AVAILABLE` is only an internal ledger bucket. Release is not withdrawal. G2 adds no recovery, refund, bank transfer, PSP call, scheduler, endpoint, or frontend.

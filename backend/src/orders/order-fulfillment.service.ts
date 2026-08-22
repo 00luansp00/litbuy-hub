@@ -14,6 +14,7 @@ import {
 } from '@prisma/client';
 import { acquireAdvisoryTransactionLock } from '../database/advisory-lock';
 import { PrismaService } from '../database/prisma.service';
+import { calculateSellerMaxRelease } from '../financial/seller-max-release-calculator';
 
 const REFERENCE_TYPE = 'OrderFulfillment';
 const SALE_REFERENCE_TYPE = 'OrderSale';
@@ -59,6 +60,11 @@ type LockedOrder = {
   sellerMaxQualificationDeadlineAt: Date | null;
   sellerMaxQualificationDecidedAt: Date | null;
   buyerConfirmedAt: Date | null;
+  frozenBaseReleaseDelayHours: number | null;
+  sellerMaxReleaseCalculationVersion: number | null;
+  sellerMaxReleaseReductionHours: number | null;
+  sellerMaxReleaseTargetAt: Date | null;
+  sellerMaxEffectiveReleaseAt: Date | null;
 };
 
 export type RecordDeliveryInput = {
@@ -180,6 +186,16 @@ export class OrderFulfillmentService {
       const qualificationStatus = qualificationPending
         ? classifySellerMaxQualification(order.sellerMaxQualificationDeadlineAt!, buyerConfirmedAt)
         : order.sellerMaxQualificationStatus;
+      const release =
+        qualificationPending &&
+        order.sellerMaxReleaseCalculationVersion === 1 &&
+        order.frozenBaseReleaseDelayHours !== null
+          ? calculateSellerMaxRelease({
+              deliveredAt: delivery.createdAt,
+              frozenBaseReleaseDelayHours: order.frozenBaseReleaseDelayHours,
+              buyerConfirmedAt,
+            })
+          : null;
 
       await tx.order.update({
         where: { id: order.id },
@@ -190,6 +206,10 @@ export class OrderFulfillmentService {
             ? {
                 sellerMaxQualificationStatus: qualificationStatus,
                 sellerMaxQualificationDecidedAt: buyerConfirmedAt,
+                sellerMaxEffectiveReleaseAt:
+                  qualificationStatus === SellerMaxQualificationStatus.QUALIFIED
+                    ? release?.effectiveReleaseAt
+                    : release?.baseReleaseEligibleAt,
               }
             : {}),
           version: { increment: 1 },
@@ -280,6 +300,13 @@ export class OrderFulfillmentService {
     });
     const startsSellerMaxQualification = order.sellerPlanSnapshot === 'LIT_MAX';
     const qualificationDeadlineAt = new Date(delivery.createdAt.getTime() + 48 * 60 * 60 * 1000);
+    const release =
+      startsSellerMaxQualification && order.frozenBaseReleaseDelayHours !== null
+        ? calculateSellerMaxRelease({
+            deliveredAt: delivery.createdAt,
+            frozenBaseReleaseDelayHours: order.frozenBaseReleaseDelayHours,
+          })
+        : null;
     await tx.order.update({
       where: { id: order.id },
       data: {
@@ -289,6 +316,13 @@ export class OrderFulfillmentService {
               sellerMaxQualificationVersion: 1,
               sellerMaxQualificationStatus: 'PENDING',
               sellerMaxQualificationDeadlineAt: qualificationDeadlineAt,
+              ...(release
+                ? {
+                    sellerMaxReleaseCalculationVersion: 1,
+                    sellerMaxReleaseReductionHours: release.reductionHours,
+                    sellerMaxReleaseTargetAt: release.maxTargetAt,
+                  }
+                : {}),
             }
           : {}),
         version: { increment: 1 },
@@ -521,6 +555,16 @@ export class OrderFulfillmentService {
         data: {
           sellerMaxQualificationStatus: 'EXPIRED',
           sellerMaxQualificationDecidedAt: now,
+          ...(order.sellerMaxReleaseCalculationVersion === 1 &&
+          order.frozenBaseReleaseDelayHours !== null
+            ? {
+                sellerMaxEffectiveReleaseAt: calculateSellerMaxRelease({
+                  deliveredAt: (await tx.orderDelivery.findUniqueOrThrow({ where: { orderId } }))
+                    .createdAt,
+                  frozenBaseReleaseDelayHours: order.frozenBaseReleaseDelayHours,
+                }).baseReleaseEligibleAt,
+              }
+            : {}),
           version: { increment: 1 },
         },
       });
@@ -554,6 +598,9 @@ export class OrderFulfillmentService {
              , o."sellerPlanSnapshot", o."sellerMaxQualificationVersion",
              o."sellerMaxQualificationStatus", o."sellerMaxQualificationDeadlineAt",
              o."sellerMaxQualificationDecidedAt", o."buyerConfirmedAt"
+             , o."frozenBaseReleaseDelayHours", o."sellerMaxReleaseCalculationVersion",
+             o."sellerMaxReleaseReductionHours", o."sellerMaxReleaseTargetAt",
+             o."sellerMaxEffectiveReleaseAt"
       FROM "Order" o JOIN "SellerProfile" sp ON sp."id" = o."sellerProfileId"
       WHERE o."id" = ${orderId}::uuid FOR UPDATE OF o
     `;
