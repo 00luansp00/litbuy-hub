@@ -51,6 +51,7 @@ const cart = (overrides: Partial<BuyerCart> = {}): BuyerCart => ({
   previewSubtotalMinor: "24690",
   checkoutReady: true,
   previewFingerprint: "fingerprint",
+  buyerVipPreviewFingerprints: { NONE: "fp-none", BASIC: "fp-basic", PREMIUM: "fp-premium" },
   createdAt: "2026-08-10",
   updatedAt: "2026-08-10",
   ...overrides,

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import {
+  BuyerVipPlan,
   CartStatus,
   CommerceIdempotencyOperation,
   InventoryReservationStatus,
@@ -18,7 +19,7 @@ import { assertCartSelection } from '../carts/cart-purchasability';
 import type { CartSelection } from '../carts/cart-purchasability';
 import { cartResponseInclude } from '../carts/carts.service';
 import type { CartResponsePayload } from '../carts/carts.service';
-import { checkoutFingerprint } from './checkout-fingerprint';
+import { buyerVipCheckoutFingerprint, checkoutFingerprint } from './checkout-fingerprint';
 import { canonicalRequestHash } from '../commerce/idempotency-key';
 import type { ParsedIdempotencyKey } from '../commerce/idempotency-key';
 import { orderItemSnapshot } from './order-snapshot';
@@ -99,7 +100,10 @@ export class CheckoutService {
           issues: [],
         })),
       });
-      if (fingerprint !== dto.expectedPreviewFingerprint)
+      if (
+        buyerVipCheckoutFingerprint(fingerprint, dto.buyerVipPlan as BuyerVipPlan) !==
+        dto.expectedPreviewFingerprint
+      )
         this.fail('CHECKOUT_PREVIEW_CHANGED', 409);
       const reservable = selections
         .filter(({ item }) => item.product.model !== ListingDraftModel.SERVICE)
@@ -190,6 +194,8 @@ export class CheckoutService {
               feeSnapshotVersion: 2,
               commercialSnapshotVersion: 1,
               sellerPlanSnapshot: product.sellerPlan,
+              buyerVipSelectionVersion: 1,
+              buyerVipPlanSnapshot: dto.buyerVipPlan as BuyerVipPlan,
               sellerReleasePolicyVersionId: releasePolicy.policyVersionId,
               sellerReleasePolicyRuleId: releasePolicy.ruleId,
               sellerReleasePolicySource: releasePolicy.source,
@@ -342,6 +348,7 @@ export class CheckoutService {
       discountAmountMinor: order.discountAmountMinor.toString(),
       platformFeeAmountMinor: order.platformFeeAmountMinor.toString(),
       totalAmountMinor: order.totalAmountMinor.toString(),
+      buyerVipPlan: order.buyerVipPlanSnapshot!,
       version: order.version,
       expiresAt: order.expiresAt.toISOString(),
       createdAt: order.createdAt.toISOString(),

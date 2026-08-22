@@ -73,6 +73,11 @@ const readyCart = (overrides: Partial<BuyerCart> = {}): BuyerCart => ({
   previewSubtotalMinor: "24690",
   checkoutReady: true,
   previewFingerprint: "fingerprint-a",
+  buyerVipPreviewFingerprints: {
+    NONE: "fingerprint-none",
+    BASIC: "fingerprint-basic",
+    PREMIUM: "fingerprint-premium",
+  },
   createdAt: "2026-08-10T00:00:00.000Z",
   updatedAt: "2026-08-10T00:00:00.000Z",
   ...overrides,
@@ -88,6 +93,7 @@ function setCart(data: BuyerCart = readyCart()) {
 }
 
 function confirm() {
+  fireEvent.click(screen.getByRole("radio", { name: "Sem plano" }));
   fireEvent.click(screen.getByRole("button", { name: "Confirmar e criar pedido" }));
 }
 
@@ -189,6 +195,22 @@ describe("CheckoutContent real cart states", () => {
 });
 
 describe("CheckoutContent creation", () => {
+  it("starts unselected and requires a conscious Buyer VIP choice", () => {
+    render(<CheckoutContent sellerSlug="loja-a" />);
+    expect((screen.getByRole("radio", { name: "Sem plano" }) as HTMLInputElement).checked).toBe(
+      false,
+    );
+    expect((screen.getByRole("radio", { name: "VIP Básico" }) as HTMLInputElement).checked).toBe(
+      false,
+    );
+    expect((screen.getByRole("radio", { name: "VIP Premium" }) as HTMLInputElement).checked).toBe(
+      false,
+    );
+    expect(
+      (screen.getByRole("button", { name: "Confirmar e criar pedido" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+  });
   it("derives the exact commercial intent from the cart", () => {
     render(<CheckoutContent sellerSlug="loja-a" />);
     confirm();
@@ -196,7 +218,8 @@ describe("CheckoutContent creation", () => {
     expect(input).toEqual({
       sellerSlug: "loja-a",
       expectedCartVersion: 12,
-      expectedPreviewFingerprint: "fingerprint-a",
+      buyerVipPlan: "NONE",
+      expectedPreviewFingerprint: "fingerprint-none",
       idempotencyKey: expect.stringMatching(/^checkout:/),
     });
     expect(input).not.toHaveProperty("price");
@@ -229,7 +252,17 @@ describe("CheckoutContent creation", () => {
     confirm();
     expect(mocks.mutate.mock.calls[2][0].idempotencyKey).not.toBe(first);
 
-    setCart(readyCart({ version: 12, previewFingerprint: "fingerprint-b" }));
+    setCart(
+      readyCart({
+        version: 12,
+        previewFingerprint: "fingerprint-b",
+        buyerVipPreviewFingerprints: {
+          NONE: "fingerprint-none-b",
+          BASIC: "fingerprint-basic-b",
+          PREMIUM: "fingerprint-premium-b",
+        },
+      }),
+    );
     rerender(<CheckoutContent sellerSlug="loja-a" />);
     confirm();
     expect(mocks.mutate.mock.calls[3][0].idempotencyKey).not.toBe(first);

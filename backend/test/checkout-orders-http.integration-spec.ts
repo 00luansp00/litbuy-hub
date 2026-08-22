@@ -68,7 +68,16 @@ describe('Checkout and orders HTTP with real auth, guards, CSRF and PostgreSQL',
       });
       return {
         ...f,
-        preview: { id: stored.id, version: 1, previewFingerprint: 'sha256:'.padEnd(71, '0') },
+        preview: {
+          id: stored.id,
+          version: 1,
+          previewFingerprint: 'sha256:'.padEnd(71, '0'),
+          buyerVipPreviewFingerprints: {
+            NONE: 'sha256:'.padEnd(71, '0'),
+            BASIC: 'sha256:'.padEnd(71, '0'),
+            PREMIUM: 'sha256:'.padEnd(71, '0'),
+          },
+        },
       };
     }
     const added = await request(app.getHttpServer())
@@ -78,13 +87,19 @@ describe('Checkout and orders HTTP with real auth, guards, CSRF and PostgreSQL',
       .expect(201);
     return {
       ...f,
-      preview: added.body as { id: string; version: number; previewFingerprint: string },
+      preview: added.body as {
+        id: string;
+        version: number;
+        previewFingerprint: string;
+        buyerVipPreviewFingerprints: Record<'NONE' | 'BASIC' | 'PREMIUM', string>;
+      },
     };
   }
   const body = (f: Awaited<ReturnType<typeof cart>>) => ({
     sellerSlug: f.seller.slug,
     expectedCartVersion: f.preview.version,
-    expectedPreviewFingerprint: f.preview.previewFingerprint,
+    buyerVipPlan: 'NONE',
+    expectedPreviewFingerprint: f.preview.buyerVipPreviewFingerprints.NONE,
   });
   const checkout = (
     actor: Awaited<ReturnType<typeof createActor>>,
@@ -373,6 +388,7 @@ describe('Checkout and orders HTTP with real auth, guards, CSRF and PostgreSQL',
       .send({
         sellerSlug: missing.seller.slug,
         expectedCartVersion: 1,
+        buyerVipPlan: 'NONE',
         expectedPreviewFingerprint: 'sha256:'.padEnd(71, '0'),
       })
       .expect(422);
@@ -391,6 +407,7 @@ describe('Checkout and orders HTTP with real auth, guards, CSRF and PostgreSQL',
       .send({
         sellerSlug: emptySeller.seller.slug,
         expectedCartVersion: empty.body.version,
+        buyerVipPlan: 'NONE',
         expectedPreviewFingerprint: empty.body.previewFingerprint,
       })
       .expect(422)
