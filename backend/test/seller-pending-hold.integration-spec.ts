@@ -204,6 +204,15 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
     await recognition.processOne(order.id);
     await fulfillment.makeAvailable(order.id);
     if (deliveredAt) {
+      // The financial clock requires a possible history: Order <= paid Payment <= delivery <= DB now.
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { createdAt: new Date(deliveredAt.getTime() - 2 * 3_600_000) },
+      });
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: { paidAt: new Date(deliveredAt.getTime() - 3_600_000) },
+      });
       const delivery = await seedHistoricalPreGuardDelivery(order, deliveredAt);
       const k = calculateSellerMaxRelease({
         deliveredAt: delivery.createdAt,
@@ -309,6 +318,16 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
       where: { orderId: order.id },
     });
     expect(persisted.createdAt).toEqual(deliveredAt);
+    const [historicalOrder, historicalPayment, now] = await Promise.all([
+      prisma.order.findUniqueOrThrow({ where: { id: order.id } }),
+      prisma.payment.findUniqueOrThrow({ where: { orderId: order.id } }),
+      databaseNow(),
+    ]);
+    expect(historicalOrder.createdAt.getTime()).toBeLessThanOrEqual(
+      historicalPayment.paidAt!.getTime(),
+    );
+    expect(historicalPayment.paidAt!.getTime()).toBeLessThanOrEqual(persisted.createdAt.getTime());
+    expect(persisted.createdAt.getTime()).toBeLessThanOrEqual(now.getTime());
     return persisted;
   }
 
@@ -329,10 +348,21 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
     return { ...result, target, seededAt: now };
   }
 
+  async function materializeExpectedHold(orderId: string) {
+    expect(await service.processOne(orderId)).toBe('PROCESSED');
+    expect(
+      await prisma.reconciliationIssue.count({
+        where: { referenceType: 'SellerPendingHold', referenceId: orderId },
+      }),
+    ).toBe(0);
+    const hold = await prisma.financialHold.findFirst({ where: { orderId } });
+    expect(hold).not.toBeNull();
+    return hold!;
+  }
+
   it('releases MAX at five days while preserving the seven-day base and replays once', async () => {
     const { order, delivery, target } = await historicalQualifiedMax(121);
-    expect(await service.processOne(order.id)).toBe('PROCESSED');
-    const hold = await prisma.financialHold.findFirstOrThrow({ where: { orderId: order.id } });
+    const hold = await materializeExpectedHold(order.id);
     expect(hold.releaseEligibleAt).toEqual(
       new Date(delivery.createdAt.getTime() + 168 * 3_600_000),
     );
@@ -381,10 +411,7 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
 
   it('G2 rejects a prematurely promoted MAX hold', async () => {
     const premature = await historicalQualifiedMax(119);
-    expect(await service.processOne(premature.order.id)).toBe('PROCESSED');
-    const earlyHold = await prisma.financialHold.findFirstOrThrow({
-      where: { orderId: premature.order.id },
-    });
+    const earlyHold = await materializeExpectedHold(premature.order.id);
     expect(await eligibility.processOne(earlyHold.id)).toBe('NOT_DUE');
     await prisma.financialHold.update({
       where: { id: earlyHold.id },
@@ -400,10 +427,7 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
 
   it('keeps a due MAX hold blocked by dispute', async () => {
     const blocked = await historicalQualifiedMax(121);
-    expect(await service.processOne(blocked.order.id)).toBe('PROCESSED');
-    const blockedHold = await prisma.financialHold.findFirstOrThrow({
-      where: { orderId: blocked.order.id },
-    });
+    const blockedHold = await materializeExpectedHold(blocked.order.id);
     expect(await eligibility.processOne(blockedHold.id)).toBe('RELEASE_ELIGIBLE');
     await prisma.order.update({ where: { id: blocked.order.id }, data: { disputeStatus: 'OPEN' } });
     expect(await release.processOne(blockedHold.id)).toBe('BUSINESS_BLOCKED');
@@ -426,10 +450,7 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
       deliveredAt,
       'EXPIRED',
     );
-    expect(await service.processOne(future.order.id)).toBe('PROCESSED');
-    const futureHold = await prisma.financialHold.findFirstOrThrow({
-      where: { orderId: future.order.id },
-    });
+    const futureHold = await materializeExpectedHold(future.order.id);
     expect(await eligibility.processOne(futureHold.id)).toBe('NOT_DUE');
     await fulfillment.confirmReceipt(future.order.publicCode, future.order.buyerUserId);
     expect(await prisma.order.findUniqueOrThrow({ where: { id: future.order.id } })).toMatchObject({
@@ -450,10 +471,7 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
       'EXPIRED',
     );
     const dueBase = new Date(due.delivery.createdAt.getTime() + 168 * 3_600_000);
-    expect(await service.processOne(due.order.id)).toBe('PROCESSED');
-    const dueHold = await prisma.financialHold.findFirstOrThrow({
-      where: { orderId: due.order.id },
-    });
+    const dueHold = await materializeExpectedHold(due.order.id);
     expect(dueHold.releaseEligibleAt).toEqual(dueBase);
     expect(await eligibility.processOne(dueHold.id)).toBe('RELEASE_ELIGIBLE');
   });
