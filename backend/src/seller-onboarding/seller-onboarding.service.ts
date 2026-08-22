@@ -19,6 +19,7 @@ import {
   serializableTransactionWithRetry,
 } from '../auth/platform-role-operations';
 import { PrismaService } from '../database/prisma.service';
+import { acquireAdvisoryTransactionLock } from '../database/advisory-lock';
 import {
   AdminSellerApplicationsQueryDto,
   RejectSellerApplicationDto,
@@ -123,11 +124,19 @@ export class SellerOnboardingService {
   async me(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
-      include: { sellerApplication: true, sellerProfile: true },
+      include: {
+        sellerApplication: true,
+        sellerProfile: true,
+        roleAssignments: { select: { role: true } },
+      },
     });
+    const commercialEnabled =
+      user.sellerProfile?.status === SellerProfileStatus.ACTIVE &&
+      user.roleAssignments.some((assignment) => assignment.role === PlatformRole.SELLER);
     return {
       application: this.mapApp(user.sellerApplication),
       sellerProfile: this.mapProfile(user.sellerProfile),
+      commercialEnabled,
       requirements: {
         ...requirementsFor(user, this.version()),
         ...this.agreementState(user.sellerApplication),
@@ -226,36 +235,112 @@ export class SellerOnboardingService {
       throw this.appError('SELLER_AGE_REQUIREMENT_NOT_MET', HttpStatus.FORBIDDEN);
     return user;
   }
+  private async assertApprovedCommercialState(
+    tx: Prisma.TransactionClient,
+    application: SellerApplication,
+  ): Promise<void> {
+    const slug = validateSellerSlug(application.requestedSlug);
+    if (!slug) throw this.appError('SELLER_COMMERCIAL_STATE_INCONSISTENT', HttpStatus.CONFLICT);
+    const [profile, sellerRole] = await Promise.all([
+      tx.sellerProfile.findUnique({ where: { userId: application.userId } }),
+      tx.userRoleAssignment.findUnique({
+        where: {
+          userId_role: { userId: application.userId, role: PlatformRole.SELLER },
+        },
+      }),
+    ]);
+    if (
+      !profile ||
+      profile.userId !== application.userId ||
+      profile.status !== SellerProfileStatus.ACTIVE ||
+      profile.slug !== slug ||
+      profile.storeName !== application.storeName ||
+      profile.description !== application.description ||
+      !sellerRole
+    )
+      throw this.appError('SELLER_COMMERCIAL_STATE_INCONSISTENT', HttpStatus.CONFLICT);
+  }
   async submit(userId: string): Promise<ApplicationPublic> {
     return serializableTransactionWithRetry(this.prisma, async (tx) => {
+      await acquireAdvisoryTransactionLock(tx, `seller-commercial-enablement:${userId}`);
       await this.assertRequirements(tx, userId);
       const app = await tx.sellerApplication.findUnique({ where: { userId } });
       if (!app) throw this.appError('SELLER_APPLICATION_NOT_FOUND', HttpStatus.NOT_FOUND);
-      if (app.status === SellerApplicationStatus.SUBMITTED) return this.mapApp(app)!;
-      if (app.status !== SellerApplicationStatus.DRAFT)
+      if (app.status === SellerApplicationStatus.REJECTED)
+        throw this.appError('SELLER_APPLICATION_INVALID_TRANSITION', HttpStatus.CONFLICT);
+      if (app.status === SellerApplicationStatus.APPROVED) {
+        await this.assertApprovedCommercialState(tx, app);
+        return this.mapApp(app)!;
+      }
+      if (
+        app.status !== SellerApplicationStatus.DRAFT &&
+        app.status !== SellerApplicationStatus.SUBMITTED &&
+        app.status !== SellerApplicationStatus.UNDER_REVIEW
+      )
         throw this.appError('SELLER_APPLICATION_INVALID_TRANSITION', HttpStatus.CONFLICT);
       this.assertAgreementCurrent(app);
       const slug = validateSellerSlug(app.requestedSlug);
       if (!slug) throw this.appError('SELLER_SLUG_INVALID');
-      const profile = await tx.sellerProfile.findUnique({ where: { slug } });
-      if (profile) throw this.appError('SELLER_SLUG_UNAVAILABLE', HttpStatus.CONFLICT);
-      const updated = await tx.sellerApplication.update({
-        where: { id: app.id },
-        data: { status: SellerApplicationStatus.SUBMITTED, submittedAt: new Date() },
-      });
-      await tx.securityEvent.create({
-        data: {
-          userId,
-          eventType: SecurityEventType.SELLER_APPLICATION_SUBMITTED,
-          outcome: SecurityEventOutcome.SUCCESS,
-          metadata: {
-            applicationId: app.id,
-            previousStatus: app.status,
-            newStatus: updated.status,
-            origin: 'user',
+      const [profileForUser, profileForSlug] = await Promise.all([
+        tx.sellerProfile.findUnique({ where: { userId } }),
+        tx.sellerProfile.findUnique({ where: { slug } }),
+      ]);
+      if (profileForSlug && profileForSlug.userId !== userId)
+        throw this.appError('SELLER_SLUG_UNAVAILABLE', HttpStatus.CONFLICT);
+      if (profileForUser) {
+        if (profileForUser.status !== SellerProfileStatus.ACTIVE)
+          throw this.appError('SELLER_PROFILE_NOT_ACTIVE', HttpStatus.CONFLICT);
+        if (
+          profileForUser.slug !== slug ||
+          profileForUser.storeName !== app.storeName ||
+          profileForUser.description !== app.description
+        )
+          throw this.appError('SELLER_COMMERCIAL_STATE_INCONSISTENT', HttpStatus.CONFLICT);
+      } else {
+        await tx.sellerProfile.create({
+          data: {
+            userId,
+            storeName: app.storeName,
+            slug,
+            description: app.description,
+            status: SellerProfileStatus.ACTIVE,
+            verified: false,
           },
-        },
+        });
+        await tx.securityEvent.create({
+          data: {
+            userId,
+            eventType: SecurityEventType.SELLER_PROFILE_CREATED,
+            outcome: SecurityEventOutcome.SUCCESS,
+            metadata: { applicationId: app.id, slug, origin: 'seller-commercial-enablement' },
+          },
+        });
+      }
+      const sellerRole = await tx.userRoleAssignment.findUnique({
+        where: { userId_role: { userId, role: PlatformRole.SELLER } },
       });
+      if (!sellerRole)
+        await grantPlatformRoleInTransaction(tx, userId, PlatformRole.SELLER, 'system');
+      let updated = app;
+      if (app.status === SellerApplicationStatus.DRAFT) {
+        updated = await tx.sellerApplication.update({
+          where: { id: app.id },
+          data: { status: SellerApplicationStatus.SUBMITTED, submittedAt: new Date() },
+        });
+        await tx.securityEvent.create({
+          data: {
+            userId,
+            eventType: SecurityEventType.SELLER_APPLICATION_SUBMITTED,
+            outcome: SecurityEventOutcome.SUCCESS,
+            metadata: {
+              applicationId: app.id,
+              previousStatus: app.status,
+              newStatus: updated.status,
+              origin: 'seller-commercial-enablement',
+            },
+          },
+        });
+      }
       return this.mapApp(updated)!;
     });
   }
@@ -391,7 +476,10 @@ export class SellerOnboardingService {
       return await serializableTransactionWithRetry(this.prisma, async (tx) => {
         const app = await tx.sellerApplication.findUnique({ where: { id } });
         if (!app) throw new NotFoundException({ code: 'SELLER_APPLICATION_NOT_FOUND' });
-        if (app.status === SellerApplicationStatus.APPROVED) return this.mapApp(app)!;
+        if (app.status === SellerApplicationStatus.APPROVED) {
+          await this.assertApprovedCommercialState(tx, app);
+          return this.mapApp(app)!;
+        }
         if (
           app.status !== SellerApplicationStatus.SUBMITTED &&
           app.status !== SellerApplicationStatus.UNDER_REVIEW
@@ -401,18 +489,30 @@ export class SellerOnboardingService {
         this.assertAgreementCurrent(app);
         const slug = validateSellerSlug(app.requestedSlug);
         if (!slug) throw this.appError('SELLER_SLUG_INVALID');
-        const existing = await tx.sellerProfile.findUnique({ where: { slug } });
-        if (existing && existing.userId !== app.userId)
+        const [profileForUser, profileForSlug] = await Promise.all([
+          tx.sellerProfile.findUnique({ where: { userId: app.userId } }),
+          tx.sellerProfile.findUnique({ where: { slug } }),
+        ]);
+        if (profileForSlug && profileForSlug.userId !== app.userId)
           throw this.appError('SELLER_SLUG_UNAVAILABLE', HttpStatus.CONFLICT);
-        await tx.sellerProfile.create({
-          data: {
-            userId: app.userId,
-            storeName: app.storeName,
-            slug,
-            description: app.description,
-            verified: false,
-          },
-        });
+        if (
+          profileForUser &&
+          (profileForUser.status !== SellerProfileStatus.ACTIVE ||
+            profileForUser.slug !== slug ||
+            profileForUser.storeName !== app.storeName ||
+            profileForUser.description !== app.description)
+        )
+          throw this.appError('SELLER_COMMERCIAL_STATE_INCONSISTENT', HttpStatus.CONFLICT);
+        if (!profileForUser)
+          await tx.sellerProfile.create({
+            data: {
+              userId: app.userId,
+              storeName: app.storeName,
+              slug,
+              description: app.description,
+              verified: false,
+            },
+          });
         await grantPlatformRoleInTransaction(tx, app.userId, PlatformRole.SELLER, 'system');
         const updated = await tx.sellerApplication.update({
           where: { id },
@@ -422,14 +522,15 @@ export class SellerOnboardingService {
             reviewedByUserId: adminUserId,
           },
         });
-        await tx.securityEvent.create({
-          data: {
-            userId: app.userId,
-            eventType: SecurityEventType.SELLER_PROFILE_CREATED,
-            outcome: SecurityEventOutcome.SUCCESS,
-            metadata: { applicationId: id, slug, origin: 'admin' },
-          },
-        });
+        if (!profileForUser)
+          await tx.securityEvent.create({
+            data: {
+              userId: app.userId,
+              eventType: SecurityEventType.SELLER_PROFILE_CREATED,
+              outcome: SecurityEventOutcome.SUCCESS,
+              metadata: { applicationId: id, slug, origin: 'admin' },
+            },
+          });
         await tx.securityEvent.create({
           data: {
             userId: app.userId,

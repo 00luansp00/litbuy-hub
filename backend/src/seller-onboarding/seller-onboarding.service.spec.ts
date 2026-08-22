@@ -4,8 +4,10 @@ import {
   PlatformRole,
   SecurityEventType,
   SellerApplicationStatus,
+  SellerProfileStatus,
   UserStatus,
 } from '@prisma/client';
+import type { Prisma, SellerProfile, UserRoleAssignment } from '@prisma/client';
 import { SellerOnboardingService } from './seller-onboarding.service';
 
 const userId = '11111111-1111-4111-8111-111111111111';
@@ -59,12 +61,20 @@ function activeUser(overrides = {}) {
     ...overrides,
   };
 }
+type FakeProfile = Pick<
+  SellerProfile,
+  'id' | 'userId' | 'storeName' | 'slug' | 'description' | 'status' | 'verified'
+>;
+type FakeRole = Pick<UserRoleAssignment, 'userId' | 'role'>;
+type ProfileFindUniqueInput = Pick<Prisma.SellerProfileFindUniqueArgs, 'where'>;
+type RoleFindUniqueInput = Pick<Prisma.UserRoleAssignmentFindUniqueArgs, 'where'>;
 function makeService(seed = application()) {
   let app = seed;
   const events: unknown[] = [];
-  const profiles: unknown[] = [];
-  const roles: unknown[] = [];
+  const profiles: FakeProfile[] = [];
+  const roles: FakeRole[] = [];
   const tx = {
+    $queryRaw: jest.fn().mockResolvedValue([{ locked: 1 }]),
     user: { findUnique: jest.fn().mockResolvedValue(activeUser()) },
     sellerApplication: {
       findUnique: jest.fn(async () => app),
@@ -78,7 +88,14 @@ function makeService(seed = application()) {
       }),
     },
     sellerProfile: {
-      findUnique: jest.fn().mockResolvedValue(null),
+      findUnique: jest.fn(
+        async ({ where }: ProfileFindUniqueInput) =>
+          profiles.find(
+            (profile) =>
+              ('userId' in where && profile.userId === where.userId) ||
+              ('slug' in where && profile.slug === where.slug),
+          ) ?? null,
+      ),
       create: jest.fn(async ({ data }) => {
         const profile = {
           id: '44444444-4444-4444-8444-444444444444',
@@ -91,6 +108,11 @@ function makeService(seed = application()) {
       }),
     },
     userRoleAssignment: {
+      findUnique: jest.fn(async ({ where }: RoleFindUniqueInput) => {
+        const key = where.userId_role;
+        if (!key) return null;
+        return roles.find((role) => role.userId === key.userId && role.role === key.role) ?? null;
+      }),
       createMany: jest.fn(async ({ data }) => {
         roles.push(...data);
         return { count: 1 };
@@ -105,9 +127,12 @@ function makeService(seed = application()) {
   };
   const prisma = {
     user: {
-      findUniqueOrThrow: jest
-        .fn()
-        .mockResolvedValue({ ...activeUser(), sellerApplication: app, sellerProfile: null }),
+      findUniqueOrThrow: jest.fn().mockResolvedValue({
+        ...activeUser(),
+        sellerApplication: app,
+        sellerProfile: null,
+        roleAssignments: [{ role: PlatformRole.BUYER }],
+      }),
     },
     sellerProfile: tx.sellerProfile,
     sellerApplication: {
@@ -189,6 +214,17 @@ describe('SellerOnboardingService', () => {
         expect.objectContaining({ eventType: SecurityEventType.SELLER_APPLICATION_SUBMITTED }),
       ]),
     );
+    expect(ctx.profiles).toEqual([
+      expect.objectContaining({ status: 'ACTIVE', verified: false, slug: 'minha-loja' }),
+    ]);
+    expect(ctx.roles).toEqual([expect.objectContaining({ role: PlatformRole.SELLER })]);
+    expect(
+      ctx.events.filter(
+        (event) =>
+          (event as { eventType?: SecurityEventType }).eventType ===
+          SecurityEventType.SELLER_PROFILE_CREATED,
+      ),
+    ).toHaveLength(1);
   });
   it('starts review, rejects, and allows correction after rejection', async () => {
     const ctx = makeService(
@@ -227,6 +263,148 @@ describe('SellerOnboardingService', () => {
       expect.objectContaining({ verified: false, slug: 'minha-loja' }),
     ]);
     expect(ctx.roles).toEqual([expect.objectContaining({ role: PlatformRole.SELLER })]);
+  });
+  it.each([SellerApplicationStatus.SUBMITTED, SellerApplicationStatus.UNDER_REVIEW])(
+    'self-enables a legacy %s application without changing its review state',
+    async (status) => {
+      const ctx = makeService(
+        application({
+          status,
+          sellerAgreementVersion: '2026-test',
+          sellerAgreementAcceptedAt: new Date(),
+        }),
+      );
+      await expect(ctx.service.submit(userId)).resolves.toMatchObject({
+        status: status === SellerApplicationStatus.SUBMITTED ? 'submitted' : 'under_review',
+      });
+      expect(ctx.profiles).toHaveLength(1);
+      expect(ctx.roles).toHaveLength(1);
+    },
+  );
+  it.each(['SUSPENDED', 'CLOSED'] as const)(
+    'does not reactivate an existing %s profile',
+    async (status) => {
+      const ctx = makeService(
+        application({ sellerAgreementVersion: '2026-test', sellerAgreementAcceptedAt: new Date() }),
+      );
+      ctx.profiles.push({
+        id: '44444444-4444-4444-8444-444444444444',
+        userId,
+        storeName: 'Minha Loja',
+        slug: 'minha-loja',
+        description: null,
+        status,
+        verified: false,
+      });
+      await expect(ctx.service.submit(userId)).rejects.toMatchObject({
+        code: 'SELLER_PROFILE_NOT_ACTIVE',
+      });
+      expect(ctx.roles).toHaveLength(0);
+    },
+  );
+  it.each([
+    ['submit', (service: SellerOnboardingService) => service.submit(userId)],
+    ['approve', (service: SellerOnboardingService) => service.approve(appId, adminId)],
+  ] as const)(
+    'fails closed on an inconsistent legacy APPROVED replay through %s',
+    async (_, run) => {
+      const ctx = makeService(
+        application({
+          status: SellerApplicationStatus.APPROVED,
+          sellerAgreementVersion: '2026-test',
+          sellerAgreementAcceptedAt: new Date(),
+        }),
+      );
+      ctx.profiles.push({
+        id: '44444444-4444-4444-8444-444444444444',
+        userId,
+        storeName: 'Outra Loja',
+        slug: 'minha-loja',
+        description: null,
+        status: SellerProfileStatus.ACTIVE,
+        verified: false,
+      });
+      ctx.roles.push({ userId, role: PlatformRole.SELLER });
+      await expect(run(ctx.service)).rejects.toMatchObject({
+        code: 'SELLER_COMMERCIAL_STATE_INCONSISTENT',
+      });
+    },
+  );
+  it.each([
+    ['profile absent', false, true],
+    ['SELLER role absent', true, false],
+  ] as const)('fails closed on APPROVED with %s', async (_, withProfile, withRole) => {
+    const ctx = makeService(
+      application({
+        status: SellerApplicationStatus.APPROVED,
+        sellerAgreementVersion: '2026-test',
+        sellerAgreementAcceptedAt: new Date(),
+      }),
+    );
+    if (withProfile)
+      ctx.profiles.push({
+        id: '44444444-4444-4444-8444-444444444444',
+        userId,
+        storeName: 'Minha Loja',
+        slug: 'minha-loja',
+        description: null,
+        status: SellerProfileStatus.ACTIVE,
+        verified: false,
+      });
+    if (withRole) ctx.roles.push({ userId, role: PlatformRole.SELLER });
+    await expect(ctx.service.submit(userId)).rejects.toMatchObject({
+      code: 'SELLER_COMMERCIAL_STATE_INCONSISTENT',
+    });
+  });
+  it.each([SellerProfileStatus.SUSPENDED, SellerProfileStatus.CLOSED])(
+    'fails closed on a legacy APPROVED replay with a %s profile',
+    async (status) => {
+      const ctx = makeService(
+        application({
+          status: SellerApplicationStatus.APPROVED,
+          sellerAgreementVersion: '2026-test',
+          sellerAgreementAcceptedAt: new Date(),
+        }),
+      );
+      ctx.profiles.push({
+        id: '44444444-4444-4444-8444-444444444444',
+        userId,
+        storeName: 'Minha Loja',
+        slug: 'minha-loja',
+        description: null,
+        status,
+        verified: false,
+      });
+      ctx.roles.push({ userId, role: PlatformRole.SELLER });
+      await expect(ctx.service.approve(appId, adminId)).rejects.toMatchObject({
+        code: 'SELLER_COMMERCIAL_STATE_INCONSISTENT',
+      });
+    },
+  );
+  it('keeps a coherent legacy APPROVED commercial state idempotent', async () => {
+    const ctx = makeService(
+      application({
+        status: SellerApplicationStatus.APPROVED,
+        sellerAgreementVersion: '2026-test',
+        sellerAgreementAcceptedAt: new Date(),
+      }),
+    );
+    ctx.profiles.push({
+      id: '44444444-4444-4444-8444-444444444444',
+      userId,
+      storeName: 'Minha Loja',
+      slug: 'minha-loja',
+      description: null,
+      status: SellerProfileStatus.ACTIVE,
+      verified: false,
+    });
+    ctx.roles.push({ userId, role: PlatformRole.SELLER });
+    await expect(ctx.service.submit(userId)).resolves.toMatchObject({ status: 'approved' });
+    await expect(ctx.service.approve(appId, adminId)).resolves.toMatchObject({
+      status: 'approved',
+    });
+    expect(ctx.profiles).toHaveLength(1);
+    expect(ctx.roles).toHaveLength(1);
   });
   it('propagates profile creation, role grant, and audit failures from the unit fake', async () => {
     const ctx = makeService(

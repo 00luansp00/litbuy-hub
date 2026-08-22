@@ -36,6 +36,7 @@ export type SellerRequirements = {
 export type SellerOnboardingMe = {
   application: SellerApplication | null;
   sellerProfile: SellerProfile | null;
+  commercialEnabled: boolean;
   requirements: SellerRequirements;
 };
 export type SellerApplicationPayload = {
@@ -129,6 +130,7 @@ function me(v: unknown): SellerOnboardingMe {
   return {
     application: app(o.application),
     sellerProfile: profile(o.sellerProfile),
+    commercialEnabled: bool(o.commercialEnabled),
     requirements: requirements(o.requirements),
   };
 }

@@ -41,7 +41,7 @@ function SellerProfileOnboardingPage() {
   const [requestedSlug, setRequestedSlug] = useState("");
   const [description, setDescription] = useState("");
   const [accepted, setAccepted] = useState(false);
-  const autoReloadedApprovedRef = useRef(false);
+  const autoReloadedCommercialRef = useRef(false);
   useEffect(() => {
     if (data?.application) {
       setStoreName(data.application.storeName);
@@ -51,11 +51,16 @@ function SellerProfileOnboardingPage() {
         data.requirements.sellerAgreementAccepted && data.requirements.sellerAgreementCurrent,
       );
     }
-    if (data?.application?.status === "approved" && !autoReloadedApprovedRef.current) {
-      autoReloadedApprovedRef.current = true;
+    if (data?.commercialEnabled && !autoReloadedCommercialRef.current) {
+      autoReloadedCommercialRef.current = true;
       void reloadCurrentUser();
     }
-  }, [data?.application?.id, data?.application?.status, reloadCurrentUser]);
+  }, [
+    data?.application?.id,
+    data?.application?.status,
+    data?.commercialEnabled,
+    reloadCurrentUser,
+  ]);
   const save = useMutation({
     mutationFn: () =>
       sellerOnboardingService.saveDraft({
@@ -80,9 +85,10 @@ function SellerProfileOnboardingPage() {
       });
       return sellerOnboardingService.submit();
     },
-    onSuccess: () => {
-      toast.success("Solicitação enviada para análise.");
+    onSuccess: async () => {
+      toast.success("Loja ativada. Você já pode anunciar e vender.");
       void qc.invalidateQueries({ queryKey: key });
+      await reloadCurrentUser();
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -93,7 +99,7 @@ function SellerProfileOnboardingPage() {
     save.mutate();
   };
   return (
-    <AuthGate title="Solicitar acesso de vendedor">
+    <AuthGate title="Configurar minha loja">
       <main className="container-lit py-8 space-y-6">
         <div className="flex items-center gap-3">
           <div className="grid h-11 w-11 place-items-center rounded-xl bg-primary text-primary-foreground">
@@ -102,8 +108,8 @@ function SellerProfileOnboardingPage() {
           <div>
             <h1 className="text-2xl font-bold">Onboarding de vendedor</h1>
             <p className="text-sm text-muted-foreground">
-              Solicitação real, persistente e analisada por administradores. Sem KYC externo nesta
-              etapa.
+              Configure e ative sua loja para anunciar. A revisão administrativa e a verificação são
+              processos separados e não bloqueiam a operação comercial básica.
             </p>
           </div>
         </div>
@@ -140,20 +146,20 @@ function SellerProfileOnboardingPage() {
                 Versão das regras do vendedor: {data.requirements.sellerAgreementVersion}.{" "}
                 {data.requirements.sellerAgreementCurrent
                   ? "A versão vigente já foi aceita."
-                  : "É necessário aceitar a versão vigente antes de enviar."}{" "}
+                  : "É necessário aceitar a versão vigente antes de ativar."}{" "}
                 O texto permanece pendente de revisão jurídica e poderá mudar antes de produção.
               </AlertDescription>
             </Alert>
             {app?.status === "submitted" && (
               <Alert>
                 <Clock className="h-4 w-4" />
-                <AlertTitle>Enviado para análise</AlertTitle>
+                <AlertTitle>Loja configurada</AlertTitle>
                 <AlertDescription>
                   Enviado em{" "}
                   {app.submittedAt
                     ? new Date(app.submittedAt).toLocaleString("pt-BR")
                     : "data indisponível"}
-                  . Ainda não há acesso ao painel.
+                  . A revisão administrativa permanece separada e não bloqueia anúncios ou vendas.
                 </AlertDescription>
               </Alert>
             )}
@@ -162,7 +168,8 @@ function SellerProfileOnboardingPage() {
                 <Clock className="h-4 w-4" />
                 <AlertTitle>Em análise</AlertTitle>
                 <AlertDescription>
-                  Nossa equipe está revisando. Não há prazo garantido nesta fase.
+                  Nossa equipe está revisando a application, sem bloquear a operação comercial
+                  básica. Isso não significa verificação/KYC concluída.
                 </AlertDescription>
               </Alert>
             )}
@@ -221,17 +228,17 @@ function SellerProfileOnboardingPage() {
                     onClick={() => submit.mutate()}
                     disabled={submit.isPending}
                   >
-                    Enviar para análise
+                    Ativar loja
                   </Button>
                 </div>
               </form>
             )}
-            {app?.status === "approved" && hasSellerAccess && (
+            {data.commercialEnabled && hasSellerAccess && (
               <Button asChild>
                 <Link to="/vendedor">Ir para o painel do vendedor</Link>
               </Button>
             )}
-            {app?.status === "approved" && !hasSellerAccess && (
+            {data.commercialEnabled && !hasSellerAccess && (
               <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-4 text-sm text-muted-foreground">
                 <span>Atualizando acesso…</span>
                 <Button type="button" variant="outline" onClick={() => void reloadCurrentUser()}>

@@ -263,6 +263,12 @@ class FakePrisma {
         roleAssignments: a.include.roleAssignments
           ? this.userRoleAssignments.filter((r) => r.userId === u.id).map((r) => ({ role: r.role }))
           : undefined,
+        sellerApplication: a.include.sellerApplication
+          ? (this.sellerApplications.find((application) => application.userId === u.id) ?? null)
+          : undefined,
+        sellerProfile: a.include.sellerProfile
+          ? (this.sellerProfiles.find((profile) => profile.userId === u.id) ?? null)
+          : undefined,
       };
     },
     update: async (a: { where: Row; data: Row }) => {
@@ -499,6 +505,17 @@ class FakePrisma {
       }
     }
     return 1;
+  }
+  async $queryRaw(
+    strings: TemplateStringsArray,
+    ...values: unknown[]
+  ): Promise<Array<{ locked: number }>> {
+    await Promise.resolve();
+    const sql = strings.join('?');
+    if (!sql.includes('pg_advisory_xact_lock')) throw new Error('unsupported FakePrisma $queryRaw');
+    if (values.length !== 1 || typeof values[0] !== 'string')
+      throw new Error('invalid advisory lock FakePrisma query');
+    return [{ locked: 1 }];
   }
   async isHealthy() {
     await Promise.resolve();
@@ -801,6 +818,11 @@ describe('Auth HTTP e2e flows', () => {
       prisma.userRoleAssignments.push({ userId: sellerOnly.user.id, role: PlatformRole.SELLER });
 
       await request(app.getHttpServer())
+        .get('/api/v1/test-rbac/seller')
+        .set('Authorization', `Bearer ${buyer.token}`)
+        .expect(HttpStatus.FORBIDDEN);
+
+      await request(app.getHttpServer())
         .get('/api/v1/seller-onboarding/me')
         .set('Authorization', `Bearer ${buyer.token}`)
         .expect(HttpStatus.OK)
@@ -933,6 +955,39 @@ describe('Auth HTTP e2e flows', () => {
         .set('Authorization', `Bearer ${buyer.token}`)
         .expect(HttpStatus.OK);
       expect(submitted.body.status).toBe('submitted');
+      expect(prisma.sellerProfiles).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            userId: buyer.user.id,
+            status: 'ACTIVE',
+            verified: false,
+            slug: 'loja-principal',
+          }),
+        ]),
+      );
+      expect(
+        prisma.userRoleAssignments.filter(
+          (assignment) =>
+            assignment.userId === buyer.user.id && assignment.role === PlatformRole.SELLER,
+        ),
+      ).toHaveLength(1);
+      await request(app.getHttpServer())
+        .get('/api/v1/auth/me')
+        .set('Authorization', `Bearer ${buyer.token}`)
+        .expect(HttpStatus.OK)
+        .expect((r) => expect(r.body.roles).toEqual(['buyer', 'seller']));
+      await request(app.getHttpServer())
+        .get('/api/v1/seller-onboarding/me')
+        .set('Authorization', `Bearer ${buyer.token}`)
+        .expect(HttpStatus.OK)
+        .expect((r) => {
+          expect(r.body.commercialEnabled).toBe(true);
+          expect(r.body.sellerProfile).toMatchObject({ status: 'active', verified: false });
+        });
+      await request(app.getHttpServer())
+        .get('/api/v1/test-rbac/seller')
+        .set('Authorization', `Bearer ${buyer.token}`)
+        .expect(HttpStatus.OK);
       await request(app.getHttpServer())
         .post('/api/v1/seller-onboarding/application/submit')
         .set('Authorization', `Bearer ${buyer.token}`)

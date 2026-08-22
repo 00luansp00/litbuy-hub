@@ -48,7 +48,7 @@ Esta matriz serve para planejar PRs, não para afirmar production readiness. Div
 | LITPOINTS-REDEMPTION | 100 LP=R$1, integral | Freeze | UI/mock não é authority | 100% LP ou indisponível; sem mixed tender | Reservation/debit/checkout/ledger | LP ledger; funding | HYBRID_REVIEW_REQUIRED | V | 6 | NOT_IMPLEMENTED | IMPLEMENTED |
 | LITPOINTS-FUNDING | Plataforma financia resgate | Freeze | Nenhum accounting bucket final provado | Seller continua BRL; ledger/accounting separado | Buckets finais abertos e validação contábil | redemption; finance architecture | HUMAN_PROD_REVIEW | V2 | 6 | DESIGN_REQUIRED | HUMAN_PROD_REVIEW |
 | LITPOINTS-REFUND | Reversão/devolução LP | Freeze; Refund contract | NOT_PROVEN; contrato documental em `REFUND_DELIVERY_GUARANTEE_CONTRACT.md` | Buyer: reversão proporcional; tender LP volta com novos 3 meses; sem novo earn. Seller LP/gasto prévio seguem abertos | Dependência documental satisfeita após merge; decisões abertas e engine pendentes | LP ledger; refund engine | HUMAN_PROD_REVIEW | W | 7 | NOT_IMPLEMENTED | HUMAN_PROD_REVIEW |
-| SELLER-COMMERCIAL-ENABLEMENT | Loja habilita venda | Freeze | Application + Admin approval cria profile/role; approval ainda é gate | Configurar lojinha permite vender sem approval comercial | Novo provisioning e migração segura de gate | RBAC; listing | AI_CANDIDATE | N | 3 | PARTIAL | IMPLEMENTED |
+| SELLER-COMMERCIAL-ENABLEMENT | Loja habilita venda | Freeze; `SELLER_COMMERCIAL_ENABLEMENT.md` | Submit self-service materializa profile `ACTIVE/verified=false` + role `SELLER` atomicamente; review Admin é independente; legacy adota sob demanda; replay/concurrency e acesso Seller são cobertos | Configurar lojinha permite vender sem approval comercial | — | RBAC; listing | AI_CANDIDATE | N | 3 | IMPLEMENTED | IMPLEMENTED |
 | SELLER-VERIFICATION | Verificação separada | Freeze | `SellerProfile.verified` boolean existe, explicitamente não KYC | Estado separado; SLA 3 dias úteis; provider humano | Lifecycle/audit/provider port | commercial enablement | EXTERNAL_PROVIDER_DECISION | O1 | 5 | PARTIAL | HUMAN_PROD_REVIEW |
 | SELLER-UNVERIFIED-VISIBILITY | Badge público | Freeze | `verified` chega a DTOs/catalog; cobertura visual/semântica target não provada | status visível ao Buyer | Consistência API/UI e truthful copy | verification | AI_CANDIDATE | O2 | 5 | PARTIAL | IMPLEMENTED |
 | SELLER-WITHDRAWAL-VERIFICATION-GATE | Não verificado não saca | Freeze | Risk policy foundation existe, enforcement end-to-end não provado | verified obrigatório | Withdrawal authority + security | verification; withdrawal | HYBRID_REVIEW_REQUIRED | O3 | 5 | PARTIAL | IMPLEMENTED |
@@ -81,7 +81,7 @@ Esta matriz serve para planejar PRs, não para afirmar production readiness. Div
 
 ### Contagem controlada
 
-Há **58 capabilities** nesta versão: `IMPLEMENTED 13`, `PARTIAL 11`, `NOT_IMPLEMENTED 22`, `DOCS_ONLY 1`, `DESIGN_REQUIRED 9`, `HUMAN_PROD_REVIEW 1`, `DEFERRED 1`, `SUPERSEDED 0`. A contagem usa **Current status**; target humano não altera a evidência CURRENT.
+Há **58 capabilities** nesta versão: `IMPLEMENTED 14`, `PARTIAL 10`, `NOT_IMPLEMENTED 22`, `DOCS_ONLY 1`, `DESIGN_REQUIRED 9`, `HUMAN_PROD_REVIEW 1`, `DEFERRED 1`, `SUPERSEDED 0`. A contagem usa **Current status**; target humano não altera a evidência CURRENT.
 
 ## 3. Implementation layers matrix
 
