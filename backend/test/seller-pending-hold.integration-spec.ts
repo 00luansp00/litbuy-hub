@@ -110,6 +110,7 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
     publishCommission = true,
     sellerMax = false,
     deliveredAt?: Date,
+    historicalTerminal?: 'QUALIFIED' | 'EXPIRED',
   ) {
     const fixture = await commerceFixture(prisma, 'NORMAL', undefined, 20, false, false);
     if (publishCommission) {
@@ -216,16 +217,32 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
         deliveredAt: delivery.createdAt,
         frozenBaseReleaseDelayHours: releaseDelayHours,
       });
+      const confirmedAt = new Date(delivery.createdAt.getTime() + 3_600_000);
+      const baseAt = k.baseReleaseEligibleAt;
       await prisma.order.update({
         where: { id: order.id },
         data: {
-          fulfillmentStatus: 'DELIVERED',
+          fulfillmentStatus:
+            historicalTerminal === 'QUALIFIED' ? 'CONFIRMED' : 'AWAITING_BUYER_CONFIRMATION',
+          ...(historicalTerminal === 'QUALIFIED' ? { status: 'COMPLETED' as const } : {}),
           sellerMaxQualificationVersion: 1,
-          sellerMaxQualificationStatus: 'PENDING',
+          sellerMaxQualificationStatus: historicalTerminal ?? 'PENDING',
           sellerMaxQualificationDeadlineAt: new Date(delivery.createdAt.getTime() + 48 * 3_600_000),
+          sellerMaxQualificationDecidedAt: historicalTerminal
+            ? historicalTerminal === 'QUALIFIED'
+              ? confirmedAt
+              : new Date(delivery.createdAt.getTime() + 48 * 3_600_000 + 1)
+            : null,
+          buyerConfirmedAt: historicalTerminal === 'QUALIFIED' ? confirmedAt : null,
           sellerMaxReleaseCalculationVersion: 1,
           sellerMaxReleaseReductionHours: k.reductionHours,
           sellerMaxReleaseTargetAt: k.maxTargetAt,
+          sellerMaxEffectiveReleaseAt:
+            historicalTerminal === 'QUALIFIED'
+              ? k.effectiveReleaseAt
+              : historicalTerminal === 'EXPIRED'
+                ? baseAt
+                : null,
           version: { increment: 1 },
         },
       });
@@ -253,20 +270,17 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
 
   async function historicalQualifiedMax(offsetFromEffectiveMs = 0) {
     const deliveredAt = new Date(Date.now() - 120 * 3_600_000 + offsetFromEffectiveMs);
-    const result = await completedOrder(1000n, 168, 'DEFAULT', false, true, true, deliveredAt);
+    const result = await completedOrder(
+      1000n,
+      168,
+      'DEFAULT',
+      false,
+      true,
+      true,
+      deliveredAt,
+      'QUALIFIED',
+    );
     const target = new Date(result.delivery.createdAt.getTime() + 120 * 3_600_000);
-    const confirmedAt = new Date(result.delivery.createdAt.getTime() + 3_600_000);
-    await prisma.order.update({
-      where: { id: result.order.id },
-      data: {
-        fulfillmentStatus: 'CONFIRMED',
-        status: 'COMPLETED',
-        buyerConfirmedAt: confirmedAt,
-        sellerMaxQualificationStatus: 'QUALIFIED',
-        sellerMaxQualificationDecidedAt: confirmedAt,
-        sellerMaxEffectiveReleaseAt: target,
-      },
-    });
     return { ...result, target };
   }
 
@@ -352,29 +366,26 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
 
   it('keeps EXPIRED MAX on the seven-day base and rejects late reactivation', async () => {
     const deliveredAt = new Date(Date.now() - 120 * 3_600_000);
-    const future = await completedOrder(1000n, 168, 'DEFAULT', false, true, true, deliveredAt);
-    const futureBase = new Date(future.delivery.createdAt.getTime() + 168 * 3_600_000);
-    await prisma.order.update({
-      where: { id: future.order.id },
-      data: {
-        sellerMaxQualificationStatus: 'EXPIRED',
-        sellerMaxQualificationDecidedAt: new Date(
-          future.delivery.createdAt.getTime() + 48 * 3_600_000 + 1,
-        ),
-        sellerMaxEffectiveReleaseAt: futureBase,
-      },
-    });
+    const future = await completedOrder(
+      1000n,
+      168,
+      'DEFAULT',
+      false,
+      true,
+      true,
+      deliveredAt,
+      'EXPIRED',
+    );
     expect(await service.processOne(future.order.id)).toBe('PROCESSED');
     const futureHold = await prisma.financialHold.findFirstOrThrow({
       where: { orderId: future.order.id },
     });
     expect(await eligibility.processOne(futureHold.id)).toBe('NOT_DUE');
-    await expect(
-      prisma.order.update({
-        where: { id: future.order.id },
-        data: { buyerConfirmedAt: new Date() },
-      }),
-    ).rejects.toBeDefined();
+    await fulfillment.confirmReceipt(future.order.publicCode, future.order.buyerUserId);
+    expect(await prisma.order.findUniqueOrThrow({ where: { id: future.order.id } })).toMatchObject({
+      sellerMaxQualificationStatus: 'EXPIRED',
+      sellerMaxEffectiveReleaseAt: futureHold.releaseEligibleAt,
+    });
 
     const due = await completedOrder(
       1000n,
@@ -384,18 +395,9 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
       true,
       true,
       new Date(Date.now() - 168 * 3_600_000 - 1_000),
+      'EXPIRED',
     );
     const dueBase = new Date(due.delivery.createdAt.getTime() + 168 * 3_600_000);
-    await prisma.order.update({
-      where: { id: due.order.id },
-      data: {
-        sellerMaxQualificationStatus: 'EXPIRED',
-        sellerMaxQualificationDecidedAt: new Date(
-          due.delivery.createdAt.getTime() + 48 * 3_600_000 + 1,
-        ),
-        sellerMaxEffectiveReleaseAt: dueBase,
-      },
-    });
     expect(await service.processOne(due.order.id)).toBe('PROCESSED');
     const dueHold = await prisma.financialHold.findFirstOrThrow({
       where: { orderId: due.order.id },
