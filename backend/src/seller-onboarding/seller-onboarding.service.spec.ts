@@ -62,8 +62,8 @@ function activeUser(overrides = {}) {
 function makeService(seed = application()) {
   let app = seed;
   const events: unknown[] = [];
-  const profiles: unknown[] = [];
-  const roles: unknown[] = [];
+  const profiles: Record<string, unknown>[] = [];
+  const roles: Record<string, unknown>[] = [];
   const tx = {
     user: { findUnique: jest.fn().mockResolvedValue(activeUser()) },
     sellerApplication: {
@@ -78,7 +78,14 @@ function makeService(seed = application()) {
       }),
     },
     sellerProfile: {
-      findUnique: jest.fn().mockResolvedValue(null),
+      findUnique: jest.fn(
+        async ({ where }) =>
+          profiles.find(
+            (profile) =>
+              ('userId' in where && profile.userId === where.userId) ||
+              ('slug' in where && profile.slug === where.slug),
+          ) ?? null,
+      ),
       create: jest.fn(async ({ data }) => {
         const profile = {
           id: '44444444-4444-4444-8444-444444444444',
@@ -91,6 +98,13 @@ function makeService(seed = application()) {
       }),
     },
     userRoleAssignment: {
+      findUnique: jest.fn(
+        async ({ where }) =>
+          roles.find(
+            (role) =>
+              role.userId === where.userId_role.userId && role.role === where.userId_role.role,
+          ) ?? null,
+      ),
       createMany: jest.fn(async ({ data }) => {
         roles.push(...data);
         return { count: 1 };
@@ -105,9 +119,12 @@ function makeService(seed = application()) {
   };
   const prisma = {
     user: {
-      findUniqueOrThrow: jest
-        .fn()
-        .mockResolvedValue({ ...activeUser(), sellerApplication: app, sellerProfile: null }),
+      findUniqueOrThrow: jest.fn().mockResolvedValue({
+        ...activeUser(),
+        sellerApplication: app,
+        sellerProfile: null,
+        roleAssignments: [{ role: PlatformRole.BUYER }],
+      }),
     },
     sellerProfile: tx.sellerProfile,
     sellerApplication: {
@@ -189,6 +206,17 @@ describe('SellerOnboardingService', () => {
         expect.objectContaining({ eventType: SecurityEventType.SELLER_APPLICATION_SUBMITTED }),
       ]),
     );
+    expect(ctx.profiles).toEqual([
+      expect.objectContaining({ status: 'ACTIVE', verified: false, slug: 'minha-loja' }),
+    ]);
+    expect(ctx.roles).toEqual([expect.objectContaining({ role: PlatformRole.SELLER })]);
+    expect(
+      ctx.events.filter(
+        (event) =>
+          (event as { eventType?: SecurityEventType }).eventType ===
+          SecurityEventType.SELLER_PROFILE_CREATED,
+      ),
+    ).toHaveLength(1);
   });
   it('starts review, rejects, and allows correction after rejection', async () => {
     const ctx = makeService(
@@ -228,6 +256,44 @@ describe('SellerOnboardingService', () => {
     ]);
     expect(ctx.roles).toEqual([expect.objectContaining({ role: PlatformRole.SELLER })]);
   });
+  it.each([SellerApplicationStatus.SUBMITTED, SellerApplicationStatus.UNDER_REVIEW])(
+    'self-enables a legacy %s application without changing its review state',
+    async (status) => {
+      const ctx = makeService(
+        application({
+          status,
+          sellerAgreementVersion: '2026-test',
+          sellerAgreementAcceptedAt: new Date(),
+        }),
+      );
+      await expect(ctx.service.submit(userId)).resolves.toMatchObject({
+        status: status === SellerApplicationStatus.SUBMITTED ? 'submitted' : 'under_review',
+      });
+      expect(ctx.profiles).toHaveLength(1);
+      expect(ctx.roles).toHaveLength(1);
+    },
+  );
+  it.each(['SUSPENDED', 'CLOSED'] as const)(
+    'does not reactivate an existing %s profile',
+    async (status) => {
+      const ctx = makeService(
+        application({ sellerAgreementVersion: '2026-test', sellerAgreementAcceptedAt: new Date() }),
+      );
+      ctx.profiles.push({
+        id: '44444444-4444-4444-8444-444444444444',
+        userId,
+        storeName: 'Minha Loja',
+        slug: 'minha-loja',
+        description: null,
+        status,
+        verified: false,
+      });
+      await expect(ctx.service.submit(userId)).rejects.toMatchObject({
+        code: 'SELLER_PROFILE_NOT_ACTIVE',
+      });
+      expect(ctx.roles).toHaveLength(0);
+    },
+  );
   it('propagates profile creation, role grant, and audit failures from the unit fake', async () => {
     const ctx = makeService(
       application({

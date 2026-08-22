@@ -10,6 +10,7 @@ vi.mock("@/lib/api/client", async (importOriginal) => ({
 const validMe = {
   application: null,
   sellerProfile: null,
+  commercialEnabled: false,
   requirements: {
     emailVerified: true,
     phoneVerified: true,

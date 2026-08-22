@@ -136,6 +136,7 @@ describe("/perfil/vendedor", () => {
     resolve({
       application: null,
       sellerProfile: null,
+      commercialEnabled: false,
       requirements: { ...requirements, phoneVerified: false },
     });
     await screen.findByText(/status: sem solicitação/i);
@@ -148,6 +149,7 @@ describe("/perfil/vendedor", () => {
     service.me.mockResolvedValueOnce({
       application: app("draft"),
       sellerProfile: null,
+      commercialEnabled: false,
       requirements,
     });
     service.saveDraft.mockResolvedValueOnce(app("draft"));
@@ -156,24 +158,26 @@ describe("/perfil/vendedor", () => {
     await screen.findByDisplayValue("Loja Teste");
     fireEvent.click(screen.getByRole("button", { name: /salvar rascunho/i }));
     await waitFor(() => expect(service.saveDraft).toHaveBeenCalled());
-    fireEvent.click(screen.getByRole("button", { name: /enviar para análise/i }));
+    fireEvent.click(screen.getByRole("button", { name: /ativar loja/i }));
     await waitFor(() => expect(service.submit).toHaveBeenCalled());
 
     cleanup();
     service.me.mockResolvedValueOnce({
       application: app("rejected"),
       sellerProfile: null,
+      commercialEnabled: false,
       requirements,
     });
     await renderRoute("../src/routes/perfil.vendedor");
     expect(await screen.findByText(/solicitação rejeitada/i)).toBeInTheDocument();
   });
 
-  it("does not show seller panel until approved role is confirmed and reloads access once", async () => {
+  it("uses commercial enablement instead of approval and reloads access once", async () => {
     auth.reloadCurrentUser = vi.fn();
     service.me.mockResolvedValue({
       application: app("approved"),
       sellerProfile: null,
+      commercialEnabled: true,
       requirements: {
         ...requirements,
         sellerAgreementAccepted: true,
@@ -190,8 +194,16 @@ describe("/perfil/vendedor", () => {
     cleanup();
     auth = { ...baseAuth(), hasSellerAccess: true, reloadCurrentUser: vi.fn() };
     service.me.mockResolvedValueOnce({
-      application: app("approved"),
-      sellerProfile: null,
+      application: app("submitted"),
+      sellerProfile: {
+        id: "22222222-2222-4222-8222-222222222222",
+        storeName: "Loja Teste",
+        slug: "loja-teste",
+        description: null,
+        status: "active",
+        verified: false,
+      },
+      commercialEnabled: true,
       requirements: {
         ...requirements,
         sellerAgreementAccepted: true,
