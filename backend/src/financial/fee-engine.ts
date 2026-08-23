@@ -1,5 +1,6 @@
 import type {
   CatalogProductType,
+  BuyerVipPlan,
   FeeFormula,
   FeeParty,
   FeeRule,
@@ -17,6 +18,7 @@ export type FeeContext = {
   installments?: number;
   sellerLevel?: string;
   sellerPlan?: string;
+  buyerVipPlan?: BuyerVipPlan;
   promotionTier?: string;
   withdrawalSpeed?: WithdrawalSpeed;
   productType?: CatalogProductType;
@@ -34,6 +36,7 @@ export type ResolvableFeeRule = FeeInput &
     | 'installmentsTo'
     | 'sellerLevel'
     | 'sellerPlan'
+    | 'buyerVipPlan'
     | 'promotionTier'
     | 'withdrawalSpeed'
     | 'productType'
@@ -89,6 +92,7 @@ function applicable(rule: ResolvableFeeRule, context: FeeContext): boolean {
     exact(rule.paymentMethod, context.paymentMethod) &&
     exact(rule.sellerLevel, context.sellerLevel) &&
     exact(rule.sellerPlan, context.sellerPlan) &&
+    exact(rule.buyerVipPlan, context.buyerVipPlan) &&
     exact(rule.promotionTier, context.promotionTier) &&
     exact(rule.withdrawalSpeed, context.withdrawalSpeed) &&
     exact(rule.productType, context.productType) &&
@@ -104,6 +108,7 @@ function specificity(rule: ResolvableFeeRule): number {
       rule.paymentMethod,
       rule.sellerLevel,
       rule.sellerPlan,
+      rule.buyerVipPlan,
       rule.promotionTier,
       rule.withdrawalSpeed,
       rule.productType,

@@ -86,7 +86,38 @@ const item = (sellerUserId = 'seller-user'): CartResponsePayload['items'][number
 const setup = (value: CartResponsePayload[]) => {
   const findMany = jest.fn().mockResolvedValue(value);
   const prisma = { cart: { findMany } } as unknown as PrismaService;
-  return { service: new CartsService(prisma), findMany };
+  const listingTierPolicy = {
+    buyerVipOptions: jest.fn((amountMinor: bigint) =>
+      Promise.resolve(
+        (
+          [
+            ['NONE', 0],
+            ['BASIC', 299],
+            ['PREMIUM', 499],
+          ] as const
+        ).map(([plan, percentBps]) => ({
+          plan,
+          available: true,
+          pricingAvailable: true,
+          unavailableCode: null,
+          quote: {
+            plan,
+            policyId: 'policy',
+            pricingPolicyVersion: 1,
+            ruleId: plan === 'NONE' ? null : `rule-${plan}`,
+            percentBps,
+            baseAmountMinor: amountMinor,
+            feeAmountMinor: (amountMinor * BigInt(percentBps)) / 10_000n,
+            totalAmountMinor: amountMinor + (amountMinor * BigInt(percentBps)) / 10_000n,
+          },
+        })),
+      ),
+    ),
+  };
+  return {
+    service: new CartsService(prisma, listingTierPolicy as never),
+    findMany,
+  };
 };
 
 describe('CartsService reconciliation', () => {

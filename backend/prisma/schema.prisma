@@ -1023,6 +1023,7 @@ model OrderFeeComponentSnapshot {
   pricingPolicyVersion Int
   listingTier          ListingDraftPromotionPreference?
   sellerPlan           ListingDraftSellerPlanPreference?
+  buyerVipPlan         BuyerVipPlan?
   category             FeeRuleCategory
   partyCharged         FeeParty
   formula              FeeFormula
@@ -1463,6 +1464,7 @@ enum FeeParty {
 enum OrderFeeComponentKind {
   LISTING_TIER
   SELLER_MAX
+  BUYER_VIP
 }
 
 enum WithdrawalPolicyStatus {
@@ -1879,6 +1881,7 @@ model FeeRule {
   installmentsTo             Int?
   sellerLevel                String?
   sellerPlan                 String?
+  buyerVipPlan               BuyerVipPlan?
   promotionTier              String?
   withdrawalSpeed            WithdrawalSpeed?
   productType                CatalogProductType?

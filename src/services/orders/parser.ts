@@ -72,6 +72,11 @@ export function parseBuyerOrder(value: unknown): BuyerOrder {
     discountAmountMinor: parseMoneyMinor(v.discountAmountMinor),
     platformFeeAmountMinor: parseMoneyMinor(v.platformFeeAmountMinor),
     totalAmountMinor: parseMoneyMinor(v.totalAmountMinor),
+    buyerVipPlan:
+      v.buyerVipPlan === null
+        ? null
+        : enumValue(v.buyerVipPlan, ["NONE", "BASIC", "PREMIUM"] as const),
+    buyerVipFeeAmountMinor: parseMoneyMinor(v.buyerVipFeeAmountMinor),
     status: enumValue(v.status, ORDER_STATUSES),
     paymentStatus: enumValue(v.paymentStatus, PAYMENT_STATUSES),
     fulfillmentStatus: enumValue(v.fulfillmentStatus, FULFILLMENT_STATUSES),

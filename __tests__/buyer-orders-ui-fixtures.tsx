@@ -11,6 +11,8 @@ export const makeOrder = (overrides: Partial<BuyerOrder> = {}): BuyerOrder => ({
   discountAmountMinor: "0",
   platformFeeAmountMinor: "100",
   totalAmountMinor: "900719925474099312445",
+  buyerVipPlan: null,
+  buyerVipFeeAmountMinor: "0",
   status: "PENDING_PAYMENT",
   paymentStatus: "NOT_CREATED",
   fulfillmentStatus: "NOT_AVAILABLE",

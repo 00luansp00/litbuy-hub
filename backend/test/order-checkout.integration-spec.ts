@@ -61,7 +61,7 @@ describe('Order checkout domain with real PostgreSQL', () => {
     };
   }
   it.each(['NONE', 'BASIC', 'PREMIUM'] as const)(
-    'freezes explicit Buyer VIP %s without changing money or fee components',
+    'charges and freezes explicit Buyer VIP %s authoritatively',
     async (buyerVipPlan) => {
       const f = await ready();
       const dto = {
@@ -70,9 +70,11 @@ describe('Order checkout domain with real PostgreSQL', () => {
         expectedPreviewFingerprint: f.preview.buyerVipPreviewFingerprints[buyerVipPlan],
       };
       const response = checkoutResponse(await checkout.create(f.buyer.id, key(), dto));
+      const expectedVip = { NONE: 0n, BASIC: 29n, PREMIUM: 49n }[buyerVipPlan];
       expect(response).toMatchObject({
         buyerVipPlan,
-        subtotalAmountMinor: response.totalAmountMinor,
+        totalAmountMinor: (1_000n + expectedVip).toString(),
+        buyerVipFeeAmountMinor: expectedVip.toString(),
       });
       const order = await prisma.order.findUniqueOrThrow({
         where: { publicCode: response.orderCode },
@@ -81,11 +83,13 @@ describe('Order checkout domain with real PostgreSQL', () => {
       expect(order).toMatchObject({
         buyerVipSelectionVersion: 1,
         buyerVipPlanSnapshot: buyerVipPlan,
-        totalAmountMinor: order.subtotalAmountMinor,
+        feeSnapshotVersion: 3,
+        totalAmountMinor: order.subtotalAmountMinor + expectedVip,
+        platformFeeAmountMinor: 99n + expectedVip,
       });
-      expect(order.feeComponentSnapshots.map((component) => component.componentKind)).not.toContain(
-        'BUYER_VIP',
-      );
+      expect(
+        order.feeComponentSnapshots.filter((x) => x.componentKind === 'BUYER_VIP'),
+      ).toHaveLength(buyerVipPlan === 'NONE' ? 0 : 1);
       await expect(
         prisma.order.update({
           where: { id: order.id },

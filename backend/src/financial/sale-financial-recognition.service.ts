@@ -37,6 +37,7 @@ type OrderSnapshot = {
   currency: string;
   totalAmountMinor: bigint;
   subtotalAmountMinor: bigint;
+  discountAmountMinor: bigint;
   platformFeeAmountMinor: bigint;
   pricingPolicyVersion: number;
   feePolicyVersionId: string | null;
@@ -44,6 +45,11 @@ type OrderSnapshot = {
   feeSnapshotVersion: number | null;
   commercialSnapshotVersion: number | null;
   sellerPlanSnapshot: string | null;
+  buyerVipSelectionVersion: number | null;
+  buyerVipPlanSnapshot: string | null;
+  listingFeeAmountMinor?: bigint;
+  sellerMaxFeeAmountMinor?: bigint;
+  buyerVipFeeAmountMinor?: bigint;
 };
 
 type FeeComponentSnapshot = {
@@ -53,6 +59,7 @@ type FeeComponentSnapshot = {
   pricingPolicyVersion: number;
   listingTier: string | null;
   sellerPlan: string | null;
+  buyerVipPlan: string | null;
   category: string;
   partyCharged: string;
   formula: string;
@@ -211,9 +218,9 @@ export class SaleFinancialRecognitionService {
   ): Promise<{ order: OrderSnapshot; payment: PaymentSnapshot } | { failure: Failure }> {
     return this.prisma.$transaction(async (tx) => {
       const orders = await tx.$queryRaw<OrderSnapshot[]>`
-        SELECT "id", "sellerProfileId", "status", "paymentStatus", "currency", "subtotalAmountMinor", "totalAmountMinor",
+        SELECT "id", "sellerProfileId", "status", "paymentStatus", "currency", "subtotalAmountMinor", "discountAmountMinor", "totalAmountMinor",
                "platformFeeAmountMinor", "pricingPolicyVersion", "feePolicyVersionId", "platformCommissionRuleId", "feeSnapshotVersion",
-               "commercialSnapshotVersion", "sellerPlanSnapshot"
+               "commercialSnapshotVersion", "sellerPlanSnapshot", "buyerVipSelectionVersion", "buyerVipPlanSnapshot"
         FROM "Order" WHERE "id" = ${orderId}::uuid FOR UPDATE
       `;
       const order = orders[0];
@@ -234,9 +241,9 @@ export class SaleFinancialRecognitionService {
         return { failure: { type: 'MISSING_LOCAL', code: 'ORDER_PRICING_SNAPSHOT_MISSING' } };
 
       let component: FeeComponentSnapshot | undefined;
-      if (order.feeSnapshotVersion === 1 || order.feeSnapshotVersion === 2) {
+      if ([1, 2, 3].includes(order.feeSnapshotVersion ?? -1)) {
         const components = await tx.$queryRaw<FeeComponentSnapshot[]>`
-          SELECT "componentKind", "feePolicyVersionId", "feeRuleId", "pricingPolicyVersion", "listingTier", "sellerPlan",
+          SELECT "componentKind", "feePolicyVersionId", "feeRuleId", "pricingPolicyVersion", "listingTier", "sellerPlan", "buyerVipPlan",
                  "category", "partyCharged", "formula", "percentBps", "baseAmountMinor",
                  "feeAmountMinor", "currency"
           FROM "OrderFeeComponentSnapshot"
@@ -245,18 +252,36 @@ export class SaleFinancialRecognitionService {
         `;
         const listing = components.filter((x) => x.componentKind === 'LISTING_TIER');
         const sellerMax = components.filter((x) => x.componentKind === 'SELLER_MAX');
+        const buyerVip = components.filter((x) => x.componentKind === 'BUYER_VIP');
         const expectedMax =
           order.feeSnapshotVersion === 2 && order.sellerPlanSnapshot === 'LIT_MAX';
+        const expectedMaxV3 =
+          order.feeSnapshotVersion === 3 && order.sellerPlanSnapshot === 'LIT_MAX';
+        const expectedVip =
+          order.feeSnapshotVersion === 3 &&
+          ['BASIC', 'PREMIUM'].includes(order.buyerVipPlanSnapshot ?? '');
+        if (expectedVip ? buyerVip.length !== 1 : buyerVip.length !== 0)
+          return {
+            failure: { type: 'MISSING_LOCAL', code: 'BUYER_VIP_FEE_SNAPSHOT_INVALID' },
+          };
         if (
           listing.length !== 1 ||
           (order.feeSnapshotVersion === 1 && sellerMax.length !== 0) ||
+          ([1, 2].includes(order.feeSnapshotVersion ?? -1) && buyerVip.length !== 0) ||
           (order.feeSnapshotVersion === 2 && order.commercialSnapshotVersion !== 1) ||
           (order.feeSnapshotVersion === 2 &&
             !['STANDARD', 'LIT_MAX'].includes(order.sellerPlanSnapshot ?? '')) ||
-          (expectedMax ? sellerMax.length !== 1 : sellerMax.length !== 0)
+          (expectedMax || expectedMaxV3 ? sellerMax.length !== 1 : sellerMax.length !== 0) ||
+          (order.feeSnapshotVersion === 3 &&
+            (order.commercialSnapshotVersion !== 1 ||
+              order.buyerVipSelectionVersion !== 1 ||
+              !['NONE', 'BASIC', 'PREMIUM'].includes(order.buyerVipPlanSnapshot ?? '')))
         )
           return { failure: { type: 'MISSING_LOCAL', code: 'H2_FEE_SNAPSHOT_INVALID' } };
         component = listing[0];
+        order.listingFeeAmountMinor = component.feeAmountMinor;
+        order.sellerMaxFeeAmountMinor = sellerMax[0]?.feeAmountMinor ?? 0n;
+        order.buyerVipFeeAmountMinor = buyerVip[0]?.feeAmountMinor ?? 0n;
         const aggregate = components.reduce((sum, item) => sum + item.feeAmountMinor, 0n);
         if (
           component.feePolicyVersionId !== order.feePolicyVersionId ||
@@ -268,11 +293,10 @@ export class SaleFinancialRecognitionService {
           component.percentBps < 0 ||
           component.listingTier === null ||
           !['SILVER', 'GOLD', 'DIAMOND'].includes(component.listingTier) ||
-          component.baseAmountMinor !== order.subtotalAmountMinor ||
+          component.baseAmountMinor !== order.subtotalAmountMinor - order.discountAmountMinor ||
           (order.feeSnapshotVersion === 1 &&
             component.feeAmountMinor !== order.platformFeeAmountMinor) ||
           component.currency !== order.currency ||
-          aggregate !== order.platformFeeAmountMinor ||
           (component.baseAmountMinor * BigInt(component.percentBps)) / 10_000n !==
             component.feeAmountMinor
         )
@@ -292,12 +316,14 @@ export class SaleFinancialRecognitionService {
             max.formula !== 'PERCENT_BPS' ||
             max.sellerPlan !== 'LIT_MAX' ||
             max.listingTier !== null ||
-            max.baseAmountMinor !== order.subtotalAmountMinor ||
+            max.buyerVipPlan !== null ||
+            max.baseAmountMinor !== order.subtotalAmountMinor - order.discountAmountMinor ||
             max.currency !== order.currency ||
             (max.baseAmountMinor * BigInt(max.percentBps)) / 10_000n !== max.feeAmountMinor ||
             !maxRule ||
             !maxRule.enabled ||
             maxRule.sellerPlan !== 'LIT_MAX' ||
+            maxRule.buyerVipPlan !== null ||
             maxRule.category !== 'LIT_MAX_PRICE' ||
             maxRule.partyCharged !== 'SELLER' ||
             maxRule.formula !== 'PERCENT_BPS' ||
@@ -317,6 +343,56 @@ export class SaleFinancialRecognitionService {
               failure: { type: 'AMOUNT_MISMATCH', code: 'SELLER_MAX_FEE_SNAPSHOT_INVALID' },
             };
         }
+        if (buyerVip[0]) {
+          const vip = buyerVip[0];
+          const vipRule = await tx.feeRule.findUnique({
+            where: {
+              id_policyVersionId: { id: vip.feeRuleId, policyVersionId: vip.feePolicyVersionId },
+            },
+          });
+          if (
+            vip.feePolicyVersionId !== order.feePolicyVersionId ||
+            vip.pricingPolicyVersion !== order.pricingPolicyVersion ||
+            vip.category !== 'BUYER_SERVICE_FEE' ||
+            vip.partyCharged !== 'BUYER' ||
+            vip.formula !== 'PERCENT_BPS' ||
+            vip.buyerVipPlan !== order.buyerVipPlanSnapshot ||
+            vip.listingTier !== null ||
+            vip.sellerPlan !== null ||
+            vip.baseAmountMinor !== order.subtotalAmountMinor - order.discountAmountMinor ||
+            vip.currency !== order.currency ||
+            (vip.baseAmountMinor * BigInt(vip.percentBps)) / 10_000n !== vip.feeAmountMinor ||
+            !vipRule ||
+            !vipRule.enabled ||
+            vipRule.buyerVipPlan !== vip.buyerVipPlan ||
+            vipRule.category !== 'BUYER_SERVICE_FEE' ||
+            vipRule.partyCharged !== 'BUYER' ||
+            vipRule.formula !== 'PERCENT_BPS' ||
+            vipRule.percentBps !== vip.percentBps ||
+            vipRule.fixedAmountMinor !== null ||
+            vipRule.minimumAmountMinor !== null ||
+            vipRule.maximumAmountMinor !== null ||
+            vipRule.promotionTier !== null ||
+            vipRule.sellerPlan !== null ||
+            vipRule.paymentMethod !== null ||
+            vipRule.installmentsFrom !== null ||
+            vipRule.installmentsTo !== null ||
+            vipRule.sellerLevel !== null ||
+            vipRule.withdrawalSpeed !== null ||
+            vipRule.productType !== null
+          )
+            return { failure: { type: 'AMOUNT_MISMATCH', code: 'BUYER_VIP_FEE_SNAPSHOT_INVALID' } };
+        }
+        if (
+          order.feeSnapshotVersion === 3 &&
+          order.totalAmountMinor !==
+            order.subtotalAmountMinor -
+              order.discountAmountMinor +
+              (order.buyerVipFeeAmountMinor ?? 0n)
+        )
+          return { failure: { type: 'AMOUNT_MISMATCH', code: 'BUYER_VIP_FEE_SNAPSHOT_INVALID' } };
+        if (aggregate !== order.platformFeeAmountMinor)
+          return { failure: { type: 'AMOUNT_MISMATCH', code: 'H2_FEE_SNAPSHOT_INVALID' } };
       } else if (order.feeSnapshotVersion !== null) {
         return { failure: { type: 'OTHER', code: 'H2_FEE_SNAPSHOT_VERSION_UNSUPPORTED' } };
       }
@@ -389,6 +465,7 @@ export class SaleFinancialRecognitionService {
           rule.installmentsTo !== null ||
           rule.sellerLevel !== null ||
           rule.sellerPlan !== null ||
+          rule.buyerVipPlan !== null ||
           rule.withdrawalSpeed !== null ||
           rule.productType !== null)
       )
@@ -430,6 +507,9 @@ export class SaleFinancialRecognitionService {
         grossAmountMinor: grossAmountMinor.toString(),
         platformCommissionMinor: platformCommissionMinor.toString(),
         sellerProceedsMinor: sellerProceedsMinor.toString(),
+        listingFeeAmountMinor: (order.listingFeeAmountMinor ?? platformCommissionMinor).toString(),
+        sellerMaxFeeAmountMinor: (order.sellerMaxFeeAmountMinor ?? 0n).toString(),
+        buyerVipFeeAmountMinor: (order.buyerVipFeeAmountMinor ?? 0n).toString(),
       },
       entries: [
         { accountId: providerClearing.id, direction: 'DEBIT', amountMinor: grossAmountMinor },

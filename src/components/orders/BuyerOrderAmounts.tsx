@@ -3,7 +3,7 @@ export function BuyerOrderAmounts({ order }: { order: BuyerOrder }) {
   const rows = [
     ["Subtotal", order.subtotalAmountMinor],
     ["Desconto", order.discountAmountMinor],
-    ["Taxa da plataforma", order.platformFeeAmountMinor],
+    ["Taxa Buyer VIP", order.buyerVipFeeAmountMinor],
     ["Total", order.totalAmountMinor],
   ];
   return (

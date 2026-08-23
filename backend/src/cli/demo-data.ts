@@ -64,10 +64,12 @@ function isExpectedFeePolicy(policy: FeePolicyWithRules) {
       const rule = policy.rules.find(({ id }) => id === expected.id);
       const expectedCategory = 'category' in expected ? expected.category : 'PLATFORM_COMMISSION';
       const expectedSellerPlan = 'sellerPlan' in expected ? expected.sellerPlan : null;
+      const expectedParty = 'partyCharged' in expected ? expected.partyCharged : 'SELLER';
+      const expectedBuyerVipPlan = 'buyerVipPlan' in expected ? expected.buyerVipPlan : null;
       return (
         rule?.code === expected.code &&
         rule.category === expectedCategory &&
-        rule.partyCharged === 'SELLER' &&
+        rule.partyCharged === expectedParty &&
         rule.formula === 'PERCENT_BPS' &&
         rule.percentBps === expected.percentBps &&
         rule.fixedAmountMinor === null &&
@@ -78,6 +80,7 @@ function isExpectedFeePolicy(policy: FeePolicyWithRules) {
         rule.installmentsTo === null &&
         rule.sellerLevel === null &&
         rule.sellerPlan === expectedSellerPlan &&
+        rule.buyerVipPlan === expectedBuyerVipPlan &&
         rule.promotionTier === expected.promotionTier &&
         rule.withdrawalSpeed === null &&
         rule.productType === null &&
@@ -394,7 +397,7 @@ async function seed(context: Runtime) {
             create: DEMO_FEE_POLICY.rules.map((rule) => ({
               ...rule,
               category: 'category' in rule ? rule.category : 'PLATFORM_COMMISSION',
-              partyCharged: 'SELLER' as const,
+              partyCharged: 'partyCharged' in rule ? rule.partyCharged : ('SELLER' as const),
               formula: 'PERCENT_BPS' as const,
               fixedAmountMinor: null,
               minimumAmountMinor: null,

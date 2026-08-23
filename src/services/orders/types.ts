@@ -61,6 +61,8 @@ export type BuyerOrder = {
   discountAmountMinor: string;
   platformFeeAmountMinor: string;
   totalAmountMinor: string;
+  buyerVipPlan: "NONE" | "BASIC" | "PREMIUM" | null;
+  buyerVipFeeAmountMinor: string;
   status: OrderStatus;
   paymentStatus: PaymentStatus;
   fulfillmentStatus: FulfillmentStatus;

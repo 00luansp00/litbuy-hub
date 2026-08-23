@@ -18,6 +18,8 @@ const valid = () => ({
   discountAmountMinor: "0",
   platformFeeAmountMinor: "100",
   totalAmountMinor: "900719925474099400",
+  buyerVipPlan: null as null | "NONE" | "BASIC" | "PREMIUM",
+  buyerVipFeeAmountMinor: "0",
   status: "PENDING_PAYMENT",
   paymentStatus: "NOT_CREATED",
   fulfillmentStatus: "NOT_AVAILABLE",
@@ -54,6 +56,24 @@ describe("buyer order parser", () => {
   it("parses detail and list responses", () => {
     expect(parseBuyerOrder(valid()).orderCode).toBe("LIT-23456789ABCDEF");
     expect(parseBuyerOrderList({ page: 1, limit: 20, items: [valid()] }).items).toHaveLength(1);
+  });
+  it.each([
+    [null, "0"],
+    ["NONE", "0"],
+    ["BASIC", "299"],
+    ["PREMIUM", "499"],
+  ] as const)("accepts Buyer VIP snapshot %s with fee %s", (buyerVipPlan, fee) => {
+    expect(
+      parseBuyerOrder({ ...valid(), buyerVipPlan, buyerVipFeeAmountMinor: fee }),
+    ).toMatchObject({ buyerVipPlan, buyerVipFeeAmountMinor: fee });
+  });
+  it("rejects missing Buyer VIP fields", () => {
+    const missingPlan = valid() as Record<string, unknown>;
+    delete missingPlan.buyerVipPlan;
+    expect(() => parseBuyerOrder(missingPlan)).toThrowError(BuyerOrderParseError);
+    const missingFee = valid() as Record<string, unknown>;
+    delete missingFee.buyerVipFeeAmountMinor;
+    expect(() => parseBuyerOrder(missingFee)).toThrowError(BuyerOrderParseError);
   });
   it("accepts every defined enum", () => {
     for (const status of ORDER_STATUSES)

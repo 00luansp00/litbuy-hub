@@ -27,11 +27,22 @@ export type BuyerCart = {
   checkoutReady: boolean;
   previewFingerprint: string;
   buyerVipPreviewFingerprints: Record<BuyerVipPlan, string>;
+  buyerVipOptions: Record<BuyerVipPlan, BuyerVipOption>;
   createdAt: string;
   updatedAt: string;
 };
 
 export type BuyerVipPlan = "NONE" | "BASIC" | "PREMIUM";
+export type BuyerVipOption = {
+  plan: BuyerVipPlan;
+  available: boolean;
+  pricingAvailable: boolean;
+  unavailableCode: string | null;
+  percentBps: number | null;
+  feeAmountMinor: string | null;
+  totalAmountMinor: string | null;
+  fingerprint: string;
+};
 
 export type BuyerCartPage = {
   page: number;

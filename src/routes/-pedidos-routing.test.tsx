@@ -20,6 +20,8 @@ const order: BuyerOrder = {
   discountAmountMinor: "0",
   platformFeeAmountMinor: "0",
   totalAmountMinor: "4990",
+  buyerVipPlan: "NONE",
+  buyerVipFeeAmountMinor: "0",
   status: "PENDING_PAYMENT",
   paymentStatus: "NOT_CREATED",
   fulfillmentStatus: "NOT_AVAILABLE",

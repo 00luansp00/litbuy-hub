@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { ListingDraftPromotionPreference, Prisma } from '@prisma/client';
+import { BuyerVipPlan, ListingDraftPromotionPreference, Prisma } from '@prisma/client';
 import { AppError } from '../common/errors/app-error';
 import { PrismaService } from '../database/prisma.service';
 import { calculateFee, resolveFeeRule } from './fee-engine';
@@ -11,6 +11,13 @@ const TIERS = [
   [ListingDraftPromotionPreference.GOLD, 'Ouro'],
   [ListingDraftPromotionPreference.DIAMOND, 'Diamante'],
 ] as const;
+const BUYER_VIP_PRICING_UNAVAILABLE_CODES = new Set([
+  'FEE_POLICY_NOT_FOUND',
+  'FEE_POLICY_AMBIGUOUS',
+  'BUYER_VIP_FEE_RULE_NOT_FOUND',
+  'BUYER_VIP_FEE_RULE_AMBIGUOUS',
+  'BUYER_VIP_FEE_RULE_INVALID',
+]);
 
 @Injectable()
 export class ListingTierPolicyService {
@@ -97,6 +104,7 @@ export class ListingTierPolicyService {
       rule.installmentsTo === null &&
       rule.sellerLevel === null &&
       rule.sellerPlan === null &&
+      rule.buyerVipPlan === null &&
       rule.withdrawalSpeed === null &&
       rule.productType === null;
     if (!canonical) this.fail('LISTING_TIER_FEE_RULE_INVALID');
@@ -118,6 +126,7 @@ export class ListingTierPolicyService {
       rule.minimumAmountMinor === null &&
       rule.maximumAmountMinor === null &&
       rule.promotionTier === null &&
+      rule.buyerVipPlan === null &&
       rule.paymentMethod === null &&
       rule.installmentsFrom === null &&
       rule.installmentsTo === null &&
@@ -125,6 +134,35 @@ export class ListingTierPolicyService {
       rule.withdrawalSpeed === null &&
       rule.productType === null;
     if (!canonical) this.fail('SELLER_MAX_FEE_RULE_INVALID');
+    return rule;
+  }
+
+  private buyerVipRule(
+    policy: Awaited<ReturnType<ListingTierPolicyService['policy']>>,
+    plan: Exclude<BuyerVipPlan, 'NONE'>,
+  ) {
+    const exact = policy.rules.filter(
+      (rule) => rule.enabled && rule.category === 'BUYER_SERVICE_FEE' && rule.buyerVipPlan === plan,
+    );
+    if (exact.length === 0) this.fail('BUYER_VIP_FEE_RULE_NOT_FOUND');
+    if (exact.length !== 1) this.fail('BUYER_VIP_FEE_RULE_AMBIGUOUS');
+    const rule = exact[0];
+    const canonical =
+      rule.partyCharged === 'BUYER' &&
+      rule.formula === 'PERCENT_BPS' &&
+      rule.percentBps !== null &&
+      rule.fixedAmountMinor === null &&
+      rule.minimumAmountMinor === null &&
+      rule.maximumAmountMinor === null &&
+      rule.promotionTier === null &&
+      rule.paymentMethod === null &&
+      rule.installmentsFrom === null &&
+      rule.installmentsTo === null &&
+      rule.sellerLevel === null &&
+      rule.sellerPlan === null &&
+      rule.withdrawalSpeed === null &&
+      rule.productType === null;
+    if (!canonical) this.fail('BUYER_VIP_FEE_RULE_INVALID');
     return rule;
   }
 
@@ -140,6 +178,7 @@ export class ListingTierPolicyService {
     client: Client,
     tier: ListingDraftPromotionPreference,
     sellerPlan: 'STANDARD' | 'LIT_MAX',
+    buyerVipPlan: BuyerVipPlan,
     amountMinor: bigint,
   ) {
     const policy = await this.policy(client, true);
@@ -147,16 +186,75 @@ export class ListingTierPolicyService {
     const listingAmountMinor = calculateFee(amountMinor, listingRule);
     const sellerMaxRule = sellerPlan === 'LIT_MAX' ? this.sellerMaxRule(policy) : null;
     const sellerMaxAmountMinor = sellerMaxRule ? calculateFee(amountMinor, sellerMaxRule) : 0n;
-    const amount = listingAmountMinor + sellerMaxAmountMinor;
-    if (amount < 0n || amount > amountMinor) this.fail('PLATFORM_COMMISSION_EXCEEDS_ORDER_TOTAL');
+    const buyerVipRule = buyerVipPlan === 'NONE' ? null : this.buyerVipRule(policy, buyerVipPlan);
+    const buyerVipAmountMinor = buyerVipRule ? calculateFee(amountMinor, buyerVipRule) : 0n;
+    const sellerFeeAmountMinor = listingAmountMinor + sellerMaxAmountMinor;
+    const buyerFeeAmountMinor = buyerVipAmountMinor;
+    const platformFeeAmountMinor = sellerFeeAmountMinor + buyerFeeAmountMinor;
+    if (sellerFeeAmountMinor < 0n || sellerFeeAmountMinor > amountMinor)
+      this.fail('PLATFORM_COMMISSION_EXCEEDS_ORDER_TOTAL');
     return {
       policy,
       listingRule,
       listingAmountMinor,
       sellerMaxRule,
       sellerMaxAmountMinor,
-      amountMinor: amount,
+      buyerVipRule,
+      buyerVipAmountMinor,
+      sellerFeeAmountMinor,
+      buyerFeeAmountMinor,
+      platformFeeAmountMinor,
+      amountMinor: platformFeeAmountMinor,
     };
+  }
+
+  async buyerVipOptions(amountMinor: bigint) {
+    let policy: Awaited<ReturnType<ListingTierPolicyService['policy']>>;
+    try {
+      policy = await this.policy(this.prisma);
+    } catch (error) {
+      if (!(error instanceof AppError) || !BUYER_VIP_PRICING_UNAVAILABLE_CODES.has(error.code))
+        throw error;
+      return (Object.values(BuyerVipPlan) as BuyerVipPlan[]).map((plan) => ({
+        plan,
+        available: plan === 'NONE',
+        pricingAvailable: false,
+        unavailableCode: plan === 'NONE' ? null : error.code,
+        quote: null,
+      }));
+    }
+    return (Object.values(BuyerVipPlan) as BuyerVipPlan[]).map((plan) => {
+      try {
+        const rule = plan === 'NONE' ? null : this.buyerVipRule(policy, plan);
+        const feeAmountMinor = rule ? calculateFee(amountMinor, rule) : 0n;
+        return {
+          plan,
+          available: true,
+          pricingAvailable: true,
+          unavailableCode: null,
+          quote: {
+            plan,
+            policyId: policy.id,
+            pricingPolicyVersion: policy.publicVersion,
+            ruleId: rule?.id ?? null,
+            percentBps: rule?.percentBps ?? 0,
+            baseAmountMinor: amountMinor,
+            feeAmountMinor,
+            totalAmountMinor: amountMinor + feeAmountMinor,
+          },
+        };
+      } catch (error) {
+        if (!(error instanceof AppError) || !BUYER_VIP_PRICING_UNAVAILABLE_CODES.has(error.code))
+          throw error;
+        return {
+          plan,
+          available: false,
+          pricingAvailable: false,
+          unavailableCode: error.code,
+          quote: null,
+        };
+      }
+    });
   }
 
   async options() {

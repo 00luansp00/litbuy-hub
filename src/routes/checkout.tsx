@@ -86,11 +86,13 @@ export function CheckoutContent({ sellerSlug }: { sellerSlug: string }) {
   const [feedback, setFeedback] = useState<string>();
   const [buyerVipPlan, setBuyerVipPlan] = useState<BuyerVipPlan>();
   const cart = cartQuery.data;
+  const selectedVip = buyerVipPlan ? cart?.buyerVipOptions[buyerVipPlan] : undefined;
 
   const confirm = () => {
     if (
       !cart ||
       !buyerVipPlan ||
+      !selectedVip?.available ||
       !cart.checkoutReady ||
       cart.items.length !== 1 ||
       create.isPending
@@ -102,12 +104,8 @@ export function CheckoutContent({ sellerSlug }: { sellerSlug: string }) {
         sellerSlug: cart.seller.slug,
         expectedCartVersion: cart.version,
         buyerVipPlan,
-        expectedPreviewFingerprint: cart.buyerVipPreviewFingerprints[buyerVipPlan],
-        idempotencyKey: checkoutIntentKey(
-          cart.seller.slug,
-          cart.version,
-          cart.buyerVipPreviewFingerprints[buyerVipPlan],
-        ),
+        expectedPreviewFingerprint: selectedVip!.fingerprint,
+        idempotencyKey: checkoutIntentKey(cart.seller.slug, cart.version, selectedVip!.fingerprint),
       },
       {
         onSuccess: async (order) => {
@@ -220,8 +218,8 @@ export function CheckoutContent({ sellerSlug }: { sellerSlug: string }) {
           <fieldset className="mt-5">
             <legend className="font-semibold">Escolha Buyer VIP</legend>
             <p className="mt-1 text-xs text-muted-foreground">
-              Esta escolha será registrada no pedido. Nesta etapa ela não cobra taxa nem ativa
-              benefícios.
+              A taxa escolhida pertence à plataforma e será somada ao total. Benefícios VIP ainda
+              não estão ativos.
             </p>
             <div className="mt-3 grid gap-2">
               {(
@@ -230,23 +228,58 @@ export function CheckoutContent({ sellerSlug }: { sellerSlug: string }) {
                   ["BASIC", "VIP Básico"],
                   ["PREMIUM", "VIP Premium"],
                 ] as const
-              ).map(([value, label]) => (
-                <label
-                  key={value}
-                  className="flex cursor-pointer items-center gap-3 rounded-lg border p-3 has-[:checked]:border-primary has-[:checked]:bg-primary/5"
-                >
-                  <input
-                    type="radio"
-                    name="buyer-vip-plan"
-                    value={value}
-                    checked={buyerVipPlan === value}
-                    onChange={() => setBuyerVipPlan(value)}
-                  />
-                  <span>{label}</span>
-                </label>
-              ))}
+              ).map(([value, label]) => {
+                const option = cart.buyerVipOptions[value];
+                return (
+                  <label
+                    key={value}
+                    className="flex cursor-pointer items-center gap-3 rounded-lg border p-3 has-[:checked]:border-primary has-[:checked]:bg-primary/5"
+                  >
+                    <input
+                      type="radio"
+                      name="buyer-vip-plan"
+                      aria-label={label}
+                      value={value}
+                      disabled={!option.available}
+                      checked={buyerVipPlan === value}
+                      onChange={() => setBuyerVipPlan(value)}
+                    />
+                    <span className="flex flex-1 justify-between gap-3">
+                      <span>{label}</span>
+                      <span className="text-right">
+                        <span className="block">
+                          {option.percentBps === null
+                            ? "Indisponível"
+                            : `${(option.percentBps / 100).toLocaleString("pt-BR", {
+                                minimumFractionDigits: 2,
+                              })}%`}
+                        </span>
+                        <span className="block text-xs text-muted-foreground">
+                          {option.available ? `+ ${money(option.feeAmountMinor)}` : "Sem cotação"}
+                        </span>
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
             </div>
           </fieldset>
+          {selectedVip && (
+            <div className="mt-4 space-y-1 border-t pt-4 text-sm">
+              <div className="flex justify-between">
+                <span>Produto</span>
+                <span>{money(cart.previewSubtotalMinor)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Taxa Buyer VIP</span>
+                <span>{money(selectedVip.feeAmountMinor)}</span>
+              </div>
+              <div className="flex justify-between font-semibold">
+                <span>Total final</span>
+                <span>{money(selectedVip.totalAmountMinor)}</span>
+              </div>
+            </div>
+          )}
           {feedback && (
             <p role="alert" className="mt-3 text-sm text-destructive">
               {feedback}
@@ -260,7 +293,11 @@ export function CheckoutContent({ sellerSlug }: { sellerSlug: string }) {
           <Button
             className="mt-5 w-full"
             disabled={
-              !buyerVipPlan || !cart.checkoutReady || cart.items.length !== 1 || create.isPending
+              !buyerVipPlan ||
+              !selectedVip?.available ||
+              !cart.checkoutReady ||
+              cart.items.length !== 1 ||
+              create.isPending
             }
             onClick={confirm}
           >
