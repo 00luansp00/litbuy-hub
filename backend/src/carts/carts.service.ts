@@ -18,6 +18,7 @@ import type {
   UpdateCartItemDto,
 } from './carts.dto';
 import { buyerVipCheckoutFingerprint, checkoutFingerprint } from '../checkout/checkout-fingerprint';
+import { ListingTierPolicyService } from '../financial/listing-tier-policy.service';
 
 export const cartProductInclude = {
   sellerProfile: { select: { userId: true, status: true } },
@@ -79,7 +80,10 @@ const ITEM_UNIQUE_TARGETS = [
 
 @Injectable()
 export class CartsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly listingTierPolicy: ListingTierPolicyService,
+  ) {}
   async list(buyerUserId: string, q: CartListQueryDto) {
     const carts = await this.prisma.cart.findMany({
       where: { buyerUserId, status: CartStatus.ACTIVE },
@@ -88,7 +92,11 @@ export class CartsService {
       take: q.limit,
       include: cartResponseInclude,
     });
-    return { page: q.page, limit: q.limit, items: carts.map((cart) => this.response(cart)) };
+    return {
+      page: q.page,
+      limit: q.limit,
+      items: await Promise.all(carts.map((cart) => this.response(cart))),
+    };
   }
   async get(buyerUserId: string, sellerSlug: string) {
     const cart = await this.prisma.cart.findFirst({
@@ -288,7 +296,7 @@ export class CartsService {
     });
     return this.response(cart);
   }
-  private response(cart: CartResponsePayload) {
+  private async response(cart: CartResponsePayload) {
     let subtotal = 0n;
     let ready = cart.items.length === 1;
     const items = cart.items.map((item) => {
@@ -360,14 +368,26 @@ export class CartsService {
         issues: items[index].issues,
       })),
     });
+    const quotes = ready ? await this.listingTierPolicy.buyerVipOptions(subtotal) : [];
+    const buyerVipOptions = Object.fromEntries(
+      quotes.map((quote) => [
+        quote.plan,
+        {
+          plan: quote.plan,
+          percentBps: quote.percentBps,
+          feeAmountMinor: minorUnitsJson(quote.feeAmountMinor),
+          totalAmountMinor: minorUnitsJson(quote.totalAmountMinor),
+          fingerprint: buyerVipCheckoutFingerprint(previewFingerprint, quote),
+        },
+      ]),
+    );
     return {
       ...response,
       previewFingerprint,
-      buyerVipPreviewFingerprints: {
-        NONE: buyerVipCheckoutFingerprint(previewFingerprint, 'NONE'),
-        BASIC: buyerVipCheckoutFingerprint(previewFingerprint, 'BASIC'),
-        PREMIUM: buyerVipCheckoutFingerprint(previewFingerprint, 'PREMIUM'),
-      },
+      buyerVipOptions,
+      buyerVipPreviewFingerprints: Object.fromEntries(
+        Object.entries(buyerVipOptions).map(([plan, quote]) => [plan, quote.fingerprint]),
+      ),
     };
   }
   private audit(

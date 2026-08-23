@@ -65,6 +65,9 @@ export async function publishPlatformCommissionPolicy(
     additionalRules?: Array<Partial<Prisma.FeeRuleUncheckedCreateInput>>;
     includeSellerMaxRule?: boolean;
     sellerMaxRule?: Partial<Prisma.FeeRuleUncheckedCreateInput>;
+    includeBuyerVipRules?: boolean;
+    buyerVipBasicRule?: Partial<Prisma.FeeRuleUncheckedCreateInput>;
+    buyerVipPremiumRule?: Partial<Prisma.FeeRuleUncheckedCreateInput>;
   } = {},
 ) {
   const formula =
@@ -107,6 +110,30 @@ export async function publishPlatformCommissionPolicy(
                     fixedAmountMinor: null,
                     sellerPlan: 'LIT_MAX',
                     ...options.sellerMaxRule,
+                  },
+                ]),
+            ...(options.includeBuyerVipRules === false
+              ? []
+              : [
+                  {
+                    code: `buyer-vip-basic-${crypto.randomUUID()}`,
+                    category: 'BUYER_SERVICE_FEE' as const,
+                    partyCharged: 'BUYER' as const,
+                    formula: 'PERCENT_BPS' as const,
+                    percentBps: 299,
+                    fixedAmountMinor: null,
+                    buyerVipPlan: 'BASIC' as const,
+                    ...options.buyerVipBasicRule,
+                  },
+                  {
+                    code: `buyer-vip-premium-${crypto.randomUUID()}`,
+                    category: 'BUYER_SERVICE_FEE' as const,
+                    partyCharged: 'BUYER' as const,
+                    formula: 'PERCENT_BPS' as const,
+                    percentBps: 499,
+                    fixedAmountMinor: null,
+                    buyerVipPlan: 'PREMIUM' as const,
+                    ...options.buyerVipPremiumRule,
                   },
                 ]),
             ...(options.additionalRules ?? []).map((rule) => ({

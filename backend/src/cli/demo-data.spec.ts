@@ -87,6 +87,8 @@ describe('local demo data guards and deterministic fixtures', () => {
       { promotionTier: 'GOLD', percentBps: 1199 },
       { promotionTier: 'DIAMOND', percentBps: 1299 },
       { promotionTier: null, percentBps: 299 },
+      { promotionTier: null, percentBps: 299 },
+      { promotionTier: null, percentBps: 499 },
     ]);
     expect(DEMO_SELLER_RELEASE_POLICY).toMatchObject({
       author: DEMO_FEE_POLICY.author,

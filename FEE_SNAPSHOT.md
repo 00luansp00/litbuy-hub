@@ -31,3 +31,9 @@ O componente MAX identifica `sellerPlan=LIT_MAX`, `category=LIT_MAX_PRICE`, Sell
 ## Future boundaries
 
 H2 persists the evidence a future refund capability will need, but implements no refund, reversal, PSP expense, recovery, deficit, payout, or withdrawal behavior. Seller MAX and Buyer VIP remain separate future capabilities; extending the component enum and rules requires their own migrations and contracts. H2 adds no commercial rate constants: rates continue to come from versioned `FeeRule` rows.
+
+## Version 3 — Buyer VIP
+
+Q2 prospectively creates `feeSnapshotVersion = 3`. It preserves the v1/v2 contracts and adds zero `BUYER_VIP` rows for the explicit `NONE` selection or exactly one for `BASIC`/`PREMIUM`. The typed row freezes `buyerVipPlan`, the same checkout FeePolicy/public version and exact rule, `BUYER_SERVICE_FEE`, Buyer party, percentage rate, post-discount product base, integer-floor amount, and BRL currency. `platformFeeAmountMinor` in v3 is the aggregate of Listing Tier, applicable Seller MAX, and applicable Buyer VIP; Buyer total is net product plus Buyer VIP. This equal increase in gross and platform aggregate preserves Seller proceeds.
+
+The database validates v3 selection/component cardinality, canonical component shape, same-policy identity, calculation, total and aggregate at commit and prevents mutation. Preview quotes and fingerprints include policy/rule/rate/base/fee/total; payment uses the resulting Order total and recognition validates the frozen evidence without rerating. Q2 seeds no production policy and implements no VIP benefit, refund/reversal, LIT Points, SLA, or Admin M2 capability.

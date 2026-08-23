@@ -78,6 +78,29 @@ const readyCart = (overrides: Partial<BuyerCart> = {}): BuyerCart => ({
     BASIC: "fingerprint-basic",
     PREMIUM: "fingerprint-premium",
   },
+  buyerVipOptions: {
+    NONE: {
+      plan: "NONE",
+      percentBps: 0,
+      feeAmountMinor: "0",
+      totalAmountMinor: "24690",
+      fingerprint: "fingerprint-none",
+    },
+    BASIC: {
+      plan: "BASIC",
+      percentBps: 299,
+      feeAmountMinor: "738",
+      totalAmountMinor: "25428",
+      fingerprint: "fingerprint-basic",
+    },
+    PREMIUM: {
+      plan: "PREMIUM",
+      percentBps: 499,
+      feeAmountMinor: "1232",
+      totalAmountMinor: "25922",
+      fingerprint: "fingerprint-premium",
+    },
+  },
   createdAt: "2026-08-10T00:00:00.000Z",
   updatedAt: "2026-08-10T00:00:00.000Z",
   ...overrides,
@@ -260,6 +283,10 @@ describe("CheckoutContent creation", () => {
           NONE: "fingerprint-none-b",
           BASIC: "fingerprint-basic-b",
           PREMIUM: "fingerprint-premium-b",
+        },
+        buyerVipOptions: {
+          ...readyCart().buyerVipOptions,
+          NONE: { ...readyCart().buyerVipOptions.NONE, fingerprint: "fingerprint-none-b" },
         },
       }),
     );

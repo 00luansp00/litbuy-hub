@@ -30,8 +30,28 @@ export function checkoutFingerprint(input: {
 
 export function buyerVipCheckoutFingerprint(
   previewFingerprint: string,
-  buyerVipPlan: BuyerVipPlan,
+  quote:
+    | BuyerVipPlan
+    | {
+        plan: BuyerVipPlan;
+        policyId: string;
+        pricingPolicyVersion: number;
+        ruleId: string | null;
+        percentBps: number;
+        baseAmountMinor: bigint | string;
+        feeAmountMinor: bigint | string;
+        totalAmountMinor: bigint | string;
+      },
 ) {
-  const canonical = JSON.stringify({ previewFingerprint, buyerVipPlan });
+  const buyerVipQuote =
+    typeof quote === 'string'
+      ? { plan: quote }
+      : {
+          ...quote,
+          baseAmountMinor: quote.baseAmountMinor.toString(),
+          feeAmountMinor: quote.feeAmountMinor.toString(),
+          totalAmountMinor: quote.totalAmountMinor.toString(),
+        };
+  const canonical = JSON.stringify({ previewFingerprint, buyerVipQuote });
   return `sha256:${createHash('sha256').update(canonical).digest('hex')}`;
 }

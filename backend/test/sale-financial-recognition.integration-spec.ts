@@ -60,6 +60,7 @@ describe('SaleFinancialRecognitionService with real PostgreSQL', () => {
       useExistingActivePolicy?: boolean;
       sellerPlan?: 'STANDARD' | 'LIT_MAX';
       listingTier?: 'SILVER' | 'GOLD' | 'DIAMOND';
+      buyerVipPlan?: 'NONE' | 'BASIC' | 'PREMIUM';
     } = {},
   ) {
     const fee = options.fee ?? 1000n;
@@ -120,8 +121,9 @@ describe('SaleFinancialRecognitionService with real PostgreSQL', () => {
       {
         sellerSlug: fixture.seller.slug,
         expectedCartVersion: preview.version,
-        buyerVipPlan: 'NONE',
-        expectedPreviewFingerprint: preview.buyerVipPreviewFingerprints.NONE,
+        buyerVipPlan: options.buyerVipPlan ?? 'NONE',
+        expectedPreviewFingerprint:
+          preview.buyerVipPreviewFingerprints[options.buyerVipPlan ?? 'NONE'],
       },
     );
     const order = await prisma.order.findUniqueOrThrow({
@@ -318,6 +320,37 @@ describe('SaleFinancialRecognitionService with real PostgreSQL', () => {
   });
 
   it.each([
+    ['BASIC', 10_299n, 1598n],
+    ['PREMIUM', 10_499n, 1798n],
+  ] as const)(
+    'recognizes Buyer VIP %s payment and balanced ledger',
+    async (buyerVipPlan, gross, platform) => {
+      const { order } = await activePaidOrder({
+        fee: 1299n,
+        quantity: 10,
+        listingTier: 'DIAMOND',
+        buyerVipPlan,
+      });
+      await expect(recognition.processOne(order.id)).resolves.toBe(true);
+      await expect(recognition.processOne(order.id)).resolves.toBe(true);
+      expect(
+        (await entriesFor(order.id)).map((entry) => ({
+          purpose: entry.account.purpose,
+          direction: entry.direction,
+          amountMinor: entry.amountMinor,
+        })),
+      ).toEqual(
+        expect.arrayContaining([
+          { purpose: 'PROVIDER_CLEARING', direction: 'DEBIT', amountMinor: gross },
+          { purpose: 'SELLER_PENDING', direction: 'CREDIT', amountMinor: 8701n },
+          { purpose: 'PLATFORM_COMMISSION', direction: 'CREDIT', amountMinor: platform },
+        ]),
+      );
+      expect(await prisma.ledgerTransaction.count({ where: { referenceId: order.id } })).toBe(1);
+    },
+  );
+
+  it.each([
     [
       'missing MAX component',
       async (tx: Prisma.TransactionClient, id: string) =>
@@ -334,7 +367,7 @@ describe('SaleFinancialRecognitionService with real PostgreSQL', () => {
       'tampered MAX rate/base/amount',
       async (tx: Prisma.TransactionClient, id: string) =>
         tx.$executeRaw`UPDATE "OrderFeeComponentSnapshot" SET "percentBps"=300, "baseAmountMinor"=9999, "feeAmountMinor"=300 WHERE "orderId"=${id}::uuid AND "componentKind"='SELLER_MAX'`,
-      'H2_FEE_SNAPSHOT_INVALID',
+      'SELLER_MAX_FEE_SNAPSHOT_INVALID',
     ],
     [
       'seller plan mismatch',
@@ -354,6 +387,41 @@ describe('SaleFinancialRecognitionService with real PostgreSQL', () => {
       await mutate(tx, order.id);
     });
     await expectSingleIssue(order.id, code);
+  });
+
+  it.each([
+    [
+      'missing component',
+      async (tx: Prisma.TransactionClient, id: string) =>
+        tx.$executeRaw`DELETE FROM "OrderFeeComponentSnapshot" WHERE "orderId"=${id}::uuid AND "componentKind"='BUYER_VIP'`,
+    ],
+    [
+      'wrong plan',
+      async (tx: Prisma.TransactionClient, id: string) =>
+        tx.$executeRaw`UPDATE "OrderFeeComponentSnapshot" SET "buyerVipPlan"='PREMIUM' WHERE "orderId"=${id}::uuid AND "componentKind"='BUYER_VIP'`,
+    ],
+    [
+      'wrong party',
+      async (tx: Prisma.TransactionClient, id: string) =>
+        tx.$executeRaw`UPDATE "OrderFeeComponentSnapshot" SET "partyCharged"='SELLER' WHERE "orderId"=${id}::uuid AND "componentKind"='BUYER_VIP'`,
+    ],
+    [
+      'wrong amount',
+      async (tx: Prisma.TransactionClient, id: string) =>
+        tx.$executeRaw`UPDATE "OrderFeeComponentSnapshot" SET "feeAmountMinor"=300 WHERE "orderId"=${id}::uuid AND "componentKind"='BUYER_VIP'`,
+    ],
+  ])('fails closed for Buyer VIP corruption: %s', async (_case, mutate) => {
+    const { order } = await activePaidOrder({
+      fee: 1299n,
+      quantity: 10,
+      listingTier: 'DIAMOND',
+      buyerVipPlan: 'BASIC',
+    });
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe("SET LOCAL session_replication_role = 'replica'");
+      await mutate(tx, order.id);
+    });
+    await expectSingleIssue(order.id, 'BUYER_VIP_FEE_SNAPSHOT_INVALID');
   });
 
   it('distinguishes created postings from replay for processBatch concurrency', async () => {

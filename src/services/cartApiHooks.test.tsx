@@ -30,6 +30,29 @@ const cart = (sellerSlug: string, version = 2): BuyerCart => ({
   checkoutReady: false,
   previewFingerprint: `fingerprint-${version}`,
   buyerVipPreviewFingerprints: { NONE: "fp-none", BASIC: "fp-basic", PREMIUM: "fp-premium" },
+  buyerVipOptions: {
+    NONE: {
+      plan: "NONE",
+      percentBps: 0,
+      feeAmountMinor: "0",
+      totalAmountMinor: "2500",
+      fingerprint: "fp-none",
+    },
+    BASIC: {
+      plan: "BASIC",
+      percentBps: 299,
+      feeAmountMinor: "74",
+      totalAmountMinor: "2574",
+      fingerprint: "fp-basic",
+    },
+    PREMIUM: {
+      plan: "PREMIUM",
+      percentBps: 499,
+      feeAmountMinor: "124",
+      totalAmountMinor: "2624",
+      fingerprint: "fp-premium",
+    },
+  },
   createdAt: "2026-08-10T00:00:00.000Z",
   updatedAt: "2026-08-10T00:00:00.000Z",
 });

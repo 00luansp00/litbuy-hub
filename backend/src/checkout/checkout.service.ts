@@ -100,11 +100,6 @@ export class CheckoutService {
           issues: [],
         })),
       });
-      if (
-        buyerVipCheckoutFingerprint(fingerprint, dto.buyerVipPlan as BuyerVipPlan) !==
-        dto.expectedPreviewFingerprint
-      )
-        this.fail('CHECKOUT_PREVIEW_CHANGED', 409);
       const reservable = selections
         .filter(({ item }) => item.product.model !== ListingDraftModel.SERVICE)
         .map((x) => ({
@@ -161,8 +156,23 @@ export class CheckoutService {
         tx,
         product.listingTier,
         product.sellerPlan,
+        dto.buyerVipPlan as BuyerVipPlan,
         subtotal,
       );
+      const buyerVipQuote = {
+        plan: dto.buyerVipPlan as BuyerVipPlan,
+        policyId: commission.policy.id,
+        pricingPolicyVersion: commission.policy.publicVersion,
+        ruleId: commission.buyerVipRule?.id ?? null,
+        percentBps: commission.buyerVipRule?.percentBps ?? 0,
+        baseAmountMinor: subtotal,
+        feeAmountMinor: commission.buyerVipAmountMinor,
+        totalAmountMinor: subtotal + commission.buyerVipAmountMinor,
+      };
+      if (
+        buyerVipCheckoutFingerprint(fingerprint, buyerVipQuote) !== dto.expectedPreviewFingerprint
+      )
+        this.fail('CHECKOUT_PREVIEW_CHANGED', 409);
       let releasePolicy: Awaited<ReturnType<SellerReleasePolicyService['resolveEffectivePolicy']>>;
       try {
         releasePolicy = await this.sellerReleasePolicy.resolveEffectivePolicy(tx, {
@@ -186,12 +196,12 @@ export class CheckoutService {
               buyerUserId: userId,
               sellerProfileId: seller.id,
               subtotalAmountMinor: subtotal,
-              platformFeeAmountMinor: commission.amountMinor,
-              totalAmountMinor: subtotal,
+              platformFeeAmountMinor: commission.platformFeeAmountMinor,
+              totalAmountMinor: buyerVipQuote.totalAmountMinor,
               feePolicyVersionId: commission.policy.id,
               platformCommissionRuleId: commission.listingRule.id,
               pricingPolicyVersion: commission.policy.publicVersion,
-              feeSnapshotVersion: 2,
+              feeSnapshotVersion: 3,
               commercialSnapshotVersion: 1,
               sellerPlanSnapshot: product.sellerPlan,
               buyerVipSelectionVersion: 1,
@@ -253,6 +263,25 @@ export class CheckoutService {
           },
         });
       }
+      if (commission.buyerVipRule) {
+        await tx.orderFeeComponentSnapshot.create({
+          data: {
+            orderId: order.id,
+            componentKind: 'BUYER_VIP',
+            feePolicyVersionId: commission.policy.id,
+            feeRuleId: commission.buyerVipRule.id,
+            pricingPolicyVersion: commission.policy.publicVersion,
+            buyerVipPlan: dto.buyerVipPlan as BuyerVipPlan,
+            category: commission.buyerVipRule.category,
+            partyCharged: commission.buyerVipRule.partyCharged,
+            formula: commission.buyerVipRule.formula,
+            percentBps: commission.buyerVipRule.percentBps!,
+            baseAmountMinor: subtotal,
+            feeAmountMinor: commission.buyerVipAmountMinor,
+            currency: 'BRL',
+          },
+        });
+      }
       const reservations: string[] = [];
       for (const { item, selection } of selections) {
         const created = await tx.orderItem.create({
@@ -302,7 +331,8 @@ export class CheckoutService {
         feePolicyVersionId: commission.policy.id,
         pricingPolicyVersion: commission.policy.publicVersion,
         platformCommissionRuleId: commission.listingRule.id,
-        platformFeeAmountMinor: commission.amountMinor.toString(),
+        platformFeeAmountMinor: commission.platformFeeAmountMinor.toString(),
+        buyerVipFeeAmountMinor: commission.buyerVipAmountMinor.toString(),
       });
       if (reservations.length)
         await this.event(tx, order.id, OrderEventType.INVENTORY_RESERVED, userId, {
@@ -349,6 +379,10 @@ export class CheckoutService {
       platformFeeAmountMinor: order.platformFeeAmountMinor.toString(),
       totalAmountMinor: order.totalAmountMinor.toString(),
       buyerVipPlan: order.buyerVipPlanSnapshot!,
+      buyerVipFeeAmountMinor: (
+        order.totalAmountMinor -
+        (order.subtotalAmountMinor - order.discountAmountMinor)
+      ).toString(),
       version: order.version,
       expiresAt: order.expiresAt.toISOString(),
       createdAt: order.createdAt.toISOString(),

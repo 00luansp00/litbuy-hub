@@ -50,6 +50,7 @@ describe('I2 Seller MAX fee checkout', () => {
     return {
       fixture,
       policy,
+      preview,
       dto: {
         sellerSlug: fixture.seller.slug,
         expectedCartVersion: preview.version,
@@ -61,6 +62,71 @@ describe('I2 Seller MAX fee checkout', () => {
 
   const key = () => parseIdempotencyKey(`seller-max-fee:${crypto.randomUUID()}`);
 
+  it('fails closed when paid Buyer VIP rules are missing', async () => {
+    await expect(ready('STANDARD', { includeBuyerVipRules: false })).rejects.toMatchObject({
+      code: 'BUYER_VIP_FEE_RULE_NOT_FOUND',
+    });
+  });
+
+  it.each([
+    ['wrong party', { partyCharged: 'SELLER' as const }],
+    ['wrong formula', { formula: 'FIXED' as const, percentBps: null, fixedAmountMinor: 299n }],
+    ['wrong plan', { buyerVipPlan: 'PREMIUM' as const }],
+  ])('rejects an invalid BASIC Buyer VIP rule: %s', async (_name, buyerVipBasicRule) => {
+    await expect(ready('STANDARD', { buyerVipBasicRule })).rejects.toMatchObject({
+      code: expect.stringMatching(/BUYER_VIP_FEE_RULE_(INVALID|NOT_FOUND|AMBIGUOUS)/),
+    });
+  });
+
+  it('fails closed for duplicate canonical Buyer VIP rules', async () => {
+    await expect(
+      ready('STANDARD', {
+        additionalRules: [
+          {
+            category: 'BUYER_SERVICE_FEE',
+            partyCharged: 'BUYER',
+            formula: 'PERCENT_BPS',
+            percentBps: 299,
+            promotionTier: null,
+            buyerVipPlan: 'BASIC',
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({ code: 'BUYER_VIP_FEE_RULE_AMBIGUOUS' });
+  });
+
+  it.each([
+    ['STANDARD', 'NONE', 10_000n, 1299n, 8701n],
+    ['STANDARD', 'BASIC', 10_299n, 1598n, 8701n],
+    ['STANDARD', 'PREMIUM', 10_499n, 1798n, 8701n],
+    ['LIT_MAX', 'NONE', 10_000n, 1598n, 8402n],
+    ['LIT_MAX', 'BASIC', 10_299n, 1897n, 8402n],
+    ['LIT_MAX', 'PREMIUM', 10_499n, 2097n, 8402n],
+  ] as const)(
+    'proves R$100 Q2 economics for %s + %s',
+    async (sellerPlan, buyerVipPlan, buyerTotal, platformAggregate, sellerProceeds) => {
+      const f = await ready(sellerPlan);
+      const response = await checkout.create(f.fixture.buyer.id, key(), {
+        ...f.dto,
+        buyerVipPlan,
+        expectedPreviewFingerprint: f.preview.buyerVipPreviewFingerprints[buyerVipPlan],
+      });
+      const order = await prisma.order.findUniqueOrThrow({
+        where: { publicCode: (response as { orderCode: string }).orderCode },
+        include: { feeComponentSnapshots: true },
+      });
+      expect(order).toMatchObject({
+        feeSnapshotVersion: 3,
+        totalAmountMinor: buyerTotal,
+        platformFeeAmountMinor: platformAggregate,
+      });
+      expect(order.totalAmountMinor - order.platformFeeAmountMinor).toBe(sellerProceeds);
+      expect(
+        order.feeComponentSnapshots.filter((x) => x.componentKind === 'BUYER_VIP'),
+      ).toHaveLength(buyerVipPlan === 'NONE' ? 0 : 1);
+    },
+  );
+
   it('STANDARD needs no MAX rule and snapshots only the Listing Tier', async () => {
     const f = await ready('STANDARD', { includeSellerMaxRule: false });
     const response = await checkout.create(f.fixture.buyer.id, key(), f.dto);
@@ -69,7 +135,7 @@ describe('I2 Seller MAX fee checkout', () => {
       include: { feeComponentSnapshots: true },
     });
     expect(order).toMatchObject({
-      feeSnapshotVersion: 2,
+      feeSnapshotVersion: 3,
       sellerPlanSnapshot: 'STANDARD',
       subtotalAmountMinor: 10_000n,
       platformFeeAmountMinor: 1299n,
@@ -92,7 +158,7 @@ describe('I2 Seller MAX fee checkout', () => {
     const tier = order.feeComponentSnapshots.find((x) => x.componentKind === 'LISTING_TIER')!;
     const max = order.feeComponentSnapshots.find((x) => x.componentKind === 'SELLER_MAX')!;
     expect(order).toMatchObject({
-      feeSnapshotVersion: 2,
+      feeSnapshotVersion: 3,
       sellerPlanSnapshot: 'LIT_MAX',
       subtotalAmountMinor: 10_000n,
       platformFeeAmountMinor: 1598n,

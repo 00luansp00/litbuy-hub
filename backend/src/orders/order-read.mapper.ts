@@ -3,6 +3,7 @@ import { AppError } from '../common/errors/app-error';
 
 export const orderReadInclude = {
   items: { orderBy: [{ createdAt: 'asc' as const }, { id: 'asc' as const }] },
+  feeComponentSnapshots: { where: { componentKind: 'BUYER_VIP' as const } },
 } satisfies Prisma.OrderInclude;
 
 export type OrderReadPayload = Prisma.OrderGetPayload<{ include: typeof orderReadInclude }>;
@@ -26,6 +27,8 @@ export function mapOrder(order: OrderReadPayload) {
     discountAmountMinor: order.discountAmountMinor.toString(),
     platformFeeAmountMinor: order.platformFeeAmountMinor.toString(),
     totalAmountMinor: order.totalAmountMinor.toString(),
+    buyerVipPlan: order.buyerVipPlanSnapshot,
+    buyerVipFeeAmountMinor: (order.feeComponentSnapshots[0]?.feeAmountMinor ?? 0n).toString(),
     status: order.status,
     paymentStatus: order.paymentStatus,
     fulfillmentStatus: order.fulfillmentStatus,

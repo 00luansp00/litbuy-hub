@@ -25,3 +25,7 @@ A seleção também não ativa pontos, prioridade, triagem/SLA, suporte estendid
 ## Negative scope
 
 Não fazem parte desta capability: Buyer VIP fee/rate/amount, LP, calendários ou deadlines, suporte, refund/recovery, PSP, payment split, Ledger, KYC, withdrawal, risco, disputas e configuração Admin. Nenhum mock ou consumer legado desses domínios consome o snapshot Q1.
+
+## Prospective Q2 consumer
+
+Q1 remains the historical selection capability described above. For Orders created after Q2, the same explicit snapshot is consumed by `BUYER_VIP_FEE.md`: `NONE` remains zero, while `BASIC`/`PREMIUM` select an authoritative versioned fee rule and financial snapshot v3. This prospective consumer does not rewrite Q1 evidence and still activates no VIP benefit or entitlement.
