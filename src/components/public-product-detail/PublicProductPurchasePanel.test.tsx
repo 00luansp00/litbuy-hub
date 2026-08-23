@@ -65,6 +65,7 @@ const cart = (version = 7, items: BuyerCart["items"] = []): BuyerCart => ({
   previewSubtotalMinor: "0",
   checkoutReady: false,
   previewFingerprint: "fingerprint",
+  buyerVipPreviewFingerprints: { NONE: "fp-none", BASIC: "fp-basic", PREMIUM: "fp-premium" },
   createdAt: "2026-08-10",
   updatedAt: "2026-08-10",
 });

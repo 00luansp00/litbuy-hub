@@ -189,7 +189,8 @@ describe('local demo data with real PostgreSQL and MinIO', () => {
       {
         sellerSlug: 'demo-lit-store',
         expectedCartVersion: preview.version,
-        expectedPreviewFingerprint: preview.previewFingerprint,
+        buyerVipPlan: 'NONE',
+        expectedPreviewFingerprint: preview.buyerVipPreviewFingerprints.NONE,
       },
     );
     const orderCode = (created as { orderCode: string }).orderCode;

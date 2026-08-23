@@ -29,6 +29,7 @@ const cart = (sellerSlug: string, version = 2): BuyerCart => ({
   previewSubtotalMinor: "0",
   checkoutReady: false,
   previewFingerprint: `fingerprint-${version}`,
+  buyerVipPreviewFingerprints: { NONE: "fp-none", BASIC: "fp-basic", PREMIUM: "fp-premium" },
   createdAt: "2026-08-10T00:00:00.000Z",
   updatedAt: "2026-08-10T00:00:00.000Z",
 });

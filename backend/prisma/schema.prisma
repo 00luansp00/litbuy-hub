@@ -684,6 +684,12 @@ enum ListingDraftSellerPlanPreference {
   LIT_MAX
 }
 
+enum BuyerVipPlan {
+  NONE
+  BASIC
+  PREMIUM
+}
+
 enum ListingDraftServicePricingType {
   FIXED
   QUOTE
@@ -953,6 +959,8 @@ model Order {
   feeSnapshotVersion                 Int?
   commercialSnapshotVersion          Int?
   sellerPlanSnapshot                 ListingDraftSellerPlanPreference?
+  buyerVipSelectionVersion           Int?
+  buyerVipPlanSnapshot               BuyerVipPlan?
   sellerMaxQualificationVersion      Int?
   sellerMaxQualificationStatus       SellerMaxQualificationStatus?
   sellerMaxQualificationDeadlineAt   DateTime?

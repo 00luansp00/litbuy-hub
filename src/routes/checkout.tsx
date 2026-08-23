@@ -9,6 +9,7 @@ import { buyerCartKeys, useBuyerSellerCart } from "@/services/cartApiHooks";
 import { checkoutIntentKey, useCreateCheckoutSession } from "@/services/checkoutApiHooks";
 import { buyerOrderKeys } from "@/services/orders";
 import { formatBrlMinorUnits } from "@/components/cart/formatMinorUnits";
+import type { BuyerVipPlan } from "@/services/cartApiService";
 
 const SELLER_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 type CheckoutSearch = { sellerSlug?: string };
@@ -83,17 +84,30 @@ export function CheckoutContent({ sellerSlug }: { sellerSlug: string }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [feedback, setFeedback] = useState<string>();
+  const [buyerVipPlan, setBuyerVipPlan] = useState<BuyerVipPlan>();
   const cart = cartQuery.data;
 
   const confirm = () => {
-    if (!cart || !cart.checkoutReady || cart.items.length !== 1 || create.isPending) return;
+    if (
+      !cart ||
+      !buyerVipPlan ||
+      !cart.checkoutReady ||
+      cart.items.length !== 1 ||
+      create.isPending
+    )
+      return;
     setFeedback(undefined);
     create.mutate(
       {
         sellerSlug: cart.seller.slug,
         expectedCartVersion: cart.version,
-        expectedPreviewFingerprint: cart.previewFingerprint,
-        idempotencyKey: checkoutIntentKey(cart.seller.slug, cart.version, cart.previewFingerprint),
+        buyerVipPlan,
+        expectedPreviewFingerprint: cart.buyerVipPreviewFingerprints[buyerVipPlan],
+        idempotencyKey: checkoutIntentKey(
+          cart.seller.slug,
+          cart.version,
+          cart.buyerVipPreviewFingerprints[buyerVipPlan],
+        ),
       },
       {
         onSuccess: async (order) => {
@@ -203,6 +217,36 @@ export function CheckoutContent({ sellerSlug }: { sellerSlug: string }) {
           <p className="mt-3 text-sm">
             {cart.checkoutReady ? "Pronto para checkout" : "Este carrinho necessita de ajustes."}
           </p>
+          <fieldset className="mt-5">
+            <legend className="font-semibold">Escolha Buyer VIP</legend>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Esta escolha será registrada no pedido. Nesta etapa ela não cobra taxa nem ativa
+              benefícios.
+            </p>
+            <div className="mt-3 grid gap-2">
+              {(
+                [
+                  ["NONE", "Sem plano"],
+                  ["BASIC", "VIP Básico"],
+                  ["PREMIUM", "VIP Premium"],
+                ] as const
+              ).map(([value, label]) => (
+                <label
+                  key={value}
+                  className="flex cursor-pointer items-center gap-3 rounded-lg border p-3 has-[:checked]:border-primary has-[:checked]:bg-primary/5"
+                >
+                  <input
+                    type="radio"
+                    name="buyer-vip-plan"
+                    value={value}
+                    checked={buyerVipPlan === value}
+                    onChange={() => setBuyerVipPlan(value)}
+                  />
+                  <span>{label}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
           {feedback && (
             <p role="alert" className="mt-3 text-sm text-destructive">
               {feedback}
@@ -215,7 +259,9 @@ export function CheckoutContent({ sellerSlug }: { sellerSlug: string }) {
           )}
           <Button
             className="mt-5 w-full"
-            disabled={!cart.checkoutReady || cart.items.length !== 1 || create.isPending}
+            disabled={
+              !buyerVipPlan || !cart.checkoutReady || cart.items.length !== 1 || create.isPending
+            }
             onClick={confirm}
           >
             {create.isPending ? "Criando pedido…" : "Confirmar e criar pedido"}

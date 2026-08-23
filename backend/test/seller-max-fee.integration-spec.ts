@@ -53,7 +53,8 @@ describe('I2 Seller MAX fee checkout', () => {
       dto: {
         sellerSlug: fixture.seller.slug,
         expectedCartVersion: preview.version,
-        expectedPreviewFingerprint: preview.previewFingerprint,
+        buyerVipPlan: 'NONE',
+        expectedPreviewFingerprint: preview.buyerVipPreviewFingerprints.NONE,
       },
     };
   }

@@ -89,7 +89,8 @@ describe('I1 Seller MAX listing authority with real PostgreSQL', () => {
       dto: {
         sellerSlug: fixture.seller.slug,
         expectedCartVersion: preview.version,
-        expectedPreviewFingerprint: preview.previewFingerprint,
+        buyerVipPlan: 'NONE',
+        expectedPreviewFingerprint: preview.buyerVipPreviewFingerprints.NONE,
       },
     };
   }

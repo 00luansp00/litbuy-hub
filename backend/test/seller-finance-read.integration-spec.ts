@@ -282,7 +282,8 @@ describe('Seller finance read HTTP with real auth and PostgreSQL', () => {
       {
         sellerSlug: fixture.seller.slug,
         expectedCartVersion: cart.version,
-        expectedPreviewFingerprint: cart.previewFingerprint,
+        buyerVipPlan: 'NONE',
+        expectedPreviewFingerprint: cart.buyerVipPreviewFingerprints.NONE,
       },
     );
     const order = await prisma.order.findUniqueOrThrow({

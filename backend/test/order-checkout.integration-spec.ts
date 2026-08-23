@@ -55,10 +55,66 @@ describe('Order checkout domain with real PostgreSQL', () => {
       dto: {
         sellerSlug: f.seller.slug,
         expectedCartVersion: preview.version,
-        expectedPreviewFingerprint: preview.previewFingerprint,
+        buyerVipPlan: 'NONE',
+        expectedPreviewFingerprint: preview.buyerVipPreviewFingerprints.NONE,
       },
     };
   }
+  it.each(['NONE', 'BASIC', 'PREMIUM'] as const)(
+    'freezes explicit Buyer VIP %s without changing money or fee components',
+    async (buyerVipPlan) => {
+      const f = await ready();
+      const dto = {
+        ...f.dto,
+        buyerVipPlan,
+        expectedPreviewFingerprint: f.preview.buyerVipPreviewFingerprints[buyerVipPlan],
+      };
+      const response = checkoutResponse(await checkout.create(f.buyer.id, key(), dto));
+      expect(response).toMatchObject({
+        buyerVipPlan,
+        subtotalAmountMinor: response.totalAmountMinor,
+      });
+      const order = await prisma.order.findUniqueOrThrow({
+        where: { publicCode: response.orderCode },
+        include: { feeComponentSnapshots: true },
+      });
+      expect(order).toMatchObject({
+        buyerVipSelectionVersion: 1,
+        buyerVipPlanSnapshot: buyerVipPlan,
+        totalAmountMinor: order.subtotalAmountMinor,
+      });
+      expect(order.feeComponentSnapshots.map((component) => component.componentKind)).not.toContain(
+        'BUYER_VIP',
+      );
+      await expect(
+        prisma.order.update({
+          where: { id: order.id },
+          data: { buyerVipPlanSnapshot: buyerVipPlan === 'NONE' ? 'BASIC' : 'NONE' },
+        }),
+      ).rejects.toThrow();
+    },
+  );
+  it('binds Buyer VIP selection to fingerprint and idempotency intent', async () => {
+    const f = await ready();
+    await expect(
+      checkout.create(f.buyer.id, key(), {
+        ...f.dto,
+        buyerVipPlan: 'BASIC',
+        expectedPreviewFingerprint: f.preview.buyerVipPreviewFingerprints.NONE,
+      }),
+    ).rejects.toMatchObject({ code: 'CHECKOUT_PREVIEW_CHANGED' });
+
+    const shared = key();
+    const none = await checkout.create(f.buyer.id, shared, f.dto);
+    await expect(
+      checkout.create(f.buyer.id, shared, {
+        ...f.dto,
+        buyerVipPlan: 'PREMIUM',
+        expectedPreviewFingerprint: f.preview.buyerVipPreviewFingerprints.PREMIUM,
+      }),
+    ).rejects.toMatchObject({ code: 'IDEMPOTENCY_KEY_REUSED' });
+    expect(await checkout.create(f.buyer.id, shared, f.dto)).toEqual(none);
+  });
   it.each([
     ['NORMAL', undefined],
     ['DYNAMIC', undefined],
@@ -122,6 +178,7 @@ describe('Order checkout domain with real PostgreSQL', () => {
       checkout.create(f.buyer.id, key(), {
         sellerSlug: f.seller.slug,
         expectedCartVersion: 1,
+        buyerVipPlan: 'NONE',
         expectedPreviewFingerprint: 'sha256:'.padEnd(71, '0'),
       }),
     ).rejects.toBeInstanceOf(AppError);
@@ -145,7 +202,8 @@ describe('Order checkout domain with real PostgreSQL', () => {
       checkout.create(f.buyer.id, idempotencyKey, {
         sellerSlug: f.seller.slug,
         expectedCartVersion: preview.version,
-        expectedPreviewFingerprint: preview.previewFingerprint,
+        buyerVipPlan: 'NONE',
+        expectedPreviewFingerprint: preview.buyerVipPreviewFingerprints.NONE,
       }),
     ).rejects.toMatchObject({ code: 'SELLER_RELEASE_POLICY_NOT_FOUND', statusCode: 422 });
     expect(await prisma.order.count()).toBe(0);
@@ -186,7 +244,8 @@ describe('Order checkout domain with real PostgreSQL', () => {
       checkout.create(own.sellerUser.id, key(), {
         sellerSlug: own.seller.slug,
         expectedCartVersion: preview.version,
-        expectedPreviewFingerprint: preview.previewFingerprint,
+        buyerVipPlan: 'NONE',
+        expectedPreviewFingerprint: preview.buyerVipPreviewFingerprints.NONE,
       }),
     ).rejects.toMatchObject({ code: 'SELF_PURCHASE_NOT_ALLOWED' });
     expect(await prisma.order.count()).toBe(0);
@@ -218,7 +277,8 @@ describe('Order checkout domain with real PostgreSQL', () => {
         checkout.create(secondBuyer.id, key(), {
           sellerSlug: first.seller.slug,
           expectedCartVersion: preview.version,
-          expectedPreviewFingerprint: preview.previewFingerprint,
+          buyerVipPlan: 'NONE',
+          expectedPreviewFingerprint: preview.buyerVipPreviewFingerprints.NONE,
         }),
       ]);
       expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
