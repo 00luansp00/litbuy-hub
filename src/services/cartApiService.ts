@@ -35,9 +35,12 @@ export type BuyerCart = {
 export type BuyerVipPlan = "NONE" | "BASIC" | "PREMIUM";
 export type BuyerVipOption = {
   plan: BuyerVipPlan;
-  percentBps: number;
-  feeAmountMinor: string;
-  totalAmountMinor: string;
+  available: boolean;
+  pricingAvailable: boolean;
+  unavailableCode: string | null;
+  percentBps: number | null;
+  feeAmountMinor: string | null;
+  totalAmountMinor: string | null;
   fingerprint: string;
 };
 

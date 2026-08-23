@@ -63,34 +63,79 @@ describe('I2 Seller MAX fee checkout', () => {
   const key = () => parseIdempotencyKey(`seller-max-fee:${crypto.randomUUID()}`);
 
   it('fails closed when paid Buyer VIP rules are missing', async () => {
-    await expect(ready('STANDARD', { includeBuyerVipRules: false })).rejects.toMatchObject({
-      code: 'BUYER_VIP_FEE_RULE_NOT_FOUND',
-    });
+    const f = await ready('STANDARD', { includeBuyerVipRules: false });
+    expect(f.preview.buyerVipOptions.NONE).toMatchObject({ available: true });
+    expect(f.preview.buyerVipOptions.BASIC).toMatchObject({ available: false });
+    expect(f.preview.buyerVipOptions.PREMIUM).toMatchObject({ available: false });
+    await expect(
+      checkout.create(f.fixture.buyer.id, key(), {
+        ...f.dto,
+        buyerVipPlan: 'BASIC',
+        expectedPreviewFingerprint: f.preview.buyerVipPreviewFingerprints.BASIC,
+      }),
+    ).rejects.toMatchObject({ code: 'BUYER_VIP_FEE_RULE_NOT_FOUND' });
   });
+
+  it.each([
+    ['BASIC', { includeBuyerVipBasicRule: false }],
+    ['PREMIUM', { includeBuyerVipPremiumRule: false }],
+  ] as const)(
+    'keeps cart and NONE available when only %s is unconfigured',
+    async (plan, policyOptions) => {
+      const f = await ready('STANDARD', policyOptions);
+      expect(f.preview.buyerVipOptions.NONE).toMatchObject({
+        available: true,
+        pricingAvailable: true,
+        percentBps: 0,
+      });
+      expect(f.preview.buyerVipOptions[plan]).toMatchObject({
+        available: false,
+        pricingAvailable: false,
+        percentBps: null,
+        feeAmountMinor: null,
+        totalAmountMinor: null,
+      });
+      await expect(checkout.create(f.fixture.buyer.id, key(), f.dto)).resolves.toBeDefined();
+    },
+  );
 
   it.each([
     ['wrong party', { partyCharged: 'SELLER' as const }],
     ['wrong formula', { formula: 'FIXED' as const, percentBps: null, fixedAmountMinor: 299n }],
     ['wrong plan', { buyerVipPlan: 'PREMIUM' as const }],
   ])('rejects an invalid BASIC Buyer VIP rule: %s', async (_name, buyerVipBasicRule) => {
-    await expect(ready('STANDARD', { buyerVipBasicRule })).rejects.toMatchObject({
+    const f = await ready('STANDARD', { buyerVipBasicRule });
+    expect(f.preview.buyerVipOptions.BASIC).toMatchObject({ available: false });
+    await expect(
+      checkout.create(f.fixture.buyer.id, key(), {
+        ...f.dto,
+        buyerVipPlan: 'BASIC',
+        expectedPreviewFingerprint: f.preview.buyerVipPreviewFingerprints.BASIC,
+      }),
+    ).rejects.toMatchObject({
       code: expect.stringMatching(/BUYER_VIP_FEE_RULE_(INVALID|NOT_FOUND|AMBIGUOUS)/),
     });
   });
 
   it('fails closed for duplicate canonical Buyer VIP rules', async () => {
+    const f = await ready('STANDARD', {
+      additionalRules: [
+        {
+          category: 'BUYER_SERVICE_FEE',
+          partyCharged: 'BUYER',
+          formula: 'PERCENT_BPS',
+          percentBps: 299,
+          promotionTier: null,
+          buyerVipPlan: 'BASIC',
+        },
+      ],
+    });
+    expect(f.preview.buyerVipOptions.BASIC).toMatchObject({ available: false });
     await expect(
-      ready('STANDARD', {
-        additionalRules: [
-          {
-            category: 'BUYER_SERVICE_FEE',
-            partyCharged: 'BUYER',
-            formula: 'PERCENT_BPS',
-            percentBps: 299,
-            promotionTier: null,
-            buyerVipPlan: 'BASIC',
-          },
-        ],
+      checkout.create(f.fixture.buyer.id, key(), {
+        ...f.dto,
+        buyerVipPlan: 'BASIC',
+        expectedPreviewFingerprint: f.preview.buyerVipPreviewFingerprints.BASIC,
       }),
     ).rejects.toMatchObject({ code: 'BUYER_VIP_FEE_RULE_AMBIGUOUS' });
   });

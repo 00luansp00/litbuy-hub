@@ -41,6 +41,28 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
   afterAll(() => app.close());
 
   const key = () => parseIdempotencyKey(`commission:${crypto.randomUUID()}`);
+  const listingRule = <
+    T extends {
+      rules: Array<{
+        id: string;
+        category: string;
+        partyCharged: string;
+        promotionTier: string | null;
+      }>;
+    },
+  >(
+    policy: T,
+    tier?: 'SILVER' | 'GOLD' | 'DIAMOND',
+  ) => {
+    const matches = policy.rules.filter(
+      (rule) =>
+        rule.category === 'PLATFORM_COMMISSION' &&
+        rule.partyCharged === 'SELLER' &&
+        (tier === undefined || rule.promotionTier === tier),
+    );
+    expect(matches).toHaveLength(1);
+    return matches[0];
+  };
   async function ready(
     policyOptions: Parameters<typeof publishPlatformCommissionPolicy>[2] = {},
     tier: 'SILVER' | 'GOLD' | 'DIAMOND' = 'SILVER',
@@ -88,7 +110,7 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
     'snapshots the exact %s listing tier commission without increasing Buyer total',
     async (tier, percentBps, fee) => {
       const f = await ready({ percentBps }, tier, 10);
-      const rule = f.policy.rules[0];
+      const rule = listingRule(f.policy, tier);
       const response = await checkout.create(f.buyer.id, key(), f.dto);
       const order = await prisma.order.findUniqueOrThrow({
         where: { publicCode: (response as { orderCode: string }).orderCode },
@@ -214,6 +236,16 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
       quantity: 1,
       expectedVersion: 0,
     });
+    expect(preview.buyerVipOptions.NONE).toMatchObject({
+      available: true,
+      pricingAvailable: false,
+      percentBps: null,
+    });
+    expect(preview.buyerVipOptions.BASIC).toMatchObject({
+      available: false,
+      pricingAvailable: false,
+      percentBps: null,
+    });
     await expect(
       checkout.create(f.buyer.id, key(), {
         sellerSlug: f.seller.slug,
@@ -309,7 +341,7 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
       prisma.feePolicyVersion.delete({ where: { id: first.policy.id } }),
     ).rejects.toBeDefined();
     await expect(
-      prisma.feeRule.delete({ where: { id: first.policy.rules[0].id } }),
+      prisma.feeRule.delete({ where: { id: listingRule(first.policy).id } }),
     ).rejects.toBeDefined();
   });
 
@@ -432,7 +464,7 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
     await expectImmutable(
       prisma.order.update({
         where: { id: order.id },
-        data: { platformCommissionRuleId: other.rules[0].id },
+        data: { platformCommissionRuleId: listingRule(other).id },
       }),
     );
     await expectImmutable(
@@ -475,7 +507,7 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
     ).resolves.toMatchObject({
       id: order.id,
       feePolicyVersionId: f.policy.id,
-      platformCommissionRuleId: f.policy.rules[0].id,
+      platformCommissionRuleId: listingRule(f.policy).id,
       pricingPolicyVersion: f.policy.publicVersion,
       platformFeeAmountMinor: 125n,
       status: 'CANCELLED',
@@ -542,7 +574,7 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
             totalAmountMinor: 1000n,
             pricingPolicyVersion: policy.publicVersion,
             feePolicyVersionId: policy.id,
-            platformCommissionRuleId: policy.rules[0].id,
+            platformCommissionRuleId: listingRule(policy).id,
             feeSnapshotVersion: 1,
             expiresAt: new Date(Date.now() + 900_000),
           },
@@ -596,7 +628,7 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
     await expect(
       createOrderShell(fixture, partialRulePreview.id, partialRulePreview.version, {
         feePolicyVersionId: null,
-        platformCommissionRuleId: policyA.rules[0].id,
+        platformCommissionRuleId: listingRule(policyA).id,
       }),
     ).rejects.toBeDefined();
 
@@ -604,7 +636,7 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
     await expect(
       createOrderShell(fixture, mismatchPreview.id, mismatchPreview.version, {
         feePolicyVersionId: policyA.id,
-        platformCommissionRuleId: policyB.rules[0].id,
+        platformCommissionRuleId: listingRule(policyB).id,
         pricingPolicyVersion: policyA.publicVersion,
         platformFeeAmountMinor: 125n,
       }),
@@ -614,13 +646,13 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
     await expect(
       createOrderShell(fixture, coherentPreview.id, coherentPreview.version, {
         feePolicyVersionId: policyA.id,
-        platformCommissionRuleId: policyA.rules[0].id,
+        platformCommissionRuleId: listingRule(policyA).id,
         pricingPolicyVersion: policyA.publicVersion,
         platformFeeAmountMinor: 125n,
       }),
     ).resolves.toMatchObject({
       feePolicyVersionId: policyA.id,
-      platformCommissionRuleId: policyA.rules[0].id,
+      platformCommissionRuleId: listingRule(policyA).id,
     });
   });
 
@@ -692,7 +724,7 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
     ).toEqual([
       {
         policy: policy.id,
-        rule: policy.rules[0].id,
+        rule: listingRule(policy).id,
         publicVersion: policy.publicVersion,
         subtotal: 1000n,
         fee: 125n,
@@ -700,7 +732,7 @@ describe('PR #47 platform commission snapshot with real PostgreSQL', () => {
       },
       {
         policy: policy.id,
-        rule: policy.rules[0].id,
+        rule: listingRule(policy).id,
         publicVersion: policy.publicVersion,
         subtotal: 2000n,
         fee: 250n,

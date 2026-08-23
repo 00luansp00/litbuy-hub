@@ -66,6 +66,8 @@ export async function publishPlatformCommissionPolicy(
     includeSellerMaxRule?: boolean;
     sellerMaxRule?: Partial<Prisma.FeeRuleUncheckedCreateInput>;
     includeBuyerVipRules?: boolean;
+    includeBuyerVipBasicRule?: boolean;
+    includeBuyerVipPremiumRule?: boolean;
     buyerVipBasicRule?: Partial<Prisma.FeeRuleUncheckedCreateInput>;
     buyerVipPremiumRule?: Partial<Prisma.FeeRuleUncheckedCreateInput>;
   } = {},
@@ -112,7 +114,7 @@ export async function publishPlatformCommissionPolicy(
                     ...options.sellerMaxRule,
                   },
                 ]),
-            ...(options.includeBuyerVipRules === false
+            ...(options.includeBuyerVipRules === false || options.includeBuyerVipBasicRule === false
               ? []
               : [
                   {
@@ -125,6 +127,11 @@ export async function publishPlatformCommissionPolicy(
                     buyerVipPlan: 'BASIC' as const,
                     ...options.buyerVipBasicRule,
                   },
+                ]),
+            ...(options.includeBuyerVipRules === false ||
+            options.includeBuyerVipPremiumRule === false
+              ? []
+              : [
                   {
                     code: `buyer-vip-premium-${crypto.randomUUID()}`,
                     category: 'BUYER_SERVICE_FEE' as const,

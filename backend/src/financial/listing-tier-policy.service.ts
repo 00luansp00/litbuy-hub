@@ -11,6 +11,13 @@ const TIERS = [
   [ListingDraftPromotionPreference.GOLD, 'Ouro'],
   [ListingDraftPromotionPreference.DIAMOND, 'Diamante'],
 ] as const;
+const BUYER_VIP_PRICING_UNAVAILABLE_CODES = new Set([
+  'FEE_POLICY_NOT_FOUND',
+  'FEE_POLICY_AMBIGUOUS',
+  'BUYER_VIP_FEE_RULE_NOT_FOUND',
+  'BUYER_VIP_FEE_RULE_AMBIGUOUS',
+  'BUYER_VIP_FEE_RULE_INVALID',
+]);
 
 @Injectable()
 export class ListingTierPolicyService {
@@ -202,20 +209,51 @@ export class ListingTierPolicyService {
   }
 
   async buyerVipOptions(amountMinor: bigint) {
-    const policy = await this.policy(this.prisma);
-    return (Object.values(BuyerVipPlan) as BuyerVipPlan[]).map((plan) => {
-      const rule = plan === 'NONE' ? null : this.buyerVipRule(policy, plan);
-      const feeAmountMinor = rule ? calculateFee(amountMinor, rule) : 0n;
-      return {
+    let policy: Awaited<ReturnType<ListingTierPolicyService['policy']>>;
+    try {
+      policy = await this.policy(this.prisma);
+    } catch (error) {
+      if (!(error instanceof AppError) || !BUYER_VIP_PRICING_UNAVAILABLE_CODES.has(error.code))
+        throw error;
+      return (Object.values(BuyerVipPlan) as BuyerVipPlan[]).map((plan) => ({
         plan,
-        policyId: policy.id,
-        pricingPolicyVersion: policy.publicVersion,
-        ruleId: rule?.id ?? null,
-        percentBps: rule?.percentBps ?? 0,
-        baseAmountMinor: amountMinor,
-        feeAmountMinor,
-        totalAmountMinor: amountMinor + feeAmountMinor,
-      };
+        available: plan === 'NONE',
+        pricingAvailable: false,
+        unavailableCode: plan === 'NONE' ? null : error.code,
+        quote: null,
+      }));
+    }
+    return (Object.values(BuyerVipPlan) as BuyerVipPlan[]).map((plan) => {
+      try {
+        const rule = plan === 'NONE' ? null : this.buyerVipRule(policy, plan);
+        const feeAmountMinor = rule ? calculateFee(amountMinor, rule) : 0n;
+        return {
+          plan,
+          available: true,
+          pricingAvailable: true,
+          unavailableCode: null,
+          quote: {
+            plan,
+            policyId: policy.id,
+            pricingPolicyVersion: policy.publicVersion,
+            ruleId: rule?.id ?? null,
+            percentBps: rule?.percentBps ?? 0,
+            baseAmountMinor: amountMinor,
+            feeAmountMinor,
+            totalAmountMinor: amountMinor + feeAmountMinor,
+          },
+        };
+      } catch (error) {
+        if (!(error instanceof AppError) || !BUYER_VIP_PRICING_UNAVAILABLE_CODES.has(error.code))
+          throw error;
+        return {
+          plan,
+          available: false,
+          pricingAvailable: false,
+          unavailableCode: error.code,
+          quote: null,
+        };
+      }
     });
   }
 

@@ -128,8 +128,17 @@ describe('local demo data with real PostgreSQL and MinIO', () => {
     });
     expect(
       feePolicy.rules.map(
-        ({ promotionTier, category, partyCharged, formula, percentBps, fixedAmountMinor }) => ({
+        ({
           promotionTier,
+          buyerVipPlan,
+          category,
+          partyCharged,
+          formula,
+          percentBps,
+          fixedAmountMinor,
+        }) => ({
+          promotionTier,
+          buyerVipPlan,
           category,
           partyCharged,
           formula,
@@ -137,40 +146,65 @@ describe('local demo data with real PostgreSQL and MinIO', () => {
           fixedAmountMinor,
         }),
       ),
-    ).toEqual([
-      {
-        promotionTier: 'DIAMOND',
-        category: 'PLATFORM_COMMISSION',
-        partyCharged: 'SELLER',
-        formula: 'PERCENT_BPS',
-        percentBps: 1299,
-        fixedAmountMinor: null,
-      },
-      {
-        promotionTier: 'GOLD',
-        category: 'PLATFORM_COMMISSION',
-        partyCharged: 'SELLER',
-        formula: 'PERCENT_BPS',
-        percentBps: 1199,
-        fixedAmountMinor: null,
-      },
-      {
-        promotionTier: 'SILVER',
-        category: 'PLATFORM_COMMISSION',
-        partyCharged: 'SELLER',
-        formula: 'PERCENT_BPS',
-        percentBps: 999,
-        fixedAmountMinor: null,
-      },
-      {
-        promotionTier: null,
-        category: 'LIT_MAX_PRICE',
-        partyCharged: 'SELLER',
-        formula: 'PERCENT_BPS',
-        percentBps: 299,
-        fixedAmountMinor: null,
-      },
-    ]);
+    ).toEqual(
+      expect.arrayContaining([
+        {
+          promotionTier: 'DIAMOND',
+          buyerVipPlan: null,
+          category: 'PLATFORM_COMMISSION',
+          partyCharged: 'SELLER',
+          formula: 'PERCENT_BPS',
+          percentBps: 1299,
+          fixedAmountMinor: null,
+        },
+        {
+          promotionTier: 'GOLD',
+          buyerVipPlan: null,
+          category: 'PLATFORM_COMMISSION',
+          partyCharged: 'SELLER',
+          formula: 'PERCENT_BPS',
+          percentBps: 1199,
+          fixedAmountMinor: null,
+        },
+        {
+          promotionTier: 'SILVER',
+          buyerVipPlan: null,
+          category: 'PLATFORM_COMMISSION',
+          partyCharged: 'SELLER',
+          formula: 'PERCENT_BPS',
+          percentBps: 999,
+          fixedAmountMinor: null,
+        },
+        {
+          promotionTier: null,
+          buyerVipPlan: null,
+          category: 'LIT_MAX_PRICE',
+          partyCharged: 'SELLER',
+          formula: 'PERCENT_BPS',
+          percentBps: 299,
+          fixedAmountMinor: null,
+        },
+        {
+          promotionTier: null,
+          buyerVipPlan: 'BASIC',
+          category: 'BUYER_SERVICE_FEE',
+          partyCharged: 'BUYER',
+          formula: 'PERCENT_BPS',
+          percentBps: 299,
+          fixedAmountMinor: null,
+        },
+        {
+          promotionTier: null,
+          buyerVipPlan: 'PREMIUM',
+          category: 'BUYER_SERVICE_FEE',
+          partyCharged: 'BUYER',
+          formula: 'PERCENT_BPS',
+          percentBps: 499,
+          fixedAmountMinor: null,
+        },
+      ]),
+    );
+    expect(feePolicy.rules).toHaveLength(6);
   });
 
   it('lets the real checkout resolver snapshot the SILVER listing-tier demo commission', async () => {

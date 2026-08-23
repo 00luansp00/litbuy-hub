@@ -115,6 +115,17 @@ describe("/pedidos/$id real UI", () => {
       expect(screen.queryByText(new RegExp(text, "i"))).not.toBeInTheDocument();
   });
   it.each([
+    ["BASIC", "299", "R$ 2,99"],
+    ["PREMIUM", "499", "R$ 4,99"],
+  ] as const)("renders the frozen %s Buyer VIP fee", async (buyerVipPlan, fee, formatted) => {
+    vi.spyOn(buyerOrdersService, "detail").mockResolvedValue(
+      makeOrder({ buyerVipPlan, buyerVipFeeAmountMinor: fee }),
+    );
+    renderDetail();
+    expect(await screen.findByText("Taxa Buyer VIP")).toBeInTheDocument();
+    expect(screen.getByText(formatted)).toBeInTheDocument();
+  });
+  it.each([
     { fulfillmentStatus: "NOT_AVAILABLE" as const },
     { fulfillmentStatus: "AWAITING_SELLER" as const },
     { fulfillmentStatus: "DELIVERED" as const },

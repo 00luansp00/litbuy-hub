@@ -69,6 +69,9 @@ const cart = (version = 7, items: BuyerCart["items"] = []): BuyerCart => ({
   buyerVipOptions: {
     NONE: {
       plan: "NONE",
+      available: true,
+      pricingAvailable: true,
+      unavailableCode: null,
       percentBps: 0,
       feeAmountMinor: "0",
       totalAmountMinor: "2500",
@@ -76,6 +79,9 @@ const cart = (version = 7, items: BuyerCart["items"] = []): BuyerCart => ({
     },
     BASIC: {
       plan: "BASIC",
+      available: true,
+      pricingAvailable: true,
+      unavailableCode: null,
       percentBps: 299,
       feeAmountMinor: "74",
       totalAmountMinor: "2574",
@@ -83,6 +89,9 @@ const cart = (version = 7, items: BuyerCart["items"] = []): BuyerCart => ({
     },
     PREMIUM: {
       plan: "PREMIUM",
+      available: true,
+      pricingAvailable: true,
+      unavailableCode: null,
       percentBps: 499,
       feeAmountMinor: "124",
       totalAmountMinor: "2624",

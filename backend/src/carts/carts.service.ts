@@ -368,16 +368,19 @@ export class CartsService {
         issues: items[index].issues,
       })),
     });
-    const quotes = ready ? await this.listingTierPolicy.buyerVipOptions(subtotal) : [];
+    const options = ready ? await this.listingTierPolicy.buyerVipOptions(subtotal) : [];
     const buyerVipOptions = Object.fromEntries(
-      quotes.map((quote) => [
-        quote.plan,
+      options.map((option) => [
+        option.plan,
         {
-          plan: quote.plan,
-          percentBps: quote.percentBps,
-          feeAmountMinor: minorUnitsJson(quote.feeAmountMinor),
-          totalAmountMinor: minorUnitsJson(quote.totalAmountMinor),
-          fingerprint: buyerVipCheckoutFingerprint(previewFingerprint, quote),
+          plan: option.plan,
+          available: option.available,
+          pricingAvailable: option.pricingAvailable,
+          unavailableCode: option.unavailableCode,
+          percentBps: option.quote?.percentBps ?? null,
+          feeAmountMinor: option.quote ? minorUnitsJson(option.quote.feeAmountMinor) : null,
+          totalAmountMinor: option.quote ? minorUnitsJson(option.quote.totalAmountMinor) : null,
+          fingerprint: buyerVipCheckoutFingerprint(previewFingerprint, option.quote ?? option.plan),
         },
       ]),
     );

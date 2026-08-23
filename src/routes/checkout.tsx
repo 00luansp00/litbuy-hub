@@ -92,6 +92,7 @@ export function CheckoutContent({ sellerSlug }: { sellerSlug: string }) {
     if (
       !cart ||
       !buyerVipPlan ||
+      !selectedVip?.available ||
       !cart.checkoutReady ||
       cart.items.length !== 1 ||
       create.isPending
@@ -239,6 +240,7 @@ export function CheckoutContent({ sellerSlug }: { sellerSlug: string }) {
                       name="buyer-vip-plan"
                       aria-label={label}
                       value={value}
+                      disabled={!option.available}
                       checked={buyerVipPlan === value}
                       onChange={() => setBuyerVipPlan(value)}
                     />
@@ -246,13 +248,14 @@ export function CheckoutContent({ sellerSlug }: { sellerSlug: string }) {
                       <span>{label}</span>
                       <span className="text-right">
                         <span className="block">
-                          {(option.percentBps / 100).toLocaleString("pt-BR", {
-                            minimumFractionDigits: 2,
-                          })}
-                          %
+                          {option.percentBps === null
+                            ? "Indisponível"
+                            : `${(option.percentBps / 100).toLocaleString("pt-BR", {
+                                minimumFractionDigits: 2,
+                              })}%`}
                         </span>
                         <span className="block text-xs text-muted-foreground">
-                          + {money(option.feeAmountMinor)}
+                          {option.available ? `+ ${money(option.feeAmountMinor)}` : "Sem cotação"}
                         </span>
                       </span>
                     </span>
@@ -290,7 +293,11 @@ export function CheckoutContent({ sellerSlug }: { sellerSlug: string }) {
           <Button
             className="mt-5 w-full"
             disabled={
-              !buyerVipPlan || !cart.checkoutReady || cart.items.length !== 1 || create.isPending
+              !buyerVipPlan ||
+              !selectedVip?.available ||
+              !cart.checkoutReady ||
+              cart.items.length !== 1 ||
+              create.isPending
             }
             onClick={confirm}
           >

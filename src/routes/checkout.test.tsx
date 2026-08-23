@@ -81,6 +81,9 @@ const readyCart = (overrides: Partial<BuyerCart> = {}): BuyerCart => ({
   buyerVipOptions: {
     NONE: {
       plan: "NONE",
+      available: true,
+      pricingAvailable: true,
+      unavailableCode: null,
       percentBps: 0,
       feeAmountMinor: "0",
       totalAmountMinor: "24690",
@@ -88,6 +91,9 @@ const readyCart = (overrides: Partial<BuyerCart> = {}): BuyerCart => ({
     },
     BASIC: {
       plan: "BASIC",
+      available: true,
+      pricingAvailable: true,
+      unavailableCode: null,
       percentBps: 299,
       feeAmountMinor: "738",
       totalAmountMinor: "25428",
@@ -95,6 +101,9 @@ const readyCart = (overrides: Partial<BuyerCart> = {}): BuyerCart => ({
     },
     PREMIUM: {
       plan: "PREMIUM",
+      available: true,
+      pricingAvailable: true,
+      unavailableCode: null,
       percentBps: 499,
       feeAmountMinor: "1232",
       totalAmountMinor: "25922",
