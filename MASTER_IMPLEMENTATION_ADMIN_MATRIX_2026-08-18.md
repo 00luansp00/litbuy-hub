@@ -40,7 +40,7 @@ Esta matriz serve para planejar PRs, não para afirmar production readiness. Div
 | BUYER-VIP-SLA | Triagem 2d/6h/1h úteis | Freeze | NOT_PROVEN | Metadados/enforcement; calendário futuro | Business-calendar port e operations | VIP snapshot | HYBRID_REVIEW_REQUIRED | R1 | 5 | DESIGN_REQUIRED | IMPLEMENTED |
 | BUYER-VIP-REFUND-SLA | 12h/6h após autorização+recursos | Freeze; Recovery | NOT_PROVEN | Cronômetro só após decisão e funding | Recovery state + operational clock | refund contract; recovery | HUMAN_PROD_REVIEW | R2 | 6 | DESIGN_REQUIRED | HUMAN_PROD_REVIEW |
 | BUYER-VIP-SUPPORT | 30/60 dias | Freeze | NOT_PROVEN | Metadado/enforcement, não limita reporting | Support operations/terms | VIP snapshot | HYBRID_REVIEW_REQUIRED | R3 | 6 | NOT_IMPLEMENTED | IMPLEMENTED |
-| LITPOINTS-LEDGER | Ledger append-only | Freeze | UI/mock config existe; nenhum ledger LP autoritativo | Histórico persistente; nunca `user.points` | Schema/event/invariants | fee/refund contracts | HYBRID_REVIEW_REQUIRED | S | 4 | NOT_IMPLEMENTED | IMPLEMENTED |
+| LITPOINTS-LEDGER | Ledger append-only | Freeze | Ledger LP persistente, append-only e idempotente; balance/history autenticados derivados de entries; testes PostgreSQL | Histórico persistente; nunca `user.points` | Schema/event/invariants | fee/refund contracts | HYBRID_REVIEW_REQUIRED | S | 4 | IMPLEMENTED | IMPLEMENTED |
 | LITPOINTS-BUYER-EARN | Earn monetário | Freeze | NOT_PROVEN | floor R$1=1; Basic +30%; Premium +80%; só dinheiro real | LP ledger; payment classification | VIP snapshot; LP availability | HYBRID_REVIEW_REQUIRED | T1 | 5 | NOT_IMPLEMENTED | IMPLEMENTED |
 | LITPOINTS-SELLER-EARN | Earn Seller MAX | Freeze | NOT_PROVEN | sem MAX 0; `floor(value/2)` depois +50%; R$100=75 | LP ledger; MAX snapshot | MAX; LP availability | HYBRID_REVIEW_REQUIRED | T2 | 5 | NOT_IMPLEMENTED | IMPLEMENTED |
 | LITPOINTS-AVAILABILITY | PENDING → AVAILABLE | Freeze | NOT_PROVEN | Instante técnico permanece aberto | Owner/domain design; não inventar evento | payments; fulfillment/refund | HUMAN_PROD_REVIEW | OWNER DECISION REQUIRED | 4 | DESIGN_REQUIRED | DESIGN_REQUIRED |
@@ -81,7 +81,7 @@ Esta matriz serve para planejar PRs, não para afirmar production readiness. Div
 
 ### Contagem controlada
 
-Há **58 capabilities** nesta versão: `IMPLEMENTED 17`, `PARTIAL 9`, `NOT_IMPLEMENTED 20`, `DOCS_ONLY 1`, `DESIGN_REQUIRED 9`, `HUMAN_PROD_REVIEW 1`, `DEFERRED 1`, `SUPERSEDED 0`. A contagem usa **Current status**; target humano não altera a evidência CURRENT.
+Há **58 capabilities** nesta versão: `IMPLEMENTED 18`, `PARTIAL 9`, `NOT_IMPLEMENTED 19`, `DOCS_ONLY 1`, `DESIGN_REQUIRED 9`, `HUMAN_PROD_REVIEW 1`, `DEFERRED 1`, `SUPERSEDED 0`. A contagem usa **Current status**; target humano não altera a evidência CURRENT.
 
 ## 3. Implementation layers matrix
 
