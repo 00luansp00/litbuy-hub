@@ -1,5 +1,5 @@
 import { ConflictException, Injectable } from '@nestjs/common';
-import { LitPointsBucket, Prisma } from '@prisma/client';
+import { LitPointsBucket } from '@prisma/client';
 import { canonicalRequestHash } from '../commerce/idempotency-key';
 import { acquireAdvisoryTransactionLock } from '../database/advisory-lock';
 import { PrismaService } from '../database/prisma.service';
