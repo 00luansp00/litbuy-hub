@@ -305,6 +305,8 @@ model User {
   financialEvents                FinancialEvent[]             @relation("FinancialEventActor")
   requestedRefunds               Refund[]                     @relation("RefundRequester")
   sentOrderChatMessages          OrderChatMessage[]           @relation("OrderChatMessageSender")
+  litPointsTransactions          LitPointsLedgerTransaction[]
+  litPointsEntries               LitPointsLedgerEntry[]
 
   @@unique([phoneE164])
   @@index([email])
@@ -1301,6 +1303,11 @@ enum LedgerDirection {
   CREDIT
 }
 
+enum LitPointsBucket {
+  PENDING
+  AVAILABLE
+}
+
 enum FinancialHoldStatus {
   ACTIVE
   RELEASE_ELIGIBLE
@@ -1604,6 +1611,37 @@ model LedgerEntry {
 
   @@index([transactionId])
   @@index([accountId, createdAt])
+}
+
+model LitPointsLedgerTransaction {
+  id              String                 @id @default(uuid()) @db.Uuid
+  userId          String                 @db.Uuid
+  operationKey    String                 @unique
+  operation       String
+  source          String
+  sourceReference String
+  requestHash     String
+  createdAt       DateTime               @default(now())
+  user            User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  entries         LitPointsLedgerEntry[]
+
+  @@unique([id, userId])
+  @@index([userId, createdAt, id])
+}
+
+model LitPointsLedgerEntry {
+  id            String                     @id @default(uuid()) @db.Uuid
+  transactionId String                     @db.Uuid
+  userId        String                     @db.Uuid
+  bucket        LitPointsBucket
+  delta         BigInt
+  createdAt     DateTime                   @default(now())
+  transaction   LitPointsLedgerTransaction @relation(fields: [transactionId, userId], references: [id, userId], onDelete: Restrict)
+  user          User                       @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([transactionId])
+  @@index([userId, bucket])
+  @@index([userId, createdAt, id])
 }
 
 model FinancialHold {
