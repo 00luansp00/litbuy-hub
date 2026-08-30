@@ -17,9 +17,13 @@ import { canonicalRequestHash } from '../commerce/idempotency-key';
 import { mapOrder, orderReadInclude } from './order-read.mapper';
 import type { ParsedIdempotencyKey } from '../commerce/idempotency-key';
 import type { CancelOrderDto, OrderListQueryDto } from './orders.dto';
+import { DisputeCoreService } from '../disputes/dispute-core.service';
 @Injectable()
 export class OrdersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly disputes: DisputeCoreService,
+  ) {}
   async list(userId: string, q: OrderListQueryDto) {
     const items = await this.prisma.order.findMany({
       where: { buyerUserId: userId, status: q.status },
@@ -37,6 +41,15 @@ export class OrdersService {
     });
     if (!order) this.fail('ORDER_NOT_FOUND', 404);
     return mapOrder(order);
+  }
+  async reportProblem(userId: string, code: string) {
+    const order = await this.prisma.order.findFirst({
+      where: { buyerUserId: userId, publicCode: code },
+      select: { id: true },
+    });
+    if (!order) this.fail('ORDER_NOT_FOUND', 404);
+    await this.disputes.createCase({ orderId: order.id, actorUserId: userId });
+    return this.get(userId, code);
   }
   async cancel(userId: string, code: string, key: ParsedIdempotencyKey, dto: CancelOrderDto) {
     const keyHash = key.hash,

@@ -34,5 +34,15 @@ export const createBuyerOrdersService = (fetcher: Fetcher = apiFetch) => ({
     if (order.orderCode !== orderCode) throw new BuyerOrderParseError();
     return order;
   },
+  async reportProblem(orderCode: string) {
+    if (!isBuyerOrderCode(orderCode)) throw new TypeError("INVALID_ORDER_CODE");
+    const order = parseBuyerOrder(
+      await fetcher(`/orders/${encodeURIComponent(orderCode)}/report-problem`, {
+        method: "POST",
+      }),
+    );
+    if (order.orderCode !== orderCode) throw new BuyerOrderParseError();
+    return order;
+  },
 });
 export const buyerOrdersService = createBuyerOrdersService();

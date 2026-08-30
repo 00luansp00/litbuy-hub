@@ -67,6 +67,26 @@ describe("buyerOrdersService", () => {
     expect(fetcher.mock.calls[0]?.[1]).not.toHaveProperty("body");
     expect(fetcher.mock.calls[0]?.[1]).not.toHaveProperty("headers");
   });
+  it("reports a problem with only the public order code and an empty POST", async () => {
+    const persisted = makeOrder({
+      disputeCases: [
+        {
+          caseId: "123e4567-e89b-42d3-a456-426614174000",
+          status: "OPEN",
+          createdAt: "2026-08-30T12:00:00.000Z",
+          updatedAt: "2026-08-30T12:00:00.000Z",
+          terminalAt: null,
+        },
+      ],
+    });
+    const fetcher = vi.fn(async () => persisted);
+    await createBuyerOrdersService(fetcher).reportProblem("LIT-23456789ABCDEF");
+    expect(fetcher).toHaveBeenCalledWith("/orders/LIT-23456789ABCDEF/report-problem", {
+      method: "POST",
+    });
+    expect(fetcher.mock.calls[0]?.[1]).not.toHaveProperty("body");
+    expect(fetcher.mock.calls[0]?.[1]).not.toHaveProperty("headers");
+  });
   it("rejects a different order code as MALFORMED_RESPONSE", async () => {
     const service = createBuyerOrdersService(async () =>
       makeOrder({ orderCode: "LIT-23456789ABCDEG" }),

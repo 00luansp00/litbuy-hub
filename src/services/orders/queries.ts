@@ -48,3 +48,21 @@ export const useConfirmBuyerOrderReceipt = (code: string) => {
     },
   });
 };
+
+export const useReportBuyerOrderProblem = (code: string) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => buyerOrdersService.reportProblem(code),
+    retry: false,
+    onSuccess: async (order) => {
+      queryClient.setQueryData(buyerOrderKeys.detail(code), order);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: buyerOrderKeys.detail(code) }),
+        queryClient.invalidateQueries({ queryKey: buyerOrderKeys.all }),
+      ]);
+    },
+    onError: async () => {
+      await queryClient.invalidateQueries({ queryKey: buyerOrderKeys.detail(code) });
+    },
+  });
+};

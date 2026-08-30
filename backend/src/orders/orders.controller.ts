@@ -44,4 +44,10 @@ export class OrdersController {
   ) {
     return this.orders.cancel(u.userId, c, parseIdempotencyKey(k), d);
   }
+  @Post(':orderCode/report-problem')
+  @HttpCode(200)
+  @UseGuards(CartCsrfGuard)
+  reportProblem(@CurrentUser() u: { userId: string }, @Param('orderCode') c: string) {
+    return this.orders.reportProblem(u.userId, c);
+  }
 }

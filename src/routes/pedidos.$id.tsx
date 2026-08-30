@@ -7,6 +7,7 @@ import { BuyerOrderItems } from "@/components/orders/BuyerOrderItems";
 import { BuyerOrderStateSummary } from "@/components/orders/BuyerOrderStateSummary";
 import { BuyerOrderStatusBadge } from "@/components/orders/BuyerOrderStatusBadge";
 import { OrderChatCard } from "@/components/orders/OrderChatCard";
+import { BuyerReportProblemCard } from "@/components/orders/BuyerReportProblemCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api/client";
@@ -100,6 +101,7 @@ export function OrderDetailContent({ orderCode }: { orderCode: string }) {
         )}
       </header>
       <BuyerOrderStateSummary order={order} />
+      <BuyerReportProblemCard order={order} />
       {canConfirm && (
         <section aria-labelledby="confirm-receipt-title" className="rounded-xl border p-5">
           <h2 id="confirm-receipt-title" className="text-lg font-bold">

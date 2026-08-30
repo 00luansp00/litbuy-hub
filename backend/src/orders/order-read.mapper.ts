@@ -4,6 +4,7 @@ import { AppError } from '../common/errors/app-error';
 export const orderReadInclude = {
   items: { orderBy: [{ createdAt: 'asc' as const }, { id: 'asc' as const }] },
   feeComponentSnapshots: { where: { componentKind: 'BUYER_VIP' as const } },
+  disputeCases: { orderBy: [{ createdAt: 'desc' as const }, { id: 'desc' as const }] },
 } satisfies Prisma.OrderInclude;
 
 export type OrderReadPayload = Prisma.OrderGetPayload<{ include: typeof orderReadInclude }>;
@@ -33,6 +34,13 @@ export function mapOrder(order: OrderReadPayload) {
     paymentStatus: order.paymentStatus,
     fulfillmentStatus: order.fulfillmentStatus,
     disputeStatus: order.disputeStatus,
+    disputeCases: order.disputeCases.map((dispute) => ({
+      caseId: dispute.id,
+      status: dispute.status,
+      createdAt: dispute.createdAt.toISOString(),
+      updatedAt: dispute.updatedAt.toISOString(),
+      terminalAt: dispute.terminalAt?.toISOString() ?? null,
+    })),
     version: order.version,
     expiresAt: order.expiresAt.toISOString(),
     cancelledAt: order.cancelledAt?.toISOString() ?? null,
