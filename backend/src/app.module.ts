@@ -18,6 +18,7 @@ import { OrdersModule } from './orders/orders.module';
 import { FinancialModule } from './financial/financial.module';
 import { OrderChatModule } from './order-chat/order-chat.module';
 import { LitPointsModule } from './lit-points/lit-points.module';
+import { DisputesModule } from './disputes/disputes.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { LitPointsModule } from './lit-points/lit-points.module';
     FinancialModule,
     OrderChatModule,
     LitPointsModule,
+    DisputesModule,
   ],
   providers: [AppLogger],
 })

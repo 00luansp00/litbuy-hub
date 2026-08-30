@@ -195,6 +195,19 @@ enum DisputeStatus {
   CLOSED
 }
 
+enum DisputeCaseStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED_BUYER
+  RESOLVED_SELLER
+  CLOSED
+}
+
+enum DisputeCaseEventType {
+  CASE_OPENED
+  STATUS_CHANGED
+}
+
 enum InventoryReservationStatus {
   ACTIVE
   RELEASED
@@ -307,6 +320,7 @@ model User {
   sentOrderChatMessages          OrderChatMessage[]           @relation("OrderChatMessageSender")
   litPointsTransactions          LitPointsLedgerTransaction[]
   litPointsEntries               LitPointsLedgerEntry[]
+  disputeCaseEvents              DisputeCaseEvent[]           @relation("DisputeCaseEventActor")
 
   @@unique([phoneE164])
   @@index([email])
@@ -1002,6 +1016,7 @@ model Order {
   sellerReleasePolicyCategory        CatalogCategory?                  @relation("OrderSellerReleasePolicyCategory", fields: [sellerReleasePolicyCategoryId], references: [id], onDelete: Restrict)
   sellerReleasePolicySubcategory     CatalogSubcategory?               @relation("OrderSellerReleasePolicySubcategory", fields: [sellerReleasePolicySubcategoryId], references: [id], onDelete: Restrict)
   chatConversation                   OrderChatConversation?
+  disputeCases                       DisputeCase[]
 
   @@unique([id, sellerProfileId])
   @@index([buyerUserId, createdAt, id])
@@ -1014,6 +1029,37 @@ model Order {
   @@index([sellerReleasePolicyCategoryId])
   @@index([sellerReleasePolicySubcategoryId])
   @@index([sellerMaxQualificationStatus, sellerMaxQualificationDeadlineAt])
+}
+
+model DisputeCase {
+  id              String             @id @default(uuid()) @db.Uuid
+  orderId         String             @db.Uuid
+  status          DisputeCaseStatus  @default(OPEN)
+  mutationActorId String?            @db.Uuid
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @default(now())
+  terminalAt      DateTime?
+  order           Order              @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  events          DisputeCaseEvent[]
+
+  @@unique([id, orderId])
+  @@index([orderId, createdAt, id])
+}
+
+model DisputeCaseEvent {
+  id            String               @id @default(uuid()) @db.Uuid
+  disputeCaseId String               @db.Uuid
+  orderId       String               @db.Uuid
+  type          DisputeCaseEventType
+  fromStatus    DisputeCaseStatus?
+  toStatus      DisputeCaseStatus
+  actorUserId   String?              @db.Uuid
+  createdAt     DateTime             @default(now())
+  disputeCase   DisputeCase          @relation(fields: [disputeCaseId, orderId], references: [id, orderId], onDelete: Restrict)
+  actor         User?                @relation("DisputeCaseEventActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([disputeCaseId, createdAt, id])
+  @@index([orderId, createdAt, id])
 }
 
 model OrderFeeComponentSnapshot {
