@@ -160,18 +160,22 @@ describe('Checkout and orders HTTP with real auth, guards, CSRF and PostgreSQL',
       .post(`/api/v1/orders/${orderCode}/fulfillment/confirm`)
       .set(authHeaders(owner));
 
-  it('lets only the owning Buyer report for life and reads persistent case history without financial effects', async () => {
+  it('lets only the owning Buyer report for life with atomic replay protection and no financial effects', async () => {
     const owner = await createActor(app, prisma, mailer);
     const other = await createActor(app, prisma, mailer);
-    const f = await cart(owner);
-    const created = await checkout(owner, f).expect(201);
-    const orderCode = String(created.body.orderCode);
-    const order = await prisma.order.findUniqueOrThrow({ where: { publicCode: orderCode } });
+    const { order: composedOrder } = await awaitingConfirmation(owner);
+    const orderCode = composedOrder.publicCode;
     const old = new Date('2020-01-01T00:00:00.000Z');
-    await prisma.order.update({
-      where: { id: order.id },
-      data: { createdAt: old, sellerMaxEffectiveReleaseAt: old },
-    });
+    await prisma.order.update({ where: { id: composedOrder.id }, data: { createdAt: old } });
+    const order = await prisma.order.findUniqueOrThrow({ where: { id: composedOrder.id } });
+    expect(order.paymentStatus).toBe('PAID');
+    expect(
+      await prisma.ledgerTransaction.count({
+        where: { type: 'SALE_RECOGNIZED', referenceType: 'OrderSale', referenceId: order.id },
+      }),
+    ).toBe(1);
+    expect(await prisma.financialHold.count({ where: { orderId: order.id } })).toBeGreaterThan(0);
+
     const financialBefore = {
       ledger: await prisma.ledgerTransaction.count(),
       holds: await prisma.financialHold.count(),
@@ -180,28 +184,31 @@ describe('Checkout and orders HTTP with real auth, guards, CSRF and PostgreSQL',
         where: { account: { purpose: 'SELLER_AVAILABLE' } },
       }),
     };
+    const keyA = `report-problem:${crypto.randomUUID()}`;
+    const keyB = `report-problem:${crypto.randomUUID()}`;
+    const report = (actor: Awaited<ReturnType<typeof createActor>>, code: string, key: string) =>
+      request(app.getHttpServer())
+        .post(`/api/v1/orders/${code}/report-problem`)
+        .set(authHeaders(actor))
+        .set('Idempotency-Key', key);
 
-    await request(app.getHttpServer())
-      .post(`/api/v1/orders/${orderCode}/report-problem`)
-      .set(authHeaders(other))
-      .expect(404);
+    await report(other, orderCode, keyA).expect(404);
     await request(app.getHttpServer())
       .get(`/api/v1/orders/${orderCode}`)
       .set(authHeaders(other, false))
       .expect(404);
-    await request(app.getHttpServer())
-      .post(`/api/v1/orders/${orderCode}/report-problem`)
-      .set(authHeaders(owner, false))
-      .expect(401);
+    await report(owner, orderCode, keyA).set('X-CSRF-Token', '').expect(401);
+    await report(owner, orderCode, 'short').expect(400);
 
-    const response = await request(app.getHttpServer())
-      .post(`/api/v1/orders/${orderCode}/report-problem`)
-      .set(authHeaders(owner))
-      .send({ actorUserId: other.user.id })
-      .expect(200);
-    expect(response.body.disputeCases).toEqual([
-      expect.objectContaining({ status: 'OPEN', terminalAt: null }),
+    const concurrent = await Promise.all([
+      report(owner, orderCode, keyA),
+      report(owner, orderCode, keyA),
     ]);
+    expect(concurrent.map(({ status }) => status)).toEqual([200, 200]);
+    expect(concurrent[0].body).toEqual(concurrent[1].body);
+    await report(owner, orderCode, keyA).expect(200);
+    expect(await prisma.disputeCase.count({ where: { orderId: order.id } })).toBe(1);
+
     const first = await prisma.disputeCase.findFirstOrThrow({
       where: { orderId: order.id },
       include: { events: true },
@@ -212,17 +219,21 @@ describe('Checkout and orders HTTP with real auth, guards, CSRF and PostgreSQL',
     expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).disputeStatus).toBe(
       'NONE',
     );
-    await request(app.getHttpServer())
-      .post(`/api/v1/orders/${orderCode}/report-problem`)
-      .set(authHeaders(owner))
-      .expect(409);
-    expect(await prisma.disputeCase.count({ where: { orderId: order.id } })).toBe(1);
+
+    const another = await cart(owner);
+    const anotherCreated = await checkout(owner, another).expect(201);
+    await report(owner, String(anotherCreated.body.orderCode), keyA)
+      .expect(409)
+      .expect(({ body }) => expect(body.code).toBe('IDEMPOTENCY_KEY_REUSED'));
 
     await disputes.transition({ caseId: first.id, toStatus: 'CLOSED', actorUserId: owner.user.id });
-    await request(app.getHttpServer())
-      .post(`/api/v1/orders/${orderCode}/report-problem`)
-      .set(authHeaders(owner))
-      .expect(200);
+    const terminalReplay = await report(owner, orderCode, keyA).expect(200);
+    expect(terminalReplay.body.disputeCases).toEqual([
+      expect.objectContaining({ caseId: first.id, status: 'OPEN' }),
+    ]);
+    expect(await prisma.disputeCase.count({ where: { orderId: order.id } })).toBe(1);
+
+    await report(owner, orderCode, keyB).expect(200);
     const refreshed = await request(app.getHttpServer())
       .get(`/api/v1/orders/${orderCode}`)
       .set(authHeaders(owner, false))
@@ -230,6 +241,11 @@ describe('Checkout and orders HTTP with real auth, guards, CSRF and PostgreSQL',
     const refreshedCases = refreshed.body.disputeCases as Array<{ status: string }>;
     expect(refreshedCases.map((item) => item.status)).toEqual(['OPEN', 'CLOSED']);
     expect(await prisma.disputeCase.count({ where: { orderId: order.id } })).toBe(2);
+    expect(
+      await prisma.commerceIdempotencyRecord.count({
+        where: { actorUserId: owner.user.id, operation: 'BUYER_REPORT_PROBLEM' },
+      }),
+    ).toBe(2);
     expect({
       ledger: await prisma.ledgerTransaction.count(),
       holds: await prisma.financialHold.count(),

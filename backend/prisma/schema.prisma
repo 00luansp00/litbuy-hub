@@ -219,6 +219,7 @@ enum CommerceIdempotencyOperation {
   CHECKOUT_CREATE
   ORDER_CANCEL
   SELLER_MAX_RESTOCK
+  BUYER_REPORT_PROBLEM
 }
 
 enum OrderEventType {

@@ -28,9 +28,12 @@ const transitions: Readonly<Record<DisputeCaseStatus, readonly DisputeCaseStatus
 export class DisputeCoreService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async createCase(input: { orderId: string; actorUserId?: string }) {
+  async createCase(
+    input: { orderId: string; actorUserId?: string },
+    tx: Prisma.TransactionClient = this.prisma,
+  ) {
     try {
-      return await this.prisma.disputeCase.create({
+      return await tx.disputeCase.create({
         data: { orderId: input.orderId, mutationActorId: input.actorUserId },
         include: { events: true },
       });

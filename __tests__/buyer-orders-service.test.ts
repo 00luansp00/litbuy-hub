@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { apiFetch } from "@/lib/api/client";
-import { buyerOrdersService, createBuyerOrdersService } from "@/services/orders";
+import {
+  buyerOrdersService,
+  completeReportProblemIntent,
+  createBuyerOrdersService,
+  reportProblemIntentKey,
+} from "@/services/orders";
 import { makeOrder } from "./buyer-orders-ui-fixtures";
 vi.mock("@/lib/api/client", async (original) => {
   const actual = await original<typeof import("@/lib/api/client")>();
@@ -80,12 +85,20 @@ describe("buyerOrdersService", () => {
       ],
     });
     const fetcher = vi.fn(async () => persisted);
-    await createBuyerOrdersService(fetcher).reportProblem("LIT-23456789ABCDEF");
+    const key = "report-problem:00000000-0000-4000-8000-000000000000";
+    await createBuyerOrdersService(fetcher).reportProblem("LIT-23456789ABCDEF", key);
     expect(fetcher).toHaveBeenCalledWith("/orders/LIT-23456789ABCDEF/report-problem", {
       method: "POST",
+      headers: { "Idempotency-Key": key },
     });
     expect(fetcher.mock.calls[0]?.[1]).not.toHaveProperty("body");
-    expect(fetcher.mock.calls[0]?.[1]).not.toHaveProperty("headers");
+  });
+  it("keeps a report key across retries and rotates it only after definitive success", () => {
+    const code = "LIT-23456789ABCDEF";
+    const first = reportProblemIntentKey(code);
+    expect(reportProblemIntentKey(code)).toBe(first);
+    completeReportProblemIntent(code);
+    expect(reportProblemIntentKey(code)).not.toBe(first);
   });
   it("rejects a different order code as MALFORMED_RESPONSE", async () => {
     const service = createBuyerOrdersService(async () =>

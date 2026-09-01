@@ -47,7 +47,12 @@ export class OrdersController {
   @Post(':orderCode/report-problem')
   @HttpCode(200)
   @UseGuards(CartCsrfGuard)
-  reportProblem(@CurrentUser() u: { userId: string }, @Param('orderCode') c: string) {
-    return this.orders.reportProblem(u.userId, c);
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  reportProblem(
+    @CurrentUser() u: { userId: string },
+    @Param('orderCode') c: string,
+    @Headers('idempotency-key') k: unknown,
+  ) {
+    return this.orders.reportProblem(u.userId, c, parseIdempotencyKey(k));
   }
 }

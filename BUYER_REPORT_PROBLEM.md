@@ -7,6 +7,7 @@
 `POST /api/v1/orders/:orderCode/report-problem` abre um caso e `GET /api/v1/orders/:orderCode`
 é o read model usado também após refresh. As duas rotas exigem access token e role `BUYER`; a mutation
 também exige o CSRF persistido da sessão. O payload não recebe identidade, status, motivo ou actor.
+O header `Idempotency-Key` é obrigatório e validado pelo parser Commerce compartilhado.
 
 O backend procura `Order` pela combinação `publicCode + buyerUserId`, sendo `buyerUserId` exclusivamente
 `CurrentUser.userId`. Recurso inexistente e Order alheio produzem a mesma resposta `ORDER_NOT_FOUND` (404),
@@ -19,6 +20,14 @@ O reporting é vitalício e não possui gate por estado do Order, idade, entrega
 existente, ownership Buyer e ausência de caso ativo. Esta escolha não atribui semântica financeira a Orders
 pré-pagamento: a autoridade disponível não autorizou um gate de lifecycle inicial, portanto nenhum foi
 inventado.
+
+Cada intenção usa `CommerceIdempotencyOperation.BUYER_REPORT_PROBLEM`. Buyer, operação e hash da key são
+serializados por advisory lock; o request hash canônico contém o `orderCode`. Caso e resposta idempotente são
+gravados na mesma transação. Um replay da mesma intenção retorna a resposta concluída mesmo se o caso já tiver
+chegado a terminal, enquanto reutilizar a key em outro Order retorna `IDEMPOTENCY_KEY_REUSED`. O frontend
+preserva a key durante falhas/retries e a descarta somente após sucesso definitivo, permitindo que uma intenção
+realmente nova use outra key. O registro desta operação não recebe expiração operacional curta, pois remover a
+intenção permitiria que um replay tardio criasse outro caso depois da resolução.
 
 A abertura delega a `DisputeCoreService.createCase`, sempre cria `OPEN` e deixa o trigger do core
 materializar `CASE_OPENED` com o Buyer autenticado como actor. O índice parcial PostgreSQL continua sendo a

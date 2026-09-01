@@ -42,14 +42,51 @@ export class OrdersService {
     if (!order) this.fail('ORDER_NOT_FOUND', 404);
     return mapOrder(order);
   }
-  async reportProblem(userId: string, code: string) {
-    const order = await this.prisma.order.findFirst({
-      where: { buyerUserId: userId, publicCode: code },
-      select: { id: true },
+  async reportProblem(userId: string, code: string, key: ParsedIdempotencyKey) {
+    const keyHash = key.hash;
+    const requestHash = canonicalRequestHash({ orderCode: code });
+    return this.prisma.$transaction(async (tx) => {
+      await acquireAdvisoryTransactionLock(
+        tx,
+        `idempotency:${userId}:BUYER_REPORT_PROBLEM:${keyHash}`,
+      );
+      const prior = await tx.commerceIdempotencyRecord.findUnique({
+        where: {
+          actorUserId_operation_keyHash: {
+            actorUserId: userId,
+            operation: CommerceIdempotencyOperation.BUYER_REPORT_PROBLEM,
+            keyHash,
+          },
+        },
+      });
+      if (prior) {
+        if (prior.requestHash !== requestHash) this.fail('IDEMPOTENCY_KEY_REUSED', 409);
+        if (prior.responseBody) return prior.responseBody;
+      }
+      const order = await tx.order.findFirst({
+        where: { buyerUserId: userId, publicCode: code },
+        include: orderReadInclude,
+      });
+      if (!order) this.fail('ORDER_NOT_FOUND', 404);
+      await this.disputes.createCase({ orderId: order.id, actorUserId: userId }, tx);
+      const updated = await tx.order.findUniqueOrThrow({
+        where: { id: order.id },
+        include: orderReadInclude,
+      });
+      const response = mapOrder(updated);
+      await this.completeIdempotency(
+        tx,
+        CommerceIdempotencyOperation.BUYER_REPORT_PROBLEM,
+        userId,
+        keyHash,
+        requestHash,
+        order.id,
+        response,
+        undefined,
+        new Date('9999-12-31T23:59:59.999Z'),
+      );
+      return response;
     });
-    if (!order) this.fail('ORDER_NOT_FOUND', 404);
-    await this.disputes.createCase({ orderId: order.id, actorUserId: userId });
-    return this.get(userId, code);
   }
   async cancel(userId: string, code: string, key: ParsedIdempotencyKey, dto: CancelOrderDto) {
     const keyHash = key.hash,
@@ -85,7 +122,15 @@ export class OrdersService {
       if (!order) this.fail('ORDER_NOT_FOUND', 404);
       if (order.status === OrderStatus.CANCELLED) {
         const response = mapOrder(order);
-        await this.completeIdempotency(tx, userId, keyHash, requestHash, order.id, response);
+        await this.completeIdempotency(
+          tx,
+          CommerceIdempotencyOperation.ORDER_CANCEL,
+          userId,
+          keyHash,
+          requestHash,
+          order.id,
+          response,
+        );
         return response;
       }
       if (order.version !== dto.expectedVersion) this.fail('ORDER_VERSION_CONFLICT', 409);
@@ -122,23 +167,34 @@ export class OrdersService {
         include: orderReadInclude,
       });
       const response = mapOrder(updated);
-      await this.completeIdempotency(tx, userId, keyHash, requestHash, order.id, response, now);
+      await this.completeIdempotency(
+        tx,
+        CommerceIdempotencyOperation.ORDER_CANCEL,
+        userId,
+        keyHash,
+        requestHash,
+        order.id,
+        response,
+        now,
+      );
       return response;
     });
   }
   private async completeIdempotency(
     tx: Prisma.TransactionClient,
+    operation: CommerceIdempotencyOperation,
     actorUserId: string,
     keyHash: string,
     requestHash: string,
     resourceId: string,
     responseBody: Prisma.InputJsonObject,
     now = new Date(),
+    expiresAt?: Date,
   ) {
     await tx.commerceIdempotencyRecord.create({
       data: {
         actorUserId,
-        operation: CommerceIdempotencyOperation.ORDER_CANCEL,
+        operation,
         keyHash,
         requestHash,
         responseStatus: 200,
@@ -146,7 +202,7 @@ export class OrdersService {
         resourceType: 'ORDER',
         resourceId,
         completedAt: now,
-        expiresAt: new Date(now.getTime() + 86_400_000),
+        expiresAt: expiresAt ?? new Date(now.getTime() + 86_400_000),
       },
     });
   }
