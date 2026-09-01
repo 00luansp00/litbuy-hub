@@ -13,6 +13,7 @@ import {
   SaleFinancialRecognitionService,
   saleRecognitionIdempotencyKey,
 } from '../src/financial/sale-financial-recognition.service';
+import { SellerPendingHoldService } from '../src/financial/seller-pending-hold.service';
 import { OrderFulfillmentService } from '../src/orders/order-fulfillment.service';
 import { PaidOrderActivationService } from '../src/orders/paid-order-activation.service';
 import { RedisService } from '../src/redis/redis.service';
@@ -24,6 +25,7 @@ describe('Checkout and orders HTTP with real auth, guards, CSRF and PostgreSQL',
   let app: INestApplication, prisma: PrismaService, mailer: AuthMailer, redis: RedisService;
   let activation: PaidOrderActivationService;
   let recognition: SaleFinancialRecognitionService;
+  let pendingHold: SellerPendingHoldService;
   let fulfillment: OrderFulfillmentService;
   let disputes: DisputeCoreService;
   beforeAll(async () => {
@@ -44,6 +46,7 @@ describe('Checkout and orders HTTP with real auth, guards, CSRF and PostgreSQL',
     redis = app.get(RedisService);
     activation = app.get(PaidOrderActivationService);
     recognition = app.get(SaleFinancialRecognitionService);
+    pendingHold = app.get(SellerPendingHoldService);
     fulfillment = app.get(OrderFulfillmentService);
     disputes = app.get(DisputeCoreService);
   });
@@ -165,16 +168,35 @@ describe('Checkout and orders HTTP with real auth, guards, CSRF and PostgreSQL',
     const other = await createActor(app, prisma, mailer);
     const { order: composedOrder } = await awaitingConfirmation(owner);
     const orderCode = composedOrder.publicCode;
+    expect(await pendingHold.processOne(composedOrder.id)).toBe('PROCESSED');
+    expect(
+      await prisma.ledgerTransaction.count({
+        where: {
+          type: 'SELLER_FUNDS_HELD',
+          referenceType: 'OrderSellerHold',
+          referenceId: composedOrder.id,
+        },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.financialHold.count({
+        where: {
+          orderId: composedOrder.id,
+          reason: 'DELIVERY_PROTECTION',
+          status: 'ACTIVE',
+        },
+      }),
+    ).toBe(1);
     const old = new Date('2020-01-01T00:00:00.000Z');
     await prisma.order.update({ where: { id: composedOrder.id }, data: { createdAt: old } });
     const order = await prisma.order.findUniqueOrThrow({ where: { id: composedOrder.id } });
+    expect(order.createdAt).toEqual(old);
     expect(order.paymentStatus).toBe('PAID');
     expect(
       await prisma.ledgerTransaction.count({
         where: { type: 'SALE_RECOGNIZED', referenceType: 'OrderSale', referenceId: order.id },
       }),
     ).toBe(1);
-    expect(await prisma.financialHold.count({ where: { orderId: order.id } })).toBeGreaterThan(0);
 
     const financialBefore = {
       ledger: await prisma.ledgerTransaction.count(),
