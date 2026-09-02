@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { PrismaClient } from '@prisma/client';
+import { DisputeCaseStatus, PrismaClient } from '@prisma/client';
 import { Test } from '@nestjs/testing';
 import { AppModule } from '../src/app.module';
 import { CartsService } from '../src/carts/carts.service';
@@ -9,6 +9,7 @@ import { parseIdempotencyKey } from '../src/commerce/idempotency-key';
 import { CheckoutService } from '../src/checkout/checkout.service';
 import { PrismaService } from '../src/database/prisma.service';
 import { FinancialLedgerService } from '../src/financial/financial-ledger.service';
+import { DisputeCoreService } from '../src/disputes/dispute-core.service';
 import { calculateSellerMaxRelease } from '../src/financial/seller-max-release-calculator';
 import { SellerHoldEligibilityService } from '../src/financial/seller-hold-eligibility.service';
 import { SellerHeldFundsReleaseService } from '../src/financial/seller-held-funds-release.service';
@@ -16,6 +17,7 @@ import { SaleFinancialRecognitionService } from '../src/financial/sale-financial
 import { SellerPendingHoldService } from '../src/financial/seller-pending-hold.service';
 import { PaidOrderActivationService } from '../src/orders/paid-order-activation.service';
 import { OrderFulfillmentService } from '../src/orders/order-fulfillment.service';
+import { OrdersService } from '../src/orders/orders.service';
 import { commerceFixture, publishPlatformCommissionPolicy } from './order-checkout-test.helpers';
 
 describe('SellerPendingHoldService with real PostgreSQL', () => {
@@ -31,6 +33,8 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
   let eligibility: SellerHoldEligibilityService;
   let release: SellerHeldFundsReleaseService;
   let fulfillment: OrderFulfillmentService;
+  let disputes: DisputeCoreService;
+  let orders: OrdersService;
   let version = 50_000;
 
   beforeAll(async () => {
@@ -45,6 +49,8 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
     eligibility = app.get(SellerHoldEligibilityService);
     release = app.get(SellerHeldFundsReleaseService);
     fulfillment = app.get(OrderFulfillmentService);
+    disputes = app.get(DisputeCoreService);
+    orders = app.get(OrdersService);
   });
   beforeEach(() =>
     cleanupPrisma.$executeRawUnsafe('TRUNCATE TABLE "User", "CatalogCategory" CASCADE'),
@@ -1690,7 +1696,8 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
     const gate = new Promise<void>((resolve) => (unlock = resolve));
     const dispute = prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT "id" FROM "Order" WHERE "id" = ${hold.orderId}::uuid FOR UPDATE`;
-      await tx.order.update({ where: { id: hold.orderId! }, data: { disputeStatus: 'OPEN' } });
+      await tx.$executeRaw`UPDATE "Order" SET "id" = "id" WHERE "id" = ${hold.orderId}::uuid`;
+      await tx.disputeCase.create({ data: { orderId: hold.orderId! } });
       locked();
       await gate;
     });
@@ -1707,6 +1714,125 @@ describe('SellerPendingHoldService with real PostgreSQL', () => {
         where: { type: 'SELLER_FUNDS_RELEASED', referenceId: hold.id },
       }),
     ).toBe(0);
+  });
+
+  it.each([
+    DisputeCaseStatus.OPEN,
+    DisputeCaseStatus.UNDER_REVIEW,
+    DisputeCaseStatus.RESOLVED_BUYER,
+    DisputeCaseStatus.CLOSED,
+  ])('keeps an ACTIVE due hold blocked by persistent %s', async (status) => {
+    const { order } = await completedOrder(1000n, 0, 'DEFAULT', false);
+    expect(await service.processOne(order.id)).toBe('PROCESSED');
+    const hold = await prisma.financialHold.findFirstOrThrow({ where: { orderId: order.id } });
+    const dispute = await disputes.createCase({ orderId: order.id });
+    if (status !== DisputeCaseStatus.OPEN)
+      await disputes.transition({ caseId: dispute.id, toStatus: status });
+
+    expect(await eligibility.processOne(hold.id)).toBe('BUSINESS_BLOCKED');
+    expect((await prisma.financialHold.findUniqueOrThrow({ where: { id: hold.id } })).status).toBe(
+      'ACTIVE',
+    );
+  });
+
+  it.each([
+    DisputeCaseStatus.OPEN,
+    DisputeCaseStatus.UNDER_REVIEW,
+    DisputeCaseStatus.RESOLVED_BUYER,
+    DisputeCaseStatus.CLOSED,
+  ])('does not post or credit a RELEASE_ELIGIBLE hold blocked by persistent %s', async (status) => {
+    const { order, hold } = await eligibleHold();
+    const before = await app
+      .get(FinancialLedgerService)
+      .getSellerFinancialBalance(order.sellerProfileId);
+    const dispute = await disputes.createCase({ orderId: order.id });
+    if (status !== DisputeCaseStatus.OPEN)
+      await disputes.transition({ caseId: dispute.id, toStatus: status });
+
+    expect(await release.processOne(hold.id)).toBe('BUSINESS_BLOCKED');
+    expect(await prisma.financialHold.findUniqueOrThrow({ where: { id: hold.id } })).toMatchObject({
+      status: 'RELEASE_ELIGIBLE',
+      releasedAt: null,
+      releaseLedgerTransactionId: null,
+    });
+    expect(
+      await prisma.ledgerTransaction.count({
+        where: { type: 'SELLER_FUNDS_RELEASED', referenceId: hold.id },
+      }),
+    ).toBe(0);
+    expect(
+      await app.get(FinancialLedgerService).getSellerFinancialBalance(order.sellerProfileId),
+    ).toEqual(before);
+  });
+
+  it('allows only seller-win histories and blocks any buyer-win or later active history', async () => {
+    const sellerOnly = await eligibleHold();
+    for (let index = 0; index < 2; index++) {
+      const dispute = await disputes.createCase({ orderId: sellerOnly.order.id });
+      await disputes.transition({
+        caseId: dispute.id,
+        toStatus: DisputeCaseStatus.RESOLVED_SELLER,
+      });
+    }
+    expect(await release.processOne(sellerOnly.hold.id)).toBe('RELEASED');
+
+    const mixed = await eligibleHold();
+    const historical = await disputes.createCase({ orderId: mixed.order.id });
+    await disputes.transition({
+      caseId: historical.id,
+      toStatus: DisputeCaseStatus.RESOLVED_SELLER,
+    });
+    await disputes.createCase({ orderId: mixed.order.id });
+    expect(await release.processOne(mixed.hold.id)).toBe('BUSINESS_BLOCKED');
+
+    const buyerWin = await eligibleHold();
+    const buyerCase = await disputes.createCase({ orderId: buyerWin.order.id });
+    await disputes.transition({
+      caseId: buyerCase.id,
+      toStatus: DisputeCaseStatus.RESOLVED_BUYER,
+    });
+    expect(await release.processOne(buyerWin.hold.id)).toBe('BUSINESS_BLOCKED');
+  });
+
+  it('serializes report-first against release through the Order row lock', async () => {
+    const { order, hold } = await eligibleHold();
+    await orders.reportProblem(
+      order.buyerUserId,
+      order.publicCode,
+      parseIdempotencyKey(`report:${randomUUID()}`),
+    );
+
+    expect(await release.processOne(hold.id)).toBe('BUSINESS_BLOCKED');
+    expect(await prisma.disputeCase.count({ where: { orderId: order.id, status: 'OPEN' } })).toBe(
+      1,
+    );
+    expect(
+      await prisma.ledgerTransaction.count({
+        where: { type: 'SELLER_FUNDS_RELEASED', referenceId: hold.id },
+      }),
+    ).toBe(0);
+  });
+
+  it('accepts a lifetime post-release report without undoing release', async () => {
+    const { order, hold } = await eligibleHold();
+    expect(await release.processOne(hold.id)).toBe('RELEASED');
+    const before = await app
+      .get(FinancialLedgerService)
+      .getSellerFinancialBalance(order.sellerProfileId);
+
+    await orders.reportProblem(
+      order.buyerUserId,
+      order.publicCode,
+      parseIdempotencyKey(`post-release-report:${randomUUID()}`),
+    );
+
+    expect(await prisma.disputeCase.count({ where: { orderId: order.id, status: 'OPEN' } })).toBe(
+      1,
+    );
+    expect(await release.processOne(hold.id)).toBe('ALREADY_RELEASED');
+    expect(
+      await app.get(FinancialLedgerService).getSellerFinancialBalance(order.sellerProfileId),
+    ).toEqual(before);
   });
 
   it('contains no PSP, HTTP, withdrawal, timer, or release-to-available dependency', () => {

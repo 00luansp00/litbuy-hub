@@ -38,8 +38,9 @@ import {
   ProviderWebhookEventProcessor,
 } from './provider-webhook-event.processor';
 import { AlphaPostPaymentRehearsalOrchestrator } from './alpha-post-payment-rehearsal.orchestrator';
+import { DisputesModule } from '../disputes/disputes.module';
 @Module({
-  imports: [DatabaseModule, AuthModule, OrdersModule, JwtModule.register({})],
+  imports: [DatabaseModule, AuthModule, OrdersModule, DisputesModule, JwtModule.register({})],
   controllers: [ProviderNotificationController, SellerFinanceController, BuyerPaymentController],
   providers: [
     FinancialLedgerService,
