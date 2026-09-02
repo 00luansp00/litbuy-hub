@@ -83,6 +83,60 @@ describe("/pedidos/$id real UI", () => {
     renderDetail();
     expect(screen.getByText("Carregando pedido...")).toBeInTheDocument();
   });
+  it("reports through the real API, blocks double submit, and adopts the persisted case", async () => {
+    const initial = makeOrder();
+    const persisted = makeOrder({
+      disputeCases: [
+        {
+          caseId: "123e4567-e89b-42d3-a456-426614174000",
+          status: "OPEN",
+          createdAt: "2026-08-30T12:00:00.000Z",
+          updatedAt: "2026-08-30T12:00:00.000Z",
+          terminalAt: null,
+        },
+      ],
+    });
+    vi.spyOn(buyerOrdersService, "detail")
+      .mockResolvedValueOnce(initial)
+      .mockResolvedValue(persisted);
+    let resolve!: (order: typeof persisted) => void;
+    const report = vi
+      .spyOn(buyerOrdersService, "reportProblem")
+      .mockReturnValue(new Promise((done) => (resolve = done)));
+    renderDetail();
+    const button = await screen.findByRole("button", { name: "Reportar problema" });
+    fireEvent.click(button);
+    await waitFor(() => expect(report).toHaveBeenCalledTimes(1));
+    expect(button).toBeDisabled();
+    fireEvent.click(button);
+    expect(report).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("Registrando...")).toBeInTheDocument();
+    resolve(persisted);
+    expect(await screen.findByText("Problema registrado")).toBeInTheDocument();
+    expect(screen.getByText("O problema foi registrado com sucesso.")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/dinheiro será devolvido|pagamento foi bloqueado|refund garantido/i),
+    ).not.toBeInTheDocument();
+  });
+  it("renders an active persisted case after a fresh detail read", async () => {
+    vi.spyOn(buyerOrdersService, "detail").mockResolvedValue(
+      makeOrder({
+        disputeCases: [
+          {
+            caseId: "123e4567-e89b-42d3-a456-426614174000",
+            status: "UNDER_REVIEW",
+            createdAt: "2026-08-29T12:00:00.000Z",
+            updatedAt: "2026-08-30T12:00:00.000Z",
+            terminalAt: null,
+          },
+        ],
+      }),
+    );
+    renderDetail();
+    expect(await screen.findByText("Problema registrado")).toBeInTheDocument();
+    expect(screen.getByText(/em análise desde/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reportar problema" })).not.toBeInTheDocument();
+  });
   it("renders historical snapshots, exact states and precise money without mock actions", async () => {
     vi.spyOn(buyerOrdersService, "detail").mockResolvedValue(makeOrder());
     renderDetail();

@@ -1,6 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@/lib/api/client";
-import { buyerOrdersService } from "./buyerOrdersService";
+import {
+  buyerOrdersService,
+  completeReportProblemIntent,
+  reportProblemIntentKey,
+} from "./buyerOrdersService";
 import { BuyerOrderParseError } from "./parserError";
 import type { OrderStatus } from "./types";
 const retry = (count: number, error: Error) =>
@@ -37,6 +41,25 @@ export const useConfirmBuyerOrderReceipt = (code: string) => {
     mutationFn: () => buyerOrdersService.confirmReceipt(code),
     retry: false,
     onSuccess: async (order) => {
+      queryClient.setQueryData(buyerOrderKeys.detail(code), order);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: buyerOrderKeys.detail(code) }),
+        queryClient.invalidateQueries({ queryKey: buyerOrderKeys.all }),
+      ]);
+    },
+    onError: async () => {
+      await queryClient.invalidateQueries({ queryKey: buyerOrderKeys.detail(code) });
+    },
+  });
+};
+
+export const useReportBuyerOrderProblem = (code: string) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => buyerOrdersService.reportProblem(code, reportProblemIntentKey(code)),
+    retry: false,
+    onSuccess: async (order) => {
+      completeReportProblemIntent(code);
       queryClient.setQueryData(buyerOrderKeys.detail(code), order);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: buyerOrderKeys.detail(code) }),

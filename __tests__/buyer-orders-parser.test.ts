@@ -24,6 +24,7 @@ const valid = () => ({
   paymentStatus: "NOT_CREATED",
   fulfillmentStatus: "NOT_AVAILABLE",
   disputeStatus: "NONE",
+  disputeCases: [],
   version: 1,
   expiresAt: "2026-08-01T00:00:00.000Z",
   cancelledAt: null,

@@ -34,6 +34,12 @@ const date = (value: unknown): string => {
     : fail();
 };
 const nullableDate = (value: unknown): string | null => (value === null ? null : date(value));
+const uuid = (value: unknown): string => {
+  const result = text(value);
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(result)
+    ? result
+    : fail();
+};
 const enumValue = <T extends string>(value: unknown, allowed: readonly T[]): T =>
   typeof value === "string" && allowed.includes(value as T) ? (value as T) : fail();
 export const parseMoneyMinor = (value: unknown): string =>
@@ -63,7 +69,9 @@ const item = (value: unknown): BuyerOrderItem => {
 export function parseBuyerOrder(value: unknown): BuyerOrder {
   const v = record(value);
   const items = v.items;
+  const disputeCases = v.disputeCases;
   if (!Array.isArray(items) || items.length === 0) throw new BuyerOrderParseError();
+  if (!Array.isArray(disputeCases)) throw new BuyerOrderParseError();
   return {
     orderCode: parseBuyerOrderCode(v.orderCode),
     seller: seller(v.seller),
@@ -81,6 +89,16 @@ export function parseBuyerOrder(value: unknown): BuyerOrder {
     paymentStatus: enumValue(v.paymentStatus, PAYMENT_STATUSES),
     fulfillmentStatus: enumValue(v.fulfillmentStatus, FULFILLMENT_STATUSES),
     disputeStatus: enumValue(v.disputeStatus, DISPUTE_STATUSES),
+    disputeCases: disputeCases.map((value) => {
+      const dispute = record(value);
+      return {
+        caseId: uuid(dispute.caseId),
+        status: enumValue(dispute.status, DISPUTE_STATUSES),
+        createdAt: date(dispute.createdAt),
+        updatedAt: date(dispute.updatedAt),
+        terminalAt: nullableDate(dispute.terminalAt),
+      };
+    }),
     version: integer(v.version, 1),
     expiresAt: date(v.expiresAt),
     cancelledAt: nullableDate(v.cancelledAt),

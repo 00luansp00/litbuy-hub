@@ -12,8 +12,9 @@ import { OrderFulfillmentService } from './order-fulfillment.service';
 import { SellerOrdersController } from './seller-orders.controller';
 import { SellerOrdersService } from './seller-orders.service';
 import { PaidOrderAvailabilityOrchestrator } from './paid-order-availability.orchestrator';
+import { DisputesModule } from '../disputes/disputes.module';
 @Module({
-  imports: [DatabaseModule, AuthModule, JwtModule.register({})],
+  imports: [DatabaseModule, AuthModule, JwtModule.register({}), DisputesModule],
   controllers: [OrdersController, OrderFulfillmentController, SellerOrdersController],
   providers: [
     OrdersService,

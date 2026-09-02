@@ -6,6 +6,17 @@ import { ORDER_STATUSES, type OrderStatus } from "./types";
 const validInteger = (value: number, min: number, max: number) =>
   Number.isInteger(value) && value >= min && value <= max;
 type Fetcher = (path: string, options?: RequestInit) => Promise<unknown>;
+const reportProblemIntentKeys = new Map<string, string>();
+export const reportProblemIntentKey = (orderCode: string) => {
+  const existing = reportProblemIntentKeys.get(orderCode);
+  if (existing) return existing;
+  const created = `report-problem:${crypto.randomUUID()}`;
+  reportProblemIntentKeys.set(orderCode, created);
+  return created;
+};
+export const completeReportProblemIntent = (orderCode: string) => {
+  reportProblemIntentKeys.delete(orderCode);
+};
 export const createBuyerOrdersService = (fetcher: Fetcher = apiFetch) => ({
   async list({ page, limit, status }: { page: number; limit: number; status?: OrderStatus }) {
     if (
@@ -29,6 +40,19 @@ export const createBuyerOrdersService = (fetcher: Fetcher = apiFetch) => ({
     const order = parseBuyerOrder(
       await fetcher(`/orders/${encodeURIComponent(orderCode)}/fulfillment/confirm`, {
         method: "POST",
+      }),
+    );
+    if (order.orderCode !== orderCode) throw new BuyerOrderParseError();
+    return order;
+  },
+  async reportProblem(orderCode: string, idempotencyKey: string) {
+    if (!isBuyerOrderCode(orderCode)) throw new TypeError("INVALID_ORDER_CODE");
+    if (!/^report-problem:[0-9a-f-]{36}$/i.test(idempotencyKey))
+      throw new TypeError("INVALID_IDEMPOTENCY_KEY");
+    const order = parseBuyerOrder(
+      await fetcher(`/orders/${encodeURIComponent(orderCode)}/report-problem`, {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
       }),
     );
     if (order.orderCode !== orderCode) throw new BuyerOrderParseError();

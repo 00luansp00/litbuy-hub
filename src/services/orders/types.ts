@@ -39,6 +39,13 @@ export type OrderStatus = (typeof ORDER_STATUSES)[number];
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 export type FulfillmentStatus = (typeof FULFILLMENT_STATUSES)[number];
 export type DisputeStatus = (typeof DISPUTE_STATUSES)[number];
+export type BuyerDisputeCase = {
+  caseId: string;
+  status: DisputeStatus;
+  createdAt: string;
+  updatedAt: string;
+  terminalAt: string | null;
+};
 export type BuyerOrderItem = {
   productSlug: string;
   productTitle: string;
@@ -67,6 +74,7 @@ export type BuyerOrder = {
   paymentStatus: PaymentStatus;
   fulfillmentStatus: FulfillmentStatus;
   disputeStatus: DisputeStatus;
+  disputeCases: BuyerDisputeCase[];
   version: number;
   expiresAt: string;
   cancelledAt: string | null;

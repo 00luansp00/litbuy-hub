@@ -13,9 +13,11 @@ import {
   SaleFinancialRecognitionService,
   saleRecognitionIdempotencyKey,
 } from '../src/financial/sale-financial-recognition.service';
+import { SellerPendingHoldService } from '../src/financial/seller-pending-hold.service';
 import { OrderFulfillmentService } from '../src/orders/order-fulfillment.service';
 import { PaidOrderActivationService } from '../src/orders/paid-order-activation.service';
 import { RedisService } from '../src/redis/redis.service';
+import { DisputeCoreService } from '../src/disputes/dispute-core.service';
 import { authHeaders, commerceFixture, createActor } from './order-checkout-test.helpers';
 
 describe('Checkout and orders HTTP with real auth, guards, CSRF and PostgreSQL', () => {
@@ -23,7 +25,9 @@ describe('Checkout and orders HTTP with real auth, guards, CSRF and PostgreSQL',
   let app: INestApplication, prisma: PrismaService, mailer: AuthMailer, redis: RedisService;
   let activation: PaidOrderActivationService;
   let recognition: SaleFinancialRecognitionService;
+  let pendingHold: SellerPendingHoldService;
   let fulfillment: OrderFulfillmentService;
+  let disputes: DisputeCoreService;
   beforeAll(async () => {
     process.env.PAYMENT_PROVIDER_MODE = 'FAKE_ALPHA';
     const ref = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -42,7 +46,9 @@ describe('Checkout and orders HTTP with real auth, guards, CSRF and PostgreSQL',
     redis = app.get(RedisService);
     activation = app.get(PaidOrderActivationService);
     recognition = app.get(SaleFinancialRecognitionService);
+    pendingHold = app.get(SellerPendingHoldService);
     fulfillment = app.get(OrderFulfillmentService);
+    disputes = app.get(DisputeCoreService);
   });
   beforeEach(async () => {
     await (await redis.getClient()).flushdb();
@@ -156,6 +162,121 @@ describe('Checkout and orders HTTP with real auth, guards, CSRF and PostgreSQL',
     request(app.getHttpServer())
       .post(`/api/v1/orders/${orderCode}/fulfillment/confirm`)
       .set(authHeaders(owner));
+
+  it('lets only the owning Buyer report for life with atomic replay protection and no financial effects', async () => {
+    const owner = await createActor(app, prisma, mailer);
+    const other = await createActor(app, prisma, mailer);
+    const { order: composedOrder } = await awaitingConfirmation(owner);
+    const orderCode = composedOrder.publicCode;
+    expect(await pendingHold.processOne(composedOrder.id)).toBe('PROCESSED');
+    expect(
+      await prisma.ledgerTransaction.count({
+        where: {
+          type: 'SELLER_FUNDS_HELD',
+          referenceType: 'OrderSellerHold',
+          referenceId: composedOrder.id,
+        },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.financialHold.count({
+        where: {
+          orderId: composedOrder.id,
+          reason: 'DELIVERY_PROTECTION',
+          status: 'ACTIVE',
+        },
+      }),
+    ).toBe(1);
+    const old = new Date('2020-01-01T00:00:00.000Z');
+    await prisma.order.update({ where: { id: composedOrder.id }, data: { createdAt: old } });
+    const order = await prisma.order.findUniqueOrThrow({ where: { id: composedOrder.id } });
+    expect(order.createdAt).toEqual(old);
+    expect(order.paymentStatus).toBe('PAID');
+    expect(
+      await prisma.ledgerTransaction.count({
+        where: { type: 'SALE_RECOGNIZED', referenceType: 'OrderSale', referenceId: order.id },
+      }),
+    ).toBe(1);
+
+    const financialBefore = {
+      ledger: await prisma.ledgerTransaction.count(),
+      holds: await prisma.financialHold.count(),
+      refunds: await prisma.refund.count(),
+      available: await prisma.ledgerEntry.count({
+        where: { account: { purpose: 'SELLER_AVAILABLE' } },
+      }),
+    };
+    const keyA = `report-problem:${crypto.randomUUID()}`;
+    const keyB = `report-problem:${crypto.randomUUID()}`;
+    const report = (actor: Awaited<ReturnType<typeof createActor>>, code: string, key: string) =>
+      request(app.getHttpServer())
+        .post(`/api/v1/orders/${code}/report-problem`)
+        .set(authHeaders(actor))
+        .set('Idempotency-Key', key);
+
+    await report(other, orderCode, keyA).expect(404);
+    await request(app.getHttpServer())
+      .get(`/api/v1/orders/${orderCode}`)
+      .set(authHeaders(other, false))
+      .expect(404);
+    await report(owner, orderCode, keyA).set('X-CSRF-Token', '').expect(401);
+    await report(owner, orderCode, 'short').expect(400);
+
+    const concurrent = await Promise.all([
+      report(owner, orderCode, keyA),
+      report(owner, orderCode, keyA),
+    ]);
+    expect(concurrent.map(({ status }) => status)).toEqual([200, 200]);
+    expect(concurrent[0].body).toEqual(concurrent[1].body);
+    await report(owner, orderCode, keyA).expect(200);
+    expect(await prisma.disputeCase.count({ where: { orderId: order.id } })).toBe(1);
+
+    const first = await prisma.disputeCase.findFirstOrThrow({
+      where: { orderId: order.id },
+      include: { events: true },
+    });
+    expect(first.events).toEqual([
+      expect.objectContaining({ type: 'CASE_OPENED', actorUserId: owner.user.id }),
+    ]);
+    expect((await prisma.order.findUniqueOrThrow({ where: { id: order.id } })).disputeStatus).toBe(
+      'NONE',
+    );
+
+    const another = await cart(owner);
+    const anotherCreated = await checkout(owner, another).expect(201);
+    await report(owner, String(anotherCreated.body.orderCode), keyA)
+      .expect(409)
+      .expect(({ body }) => expect(body.code).toBe('IDEMPOTENCY_KEY_REUSED'));
+
+    await disputes.transition({ caseId: first.id, toStatus: 'CLOSED', actorUserId: owner.user.id });
+    const terminalReplay = await report(owner, orderCode, keyA).expect(200);
+    expect(terminalReplay.body.disputeCases).toEqual([
+      expect.objectContaining({ caseId: first.id, status: 'OPEN' }),
+    ]);
+    expect(await prisma.disputeCase.count({ where: { orderId: order.id } })).toBe(1);
+
+    await report(owner, orderCode, keyB).expect(200);
+    const refreshed = await request(app.getHttpServer())
+      .get(`/api/v1/orders/${orderCode}`)
+      .set(authHeaders(owner, false))
+      .expect(200);
+    const refreshedCases = refreshed.body.disputeCases as Array<{ status: string }>;
+    expect(refreshedCases.map((item) => item.status)).toEqual(['OPEN', 'CLOSED']);
+    expect(await prisma.disputeCase.count({ where: { orderId: order.id } })).toBe(2);
+    expect(
+      await prisma.commerceIdempotencyRecord.count({
+        where: { actorUserId: owner.user.id, operation: 'BUYER_REPORT_PROBLEM' },
+      }),
+    ).toBe(2);
+    expect({
+      ledger: await prisma.ledgerTransaction.count(),
+      holds: await prisma.financialHold.count(),
+      refunds: await prisma.refund.count(),
+      available: await prisma.ledgerEntry.count({
+        where: { account: { purpose: 'SELLER_AVAILABLE' } },
+      }),
+    }).toEqual(financialBefore);
+  });
 
   it('composes the real FAKE_ALPHA path through recognition before seller availability', async () => {
     const owner = await createActor(app, prisma, mailer);

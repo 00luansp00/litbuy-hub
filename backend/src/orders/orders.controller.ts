@@ -44,4 +44,15 @@ export class OrdersController {
   ) {
     return this.orders.cancel(u.userId, c, parseIdempotencyKey(k), d);
   }
+  @Post(':orderCode/report-problem')
+  @HttpCode(200)
+  @UseGuards(CartCsrfGuard)
+  @ApiHeader({ name: 'Idempotency-Key', required: true })
+  reportProblem(
+    @CurrentUser() u: { userId: string },
+    @Param('orderCode') c: string,
+    @Headers('idempotency-key') k: unknown,
+  ) {
+    return this.orders.reportProblem(u.userId, c, parseIdempotencyKey(k));
+  }
 }
