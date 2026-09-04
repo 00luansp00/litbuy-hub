@@ -42,8 +42,7 @@ DECLARE
   order_row "Order"%ROWTYPE;
   already_decided BIGINT;
 BEGIN
-  -- Also serializes direct SQL inserts at the Order boundary.
-  PERFORM pg_advisory_xact_lock(hashtextextended('dispute-financial-decision:' || NEW."orderId"::text, 0));
+  -- The Order row is the common boundary for service and direct SQL inserts.
   SELECT * INTO order_row FROM "Order" WHERE id = NEW."orderId" FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'financial decision order not found' USING ERRCODE = '23503'; END IF;
   SELECT * INTO dispute_row FROM "DisputeCase" WHERE id = NEW."disputeCaseId" FOR SHARE;

@@ -18,7 +18,9 @@ Order, Buyer e Seller são derivados de `DisputeCase -> Order`; o caller não os
 
 A row guarda case, Order, Buyer, Seller, tipo, principal original, principal decidido, BRL, ator, hashes de idempotência/request e timestamps PostgreSQL. Uma chave do mesmo ator e request retorna a mesma row; reutilização com outro request conflita; outra chave para o mesmo case também conflita. A evidência não expira.
 
-Transactions `SERIALIZABLE`, advisory lock da chave e `Order FOR UPDATE` serializam replay e o limite cumulativo. O trigger também toma lock por Order, recalcula invariantes e o acumulado para inserts SQL diretos. Triggers rejeitam todo `UPDATE` e `DELETE`; `executableAt` e `createdAt` são impostos pelo relógio transacional PostgreSQL.
+Transactions `SERIALIZABLE`, advisory lock somente da chave idempotente e `Order FOR UPDATE` serializam replay e o limite cumulativo. A row do Order é o boundary comum: o service lê o case para resolver o Order e então trava a row; o trigger começa pela mesma row, depois valida o case e o acumulado. Não há advisory lock de Order no trigger, evitando a antiga inversão `row → advisory` contra `advisory → row` na corrida service/direct insert. O trigger recalcula invariantes e o acumulado para inserts SQL diretos. Triggers rejeitam todo `UPDATE` e `DELETE`; `executableAt` e `createdAt` são impostos pelo relógio transacional PostgreSQL.
+
+A suíte PostgreSQL dedicada compõe checkout, pagamento, recognition, pending, held, eligibility e release pelos services reais. Ela prova a evidência pós-release, as races service/service e service/direct insert, invariantes fail-closed, timestamps/imutabilidade e que counts de Ledger/event/outbox/refund, saldos do Seller e fee snapshots não mudam ao materializar AA0.
 
 ## O que AA0 não autoriza
 
