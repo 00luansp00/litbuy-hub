@@ -7,6 +7,7 @@ import { FinancialDomainError } from './financial.errors';
 import { FinancialLedgerService } from './financial-ledger.service';
 import { effectiveReleaseDeadline } from './seller-max-release-calculator';
 import { DisputeReleaseBlockerService } from '../disputes/dispute-release-blocker.service';
+import { isSerializationFailure } from './serialization-failure';
 
 const LEDGER_TYPE = 'SELLER_FUNDS_RELEASED';
 const LEDGER_REFERENCE_TYPE = 'FinancialHoldRelease';
@@ -64,7 +65,7 @@ export class SellerHeldFundsReleaseService {
           });
           return 'RECONCILIATION_REQUIRED';
         }
-        if (!this.isSerializationFailure(error) || attempt === 3) throw error;
+        if (!isSerializationFailure(error) || attempt === 3) throw error;
       }
     }
     throw new Error('unreachable');
@@ -437,11 +438,5 @@ export class SellerHeldFundsReleaseService {
   }
   private isInsufficientBalance(error: unknown) {
     return error instanceof FinancialDomainError && error.code === 'INSUFFICIENT_FINANCIAL_BALANCE';
-  }
-  private isSerializationFailure(error: unknown) {
-    return (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      (error.code === 'P2034' || (error.code === 'P2010' && error.meta?.code === '40001'))
-    );
   }
 }

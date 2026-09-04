@@ -5,6 +5,7 @@ import { acquireAdvisoryTransactionLock } from '../database/advisory-lock';
 import { PrismaService } from '../database/prisma.service';
 import { effectiveReleaseDeadline } from './seller-max-release-calculator';
 import { DisputeReleaseBlockerService } from '../disputes/dispute-release-blocker.service';
+import { isSerializationFailure } from './serialization-failure';
 
 const ISSUE_REFERENCE_TYPE = 'SellerHoldEligibility';
 
@@ -53,7 +54,7 @@ export class SellerHoldEligibilityService {
           isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
         });
       } catch (error) {
-        if (!this.isSerializationFailure(error) || attempt === 3) throw error;
+        if (!isSerializationFailure(error) || attempt === 3) throw error;
       }
     }
     throw new Error('unreachable');
@@ -307,15 +308,5 @@ export class SellerHoldEligibilityService {
 
   private holdKey(orderId: string) {
     return createHash('sha256').update(`seller-pending-hold:v1:${orderId}`).digest('hex');
-  }
-
-  private isSerializationFailure(error: unknown) {
-    return (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      (error.code === 'P2034' ||
-        (error.code === 'P2010' &&
-          typeof error.meta?.code === 'string' &&
-          error.meta.code === '40001'))
-    );
   }
 }
