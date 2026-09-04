@@ -4,6 +4,8 @@ import { Prisma, ReconciliationIssueType } from '@prisma/client';
 import { acquireAdvisoryTransactionLock } from '../database/advisory-lock';
 import { PrismaService } from '../database/prisma.service';
 import { effectiveReleaseDeadline } from './seller-max-release-calculator';
+import { DisputeReleaseBlockerService } from '../disputes/dispute-release-blocker.service';
+import { isSerializationFailure } from './serialization-failure';
 
 const ISSUE_REFERENCE_TYPE = 'SellerHoldEligibility';
 
@@ -38,7 +40,10 @@ type HoldRow = {
 
 @Injectable()
 export class SellerHoldEligibilityService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly disputeBlocker: DisputeReleaseBlockerService,
+  ) {}
 
   async processOne(holdId?: string): Promise<SellerHoldEligibilityResult> {
     const id = holdId ?? (await this.nextCandidate());
@@ -49,7 +54,7 @@ export class SellerHoldEligibilityService {
           isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
         });
       } catch (error) {
-        if (!this.isSerializationFailure(error) || attempt === 3) throw error;
+        if (!isSerializationFailure(error) || attempt === 3) throw error;
       }
     }
     throw new Error('unreachable');
@@ -64,6 +69,12 @@ export class SellerHoldEligibilityService {
         AND h."status" = 'ACTIVE'
         AND h."releaseEligibleAt" IS NOT NULL
         AND COALESCE(o."sellerMaxEffectiveReleaseAt", h."releaseEligibleAt") <= transaction_timestamp()
+        AND o."disputeStatus" IN ('NONE', 'RESOLVED_SELLER')
+        AND NOT EXISTS (
+          SELECT 1 FROM "DisputeCase" d
+          WHERE d."orderId" = o."id"
+            AND d."status" IN ('OPEN', 'UNDER_REVIEW', 'RESOLVED_BUYER', 'CLOSED')
+        )
         AND NOT EXISTS (
           SELECT 1 FROM "ReconciliationIssue" r
           WHERE r."referenceType" = ${ISSUE_REFERENCE_TYPE}
@@ -81,6 +92,15 @@ export class SellerHoldEligibilityService {
     const rows = await this.prisma.$queryRaw<Array<{ id: string }>>`
       SELECT h."id" FROM "FinancialHold" h
       WHERE h."reason" = 'DELIVERY_PROTECTION' AND h."status" = 'ACTIVE'
+        AND NOT EXISTS (
+          SELECT 1 FROM "Order" o
+          WHERE o."id" = h."orderId" AND (
+            o."disputeStatus" NOT IN ('NONE', 'RESOLVED_SELLER') OR EXISTS (
+              SELECT 1 FROM "DisputeCase" d WHERE d."orderId" = o."id"
+                AND d."status" IN ('OPEN', 'UNDER_REVIEW', 'RESOLVED_BUYER', 'CLOSED')
+            )
+          )
+        )
         AND NOT EXISTS (
           SELECT 1 FROM "ReconciliationIssue" r
           WHERE r."referenceType" = ${ISSUE_REFERENCE_TYPE}
@@ -136,6 +156,7 @@ export class SellerHoldEligibilityService {
       },
       select: { scope: true, delayHours: true },
     });
+    await tx.$queryRaw`SELECT "id" FROM "Order" WHERE "id" = ${hold.orderId}::uuid FOR UPDATE`;
     const order = await tx.order.findUnique({ where: { id: hold.orderId } });
     if (!order) return this.fail(tx, holdId, { type: 'MISSING_LOCAL', code: 'ORDER_MISSING' });
     const orderSnapshotComplete =
@@ -230,6 +251,7 @@ export class SellerHoldEligibilityService {
       return 'BUSINESS_BLOCKED';
     if (!['NONE', 'RESOLVED_SELLER'].includes(order.disputeStatus))
       return this.fail(tx, holdId, { type: 'STATUS_MISMATCH', code: 'ORDER_DISPUTE_INVALID' });
+    if (await this.disputeBlocker.hasPersistentBlocker(tx, order.id)) return 'BUSINESS_BLOCKED';
     if (!hold.due) return 'NOT_DUE';
 
     await tx.financialHold.update({ where: { id: hold.id }, data: { status: 'RELEASE_ELIGIBLE' } });
@@ -286,15 +308,5 @@ export class SellerHoldEligibilityService {
 
   private holdKey(orderId: string) {
     return createHash('sha256').update(`seller-pending-hold:v1:${orderId}`).digest('hex');
-  }
-
-  private isSerializationFailure(error: unknown) {
-    return (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      (error.code === 'P2034' ||
-        (error.code === 'P2010' &&
-          typeof error.meta?.code === 'string' &&
-          error.meta.code === '40001'))
-    );
   }
 }

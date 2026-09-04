@@ -6,6 +6,8 @@ import { PrismaService } from '../database/prisma.service';
 import { FinancialDomainError } from './financial.errors';
 import { FinancialLedgerService } from './financial-ledger.service';
 import { effectiveReleaseDeadline } from './seller-max-release-calculator';
+import { DisputeReleaseBlockerService } from '../disputes/dispute-release-blocker.service';
+import { isSerializationFailure } from './serialization-failure';
 
 const LEDGER_TYPE = 'SELLER_FUNDS_RELEASED';
 const LEDGER_REFERENCE_TYPE = 'FinancialHoldRelease';
@@ -44,6 +46,7 @@ export class SellerHeldFundsReleaseService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ledger: FinancialLedgerService,
+    private readonly disputeBlocker: DisputeReleaseBlockerService,
   ) {}
 
   async processOne(holdId?: string): Promise<SellerHeldFundsReleaseResult> {
@@ -62,7 +65,7 @@ export class SellerHeldFundsReleaseService {
           });
           return 'RECONCILIATION_REQUIRED';
         }
-        if (!this.isSerializationFailure(error) || attempt === 3) throw error;
+        if (!isSerializationFailure(error) || attempt === 3) throw error;
       }
     }
     throw new Error('unreachable');
@@ -76,6 +79,11 @@ export class SellerHeldFundsReleaseService {
           SELECT 1 FROM "Order" o
           WHERE o."id" = h."orderId"
             AND o."disputeStatus" IN ('OPEN', 'UNDER_REVIEW', 'RESOLVED_BUYER', 'CLOSED')
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM "DisputeCase" d
+          WHERE d."orderId" = h."orderId"
+            AND d."status" IN ('OPEN', 'UNDER_REVIEW', 'RESOLVED_BUYER', 'CLOSED')
         )
         AND NOT EXISTS (
           SELECT 1 FROM "ReconciliationIssue" r
@@ -98,6 +106,11 @@ export class SellerHeldFundsReleaseService {
           SELECT 1 FROM "Order" o
           WHERE o."id" = h."orderId"
             AND o."disputeStatus" IN ('OPEN', 'UNDER_REVIEW', 'RESOLVED_BUYER', 'CLOSED')
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM "DisputeCase" d
+          WHERE d."orderId" = h."orderId"
+            AND d."status" IN ('OPEN', 'UNDER_REVIEW', 'RESOLVED_BUYER', 'CLOSED')
         )
         AND NOT EXISTS (
           SELECT 1 FROM "ReconciliationIssue" r
@@ -271,6 +284,8 @@ export class SellerHeldFundsReleaseService {
       order.disputeStatus === 'CLOSED'
     )
       return 'BUSINESS_BLOCKED' as const;
+    if (await this.disputeBlocker.hasPersistentBlocker(tx, order.id))
+      return 'BUSINESS_BLOCKED' as const;
     const validPostDeliveryState =
       (order.status === 'ACTIVE' &&
         order.paymentStatus === 'PAID' &&
@@ -423,11 +438,5 @@ export class SellerHeldFundsReleaseService {
   }
   private isInsufficientBalance(error: unknown) {
     return error instanceof FinancialDomainError && error.code === 'INSUFFICIENT_FINANCIAL_BALANCE';
-  }
-  private isSerializationFailure(error: unknown) {
-    return (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      (error.code === 'P2034' || (error.code === 'P2010' && error.meta?.code === '40001'))
-    );
   }
 }

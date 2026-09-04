@@ -68,6 +68,13 @@ export class OrdersService {
         include: orderReadInclude,
       });
       if (!order) this.fail('ORDER_NOT_FOUND', 404);
+      // Shared serialization boundary with both Seller release gates. The dispute
+      // is materialized only after owning the authoritative Order row lock.
+      await tx.$queryRaw`SELECT "id" FROM "Order" WHERE "id" = ${order.id}::uuid FOR UPDATE`;
+      // Materialize a new row version without changing domain data. PostgreSQL then
+      // makes a financial SERIALIZABLE transaction that took an older snapshot retry,
+      // rather than letting it miss the newly committed child DisputeCase.
+      await tx.$executeRaw`UPDATE "Order" SET "id" = "id" WHERE "id" = ${order.id}::uuid`;
       await this.disputes.createCase({ orderId: order.id, actorUserId: userId }, tx);
       const updated = await tx.order.findUniqueOrThrow({
         where: { id: order.id },
