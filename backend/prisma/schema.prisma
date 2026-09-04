@@ -203,6 +203,11 @@ enum DisputeCaseStatus {
   CLOSED
 }
 
+enum DisputeFinancialDecisionType {
+  TOTAL
+  PARTIAL
+}
+
 enum DisputeCaseEventType {
   CASE_OPENED
   STATUS_CHANGED
@@ -276,52 +281,54 @@ enum SecurityEventOutcome {
 }
 
 model User {
-  id                             String                       @id @default(uuid()) @db.Uuid
-  email                          String                       @unique
-  phoneE164                      String?
-  phoneVerifiedAt                DateTime?
-  birthDate                      DateTime                     @db.Date
-  status                         UserStatus                   @default(PENDING_EMAIL)
-  emailVerifiedAt                DateTime?
-  termsVersion                   String
-  termsAcceptedAt                DateTime
-  privacyVersion                 String
-  privacyAcceptedAt              DateTime
-  createdAt                      DateTime                     @default(now())
-  updatedAt                      DateTime                     @updatedAt
-  deletedAt                      DateTime?
-  sensitiveActionHoldUntil       DateTime?
-  lastSensitiveChangeAt          DateTime?
-  passwordCredential             PasswordCredential?
-  devices                        Device[]
-  sessions                       Session[]
-  verificationChallenges         VerificationChallenge[]
-  securityEvents                 SecurityEvent[]
-  emailChangeRequests            EmailChangeRequest[]
-  twoFactorSettings              TwoFactorSettings?
-  twoFactorRecoveryCodes         TwoFactorRecoveryCode[]
-  stepUpGrants                   StepUpGrant[]
-  roleAssignments                UserRoleAssignment[]
-  sellerApplication              SellerApplication?           @relation("SellerApplicationOwner")
-  reviewedSellerApplications     SellerApplication[]          @relation("SellerApplicationReviewer")
-  sellerProfile                  SellerProfile?
-  reviewedListingDrafts          ListingDraft[]               @relation("ListingDraftReviewer")
-  carts                          Cart[]                       @relation("CartBuyer")
-  orders                         Order[]                      @relation("OrderBuyer")
-  commerceIdempotencyRecords     CommerceIdempotencyRecord[]
-  reviewedWithdrawals            Withdrawal[]                 @relation("WithdrawalReviewer")
-  createdFeePolicies             FeePolicyVersion[]           @relation("FeePolicyCreator")
-  publishedFeePolicies           FeePolicyVersion[]           @relation("FeePolicyPublisher")
-  createdWithdrawalPolicies      WithdrawalPolicyVersion[]    @relation("WithdrawalPolicyCreator")
-  publishedWithdrawalPolicies    WithdrawalPolicyVersion[]    @relation("WithdrawalPolicyPublisher")
-  createdSellerReleasePolicies   SellerReleasePolicyVersion[] @relation("SellerReleasePolicyCreator")
-  publishedSellerReleasePolicies SellerReleasePolicyVersion[] @relation("SellerReleasePolicyPublisher")
-  financialEvents                FinancialEvent[]             @relation("FinancialEventActor")
-  requestedRefunds               Refund[]                     @relation("RefundRequester")
-  sentOrderChatMessages          OrderChatMessage[]           @relation("OrderChatMessageSender")
-  litPointsTransactions          LitPointsLedgerTransaction[]
-  litPointsEntries               LitPointsLedgerEntry[]
-  disputeCaseEvents              DisputeCaseEvent[]           @relation("DisputeCaseEventActor")
+  id                               String                       @id @default(uuid()) @db.Uuid
+  email                            String                       @unique
+  phoneE164                        String?
+  phoneVerifiedAt                  DateTime?
+  birthDate                        DateTime                     @db.Date
+  status                           UserStatus                   @default(PENDING_EMAIL)
+  emailVerifiedAt                  DateTime?
+  termsVersion                     String
+  termsAcceptedAt                  DateTime
+  privacyVersion                   String
+  privacyAcceptedAt                DateTime
+  createdAt                        DateTime                     @default(now())
+  updatedAt                        DateTime                     @updatedAt
+  deletedAt                        DateTime?
+  sensitiveActionHoldUntil         DateTime?
+  lastSensitiveChangeAt            DateTime?
+  passwordCredential               PasswordCredential?
+  devices                          Device[]
+  sessions                         Session[]
+  verificationChallenges           VerificationChallenge[]
+  securityEvents                   SecurityEvent[]
+  emailChangeRequests              EmailChangeRequest[]
+  twoFactorSettings                TwoFactorSettings?
+  twoFactorRecoveryCodes           TwoFactorRecoveryCode[]
+  stepUpGrants                     StepUpGrant[]
+  roleAssignments                  UserRoleAssignment[]
+  sellerApplication                SellerApplication?           @relation("SellerApplicationOwner")
+  reviewedSellerApplications       SellerApplication[]          @relation("SellerApplicationReviewer")
+  sellerProfile                    SellerProfile?
+  reviewedListingDrafts            ListingDraft[]               @relation("ListingDraftReviewer")
+  carts                            Cart[]                       @relation("CartBuyer")
+  orders                           Order[]                      @relation("OrderBuyer")
+  commerceIdempotencyRecords       CommerceIdempotencyRecord[]
+  reviewedWithdrawals              Withdrawal[]                 @relation("WithdrawalReviewer")
+  createdFeePolicies               FeePolicyVersion[]           @relation("FeePolicyCreator")
+  publishedFeePolicies             FeePolicyVersion[]           @relation("FeePolicyPublisher")
+  createdWithdrawalPolicies        WithdrawalPolicyVersion[]    @relation("WithdrawalPolicyCreator")
+  publishedWithdrawalPolicies      WithdrawalPolicyVersion[]    @relation("WithdrawalPolicyPublisher")
+  createdSellerReleasePolicies     SellerReleasePolicyVersion[] @relation("SellerReleasePolicyCreator")
+  publishedSellerReleasePolicies   SellerReleasePolicyVersion[] @relation("SellerReleasePolicyPublisher")
+  financialEvents                  FinancialEvent[]             @relation("FinancialEventActor")
+  requestedRefunds                 Refund[]                     @relation("RefundRequester")
+  sentOrderChatMessages            OrderChatMessage[]           @relation("OrderChatMessageSender")
+  litPointsTransactions            LitPointsLedgerTransaction[]
+  litPointsEntries                 LitPointsLedgerEntry[]
+  disputeCaseEvents                DisputeCaseEvent[]           @relation("DisputeCaseEventActor")
+  createdDisputeFinancialDecisions DisputeFinancialDecision[]   @relation("DisputeFinancialDecisionCreator")
+  buyerDisputeFinancialDecisions   DisputeFinancialDecision[]   @relation("DisputeFinancialDecisionBuyer")
 
   @@unique([phoneE164])
   @@index([email])
@@ -374,17 +381,18 @@ model SellerProfile {
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt
 
-  user                    User                     @relation(fields: [userId], references: [id], onDelete: Restrict)
-  listingDrafts           ListingDraft[]
-  products                Product[]
-  carts                   Cart[]
-  orders                  Order[]
-  paymentProviderAccounts PaymentProviderAccount[]
-  ledgerAccounts          LedgerAccount[]
-  financialHolds          FinancialHold[]
-  sellerPendingHoldZeros  SellerPendingHoldZero[]
-  withdrawals             Withdrawal[]
-  orderDeliveries         OrderDelivery[]
+  user                      User                       @relation(fields: [userId], references: [id], onDelete: Restrict)
+  listingDrafts             ListingDraft[]
+  products                  Product[]
+  carts                     Cart[]
+  orders                    Order[]
+  paymentProviderAccounts   PaymentProviderAccount[]
+  ledgerAccounts            LedgerAccount[]
+  financialHolds            FinancialHold[]
+  sellerPendingHoldZeros    SellerPendingHoldZero[]
+  withdrawals               Withdrawal[]
+  orderDeliveries           OrderDelivery[]
+  disputeFinancialDecisions DisputeFinancialDecision[]
 
   @@index([status])
   @@index([slug])
@@ -1018,6 +1026,7 @@ model Order {
   sellerReleasePolicySubcategory     CatalogSubcategory?               @relation("OrderSellerReleasePolicySubcategory", fields: [sellerReleasePolicySubcategoryId], references: [id], onDelete: Restrict)
   chatConversation                   OrderChatConversation?
   disputeCases                       DisputeCase[]
+  disputeFinancialDecisions          DisputeFinancialDecision[]
 
   @@unique([id, sellerProfileId])
   @@index([buyerUserId, createdAt, id])
@@ -1033,18 +1042,46 @@ model Order {
 }
 
 model DisputeCase {
-  id              String             @id @default(uuid()) @db.Uuid
-  orderId         String             @db.Uuid
-  status          DisputeCaseStatus  @default(OPEN)
-  mutationActorId String?            @db.Uuid
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @default(now())
-  terminalAt      DateTime?
-  order           Order              @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  events          DisputeCaseEvent[]
+  id                String                    @id @default(uuid()) @db.Uuid
+  orderId           String                    @db.Uuid
+  status            DisputeCaseStatus         @default(OPEN)
+  mutationActorId   String?                   @db.Uuid
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @default(now())
+  terminalAt        DateTime?
+  order             Order                     @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  events            DisputeCaseEvent[]
+  financialDecision DisputeFinancialDecision?
 
   @@unique([id, orderId])
   @@index([orderId, createdAt, id])
+}
+
+model DisputeFinancialDecision {
+  id                          String                       @id @default(uuid()) @db.Uuid
+  disputeCaseId               String                       @unique @db.Uuid
+  orderId                     String                       @db.Uuid
+  buyerUserId                 String                       @db.Uuid
+  sellerProfileId             String                       @db.Uuid
+  decisionType                DisputeFinancialDecisionType
+  orderPrincipalSnapshotMinor BigInt
+  decidedPrincipalAmountMinor BigInt
+  currency                    String                       @default("BRL")
+  executableAt                DateTime                     @default(now())
+  createdByUserId             String                       @db.Uuid
+  idempotencyKeyHash          String
+  requestHash                 String
+  createdAt                   DateTime                     @default(now())
+  disputeCase                 DisputeCase                  @relation(fields: [disputeCaseId, orderId], references: [id, orderId], onDelete: Restrict)
+  order                       Order                        @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  buyer                       User                         @relation("DisputeFinancialDecisionBuyer", fields: [buyerUserId], references: [id], onDelete: Restrict)
+  sellerProfile               SellerProfile                @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
+  createdBy                   User                         @relation("DisputeFinancialDecisionCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([createdByUserId, idempotencyKeyHash])
+  @@unique([disputeCaseId, orderId])
+  @@index([sellerProfileId, executableAt, id])
+  @@index([orderId, executableAt, id])
 }
 
 model DisputeCaseEvent {
