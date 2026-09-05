@@ -194,6 +194,98 @@ describe('AA0 DisputeFinancialDecision (real PostgreSQL)', () => {
       VALUES (${randomUUID()}::uuid,${p.caseId}::uuid,${p.orderId}::uuid,${p.buyerId}::uuid,${p.sellerId}::uuid,${p.type ?? 'PARTIAL'}::"DisputeFinancialDecisionType",${p.principal ?? 10000n},${p.amount},${p.currency ?? 'BRL'},${p.executableAt ?? new Date('2000-01-01')},${p.actorId}::uuid,${p.hash ?? 'a'.repeat(64)},${'b'.repeat(64)},${new Date('2000-01-01')})`;
   }
 
+  async function liabilityAuthority(decisionId: string) {
+    const decision = await prisma.disputeFinancialDecision.findUniqueOrThrow({
+      where: { id: decisionId },
+    });
+    const components = await prisma.orderFeeComponentSnapshot.findMany({
+      where: { orderId: decision.orderId, componentKind: { in: ['LISTING_TIER', 'SELLER_MAX'] } },
+      orderBy: { id: 'asc' },
+    });
+    const prior = await prisma.disputeFinancialDecision.aggregate({
+      where: {
+        orderId: decision.orderId,
+        OR: [
+          { executableAt: { lt: decision.executableAt } },
+          { executableAt: decision.executableAt, id: { lt: decision.id } },
+        ],
+      },
+      _sum: { decidedPrincipalAmountMinor: true },
+    });
+    const priorPrincipal = prior._sum.decidedPrincipalAmountMinor ?? 0n;
+    const allocations = components.map((component) => ({
+      component,
+      amount:
+        (component.feeAmountMinor * (priorPrincipal + decision.decidedPrincipalAmountMinor)) /
+          decision.orderPrincipalSnapshotMinor -
+        (component.feeAmountMinor * priorPrincipal) / decision.orderPrincipalSnapshotMinor,
+    }));
+    return {
+      decision,
+      allocations,
+      reversal: allocations.reduce((sum, allocation) => sum + allocation.amount, 0n),
+    };
+  }
+
+  type LiabilityOverrides = Partial<{
+    financialDecisionId: string;
+    disputeCaseId: string;
+    orderId: string;
+    buyerUserId: string;
+    sellerProfileId: string;
+    principal: bigint;
+    reversal: bigint;
+    liability: bigint;
+    currency: string;
+    createdAt: Date;
+  }>;
+
+  async function directLiabilityParent(
+    tx: Prisma.TransactionClient | PrismaClient,
+    decisionId: string,
+    overrides: LiabilityOverrides = {},
+  ) {
+    const authority = await liabilityAuthority(decisionId);
+    const d = authority.decision;
+    const id = randomUUID();
+    await tx.$executeRaw`
+      INSERT INTO "DisputeSellerLiability"
+        (id,"disputeFinancialDecisionId","disputeCaseId","orderId","buyerUserId","sellerProfileId",
+         "decisionPrincipalAmountMinor","reversiblePlatformSellerFeeRequiredAmountMinor",
+         "sellerLiabilityAmountMinor",currency,"createdAt")
+      VALUES
+        (${id}::uuid,${overrides.financialDecisionId ?? d.id}::uuid,
+         ${overrides.disputeCaseId ?? d.disputeCaseId}::uuid,${overrides.orderId ?? d.orderId}::uuid,
+         ${overrides.buyerUserId ?? d.buyerUserId}::uuid,
+         ${overrides.sellerProfileId ?? d.sellerProfileId}::uuid,
+         ${overrides.principal ?? d.decidedPrincipalAmountMinor},
+         ${overrides.reversal ?? authority.reversal},
+         ${overrides.liability ?? d.decidedPrincipalAmountMinor - authority.reversal},
+         ${overrides.currency ?? d.currency},${overrides.createdAt ?? new Date('2000-01-01')})`;
+    return { id, ...authority };
+  }
+
+  async function directLiabilityChild(
+    tx: Prisma.TransactionClient | PrismaClient,
+    liabilityId: string,
+    snapshot: Awaited<ReturnType<typeof liabilityAuthority>>['allocations'][number]['component'],
+    amount: bigint,
+    overrides: Partial<{
+      snapshotId: string;
+      componentKind: 'LISTING_TIER' | 'SELLER_MAX' | 'BUYER_VIP';
+      originalFee: bigint;
+    }> = {},
+  ) {
+    return tx.$executeRaw`
+      INSERT INTO "DisputeSellerLiabilityFeeComponent"
+        (id,"disputeSellerLiabilityId","orderFeeComponentSnapshotId","componentKind",
+         "originalFrozenFeeAmountMinor","reversalRequiredAmountMinor","createdAt")
+      VALUES (${randomUUID()}::uuid,${liabilityId}::uuid,
+        ${overrides.snapshotId ?? snapshot.id}::uuid,
+        ${overrides.componentKind ?? snapshot.componentKind}::"OrderFeeComponentKind",
+        ${overrides.originalFee ?? snapshot.feeAmountMinor},${amount},${new Date('2000-01-01')})`;
+  }
+
   async function expectReleaseEvidenceRejection(operation: Promise<unknown>) {
     try {
       await operation;
@@ -564,5 +656,279 @@ describe('AA0 DisputeFinancialDecision (real PostgreSQL)', () => {
       `DELETE FROM "DisputeFinancialDecision" WHERE id='${d.id}'::uuid`,
     ])
       await expect(direct.$executeRawUnsafe(sql)).rejects.toBeDefined();
+  });
+
+  it('fails closed for unresolved legacy fees through the service and direct SQL', async () => {
+    const s = await sale();
+    const c = await buyerWin(s.order.id);
+    const d = await decisions.createPostReleaseBuyerDecision(
+      input(s.admin.id, c.id, 5000n, 'PARTIAL'),
+    );
+    // Controlled corruption fixture: earlier PostgreSQL guards make a modern snapshot immutable.
+    await direct.$executeRawUnsafe(
+      'ALTER TABLE "Order" DISABLE TRIGGER "Order_pricing_snapshot_immutable"',
+    );
+    try {
+      await direct.order.update({ where: { id: s.order.id }, data: { feeSnapshotVersion: null } });
+    } finally {
+      await direct.$executeRawUnsafe(
+        'ALTER TABLE "Order" ENABLE TRIGGER "Order_pricing_snapshot_immutable"',
+      );
+    }
+    await expect(liabilities.createForFinancialDecision(d.id)).rejects.toMatchObject({
+      code: 'SELLER_LIABILITY_LEGACY_FEE_UNRESOLVED',
+    });
+    await expect(directLiabilityParent(direct, d.id)).rejects.toMatchObject({
+      code: 'P2010',
+      meta: expect.objectContaining({
+        code: '23514',
+        message: expect.stringContaining('SELLER_LIABILITY_LEGACY_FEE_UNRESOLVED'),
+      }),
+    });
+    expect(await prisma.disputeSellerLiability.count()).toBe(0);
+  });
+
+  it('proves cumulative PostgreSQL rounding with remainder over 3333 + 3333 + 3334', async () => {
+    const s = await sale('RELEASED', false);
+    const frozen = await prisma.orderFeeComponentSnapshot.findMany({
+      where: { orderId: s.order.id, componentKind: { in: ['LISTING_TIER', 'SELLER_MAX'] } },
+      orderBy: { id: 'asc' },
+    });
+    const amounts = [3333n, 3333n, 3334n];
+    let prior = 0n;
+    const seen = new Map<string, bigint>();
+    for (const amount of amounts) {
+      const c = await buyerWin(s.order.id);
+      const d = await decisions.createPostReleaseBuyerDecision(
+        input(s.admin.id, c.id, amount, 'PARTIAL'),
+      );
+      const liability = await liabilities.createForFinancialDecision(d.id);
+      expect(liability.sellerLiabilityAmountMinor).toBe(
+        amount - liability.reversiblePlatformSellerFeeRequiredAmountMinor,
+      );
+      for (const fee of liability.feeComponents) {
+        const original = frozen.find(
+          (snapshot) => snapshot.id === fee.orderFeeComponentSnapshotId,
+        )!;
+        const expected =
+          (original.feeAmountMinor * (prior + amount)) / 10000n -
+          (original.feeAmountMinor * prior) / 10000n;
+        expect(fee.reversalRequiredAmountMinor).toBe(expected);
+        seen.set(original.id, (seen.get(original.id) ?? 0n) + fee.reversalRequiredAmountMinor);
+        expect(seen.get(original.id)).toBeLessThanOrEqual(original.feeAmountMinor);
+      }
+      prior += amount;
+    }
+    expect(prior).toBe(10000n);
+    for (const snapshot of frozen) expect(seen.get(snapshot.id)).toBe(snapshot.feeAmountMinor);
+  });
+
+  it('rejects direct parent party, linkage, principal, currency and calculated amount forgery', async () => {
+    const s = await sale();
+    const c = await buyerWin(s.order.id);
+    const d = await decisions.createPostReleaseBuyerDecision(
+      input(s.admin.id, c.id, 5000n, 'PARTIAL'),
+    );
+    const other = await sale();
+    const authority = await liabilityAuthority(d.id);
+    const invalid: LiabilityOverrides[] = [
+      { buyerUserId: other.buyer.id },
+      { sellerProfileId: other.seller.id },
+      { orderId: other.order.id },
+      { disputeCaseId: (await buyerWin(other.order.id)).id },
+      { principal: d.decidedPrincipalAmountMinor - 1n },
+      { reversal: authority.reversal - 1n },
+      { reversal: authority.reversal + 1n },
+      { liability: d.decidedPrincipalAmountMinor - authority.reversal + 1n },
+      { liability: -1n },
+      { currency: 'USD' },
+    ];
+    for (const overrides of invalid)
+      await expect(directLiabilityParent(direct, d.id, overrides)).rejects.toBeDefined();
+    expect(await prisma.disputeSellerLiability.count({ where: { orderId: s.order.id } })).toBe(0);
+  });
+
+  it('enforces parent and child append-only triggers for every authority field', async () => {
+    const s = await sale();
+    const c = await buyerWin(s.order.id);
+    const d = await decisions.createPostReleaseBuyerDecision(
+      input(s.admin.id, c.id, 5000n, 'PARTIAL'),
+    );
+    const liability = await liabilities.createForFinancialDecision(d.id);
+    const child = liability.feeComponents[0];
+    const parentUpdates = [
+      `"sellerLiabilityAmountMinor"=0`,
+      `"reversiblePlatformSellerFeeRequiredAmountMinor"=0`,
+      `"decisionPrincipalAmountMinor"=1`,
+      `"buyerUserId"='${s.admin.id}'::uuid`,
+      `"sellerProfileId"='${randomUUID()}'::uuid`,
+      `"createdAt"=CURRENT_TIMESTAMP`,
+    ];
+    for (const update of parentUpdates)
+      await expect(
+        direct.$executeRawUnsafe(
+          `UPDATE "DisputeSellerLiability" SET ${update} WHERE id='${liability.id}'::uuid`,
+        ),
+      ).rejects.toBeDefined();
+    const childUpdates = [
+      `"reversalRequiredAmountMinor"=0`,
+      `"originalFrozenFeeAmountMinor"=0`,
+      `"orderFeeComponentSnapshotId"='${randomUUID()}'::uuid`,
+      `"componentKind"='BUYER_VIP'`,
+    ];
+    for (const update of childUpdates)
+      await expect(
+        direct.$executeRawUnsafe(
+          `UPDATE "DisputeSellerLiabilityFeeComponent" SET ${update} WHERE id='${child.id}'::uuid`,
+        ),
+      ).rejects.toBeDefined();
+    await expect(
+      direct.$executeRawUnsafe(
+        `DELETE FROM "DisputeSellerLiabilityFeeComponent" WHERE id='${child.id}'::uuid`,
+      ),
+    ).rejects.toBeDefined();
+    await expect(
+      direct.$executeRawUnsafe(
+        `DELETE FROM "DisputeSellerLiability" WHERE id='${liability.id}'::uuid`,
+      ),
+    ).rejects.toBeDefined();
+  });
+
+  it('rejects forged children, Buyer VIP reversal, and incomplete deferred breakdown at COMMIT', async () => {
+    const s = await sale('RELEASED', true);
+    const c = await buyerWin(s.order.id);
+    const d = await decisions.createPostReleaseBuyerDecision(
+      input(s.admin.id, c.id, 5000n, 'PARTIAL'),
+    );
+    const authority = await liabilityAuthority(d.id);
+    const sellerFee = authority.allocations[0];
+    const vip = await prisma.orderFeeComponentSnapshot.findFirstOrThrow({
+      where: { orderId: s.order.id, componentKind: 'BUYER_VIP' },
+    });
+    const other = await sale('RELEASED', false);
+    const otherSnapshot = await prisma.orderFeeComponentSnapshot.findFirstOrThrow({
+      where: { orderId: other.order.id, componentKind: 'LISTING_TIER' },
+    });
+    const invalidChildren = [
+      { snapshotId: otherSnapshot.id },
+      { componentKind: 'SELLER_MAX' as const },
+      { originalFee: sellerFee.component.feeAmountMinor + 1n },
+    ];
+    for (const overrides of invalidChildren)
+      await expect(
+        direct.$transaction(async (tx) => {
+          const parent = await directLiabilityParent(tx, d.id);
+          await directLiabilityChild(
+            tx,
+            parent.id,
+            sellerFee.component,
+            sellerFee.amount,
+            overrides,
+          );
+        }),
+      ).rejects.toBeDefined();
+    await expect(
+      direct.$transaction(async (tx) => {
+        const parent = await directLiabilityParent(tx, d.id);
+        await directLiabilityChild(tx, parent.id, sellerFee.component, sellerFee.amount + 1n);
+      }),
+    ).rejects.toBeDefined();
+    await expect(
+      direct.$transaction(async (tx) => {
+        const parent = await directLiabilityParent(tx, d.id);
+        await directLiabilityChild(tx, parent.id, vip, 0n, { componentKind: 'BUYER_VIP' });
+      }),
+    ).rejects.toBeDefined();
+    await expect(
+      direct.$transaction(async (tx) => {
+        await directLiabilityParent(tx, d.id);
+        // The INSERT is accepted here; the deferred constraint must reject COMMIT.
+      }),
+    ).rejects.toThrow('seller liability fee breakdown incomplete');
+    expect(await prisma.disputeSellerLiability.count({ where: { orderId: s.order.id } })).toBe(0);
+  });
+
+  it('serializes concurrent same-decision replay without duplicate rows or raw retry errors', async () => {
+    const s = await sale();
+    const c = await buyerWin(s.order.id);
+    const d = await decisions.createPostReleaseBuyerDecision(
+      input(s.admin.id, c.id, 5000n, 'PARTIAL'),
+    );
+    const results = await Promise.allSettled([
+      liabilities.createForFinancialDecision(d.id),
+      liabilities.createForFinancialDecision(d.id),
+    ]);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(2);
+    expect(rejectionText(results)).not.toMatch(/40001|40P01|deadlock/i);
+    const fulfilled = results.filter(
+      (
+        result,
+      ): result is PromiseFulfilledResult<
+        Awaited<ReturnType<typeof liabilities.createForFinancialDecision>>
+      > => result.status === 'fulfilled',
+    );
+    expect(fulfilled[0].value.id).toBe(fulfilled[1].value.id);
+    expect(await prisma.disputeSellerLiability.count({ where: { orderId: s.order.id } })).toBe(1);
+    expect(
+      await prisma.disputeSellerLiabilityFeeComponent.count({
+        where: { disputeSellerLiabilityId: fulfilled[0].value.id },
+      }),
+    ).toBe(fulfilled[0].value.feeComponents.length);
+  });
+
+  it('serializes different historical liabilities on one Order and preserves snapshot/non-effects', async () => {
+    const s = await sale();
+    const a = await buyerWin(s.order.id);
+    const da = await decisions.createPostReleaseBuyerDecision(
+      input(s.admin.id, a.id, 3333n, 'PARTIAL'),
+    );
+    const b = await buyerWin(s.order.id);
+    const db = await decisions.createPostReleaseBuyerDecision(
+      input(s.admin.id, b.id, 6667n, 'PARTIAL'),
+    );
+    const before = {
+      ledgerTransactions: await prisma.ledgerTransaction.count(),
+      ledgerEntries: await prisma.ledgerEntry.count(),
+      events: await prisma.financialEvent.count(),
+      outbox: await prisma.financialOutboxEvent.count(),
+      refunds: await prisma.refund.count(),
+      holds: await prisma.financialHold.findMany({ where: { orderId: s.order.id } }),
+      payment: await prisma.payment.findUniqueOrThrow({ where: { orderId: s.order.id } }),
+      order: await prisma.order.findUniqueOrThrow({ where: { id: s.order.id } }),
+      finance: await finance.summary(s.sellerUser.id),
+      snapshots: await prisma.orderFeeComponentSnapshot.findMany({
+        where: { orderId: s.order.id },
+        orderBy: { id: 'asc' },
+      }),
+    };
+    const results = await Promise.allSettled([
+      liabilities.createForFinancialDecision(da.id),
+      liabilities.createForFinancialDecision(db.id),
+    ]);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(2);
+    expect(rejectionText(results)).not.toMatch(/40001|40P01|deadlock/i);
+    expect(await prisma.disputeSellerLiability.count({ where: { orderId: s.order.id } })).toBe(2);
+    for (const snapshot of before.snapshots.filter((fee) => fee.componentKind !== 'BUYER_VIP')) {
+      const allocated = await prisma.disputeSellerLiabilityFeeComponent.aggregate({
+        where: { orderFeeComponentSnapshotId: snapshot.id },
+        _sum: { reversalRequiredAmountMinor: true },
+      });
+      expect(allocated._sum.reversalRequiredAmountMinor).toBe(snapshot.feeAmountMinor);
+    }
+    expect({
+      ledgerTransactions: await prisma.ledgerTransaction.count(),
+      ledgerEntries: await prisma.ledgerEntry.count(),
+      events: await prisma.financialEvent.count(),
+      outbox: await prisma.financialOutboxEvent.count(),
+      refunds: await prisma.refund.count(),
+      holds: await prisma.financialHold.findMany({ where: { orderId: s.order.id } }),
+      payment: await prisma.payment.findUniqueOrThrow({ where: { orderId: s.order.id } }),
+      order: await prisma.order.findUniqueOrThrow({ where: { id: s.order.id } }),
+      finance: await finance.summary(s.sellerUser.id),
+      snapshots: await prisma.orderFeeComponentSnapshot.findMany({
+        where: { orderId: s.order.id },
+        orderBy: { id: 'asc' },
+      }),
+    }).toEqual(before);
   });
 });
