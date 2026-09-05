@@ -8,6 +8,7 @@ import { CheckoutService } from '../src/checkout/checkout.service';
 import { PrismaService } from '../src/database/prisma.service';
 import { DisputeCoreService } from '../src/disputes/dispute-core.service';
 import { DisputeFinancialDecisionService } from '../src/disputes/dispute-financial-decision.service';
+import { DisputeSellerLiabilityService } from '../src/disputes/dispute-seller-liability.service';
 import { SaleFinancialRecognitionService } from '../src/financial/sale-financial-recognition.service';
 import { SellerFinanceReadService } from '../src/financial/seller-finance-read.service';
 import { SellerHeldFundsReleaseService } from '../src/financial/seller-held-funds-release.service';
@@ -36,6 +37,7 @@ describe('AA0 DisputeFinancialDecision (real PostgreSQL)', () => {
   let fulfillment: OrderFulfillmentService;
   let disputes: DisputeCoreService;
   let decisions: DisputeFinancialDecisionService;
+  let liabilities: DisputeSellerLiabilityService;
   let finance: SellerFinanceReadService;
   let version = 80_000;
 
@@ -54,6 +56,7 @@ describe('AA0 DisputeFinancialDecision (real PostgreSQL)', () => {
     fulfillment = app.get(OrderFulfillmentService);
     disputes = app.get(DisputeCoreService);
     decisions = app.get(DisputeFinancialDecisionService);
+    liabilities = app.get(DisputeSellerLiabilityService);
     finance = app.get(SellerFinanceReadService);
   });
   beforeEach(() => direct.$executeRawUnsafe('TRUNCATE TABLE "User", "CatalogCategory" CASCADE'));
@@ -228,6 +231,7 @@ describe('AA0 DisputeFinancialDecision (real PostgreSQL)', () => {
     };
     const principal = s.order.subtotalAmountMinor - s.order.discountAmountMinor;
     const d = await decisions.createPostReleaseBuyerDecision(input(s.admin.id, c.id, principal));
+    const liability = await liabilities.createForFinancialDecision(d.id);
     expect(d).toMatchObject({
       orderId: s.order.id,
       buyerUserId: s.buyer.id,
@@ -238,6 +242,17 @@ describe('AA0 DisputeFinancialDecision (real PostgreSQL)', () => {
       currency: 'BRL',
     });
     expect(d.executableAt).toEqual(d.createdAt);
+    const sellerFees = before.fees.filter((fee) =>
+      ['LISTING_TIER', 'SELLER_MAX'].includes(fee.componentKind),
+    );
+    expect(liability.reversiblePlatformSellerFeeRequiredAmountMinor).toBe(
+      sellerFees.reduce((sum, fee) => sum + fee.feeAmountMinor, 0n),
+    );
+    expect(liability.sellerLiabilityAmountMinor).toBe(
+      principal - liability.reversiblePlatformSellerFeeRequiredAmountMinor,
+    );
+    expect(liability.feeComponents.map((fee) => fee.componentKind)).not.toContain('BUYER_VIP');
+    await expect(liabilities.createForFinancialDecision(d.id)).resolves.toEqual(liability);
     expect({
       tx: await prisma.ledgerTransaction.count(),
       entries: await prisma.ledgerEntry.count(),
@@ -316,9 +331,26 @@ describe('AA0 DisputeFinancialDecision (real PostgreSQL)', () => {
   it('accepts sequential historical 4000 + 6000 and rejects the next positive amount', async () => {
     const s = await sale();
     const a = await buyerWin(s.order.id);
-    await decisions.createPostReleaseBuyerDecision(input(s.admin.id, a.id, 4000n, 'PARTIAL'));
+    const da = await decisions.createPostReleaseBuyerDecision(
+      input(s.admin.id, a.id, 4000n, 'PARTIAL'),
+    );
+    const la = await liabilities.createForFinancialDecision(da.id);
     const b = await buyerWin(s.order.id);
-    await decisions.createPostReleaseBuyerDecision(input(s.admin.id, b.id, 6000n, 'PARTIAL'));
+    const db = await decisions.createPostReleaseBuyerDecision(
+      input(s.admin.id, b.id, 6000n, 'PARTIAL'),
+    );
+    const lb = await liabilities.createForFinancialDecision(db.id);
+    expect(
+      la.reversiblePlatformSellerFeeRequiredAmountMinor +
+        lb.reversiblePlatformSellerFeeRequiredAmountMinor,
+    ).toBe(
+      (
+        await prisma.orderFeeComponentSnapshot.aggregate({
+          where: { orderId: s.order.id, componentKind: { in: ['LISTING_TIER', 'SELLER_MAX'] } },
+          _sum: { feeAmountMinor: true },
+        })
+      )._sum.feeAmountMinor,
+    );
     const c = await buyerWin(s.order.id);
     await expect(
       decisions.createPostReleaseBuyerDecision(input(s.admin.id, c.id, 1n, 'PARTIAL')),

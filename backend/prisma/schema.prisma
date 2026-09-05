@@ -329,6 +329,7 @@ model User {
   disputeCaseEvents                DisputeCaseEvent[]           @relation("DisputeCaseEventActor")
   createdDisputeFinancialDecisions DisputeFinancialDecision[]   @relation("DisputeFinancialDecisionCreator")
   buyerDisputeFinancialDecisions   DisputeFinancialDecision[]   @relation("DisputeFinancialDecisionBuyer")
+  buyerDisputeSellerLiabilities    DisputeSellerLiability[]     @relation("DisputeSellerLiabilityBuyer")
 
   @@unique([phoneE164])
   @@index([email])
@@ -393,6 +394,7 @@ model SellerProfile {
   withdrawals               Withdrawal[]
   orderDeliveries           OrderDelivery[]
   disputeFinancialDecisions DisputeFinancialDecision[]
+  disputeSellerLiabilities  DisputeSellerLiability[]
 
   @@index([status])
   @@index([slug])
@@ -1027,6 +1029,7 @@ model Order {
   chatConversation                   OrderChatConversation?
   disputeCases                       DisputeCase[]
   disputeFinancialDecisions          DisputeFinancialDecision[]
+  disputeSellerLiabilities           DisputeSellerLiability[]
 
   @@unique([id, sellerProfileId])
   @@index([buyerUserId, createdAt, id])
@@ -1052,6 +1055,7 @@ model DisputeCase {
   order             Order                     @relation(fields: [orderId], references: [id], onDelete: Restrict)
   events            DisputeCaseEvent[]
   financialDecision DisputeFinancialDecision?
+  sellerLiability   DisputeSellerLiability?
 
   @@unique([id, orderId])
   @@index([orderId, createdAt, id])
@@ -1077,11 +1081,49 @@ model DisputeFinancialDecision {
   buyer                       User                         @relation("DisputeFinancialDecisionBuyer", fields: [buyerUserId], references: [id], onDelete: Restrict)
   sellerProfile               SellerProfile                @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
   createdBy                   User                         @relation("DisputeFinancialDecisionCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  sellerLiability             DisputeSellerLiability?
 
   @@unique([createdByUserId, idempotencyKeyHash])
   @@unique([disputeCaseId, orderId])
   @@index([sellerProfileId, executableAt, id])
   @@index([orderId, executableAt, id])
+}
+
+model DisputeSellerLiability {
+  id                                             String                               @id @default(uuid()) @db.Uuid
+  disputeFinancialDecisionId                     String                               @unique @db.Uuid
+  disputeCaseId                                  String                               @unique @db.Uuid
+  orderId                                        String                               @db.Uuid
+  buyerUserId                                    String                               @db.Uuid
+  sellerProfileId                                String                               @db.Uuid
+  decisionPrincipalAmountMinor                   BigInt
+  reversiblePlatformSellerFeeRequiredAmountMinor BigInt
+  sellerLiabilityAmountMinor                     BigInt
+  currency                                       String                               @default("BRL")
+  createdAt                                      DateTime                             @default(now())
+  financialDecision                              DisputeFinancialDecision             @relation(fields: [disputeFinancialDecisionId], references: [id], onDelete: Restrict)
+  disputeCase                                    DisputeCase                          @relation(fields: [disputeCaseId], references: [id], onDelete: Restrict)
+  order                                          Order                                @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  buyer                                          User                                 @relation("DisputeSellerLiabilityBuyer", fields: [buyerUserId], references: [id], onDelete: Restrict)
+  sellerProfile                                  SellerProfile                        @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
+  feeComponents                                  DisputeSellerLiabilityFeeComponent[]
+
+  @@index([orderId, createdAt, id])
+  @@index([sellerProfileId, createdAt, id])
+}
+
+model DisputeSellerLiabilityFeeComponent {
+  id                           String                    @id @default(uuid()) @db.Uuid
+  disputeSellerLiabilityId     String                    @db.Uuid
+  orderFeeComponentSnapshotId  String                    @db.Uuid
+  componentKind                OrderFeeComponentKind
+  originalFrozenFeeAmountMinor BigInt
+  reversalRequiredAmountMinor  BigInt
+  createdAt                    DateTime                  @default(now())
+  liability                    DisputeSellerLiability    @relation(fields: [disputeSellerLiabilityId], references: [id], onDelete: Restrict)
+  orderFeeComponentSnapshot    OrderFeeComponentSnapshot @relation(fields: [orderFeeComponentSnapshotId], references: [id], onDelete: Restrict)
+
+  @@unique([disputeSellerLiabilityId, orderFeeComponentSnapshotId])
 }
 
 model DisputeCaseEvent {
@@ -1101,26 +1143,27 @@ model DisputeCaseEvent {
 }
 
 model OrderFeeComponentSnapshot {
-  id                   String                            @id @default(uuid()) @db.Uuid
-  orderId              String                            @db.Uuid
-  componentKind        OrderFeeComponentKind
-  feePolicyVersionId   String                            @db.Uuid
-  feeRuleId            String                            @db.Uuid
-  pricingPolicyVersion Int
-  listingTier          ListingDraftPromotionPreference?
-  sellerPlan           ListingDraftSellerPlanPreference?
-  buyerVipPlan         BuyerVipPlan?
-  category             FeeRuleCategory
-  partyCharged         FeeParty
-  formula              FeeFormula
-  percentBps           Int
-  baseAmountMinor      BigInt
-  feeAmountMinor       BigInt
-  currency             String
-  createdAt            DateTime                          @default(now())
-  order                Order                             @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  feePolicyVersion     FeePolicyVersion                  @relation(fields: [feePolicyVersionId], references: [id], onDelete: Restrict)
-  feeRule              FeeRule                           @relation(fields: [feeRuleId, feePolicyVersionId], references: [id, policyVersionId], onDelete: Restrict)
+  id                                  String                               @id @default(uuid()) @db.Uuid
+  orderId                             String                               @db.Uuid
+  componentKind                       OrderFeeComponentKind
+  feePolicyVersionId                  String                               @db.Uuid
+  feeRuleId                           String                               @db.Uuid
+  pricingPolicyVersion                Int
+  listingTier                         ListingDraftPromotionPreference?
+  sellerPlan                          ListingDraftSellerPlanPreference?
+  buyerVipPlan                        BuyerVipPlan?
+  category                            FeeRuleCategory
+  partyCharged                        FeeParty
+  formula                             FeeFormula
+  percentBps                          Int
+  baseAmountMinor                     BigInt
+  feeAmountMinor                      BigInt
+  currency                            String
+  createdAt                           DateTime                             @default(now())
+  order                               Order                                @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  feePolicyVersion                    FeePolicyVersion                     @relation(fields: [feePolicyVersionId], references: [id], onDelete: Restrict)
+  feeRule                             FeeRule                              @relation(fields: [feeRuleId, feePolicyVersionId], references: [id, policyVersionId], onDelete: Restrict)
+  disputeSellerLiabilityFeeComponents DisputeSellerLiabilityFeeComponent[]
 
   @@unique([orderId, componentKind])
   @@index([feePolicyVersionId])
