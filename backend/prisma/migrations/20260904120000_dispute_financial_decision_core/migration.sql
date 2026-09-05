@@ -64,7 +64,7 @@ BEGIN
       AND h.reason = 'DELIVERY_PROTECTION' AND h.status = 'RELEASED' AND h."amountMinor" > 0
       AND h."releasedAt" IS NOT NULL AND h."releaseLedgerTransactionId" IS NOT NULL
       AND lt.type = 'SELLER_FUNDS_RELEASED' AND lt."referenceType" = 'FinancialHoldRelease'
-      AND lt."referenceId" = h.id::text AND lt."createdAt" = h."releasedAt"
+      AND lt."referenceId" = h.id AND lt."createdAt" = h."releasedAt"
   ) THEN RAISE EXCEPTION 'financial decision requires legitimate seller proceeds release' USING ERRCODE = '23514'; END IF;
   SELECT COALESCE(SUM("decidedPrincipalAmountMinor"), 0) INTO already_decided FROM "DisputeFinancialDecision" WHERE "orderId" = NEW."orderId";
   IF already_decided + NEW."decidedPrincipalAmountMinor" > NEW."orderPrincipalSnapshotMinor" THEN

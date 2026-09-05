@@ -38,6 +38,17 @@ export class DisputeFinancialDecisionService {
         );
       } catch (error) {
         if (isSerializationFailure(error) && attempt < 3) continue;
+        if (this.isUniqueConflict(error)) {
+          const replay = await this.prisma.disputeFinancialDecision.findUnique({
+            where: {
+              createdByUserId_idempotencyKeyHash: {
+                createdByUserId: input.actorUserId,
+                idempotencyKeyHash: key.hash,
+              },
+            },
+          });
+          if (replay?.requestHash === requestHash) return replay;
+        }
         throw this.toDomainError(error);
       }
     }
@@ -182,5 +193,9 @@ export class DisputeFinancialDecisionService {
       );
     }
     return error;
+  }
+
+  private isUniqueConflict(error: unknown): boolean {
+    return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
   }
 }

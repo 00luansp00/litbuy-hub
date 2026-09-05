@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { PrismaClient } from '@prisma/client';
-import type { Prisma } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { Test } from '@nestjs/testing';
 import { AppModule } from '../src/app.module';
 import { CartsService } from '../src/carts/carts.service';
@@ -65,11 +64,13 @@ describe('AA0 DisputeFinancialDecision (real PostgreSQL)', () => {
 
   async function sale(stage: 'ACTIVE' | 'ELIGIBLE' | 'RELEASED' = 'RELEASED', vip = true) {
     const f = await commerceFixture(prisma, 'NORMAL', undefined, 20, false, false);
-    await publishPlatformCommissionPolicy(prisma, f.sellerUser.id, {
-      publicVersion: version++,
-      percentBps: 1000,
-    });
-    await publishSellerReleasePolicy(prisma, f.sellerUser.id, 0);
+    if ((await prisma.feePolicyVersion.count({ where: { status: 'ACTIVE' } })) === 0)
+      await publishPlatformCommissionPolicy(prisma, f.sellerUser.id, {
+        publicVersion: version++,
+        percentBps: 1000,
+      });
+    if ((await prisma.sellerReleasePolicyVersion.count({ where: { status: 'ACTIVE' } })) === 0)
+      await publishSellerReleasePolicy(prisma, f.sellerUser.id, 0);
     const cart = await carts.add(f.buyer.id, f.seller.slug, {
       productId: f.product.id,
       quantity: 10,
@@ -188,6 +189,21 @@ describe('AA0 DisputeFinancialDecision (real PostgreSQL)', () => {
     return tx.$executeRaw`
       INSERT INTO "DisputeFinancialDecision" (id,"disputeCaseId","orderId","buyerUserId","sellerProfileId","decisionType","orderPrincipalSnapshotMinor","decidedPrincipalAmountMinor",currency,"executableAt","createdByUserId","idempotencyKeyHash","requestHash","createdAt")
       VALUES (${randomUUID()}::uuid,${p.caseId}::uuid,${p.orderId}::uuid,${p.buyerId}::uuid,${p.sellerId}::uuid,${p.type ?? 'PARTIAL'}::"DisputeFinancialDecisionType",${p.principal ?? 10000n},${p.amount},${p.currency ?? 'BRL'},${p.executableAt ?? new Date('2000-01-01')},${p.actorId}::uuid,${p.hash ?? 'a'.repeat(64)},${'b'.repeat(64)},${new Date('2000-01-01')})`;
+  }
+
+  async function expectReleaseEvidenceRejection(operation: Promise<unknown>) {
+    try {
+      await operation;
+      throw new Error('expected release evidence invariant to reject the insert');
+    } catch (error) {
+      expect(error).toBeInstanceOf(Prisma.PrismaClientKnownRequestError);
+      const prismaError = error as Prisma.PrismaClientKnownRequestError;
+      expect(prismaError.code).toBe('P2010');
+      expect(prismaError.meta).toMatchObject({ code: '23514' });
+      expect(String(prismaError.meta?.message)).toContain(
+        'financial decision requires legitimate seller proceeds release',
+      );
+    }
   }
 
   it('creates TOTAL after real G1/G2 release, excludes Buyer VIP, and moves no money', async () => {
@@ -343,16 +359,18 @@ describe('AA0 DisputeFinancialDecision (real PostgreSQL)', () => {
     const b = await buyerWin(s.order.id);
     const results = await Promise.allSettled([
       decisions.createPostReleaseBuyerDecision(input(s.admin.id, a.id, 6000n, 'PARTIAL')),
-      direct.$transaction((tx) =>
-        directInsert(tx, {
-          caseId: b.id,
-          orderId: s.order.id,
-          buyerId: s.buyer.id,
-          sellerId: s.seller.id,
-          actorId: s.admin.id,
-          amount: 6000n,
-          hash: 'c'.repeat(64),
-        }),
+      direct.$transaction(
+        (tx) =>
+          directInsert(tx, {
+            caseId: b.id,
+            orderId: s.order.id,
+            buyerId: s.buyer.id,
+            sellerId: s.seller.id,
+            actorId: s.admin.id,
+            amount: 6000n,
+            hash: 'c'.repeat(64),
+          }),
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       ),
     ]);
     expect(results.filter((x) => x.status === 'fulfilled')).toHaveLength(1);
@@ -425,7 +443,7 @@ describe('AA0 DisputeFinancialDecision (real PostgreSQL)', () => {
       await expect(directInsert(direct, bad)).rejects.toBeDefined();
     const pre = await sale('ELIGIBLE', false);
     const pc = await buyerWin(pre.order.id);
-    await expect(
+    await expectReleaseEvidenceRejection(
       directInsert(direct, {
         caseId: pc.id,
         orderId: pre.order.id,
@@ -434,7 +452,39 @@ describe('AA0 DisputeFinancialDecision (real PostgreSQL)', () => {
         actorId: pre.admin.id,
         amount: 5000n,
       }),
-    ).rejects.toBeDefined();
+    );
+  });
+
+  it('prevents inconsistent RELEASED evidence and rejects the unreleased decision', async () => {
+    const s = await sale('ELIGIBLE', false);
+    const c = await buyerWin(s.order.id);
+    const unrelatedPosting = await prisma.ledgerTransaction.findFirstOrThrow({
+      where: { type: 'SALE_RECOGNIZED', referenceId: s.order.id },
+    });
+    await expect(
+      prisma.$executeRaw`
+        UPDATE "FinancialHold"
+        SET status = 'RELEASED', "releasedAt" = transaction_timestamp(),
+            "releaseLedgerTransactionId" = ${unrelatedPosting.id}::uuid
+        WHERE id = ${s.hold.id}::uuid
+      `,
+    ).rejects.toMatchObject({
+      code: 'P2010',
+      meta: expect.objectContaining({
+        code: '23514',
+        message: expect.stringContaining('FINANCIAL_HOLD_RELEASE_POSTING_INVALID'),
+      }),
+    });
+    await expectReleaseEvidenceRejection(
+      directInsert(direct, {
+        caseId: c.id,
+        orderId: s.order.id,
+        buyerId: s.buyer.id,
+        sellerId: s.seller.id,
+        actorId: s.admin.id,
+        amount: 5000n,
+      }),
+    );
   });
 
   it.each(['OPEN', 'UNDER_REVIEW', 'RESOLVED_SELLER', 'CLOSED'] as const)(
