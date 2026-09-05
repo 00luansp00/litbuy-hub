@@ -9,6 +9,7 @@ import { PrismaService } from '../src/database/prisma.service';
 import { DisputeCoreService } from '../src/disputes/dispute-core.service';
 import { DisputeFinancialDecisionService } from '../src/disputes/dispute-financial-decision.service';
 import { DisputeSellerLiabilityService } from '../src/disputes/dispute-seller-liability.service';
+import { DisputeRecoveryService } from '../src/financial/dispute-recovery.service';
 import { SaleFinancialRecognitionService } from '../src/financial/sale-financial-recognition.service';
 import { SellerFinanceReadService } from '../src/financial/seller-finance-read.service';
 import { SellerHeldFundsReleaseService } from '../src/financial/seller-held-funds-release.service';
@@ -39,6 +40,7 @@ describe('AA0 DisputeFinancialDecision (real PostgreSQL)', () => {
   let decisions: DisputeFinancialDecisionService;
   let liabilities: DisputeSellerLiabilityService;
   let finance: SellerFinanceReadService;
+  let recovery: DisputeRecoveryService;
   let version = 80_000;
 
   beforeAll(async () => {
@@ -58,6 +60,7 @@ describe('AA0 DisputeFinancialDecision (real PostgreSQL)', () => {
     decisions = app.get(DisputeFinancialDecisionService);
     liabilities = app.get(DisputeSellerLiabilityService);
     finance = app.get(SellerFinanceReadService);
+    recovery = app.get(DisputeRecoveryService);
   });
   beforeEach(() => direct.$executeRawUnsafe('TRUNCATE TABLE "User", "CatalogCategory" CASCADE'));
   afterAll(async () => {
@@ -359,6 +362,55 @@ describe('AA0 DisputeFinancialDecision (real PostgreSQL)', () => {
       payment: await prisma.payment.findUniqueOrThrow({ where: { orderId: s.order.id } }),
       hold: await prisma.financialHold.findUniqueOrThrow({ where: { id: s.hold.id } }),
     }).toEqual(before);
+  });
+
+  it('AA0.2 reserves released AVAILABLE once, links the claim, and derives unfunded without deficit', async () => {
+    const s = await sale('RELEASED', false);
+    const c = await buyerWin(s.order.id);
+    const principal = s.order.subtotalAmountMinor - s.order.discountAmountMinor;
+    const d = await decisions.createPostReleaseBuyerDecision(input(s.admin.id, c.id, principal));
+    const liability = await liabilities.createForFinancialDecision(d.id);
+    const before = await finance.summary(s.sellerUser.id);
+    const result = await recovery.processForLiability(liability.id);
+    expect(result).toMatchObject({
+      outcome: 'CLAIM',
+      claimAmountMinor: liability.sellerLiabilityAmountMinor,
+      reservedAmountMinor: liability.sellerLiabilityAmountMinor,
+      unfundedAmountMinor: 0n,
+      status: 'FUNDED',
+    });
+    const claim = await prisma.disputeRecoveryClaim.findUniqueOrThrow({
+      where: { disputeSellerLiabilityId: liability.id },
+      include: { reservations: { include: { ledgerTransaction: { include: { entries: true } } } } },
+    });
+    expect(claim).toMatchObject({
+      buyerUserId: s.buyer.id,
+      sellerProfileId: s.seller.id,
+      orderId: s.order.id,
+      priorityAt: d.executableAt,
+      prioritySourceId: d.id,
+    });
+    expect(claim.reservations).toHaveLength(1);
+    expect(claim.reservations[0].ledgerTransaction).toMatchObject({
+      type: 'DISPUTE_RECOVERY_RESERVED',
+      referenceType: 'DisputeRecoveryClaim',
+      referenceId: claim.id,
+    });
+    expect(claim.reservations[0].ledgerTransaction.entries).toHaveLength(2);
+    const after = await finance.summary(s.sellerUser.id);
+    expect(BigInt(after.balances.availableMinor)).toBe(
+      BigInt(before.balances.availableMinor) - liability.sellerLiabilityAmountMinor,
+    );
+    expect(BigInt(after.balances.reservedMinor)).toBe(
+      BigInt(before.balances.reservedMinor) + liability.sellerLiabilityAmountMinor,
+    );
+    expect(after.balances.pendingMinor).toBe(before.balances.pendingMinor);
+    expect(after.balances.heldMinor).toBe(before.balances.heldMinor);
+    expect(after.balances.deficitMinor).toBe(before.balances.deficitMinor);
+    await expect(recovery.processForLiability(liability.id)).resolves.toEqual(result);
+    expect(await prisma.disputeRecoveryClaim.count()).toBe(1);
+    expect(await prisma.disputeRecoveryReservation.count()).toBe(1);
+    expect(await prisma.refund.count()).toBe(0);
   });
 
   it.each(['ACTIVE', 'ELIGIBLE'] as const)(
