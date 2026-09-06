@@ -39,11 +39,13 @@ import {
 } from './provider-webhook-event.processor';
 import { AlphaPostPaymentRehearsalOrchestrator } from './alpha-post-payment-rehearsal.orchestrator';
 import { DisputesModule } from '../disputes/disputes.module';
+import { DisputeRecoveryService } from './dispute-recovery.service';
 @Module({
   imports: [DatabaseModule, AuthModule, OrdersModule, DisputesModule, JwtModule.register({})],
   controllers: [ProviderNotificationController, SellerFinanceController, BuyerPaymentController],
   providers: [
     FinancialLedgerService,
+    DisputeRecoveryService,
     SellerFinanceReadService,
     SaleFinancialRecognitionService,
     SellerPendingHoldService,
@@ -87,6 +89,7 @@ import { DisputesModule } from '../disputes/disputes.module';
   ],
   exports: [
     FinancialLedgerService,
+    DisputeRecoveryService,
     SaleFinancialRecognitionService,
     SellerPendingHoldService,
     SellerHoldEligibilityService,

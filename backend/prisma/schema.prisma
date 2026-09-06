@@ -330,6 +330,7 @@ model User {
   createdDisputeFinancialDecisions DisputeFinancialDecision[]   @relation("DisputeFinancialDecisionCreator")
   buyerDisputeFinancialDecisions   DisputeFinancialDecision[]   @relation("DisputeFinancialDecisionBuyer")
   buyerDisputeSellerLiabilities    DisputeSellerLiability[]     @relation("DisputeSellerLiabilityBuyer")
+  buyerDisputeRecoveryClaims       DisputeRecoveryClaim[]       @relation("DisputeRecoveryClaimBuyer")
 
   @@unique([phoneE164])
   @@index([email])
@@ -382,19 +383,21 @@ model SellerProfile {
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt
 
-  user                      User                       @relation(fields: [userId], references: [id], onDelete: Restrict)
-  listingDrafts             ListingDraft[]
-  products                  Product[]
-  carts                     Cart[]
-  orders                    Order[]
-  paymentProviderAccounts   PaymentProviderAccount[]
-  ledgerAccounts            LedgerAccount[]
-  financialHolds            FinancialHold[]
-  sellerPendingHoldZeros    SellerPendingHoldZero[]
-  withdrawals               Withdrawal[]
-  orderDeliveries           OrderDelivery[]
-  disputeFinancialDecisions DisputeFinancialDecision[]
-  disputeSellerLiabilities  DisputeSellerLiability[]
+  user                        User                         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  listingDrafts               ListingDraft[]
+  products                    Product[]
+  carts                       Cart[]
+  orders                      Order[]
+  paymentProviderAccounts     PaymentProviderAccount[]
+  ledgerAccounts              LedgerAccount[]
+  financialHolds              FinancialHold[]
+  sellerPendingHoldZeros      SellerPendingHoldZero[]
+  withdrawals                 Withdrawal[]
+  orderDeliveries             OrderDelivery[]
+  disputeFinancialDecisions   DisputeFinancialDecision[]
+  disputeSellerLiabilities    DisputeSellerLiability[]
+  disputeRecoveryClaims       DisputeRecoveryClaim[]
+  disputeRecoveryReservations DisputeRecoveryReservation[]
 
   @@index([status])
   @@index([slug])
@@ -1030,6 +1033,7 @@ model Order {
   disputeCases                       DisputeCase[]
   disputeFinancialDecisions          DisputeFinancialDecision[]
   disputeSellerLiabilities           DisputeSellerLiability[]
+  disputeRecoveryClaims              DisputeRecoveryClaim[]
 
   @@unique([id, sellerProfileId])
   @@index([buyerUserId, createdAt, id])
@@ -1056,6 +1060,7 @@ model DisputeCase {
   events            DisputeCaseEvent[]
   financialDecision DisputeFinancialDecision?
   sellerLiability   DisputeSellerLiability?
+  recoveryClaim     DisputeRecoveryClaim?
 
   @@unique([id, orderId])
   @@index([orderId, createdAt, id])
@@ -1082,6 +1087,7 @@ model DisputeFinancialDecision {
   sellerProfile               SellerProfile                @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
   createdBy                   User                         @relation("DisputeFinancialDecisionCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
   sellerLiability             DisputeSellerLiability?
+  recoveryClaim               DisputeRecoveryClaim?
 
   @@unique([createdByUserId, idempotencyKeyHash])
   @@unique([disputeCaseId, orderId])
@@ -1107,8 +1113,49 @@ model DisputeSellerLiability {
   buyer                                          User                                 @relation("DisputeSellerLiabilityBuyer", fields: [buyerUserId], references: [id], onDelete: Restrict)
   sellerProfile                                  SellerProfile                        @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
   feeComponents                                  DisputeSellerLiabilityFeeComponent[]
+  recoveryClaim                                  DisputeRecoveryClaim?
 
   @@index([orderId, createdAt, id])
+  @@index([sellerProfileId, createdAt, id])
+}
+
+model DisputeRecoveryClaim {
+  id                         String                       @id @default(uuid()) @db.Uuid
+  disputeSellerLiabilityId   String                       @unique @db.Uuid
+  disputeFinancialDecisionId String                       @unique @db.Uuid
+  disputeCaseId              String                       @unique @db.Uuid
+  orderId                    String                       @db.Uuid
+  buyerUserId                String                       @db.Uuid
+  sellerProfileId            String                       @db.Uuid
+  claimAmountMinor           BigInt
+  currency                   String                       @default("BRL")
+  priorityAt                 DateTime
+  prioritySourceId           String                       @db.Uuid
+  createdAt                  DateTime                     @default(now())
+  sellerLiability            DisputeSellerLiability       @relation(fields: [disputeSellerLiabilityId], references: [id], onDelete: Restrict)
+  financialDecision          DisputeFinancialDecision     @relation(fields: [disputeFinancialDecisionId], references: [id], onDelete: Restrict)
+  disputeCase                DisputeCase                  @relation(fields: [disputeCaseId], references: [id], onDelete: Restrict)
+  order                      Order                        @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  buyer                      User                         @relation("DisputeRecoveryClaimBuyer", fields: [buyerUserId], references: [id], onDelete: Restrict)
+  sellerProfile              SellerProfile                @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
+  reservations               DisputeRecoveryReservation[]
+
+  @@unique([sellerProfileId, priorityAt, prioritySourceId])
+  @@index([sellerProfileId, priorityAt, prioritySourceId])
+}
+
+model DisputeRecoveryReservation {
+  id                  String               @id @default(uuid()) @db.Uuid
+  recoveryClaimId     String               @unique @db.Uuid
+  sellerProfileId     String               @db.Uuid
+  ledgerTransactionId String               @unique @db.Uuid
+  amountMinor         BigInt
+  fundingSource       String               @default("AVAILABLE_BALANCE")
+  createdAt           DateTime             @default(now())
+  recoveryClaim       DisputeRecoveryClaim @relation(fields: [recoveryClaimId], references: [id], onDelete: Restrict)
+  sellerProfile       SellerProfile        @relation(fields: [sellerProfileId], references: [id], onDelete: Restrict)
+  ledgerTransaction   LedgerTransaction    @relation(fields: [ledgerTransactionId], references: [id], onDelete: Restrict)
+
   @@index([sellerProfileId, createdAt, id])
 }
 
@@ -1710,20 +1757,21 @@ model LedgerAccount {
 }
 
 model LedgerTransaction {
-  id                       String          @id @default(uuid()) @db.Uuid
-  currency                 String          @default("BRL")
-  type                     String
-  referenceType            String?
-  referenceId              String?         @db.Uuid
-  idempotencyKeyHash       String          @unique
-  requestHash              String
-  reversalOfId             String?         @db.Uuid
-  metadata                 Json            @default("{}")
-  createdAt                DateTime        @default(now())
-  entries                  LedgerEntry[]
-  financialEvent           FinancialEvent?
-  originatingFinancialHold FinancialHold?  @relation("FinancialHoldOriginatingTransaction")
-  releasedFinancialHold    FinancialHold?  @relation("FinancialHoldReleaseTransaction")
+  id                         String                      @id @default(uuid()) @db.Uuid
+  currency                   String                      @default("BRL")
+  type                       String
+  referenceType              String?
+  referenceId                String?                     @db.Uuid
+  idempotencyKeyHash         String                      @unique
+  requestHash                String
+  reversalOfId               String?                     @db.Uuid
+  metadata                   Json                        @default("{}")
+  createdAt                  DateTime                    @default(now())
+  entries                    LedgerEntry[]
+  financialEvent             FinancialEvent?
+  disputeRecoveryReservation DisputeRecoveryReservation?
+  originatingFinancialHold   FinancialHold?              @relation("FinancialHoldOriginatingTransaction")
+  releasedFinancialHold      FinancialHold?              @relation("FinancialHoldReleaseTransaction")
 }
 
 model LedgerEntry {
