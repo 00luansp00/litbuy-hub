@@ -29,3 +29,9 @@ Partial and zero funding remain valid. `SELLER_PENDING`, `SELLER_HELD`, unrelate
 ## Deliberate boundary
 
 Unfunded claim value is **not** a `SELLER_DEFICIT` posting. No approved accounting counterparty exists for that posting: neither `PROVIDER_CLEARING` nor `BUYER_REFUND_CLEARING` may be selected by convenience. There is no Buyer wallet, payout, PSP refund, Seller top-up, new-sale amortization, fee-reversal posting, endpoint, cron or external consumer in AA0.2. AA1 must define the deficit accounting authority; later capabilities must add approved funding sources and human-authorized recovery execution.
+
+## Initial-only and commit-time correlation
+
+`AVAILABLE_BALANCE` is intentionally a single initial allocation per claim. The unique claim key on the reservation makes replay incapable of allocating AVAILABLE a second time. If that initial allocation is partial, the claim remains the FIFO head: later AVAILABLE is not consumed by AA0.2 and later claims cannot overtake it. A future, separately approved funding capability must continue recovery.
+
+Ledger-to-allocation correlation is final-state validation. A PostgreSQL constraint trigger is `DEFERRABLE INITIALLY DEFERRED`, so the legitimate sequence—Ledger transaction, entries, event/outbox, matching reservation, commit—succeeds even though the in-transaction intermediate state has no allocation yet. At commit, exactly one matching reservation must exist; an orphan `DISPUTE_RECOVERY_RESERVED` transaction is rejected and rolled back. This does not create a `SELLER_DEFICIT` posting.

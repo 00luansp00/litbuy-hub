@@ -59,7 +59,7 @@ BEGIN
  -- The same stable Seller row is the database serialization boundary for direct SQL too.
  PERFORM id FROM "SellerProfile" WHERE id=c."sellerProfileId" FOR UPDATE;
  SELECT * INTO t FROM "LedgerTransaction" WHERE id=NEW."ledgerTransactionId";
- SELECT count(*), count(*) FILTER (WHERE e.direction='DEBIT' AND a.purpose='SELLER_AVAILABLE' AND a."ownerType"='SELLER' AND a."ownerId"=c."sellerProfileId" AND a.currency='BRL' AND e."amountMinor"=NEW."amountMinor"), count(*) FILTER (WHERE e.direction='CREDIT' AND a.purpose='SELLER_RESERVED' AND a."ownerType"='SELLER' AND a."ownerId"=c."sellerProfileId" AND a.currency='BRL' AND e."amountMinor"=NEW."amountMinor")
+ SELECT count(*), count(*) FILTER (WHERE e.direction='DEBIT' AND a.purpose='SELLER_AVAILABLE' AND a."ownerType"='SELLER' AND a."ownerId"=c."sellerProfileId"::text AND a.currency='BRL' AND e."amountMinor"=NEW."amountMinor"), count(*) FILTER (WHERE e.direction='CREDIT' AND a.purpose='SELLER_RESERVED' AND a."ownerType"='SELLER' AND a."ownerId"=c."sellerProfileId"::text AND a.currency='BRL' AND e."amountMinor"=NEW."amountMinor")
  INTO entry_count,debit_count,credit_count FROM "LedgerEntry" e JOIN "LedgerAccount" a ON a.id=e."accountId" WHERE e."transactionId"=NEW."ledgerTransactionId";
  IF t.id IS NULL OR NEW."sellerProfileId"<>c."sellerProfileId" OR NEW."fundingSource"<>'AVAILABLE_BALANCE'
  OR t.type<>'DISPUTE_RECOVERY_RESERVED' OR t.currency<>'BRL' OR t."referenceType"<>'DisputeRecoveryClaim' OR t."referenceId"<>c.id
@@ -80,8 +80,8 @@ END; $$ LANGUAGE plpgsql;
 
 CREATE FUNCTION "validate_recovery_ledger_allocation"() RETURNS trigger AS $$
 BEGIN
- IF NEW.type='DISPUTE_RECOVERY_RESERVED' AND NOT EXISTS(SELECT 1 FROM "DisputeRecoveryReservation" WHERE "ledgerTransactionId"=NEW.id)
- THEN RAISE EXCEPTION 'recovery ledger transaction requires allocation' USING ERRCODE='23514'; END IF;
+ IF NEW.type='DISPUTE_RECOVERY_RESERVED' AND (SELECT count(*) FROM "DisputeRecoveryReservation" WHERE "ledgerTransactionId"=NEW.id)<>1
+ THEN RAISE EXCEPTION 'DISPUTE_RECOVERY_RESERVED ledger transaction requires matching recovery reservation' USING ERRCODE='23514'; END IF;
  RETURN NULL;
 END; $$ LANGUAGE plpgsql;
 CREATE FUNCTION "reject_dispute_recovery_mutation"() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'dispute recovery authority is append-only' USING ERRCODE='55000'; END; $$ LANGUAGE plpgsql;
