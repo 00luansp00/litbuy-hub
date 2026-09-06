@@ -18,6 +18,11 @@ export type DisputeRecoveryResult =
       status: 'UNFUNDED' | 'PARTIALLY_FUNDED' | 'FUNDED';
     };
 
+export const deriveInitialDeficitAmountMinor = (
+  claimAmountMinor: bigint,
+  reservationAmountsMinor: readonly bigint[],
+): bigint => claimAmountMinor - reservationAmountsMinor.reduce((sum, amount) => sum + amount, 0n);
+
 @Injectable()
 export class DisputeRecoveryService {
   constructor(
@@ -149,6 +154,66 @@ export class DisputeRecoveryService {
       });
       available -= amount;
       if (amount < remaining) break;
+    }
+
+    // AA1 begins only after AA0.2's single initial AVAILABLE pass. It recognizes
+    // the immutable initial shortfall; it neither retries funding nor moves a
+    // protected Seller balance.
+    const refreshedClaims = await tx.disputeRecoveryClaim.findMany({
+      where: { sellerProfileId },
+      include: { reservations: true, sellerDeficitOrigination: true },
+      orderBy: [{ priorityAt: 'asc' }, { prioritySourceId: 'asc' }],
+    });
+    const deficitAccount = await tx.ledgerAccount.findFirstOrThrow({
+      where: {
+        ownerType: 'SELLER',
+        ownerId: sellerProfileId,
+        purpose: 'SELLER_DEFICIT',
+        currency: 'BRL',
+      },
+    });
+    for (const claim of refreshedClaims) {
+      const amount = deriveInitialDeficitAmountMinor(
+        claim.claimAmountMinor,
+        claim.reservations.map((item) => item.amountMinor),
+      );
+      if (amount <= 0n || claim.sellerDeficitOrigination) continue;
+
+      const obligationAccount = await tx.ledgerAccount.create({
+        data: {
+          ownerType: 'SYSTEM',
+          ownerId: `RECOVERY_CLAIM:${claim.id}`,
+          accountClass: 'LIABILITY',
+          purpose: 'RECOVERY_CLAIM_OBLIGATION',
+          currency: 'BRL',
+        },
+      });
+      await tx.recoveryClaimObligationBinding.create({
+        data: { recoveryClaimId: claim.id, ledgerAccountId: obligationAccount.id },
+      });
+      const outcome = await this.ledger.postWithOutcomeInTransaction(tx, {
+        type: 'DISPUTE_SELLER_DEFICIT_RECOGNIZED',
+        currency: 'BRL',
+        idempotencyKeyHash: sha256(`dispute-seller-deficit:${claim.id}:initial-unfunded:v1`),
+        referenceType: 'DisputeRecoveryClaim',
+        referenceId: claim.id,
+        entries: [
+          { accountId: deficitAccount.id, direction: 'DEBIT', amountMinor: amount },
+          { accountId: obligationAccount.id, direction: 'CREDIT', amountMinor: amount },
+        ],
+        emitOutbox: true,
+        metadata: { sellerProfileId, recoveryClaimId: claim.id },
+      });
+      await tx.disputeSellerDeficitOrigination.create({
+        data: {
+          recoveryClaimId: claim.id,
+          sellerProfileId: claim.sellerProfileId,
+          buyerUserId: claim.buyerUserId,
+          amountMinor: amount,
+          currency: 'BRL',
+          ledgerTransactionId: outcome.transaction.id,
+        },
+      });
     }
 
     const requested = await tx.disputeRecoveryClaim.findUniqueOrThrow({

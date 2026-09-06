@@ -1,6 +1,17 @@
-import { DisputeRecoveryService } from './dispute-recovery.service';
+import {
+  deriveInitialDeficitAmountMinor,
+  DisputeRecoveryService,
+} from './dispute-recovery.service';
 
 describe('DisputeRecoveryService', () => {
+  it.each([
+    { claim: 10_000n, reservations: [10_000n], expected: 0n, boundary: 'fully funded' },
+    { claim: 10_000n, reservations: [4_000n], expected: 6_000n, boundary: 'partial' },
+    { claim: 10_000n, reservations: [], expected: 10_000n, boundary: 'zero available' },
+  ])('derives the AA1 amount at the $boundary boundary', ({ claim, reservations, expected }) => {
+    expect(deriveInitialDeficitAmountMinor(claim, reservations)).toBe(expected);
+  });
+
   it('returns ZERO_SELLER_LIABILITY without provisioning, claim or posting', async () => {
     const prisma = {
       disputeSellerLiability: {
