@@ -269,6 +269,14 @@ jobs:
       - name: Generate Prisma client
         run: bun run prisma:generate
 
+      - name: Build pinned MinIO Community images
+        working-directory: ${{ github.workspace }}
+        run: |
+          docker build --target server \
+            -t litbuy/minio-community:RELEASE.2025-10-15T17-29-55Z infra/minio
+          docker build --target client \
+            -t litbuy/minio-mc:RELEASE.2025-08-13T08-35-41Z infra/minio
+
       - name: Start MinIO and initialize private bucket
         working-directory: ${{ github.workspace }}
         run: |
@@ -278,7 +286,7 @@ jobs:
             -e MINIO_ROOT_USER="$MINIO_ROOT_USER" \
             -e MINIO_ROOT_PASSWORD="$MINIO_ROOT_PASSWORD" \
             -e MINIO_API_CORS_ALLOW_ORIGIN="http://localhost:3000" \
-            minio/minio:RELEASE.2025-04-22T22-12-26Z server /data
+            litbuy/minio-community:RELEASE.2025-10-15T17-29-55Z server /data
           ready=false
           for attempt in $(seq 1 30); do
             if curl -fsS http://localhost:9000/minio/health/live >/dev/null; then ready=true; break; fi
@@ -289,11 +297,11 @@ jobs:
           echo "MINIO_API_CORS_ALLOW_ORIGIN=http://localhost:3000"
           docker run --rm --network host \
             -e MC_HOST_local=http://$MINIO_ROOT_USER:$MINIO_ROOT_PASSWORD@localhost:9000 \
-            minio/mc:RELEASE.2025-04-16T18-13-26Z \
+            litbuy/minio-mc:RELEASE.2025-08-13T08-35-41Z \
             mb --ignore-existing local/$PRODUCT_IMAGE_S3_BUCKET
           docker run --rm --network host \
             -e MC_HOST_local=http://$MINIO_ROOT_USER:$MINIO_ROOT_PASSWORD@localhost:9000 \
-            minio/mc:RELEASE.2025-04-16T18-13-26Z \
+            litbuy/minio-mc:RELEASE.2025-08-13T08-35-41Z \
             stat local/$PRODUCT_IMAGE_S3_BUCKET
 
       - name: Upload MinIO setup failure log
