@@ -1,7 +1,5 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
-ALTER TYPE "LedgerAccountPurpose" ADD VALUE 'RECOVERY_CLAIM_OBLIGATION';
-
 CREATE TABLE "DisputeRecoveryClaimObligation" (
  "id" UUID NOT NULL DEFAULT gen_random_uuid(), "recoveryClaimId" UUID NOT NULL,
  "ledgerAccountId" UUID NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
