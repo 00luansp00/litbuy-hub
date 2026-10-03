@@ -3,7 +3,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import { Test } from '@nestjs/testing';
 import { AppModule } from '../src/app.module';
 import { CartsService } from '../src/carts/carts.service';
-import { parseIdempotencyKey } from '../src/commerce/idempotency-key';
+import { parseIdempotencyKey, sha256 } from '../src/commerce/idempotency-key';
 import { CheckoutService } from '../src/checkout/checkout.service';
 import { PrismaService } from '../src/database/prisma.service';
 import { DisputeCoreService } from '../src/disputes/dispute-core.service';
@@ -416,7 +416,7 @@ describe('AA0 DisputeFinancialDecision (real PostgreSQL)', () => {
     }).toEqual(before);
   });
 
-  it('AA0.2 reserves released AVAILABLE once, links the claim, and derives unfunded without deficit', async () => {
+  it('AA0.2/AA1 fully funds without artificial deficit', async () => {
     const s = await sale('RELEASED', false);
     const c = await buyerWin(s.order.id);
     const principal = s.order.subtotalAmountMinor - s.order.discountAmountMinor;
@@ -465,7 +465,7 @@ describe('AA0 DisputeFinancialDecision (real PostgreSQL)', () => {
     expect(await prisma.refund.count()).toBe(0);
   });
 
-  it('AA0.2 partially funds only the initial AVAILABLE and keeps the partial claim at the FIFO head', async () => {
+  it('AA1 recognizes only the initially unfunded remainder after partial reservation', async () => {
     const s = await sale('RELEASED', false);
     const c = await buyerWin(s.order.id);
     const principal = s.order.subtotalAmountMinor - s.order.discountAmountMinor;
@@ -486,7 +486,10 @@ describe('AA0 DisputeFinancialDecision (real PostgreSQL)', () => {
     });
     const afterInitial = await finance.summary(s.sellerUser.id);
     expect(afterInitial.balances.availableMinor).toBe('0');
-    expect(afterInitial.balances.deficitMinor).toBe(before.balances.deficitMinor);
+    expect(BigInt(afterInitial.balances.deficitMinor)).toBe(
+      BigInt(before.balances.deficitMinor) + 3000n,
+    );
+    expect(await prisma.disputeSellerDeficitOrigination.count()).toBe(1);
 
     await moveReservedToAvailable(s.seller.id, 3000n);
     await expect(recovery.processForLiability(liability.id)).resolves.toEqual(first);
@@ -501,7 +504,7 @@ describe('AA0 DisputeFinancialDecision (real PostgreSQL)', () => {
     expect((await finance.summary(s.sellerUser.id)).balances.availableMinor).toBe('3000');
   });
 
-  it('AA0.2 materializes an unfunded claim without touching protected or deficit buckets', async () => {
+  it('AA1 recognizes the whole claim as deficit when initial AVAILABLE is zero', async () => {
     const s = await sale('RELEASED', false);
     const c = await buyerWin(s.order.id);
     const principal = s.order.subtotalAmountMinor - s.order.discountAmountMinor;
@@ -528,7 +531,520 @@ describe('AA0 DisputeFinancialDecision (real PostgreSQL)', () => {
     const after = await finance.summary(s.sellerUser.id);
     expect(after.balances.pendingMinor).toBe(before.balances.pendingMinor);
     expect(after.balances.heldMinor).toBe(before.balances.heldMinor);
-    expect(after.balances.deficitMinor).toBe(before.balances.deficitMinor);
+    expect(BigInt(after.balances.deficitMinor)).toBe(
+      BigInt(before.balances.deficitMinor) + liability.sellerLiabilityAmountMinor,
+    );
+    expect(await prisma.disputeSellerDeficitOrigination.count()).toBe(1);
+  });
+
+  it('AA1 fully funded creates no deficit authority, obligation, posting or balance change', async () => {
+    const s = await sale('RELEASED', false);
+    const c = await buyerWin(s.order.id);
+    const principal = s.order.subtotalAmountMinor - s.order.discountAmountMinor;
+    const d = await decisions.createPostReleaseBuyerDecision(input(s.admin.id, c.id, principal));
+    const liability = await liabilities.createForFinancialDecision(d.id);
+    const before = await finance.summary(s.sellerUser.id);
+
+    const result = await recovery.processForLiability(liability.id);
+    if (result.outcome !== 'CLAIM') throw new Error('expected recovery claim');
+
+    expect(
+      await prisma.disputeSellerDeficitOrigination.count({
+        where: { recoveryClaimId: result.claimId },
+      }),
+    ).toBe(0);
+    expect(
+      await prisma.disputeRecoveryClaimObligation.count({
+        where: { recoveryClaimId: result.claimId },
+      }),
+    ).toBe(0);
+    expect(
+      await prisma.ledgerAccount.count({
+        where: { purpose: 'RECOVERY_CLAIM_OBLIGATION', ownerId: result.claimId },
+      }),
+    ).toBe(0);
+    expect(
+      await prisma.ledgerTransaction.count({
+        where: { type: 'DISPUTE_SELLER_DEFICIT_RECOGNIZED', referenceId: result.claimId },
+      }),
+    ).toBe(0);
+    expect((await finance.summary(s.sellerUser.id)).balances.deficitMinor).toBe(
+      before.balances.deficitMinor,
+    );
+  });
+
+  it('AA1 partial posting has the exact authority, account and two-entry shape', async () => {
+    const s = await sale('RELEASED', false);
+    const c = await buyerWin(s.order.id);
+    const principal = s.order.subtotalAmountMinor - s.order.discountAmountMinor;
+    const d = await decisions.createPostReleaseBuyerDecision(input(s.admin.id, c.id, principal));
+    const liability = await liabilities.createForFinancialDecision(d.id);
+    const available = BigInt((await finance.summary(s.sellerUser.id)).balances.availableMinor);
+    const remainder = 3000n;
+    await moveAvailableToReserved(
+      s.seller.id,
+      available - (liability.sellerLiabilityAmountMinor - remainder),
+    );
+
+    const result = await recovery.processForLiability(liability.id);
+    if (result.outcome !== 'CLAIM') throw new Error('expected recovery claim');
+    const originations = await prisma.disputeSellerDeficitOrigination.findMany({
+      include: {
+        obligationAccount: true,
+        ledgerTransaction: {
+          include: {
+            entries: { include: { account: true } },
+            financialEvent: { include: { outbox: true } },
+          },
+        },
+        recoveryClaim: true,
+      },
+    });
+    expect(originations).toHaveLength(1);
+    const authority = originations[0];
+    expect(authority).toMatchObject({
+      recoveryClaimId: result.claimId,
+      sellerProfileId: s.seller.id,
+      amountMinor: remainder,
+      currency: 'BRL',
+    });
+    expect(await prisma.disputeRecoveryClaimObligation.count()).toBe(1);
+    expect(authority.obligationAccount).toMatchObject({
+      ownerType: 'SYSTEM',
+      ownerId: result.claimId,
+      sellerProfileId: null,
+      accountClass: 'LIABILITY',
+      purpose: 'RECOVERY_CLAIM_OBLIGATION',
+      currency: 'BRL',
+    });
+    expect(authority.ledgerTransaction).toMatchObject({
+      type: 'DISPUTE_SELLER_DEFICIT_RECOGNIZED',
+      referenceType: 'DisputeRecoveryClaim',
+      referenceId: result.claimId,
+      currency: 'BRL',
+    });
+    expect(authority.ledgerTransaction.entries).toHaveLength(2);
+    const debit = authority.ledgerTransaction.entries.find((entry) => entry.direction === 'DEBIT')!;
+    const credit = authority.ledgerTransaction.entries.find(
+      (entry) => entry.direction === 'CREDIT',
+    )!;
+    expect(debit.amountMinor).toBe(remainder);
+    expect(debit.account).toMatchObject({
+      ownerType: 'SELLER',
+      ownerId: s.seller.id,
+      sellerProfileId: s.seller.id,
+      accountClass: 'ASSET',
+      purpose: 'SELLER_DEFICIT',
+    });
+    expect(credit.amountMinor).toBe(remainder);
+    expect(credit.accountId).toBe(authority.obligationAccountId);
+    expect(authority.ledgerTransaction.financialEvent?.outbox).toBeTruthy();
+  });
+
+  it('AA1 sequential replay of an unfunded claim does not duplicate any ledger authority', async () => {
+    const s = await sale('RELEASED', false);
+    const c = await buyerWin(s.order.id);
+    const d = await decisions.createPostReleaseBuyerDecision(
+      input(s.admin.id, c.id, s.order.subtotalAmountMinor - s.order.discountAmountMinor),
+    );
+    const liability = await liabilities.createForFinancialDecision(d.id);
+    const available = BigInt((await finance.summary(s.sellerUser.id)).balances.availableMinor);
+    await moveAvailableToReserved(s.seller.id, available);
+    const before = await finance.summary(s.sellerUser.id);
+    const first = await recovery.processForLiability(liability.id);
+    const second = await recovery.processForLiability(liability.id);
+    expect(second).toEqual(first);
+    if (first.outcome !== 'CLAIM') throw new Error('expected recovery claim');
+    const tx = await prisma.ledgerTransaction.findMany({
+      where: { type: 'DISPUTE_SELLER_DEFICIT_RECOGNIZED', referenceId: first.claimId },
+      include: { entries: true, financialEvent: { include: { outbox: true } } },
+    });
+    expect(await prisma.disputeRecoveryClaimObligation.count()).toBe(1);
+    expect(
+      await prisma.ledgerAccount.count({ where: { purpose: 'RECOVERY_CLAIM_OBLIGATION' } }),
+    ).toBe(1);
+    expect(await prisma.disputeSellerDeficitOrigination.count()).toBe(1);
+    expect(tx).toHaveLength(1);
+    expect(tx[0].entries).toHaveLength(2);
+    expect(tx[0].financialEvent?.outbox).toBeTruthy();
+    expect(BigInt((await finance.summary(s.sellerUser.id)).balances.deficitMinor)).toBe(
+      BigInt(before.balances.deficitMinor) + liability.sellerLiabilityAmountMinor,
+    );
+  });
+
+  it('AA1 concurrent same unfunded claim creates exactly one origination and obligation', async () => {
+    const s = await sale('RELEASED', false);
+    const c = await buyerWin(s.order.id);
+    const d = await decisions.createPostReleaseBuyerDecision(
+      input(s.admin.id, c.id, s.order.subtotalAmountMinor - s.order.discountAmountMinor),
+    );
+    const liability = await liabilities.createForFinancialDecision(d.id);
+    const available = BigInt((await finance.summary(s.sellerUser.id)).balances.availableMinor);
+    await moveAvailableToReserved(s.seller.id, available);
+    const before = await finance.summary(s.sellerUser.id);
+    const results = await Promise.all([
+      recovery.processForLiability(liability.id),
+      recovery.processForLiability(liability.id),
+    ]);
+    expect(results[0]).toEqual(results[1]);
+    expect(await prisma.disputeSellerDeficitOrigination.count()).toBe(1);
+    expect(await prisma.disputeRecoveryClaimObligation.count()).toBe(1);
+    expect(
+      await prisma.ledgerTransaction.count({
+        where: {
+          type: 'DISPUTE_SELLER_DEFICIT_RECOGNIZED',
+          referenceId: results[0].outcome === 'CLAIM' ? results[0].claimId : undefined,
+        },
+      }),
+    ).toBe(1);
+    expect(BigInt((await finance.summary(s.sellerUser.id)).balances.deficitMinor)).toBe(
+      BigInt(before.balances.deficitMinor) + liability.sellerLiabilityAmountMinor,
+    );
+  });
+
+  it('AA1 authorities and bound obligation account are append-only', async () => {
+    const s = await sale('RELEASED', false);
+    const c = await buyerWin(s.order.id);
+    const d = await decisions.createPostReleaseBuyerDecision(
+      input(s.admin.id, c.id, s.order.subtotalAmountMinor - s.order.discountAmountMinor),
+    );
+    const liability = await liabilities.createForFinancialDecision(d.id);
+    const available = BigInt((await finance.summary(s.sellerUser.id)).balances.availableMinor);
+    await moveAvailableToReserved(s.seller.id, available);
+    await recovery.processForLiability(liability.id);
+    const binding = await prisma.disputeRecoveryClaimObligation.findFirstOrThrow();
+    const origination = await prisma.disputeSellerDeficitOrigination.findFirstOrThrow();
+    for (const statement of [
+      `UPDATE "DisputeRecoveryClaimObligation" SET "createdAt"=CURRENT_TIMESTAMP WHERE id='${binding.id}'`,
+      `DELETE FROM "DisputeRecoveryClaimObligation" WHERE id='${binding.id}'`,
+      `UPDATE "DisputeSellerDeficitOrigination" SET "amountMinor"="amountMinor"+1 WHERE id='${origination.id}'`,
+      `DELETE FROM "DisputeSellerDeficitOrigination" WHERE id='${origination.id}'`,
+      `UPDATE "LedgerAccount" SET "ownerId"='changed' WHERE id='${binding.ledgerAccountId}'`,
+      `DELETE FROM "LedgerAccount" WHERE id='${binding.ledgerAccountId}'`,
+    ])
+      await expect(direct.$executeRawUnsafe(statement)).rejects.toBeDefined();
+  });
+
+  it('AA1 mutation guard permits DELETE of an isolated unbound ordinary LedgerAccount', async () => {
+    const id = randomUUID();
+    await direct.$executeRaw`
+      INSERT INTO "LedgerAccount" (id,"ownerType","ownerId","accountClass",purpose,currency)
+      VALUES (${id}::uuid,'SYSTEM',${`isolated-${id}`}::text,'ASSET','PROVIDER_CLEARING','BRL')`;
+    expect(await prisma.ledgerAccount.count({ where: { id } })).toBe(1);
+    expect(await direct.$executeRaw`DELETE FROM "LedgerAccount" WHERE id=${id}::uuid`).toBe(1);
+    expect(await prisma.ledgerAccount.count({ where: { id } })).toBe(0);
+  });
+
+  it('AA1 segregates two unfunded claims of the same Seller and aggregates ledger deficit', async () => {
+    const firstSale = await sale('RELEASED', false);
+    const secondSale = await sale('RELEASED', false, firstSale);
+    const firstCase = await buyerWin(firstSale.order.id);
+    const firstDecision = await decisions.createPostReleaseBuyerDecision(
+      input(
+        firstSale.admin.id,
+        firstCase.id,
+        firstSale.order.subtotalAmountMinor - firstSale.order.discountAmountMinor,
+      ),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const secondCase = await buyerWin(secondSale.order.id);
+    const secondDecision = await decisions.createPostReleaseBuyerDecision(
+      input(
+        secondSale.admin.id,
+        secondCase.id,
+        secondSale.order.subtotalAmountMinor - secondSale.order.discountAmountMinor,
+      ),
+    );
+    const firstLiability = await liabilities.createForFinancialDecision(firstDecision.id);
+    const secondLiability = await liabilities.createForFinancialDecision(secondDecision.id);
+    const available = BigInt(
+      (await finance.summary(firstSale.sellerUser.id)).balances.availableMinor,
+    );
+    await moveAvailableToReserved(firstSale.seller.id, available);
+    const before = await finance.summary(firstSale.sellerUser.id);
+    await recovery.processForLiability(secondLiability.id);
+    await recovery.processForLiability(firstLiability.id);
+    const claims = await prisma.disputeRecoveryClaim.findMany({
+      where: { sellerProfileId: firstSale.seller.id },
+      include: { deficitOrigination: { include: { obligationAccount: true } }, reservations: true },
+      orderBy: [{ priorityAt: 'asc' }, { prioritySourceId: 'asc' }],
+    });
+    expect(claims).toHaveLength(2);
+    expect(claims.every((claim) => claim.reservations.length === 0)).toBe(true);
+    expect(claims.every((claim) => claim.deficitOrigination?.recoveryClaimId === claim.id)).toBe(
+      true,
+    );
+    expect(new Set(claims.map((claim) => claim.deficitOrigination?.obligationAccountId)).size).toBe(
+      2,
+    );
+    for (const claim of claims)
+      expect(claim.deficitOrigination?.obligationAccount.ownerId).toBe(claim.id);
+    const total =
+      firstLiability.sellerLiabilityAmountMinor + secondLiability.sellerLiabilityAmountMinor;
+    expect(BigInt((await finance.summary(firstSale.sellerUser.id)).balances.deficitMinor)).toBe(
+      BigInt(before.balances.deficitMinor) + total,
+    );
+  });
+
+  it('AA1 keeps unfunded claims and deficit accounts segregated across Sellers', async () => {
+    const sales = [await sale('RELEASED', false), await sale('RELEASED', false)];
+    const prepared = [];
+    for (const s of sales) {
+      const c = await buyerWin(s.order.id);
+      const d = await decisions.createPostReleaseBuyerDecision(
+        input(s.admin.id, c.id, s.order.subtotalAmountMinor - s.order.discountAmountMinor),
+      );
+      const liability = await liabilities.createForFinancialDecision(d.id);
+      const available = BigInt((await finance.summary(s.sellerUser.id)).balances.availableMinor);
+      await moveAvailableToReserved(s.seller.id, available);
+      prepared.push({ s, liability });
+    }
+    await Promise.all(prepared.map(({ liability }) => recovery.processForLiability(liability.id)));
+    const originations = await prisma.disputeSellerDeficitOrigination.findMany({
+      include: {
+        recoveryClaim: true,
+        ledgerTransaction: { include: { entries: { include: { account: true } } } },
+      },
+    });
+    expect(originations).toHaveLength(2);
+    for (const authority of originations) {
+      const debit = authority.ledgerTransaction.entries.find(
+        (entry) => entry.direction === 'DEBIT',
+      )!;
+      expect(debit.account.ownerId).toBe(authority.recoveryClaim.sellerProfileId);
+      expect(authority.sellerProfileId).toBe(authority.recoveryClaim.sellerProfileId);
+    }
+    expect(new Set(originations.map((authority) => authority.obligationAccountId)).size).toBe(2);
+  });
+
+  it('AA1 deferred guards reject orphan posting and roll back ledger, event and outbox', async () => {
+    const s = await sale('RELEASED', false);
+    const c = await buyerWin(s.order.id);
+    const d = await decisions.createPostReleaseBuyerDecision(
+      input(s.admin.id, c.id, s.order.subtotalAmountMinor - s.order.discountAmountMinor),
+    );
+    const liability = await liabilities.createForFinancialDecision(d.id);
+    const available = BigInt((await finance.summary(s.sellerUser.id)).balances.availableMinor);
+    await moveAvailableToReserved(s.seller.id, available);
+    const result = await recovery.processForLiability(liability.id);
+    if (result.outcome !== 'CLAIM') throw new Error('expected recovery claim');
+    const origination = await prisma.disputeSellerDeficitOrigination.findFirstOrThrow({
+      include: { obligationAccount: true },
+    });
+    const deficit = await prisma.ledgerAccount.findFirstOrThrow({
+      where: { sellerProfileId: s.seller.id, purpose: 'SELLER_DEFICIT' },
+    });
+    const before = {
+      transactions: await prisma.ledgerTransaction.count(),
+      entries: await prisma.ledgerEntry.count(),
+      events: await prisma.financialEvent.count(),
+      outbox: await prisma.financialOutboxEvent.count(),
+    };
+    await expect(
+      prisma.$transaction((tx) =>
+        ledger.postWithOutcomeInTransaction(tx, {
+          type: 'DISPUTE_SELLER_DEFICIT_RECOGNIZED',
+          currency: 'BRL',
+          idempotencyKeyHash: randomUUID(),
+          referenceType: 'DisputeRecoveryClaim',
+          referenceId: result.claimId,
+          entries: [
+            { accountId: deficit.id, direction: 'DEBIT', amountMinor: 1n },
+            { accountId: origination.obligationAccountId, direction: 'CREDIT', amountMinor: 1n },
+          ],
+          emitOutbox: true,
+        }),
+      ),
+    ).rejects.toThrow(/requires origination/);
+    expect({
+      transactions: await prisma.ledgerTransaction.count(),
+      entries: await prisma.ledgerEntry.count(),
+      events: await prisma.financialEvent.count(),
+      outbox: await prisma.financialOutboxEvent.count(),
+    }).toEqual(before);
+  });
+
+  it('AA1 deferred guards reject orphan obligation account and binding at commit', async () => {
+    const s = await sale('RELEASED', false);
+    const c = await buyerWin(s.order.id);
+    const d = await decisions.createPostReleaseBuyerDecision(
+      input(s.admin.id, c.id, s.order.subtotalAmountMinor - s.order.discountAmountMinor),
+    );
+    const liability = await liabilities.createForFinancialDecision(d.id);
+    const result = await recovery.processForLiability(liability.id);
+    if (result.outcome !== 'CLAIM') throw new Error('expected recovery claim');
+    const before = await prisma.ledgerAccount.count();
+    await expect(
+      prisma.$transaction((tx) =>
+        tx.ledgerAccount.create({
+          data: {
+            ownerType: 'SYSTEM',
+            ownerId: result.claimId,
+            accountClass: 'LIABILITY',
+            purpose: 'RECOVERY_CLAIM_OBLIGATION',
+            currency: 'BRL',
+          },
+        }),
+      ),
+    ).rejects.toThrow(/requires binding and origination/);
+    await expect(
+      prisma.$transaction(async (tx) => {
+        const account = await tx.ledgerAccount.create({
+          data: {
+            ownerType: 'SYSTEM',
+            ownerId: result.claimId,
+            accountClass: 'LIABILITY',
+            purpose: 'RECOVERY_CLAIM_OBLIGATION',
+            currency: 'BRL',
+          },
+        });
+        await tx.disputeRecoveryClaimObligation.create({
+          data: { recoveryClaimId: result.claimId, ledgerAccountId: account.id },
+        });
+      }),
+    ).rejects.toThrow(/requires binding and origination/);
+    expect(await prisma.ledgerAccount.count()).toBe(before);
+    expect(await prisma.disputeRecoveryClaimObligation.count()).toBe(0);
+  });
+
+  it('AA1 PostgreSQL rejects direct obligation owner, class, purpose and claim forgeries', async () => {
+    const s = await sale('RELEASED', false);
+    const c = await buyerWin(s.order.id);
+    const d = await decisions.createPostReleaseBuyerDecision(
+      input(s.admin.id, c.id, s.order.subtotalAmountMinor - s.order.discountAmountMinor),
+    );
+    const liability = await liabilities.createForFinancialDecision(d.id);
+    const result = await recovery.processForLiability(liability.id);
+    if (result.outcome !== 'CLAIM') throw new Error('expected recovery claim');
+    const attempts = [
+      { claimId: randomUUID() },
+      { ownerType: 'PLATFORM' as const },
+      { ownerId: randomUUID() },
+      { accountClass: 'ASSET' as const },
+      { purpose: 'PROVIDER_CLEARING' as const },
+      { purpose: 'BUYER_REFUND_CLEARING' as const },
+      { purpose: 'SELLER_RESERVED' as const },
+      { currency: 'USD' },
+    ];
+    for (const variant of attempts)
+      await expect(
+        prisma.$transaction(async (tx) => {
+          const account = await tx.ledgerAccount.create({
+            data: {
+              ownerType: variant.ownerType ?? 'SYSTEM',
+              ownerId: variant.ownerId ?? result.claimId,
+              accountClass: variant.accountClass ?? 'LIABILITY',
+              purpose: variant.purpose ?? 'RECOVERY_CLAIM_OBLIGATION',
+              currency: variant.currency ?? 'BRL',
+            },
+          });
+          await tx.disputeRecoveryClaimObligation.create({
+            data: {
+              recoveryClaimId: variant.claimId ?? result.claimId,
+              ledgerAccountId: account.id,
+            },
+          });
+        }),
+      ).rejects.toBeDefined();
+  });
+
+  it('AA1 PostgreSQL rejects direct origination amount, currency, identity, Seller and correlation forgeries', async () => {
+    const s = await sale('RELEASED', false);
+    const c = await buyerWin(s.order.id);
+    const d = await decisions.createPostReleaseBuyerDecision(
+      input(s.admin.id, c.id, s.order.subtotalAmountMinor - s.order.discountAmountMinor),
+    );
+    const liability = await liabilities.createForFinancialDecision(d.id);
+    const available = BigInt((await finance.summary(s.sellerUser.id)).balances.availableMinor);
+    await moveAvailableToReserved(s.seller.id, available);
+    const claim = await prisma.disputeRecoveryClaim.create({
+      data: {
+        disputeSellerLiabilityId: liability.id,
+        disputeFinancialDecisionId: liability.disputeFinancialDecisionId,
+        disputeCaseId: liability.disputeCaseId,
+        orderId: liability.orderId,
+        buyerUserId: liability.buyerUserId,
+        sellerProfileId: liability.sellerProfileId,
+        claimAmountMinor: liability.sellerLiabilityAmountMinor,
+        currency: liability.currency,
+        priorityAt: d.executableAt,
+        prioritySourceId: d.id,
+      },
+    });
+    const deficit = await prisma.ledgerAccount.findFirstOrThrow({
+      where: { sellerProfileId: s.seller.id, purpose: 'SELLER_DEFICIT' },
+    });
+    const expected = claim.claimAmountMinor;
+    const variants = [
+      { amount: expected + 1n },
+      { amount: expected - 1n },
+      { amount: 0n },
+      { amount: -1n },
+      { currency: 'USD' },
+      { identity: randomUUID() },
+      { sellerProfileId: randomUUID() },
+      { type: 'WRONG_TYPE' },
+      { referenceType: 'WrongReference' },
+      { referenceId: randomUUID() },
+      { inverted: true },
+      { extra: true },
+      { unequal: true },
+    ];
+    for (const variant of variants)
+      await expect(
+        prisma.$transaction(async (tx) => {
+          const obligation = await tx.ledgerAccount.create({
+            data: {
+              ownerType: 'SYSTEM',
+              ownerId: claim.id,
+              accountClass: 'LIABILITY',
+              purpose: 'RECOVERY_CLAIM_OBLIGATION',
+              currency: 'BRL',
+            },
+          });
+          await tx.disputeRecoveryClaimObligation.create({
+            data: { recoveryClaimId: claim.id, ledgerAccountId: obligation.id },
+          });
+          const identity =
+            variant.identity ?? sha256(`dispute-seller-deficit:${claim.id}:initial-unfunded:v1`);
+          const posted = await ledger.postWithOutcomeInTransaction(tx, {
+            type: variant.type ?? 'DISPUTE_SELLER_DEFICIT_RECOGNIZED',
+            currency: 'BRL',
+            idempotencyKeyHash: identity,
+            referenceType: variant.referenceType ?? 'DisputeRecoveryClaim',
+            referenceId: variant.referenceId ?? claim.id,
+            entries: [
+              {
+                accountId: variant.inverted ? obligation.id : deficit.id,
+                direction: 'DEBIT',
+                amountMinor: expected,
+              },
+              {
+                accountId: variant.inverted ? deficit.id : obligation.id,
+                direction: 'CREDIT',
+                amountMinor: variant.unequal ? expected + 1n : expected,
+              },
+              ...(variant.extra
+                ? [{ accountId: obligation.id, direction: 'CREDIT' as const, amountMinor: 1n }]
+                : []),
+            ],
+            emitOutbox: true,
+          });
+          await tx.disputeSellerDeficitOrigination.create({
+            data: {
+              recoveryClaimId: claim.id,
+              sellerProfileId: variant.sellerProfileId ?? s.seller.id,
+              obligationAccountId: obligation.id,
+              ledgerTransactionId: posted.transaction.id,
+              amountMinor: variant.amount ?? expected,
+              currency: variant.currency ?? 'BRL',
+              idempotencyKeyHash: identity,
+            },
+          });
+        }),
+      ).rejects.toBeDefined();
+    expect(await prisma.disputeSellerDeficitOrigination.count()).toBe(0);
+    expect(await prisma.disputeRecoveryClaimObligation.count()).toBe(0);
   });
 
   it('AA0.2 concurrent replay creates one claim, reservation and economic posting', async () => {

@@ -160,6 +160,75 @@ export class DisputeRecoveryService {
       0n,
     );
     const unfundedAmountMinor = requested.claimAmountMinor - reservedAmountMinor;
+    if (unfundedAmountMinor > 0n) {
+      const identity = sha256(`dispute-seller-deficit:${requested.id}:initial-unfunded:v1`);
+      const prior = await tx.disputeSellerDeficitOrigination.findUnique({
+        where: { recoveryClaimId: requested.id },
+      });
+      if (prior) {
+        if (
+          prior.amountMinor !== unfundedAmountMinor ||
+          prior.sellerProfileId !== sellerProfileId ||
+          prior.idempotencyKeyHash !== identity
+        )
+          throw new AppError(
+            'RECOVERY_DEFICIT_REPLAY_MISMATCH',
+            'RECOVERY_DEFICIT_REPLAY_MISMATCH',
+            409,
+          );
+      } else {
+        const obligationAccount = await tx.ledgerAccount.create({
+          data: {
+            ownerType: 'SYSTEM',
+            ownerId: requested.id,
+            accountClass: 'LIABILITY',
+            purpose: 'RECOVERY_CLAIM_OBLIGATION',
+            currency: 'BRL',
+          },
+        });
+        await tx.disputeRecoveryClaimObligation.create({
+          data: { recoveryClaimId: requested.id, ledgerAccountId: obligationAccount.id },
+        });
+        const deficitAccount = await tx.ledgerAccount.findFirstOrThrow({
+          where: {
+            ownerType: 'SELLER',
+            ownerId: sellerProfileId,
+            sellerProfileId,
+            purpose: 'SELLER_DEFICIT',
+            accountClass: 'ASSET',
+            currency: 'BRL',
+          },
+        });
+        const outcome = await this.ledger.postWithOutcomeInTransaction(tx, {
+          type: 'DISPUTE_SELLER_DEFICIT_RECOGNIZED',
+          currency: 'BRL',
+          idempotencyKeyHash: identity,
+          referenceType: 'DisputeRecoveryClaim',
+          referenceId: requested.id,
+          entries: [
+            { accountId: deficitAccount.id, direction: 'DEBIT', amountMinor: unfundedAmountMinor },
+            {
+              accountId: obligationAccount.id,
+              direction: 'CREDIT',
+              amountMinor: unfundedAmountMinor,
+            },
+          ],
+          emitOutbox: true,
+          metadata: { sellerProfileId, authority: 'INITIAL_UNFUNDED_V1' },
+        });
+        await tx.disputeSellerDeficitOrigination.create({
+          data: {
+            recoveryClaimId: requested.id,
+            sellerProfileId,
+            obligationAccountId: obligationAccount.id,
+            ledgerTransactionId: outcome.transaction.id,
+            amountMinor: unfundedAmountMinor,
+            currency: 'BRL',
+            idempotencyKeyHash: identity,
+          },
+        });
+      }
+    }
     return {
       outcome: 'CLAIM',
       claimId: requested.id,
