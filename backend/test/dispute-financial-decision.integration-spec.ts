@@ -416,7 +416,7 @@ describe('AA0 DisputeFinancialDecision (real PostgreSQL)', () => {
     }).toEqual(before);
   });
 
-  it('AA0.2 reserves released AVAILABLE once, links the claim, and derives unfunded without deficit', async () => {
+  it('AA0.2/AA1 fully funds without artificial deficit', async () => {
     const s = await sale('RELEASED', false);
     const c = await buyerWin(s.order.id);
     const principal = s.order.subtotalAmountMinor - s.order.discountAmountMinor;
@@ -465,7 +465,7 @@ describe('AA0 DisputeFinancialDecision (real PostgreSQL)', () => {
     expect(await prisma.refund.count()).toBe(0);
   });
 
-  it('AA0.2 partially funds only the initial AVAILABLE and keeps the partial claim at the FIFO head', async () => {
+  it('AA1 recognizes only the initially unfunded remainder after partial reservation', async () => {
     const s = await sale('RELEASED', false);
     const c = await buyerWin(s.order.id);
     const principal = s.order.subtotalAmountMinor - s.order.discountAmountMinor;
@@ -486,7 +486,10 @@ describe('AA0 DisputeFinancialDecision (real PostgreSQL)', () => {
     });
     const afterInitial = await finance.summary(s.sellerUser.id);
     expect(afterInitial.balances.availableMinor).toBe('0');
-    expect(afterInitial.balances.deficitMinor).toBe(before.balances.deficitMinor);
+    expect(BigInt(afterInitial.balances.deficitMinor)).toBe(
+      BigInt(before.balances.deficitMinor) + 3000n,
+    );
+    expect(await prisma.disputeSellerDeficitOrigination.count()).toBe(1);
 
     await moveReservedToAvailable(s.seller.id, 3000n);
     await expect(recovery.processForLiability(liability.id)).resolves.toEqual(first);
@@ -501,7 +504,7 @@ describe('AA0 DisputeFinancialDecision (real PostgreSQL)', () => {
     expect((await finance.summary(s.sellerUser.id)).balances.availableMinor).toBe('3000');
   });
 
-  it('AA0.2 materializes an unfunded claim without touching protected or deficit buckets', async () => {
+  it('AA1 recognizes the whole claim as deficit when initial AVAILABLE is zero', async () => {
     const s = await sale('RELEASED', false);
     const c = await buyerWin(s.order.id);
     const principal = s.order.subtotalAmountMinor - s.order.discountAmountMinor;
@@ -528,7 +531,10 @@ describe('AA0 DisputeFinancialDecision (real PostgreSQL)', () => {
     const after = await finance.summary(s.sellerUser.id);
     expect(after.balances.pendingMinor).toBe(before.balances.pendingMinor);
     expect(after.balances.heldMinor).toBe(before.balances.heldMinor);
-    expect(after.balances.deficitMinor).toBe(before.balances.deficitMinor);
+    expect(BigInt(after.balances.deficitMinor)).toBe(
+      BigInt(before.balances.deficitMinor) + liability.sellerLiabilityAmountMinor,
+    );
+    expect(await prisma.disputeSellerDeficitOrigination.count()).toBe(1);
   });
 
   it('AA0.2 concurrent replay creates one claim, reservation and economic posting', async () => {

@@ -30,6 +30,7 @@ const CLASSES: Record<LedgerAccountPurpose, LedgerAccountClass> = {
   BUYER_REFUND_CLEARING: 'LIABILITY',
   WITHDRAWAL_CLEARING: 'ASSET',
   CHARGEBACK_RESERVE: 'LIABILITY',
+  RECOVERY_CLAIM_OBLIGATION: 'LIABILITY',
 };
 const PROTECTED = new Set<LedgerAccountPurpose>([
   'SELLER_PENDING',
